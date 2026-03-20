@@ -1,5 +1,7 @@
 {
   "token": "YOUR_STORYBOT_TOKEN",
+  "clientId": "YOUR_BOT_APPLICATION_ID",
+  "guildId": "YOUR_DISCORD_SERVER_ID",
   "db": {
     "host": "localhost",
     "port": 3306,

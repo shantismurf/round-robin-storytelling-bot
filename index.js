@@ -1,20 +1,25 @@
-import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events } from 'discord.js';
+import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
 import { StoryBot } from './storybot.js';
-import { loadConfig, formattedDate, getDBConnection, getConfigValue } from './utilities.js';
+import { loadConfig, formattedDate, DB, getConfigValue } from './utilities.js';
 import { setupDatabase } from './database-setup.js';
+import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
 
 async function main() {
   const config = loadConfig();
-  
+
   // Setup database before starting bot
   console.log(`${formattedDate()}: Initializing Round Robin Storybot...`);
   const dbSetupSuccess = await setupDatabase(config);
-  
+
   if (!dbSetupSuccess) {
     console.error(`${formattedDate()}: Failed to setup database. Exiting...`);
     process.exit(1);
   }
+
+  // Create single database connection
+  const db = new DB(config.db);
+  const connection = await db.connect();
   
   // create Discord client here (index.js owns the client)
   const client = new Client({ intents: [
@@ -23,7 +28,7 @@ async function main() {
     GatewayIntentBits.MessageContent] });
   // instantiate story engine
   const bot = new StoryBot(config);
-  // Listen for publish events from StoryBot and post using the Discord client
+  // Listen for publish events from RRStoryBot and post using the Discord client
   bot.on('publish', async (botContent) => {
     try {
       const channel = await client.channels.fetch(botContent.channelId);
@@ -62,49 +67,50 @@ async function main() {
       console.error(`${formattedDate()}: Error loading commands:`, error);
     }
   }
-  client.once('ready', async () => {
+  client.once(Events.ClientReady, async () => {
     console.log(`Discord client ready as ${client.user.tag}`);
     await bot.start();
     await loadCommands('./commands');
+    startJobRunner(connection, client);
   });
   // Listen for slash commands and modal interactions
   client.on(Events.InteractionCreate, async interaction => {
+    console.log(`${formattedDate()}: InteractionCreate fired — type: ${interaction.type}, user: ${interaction.user.username}`);
     try {
       if (interaction.isChatInputCommand()) {
         console.log(`${formattedDate()}: ${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`);
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
-          await command.execute(interaction);
+          await command.execute(connection, interaction);
         }
       } else if (interaction.isModalSubmit()) {
-        const connection = await getDBConnection();
         console.log(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
-        
+
         // Handle story modal submissions
-        if (interaction.customId === 'story_add_modal') {
+        if (interaction.customId.startsWith('story_')) {
           const storyCommand = interaction.client.commands.get('story');
           if (storyCommand && storyCommand.handleModalSubmit) {
             await storyCommand.handleModalSubmit(connection, interaction);
           }
-        } else if (interaction.customId.startsWith('story_add_modal_2_')) {
-          const storyCommand = interaction.client.commands.get('story');
-          if (storyCommand && storyCommand.handleSecondModalSubmit) {
-            await storyCommand.handleSecondModalSubmit(connection, interaction);
+        } else if (interaction.customId.startsWith('storyadmin_')) {
+          const adminCommand = interaction.client.commands.get('storyadmin');
+          if (adminCommand && adminCommand.handleModalSubmit) {
+            await adminCommand.handleModalSubmit(connection, interaction);
           }
         }
       } else if (interaction.isButton()) {
         console.log(`${formattedDate()}: ${interaction.user.username} clicked button ${interaction.customId}`);
-        
-        // Handle story button interactions
-        if (interaction.customId.startsWith('story_')) {
-          const storyCommand = interaction.client.commands.get('story');
-          if (storyCommand && storyCommand.handleButtonInteraction) {
-            await storyCommand.handleButtonInteraction(connection, interaction);
-          }
+
+        const isStoryadminButton = interaction.customId.startsWith('storyadmin_');
+        const isMystoryButton = interaction.customId.startsWith('catchup_') || interaction.customId.startsWith('mystory_');
+        const commandName = isStoryadminButton ? 'storyadmin' : isMystoryButton ? 'mystory' : 'story';
+        const command = interaction.client.commands.get(commandName);
+        if (command && command.handleButtonInteraction) {
+          await command.handleButtonInteraction(connection, interaction);
         }
       } else if (interaction.isStringSelectMenu()) {
         console.log(`${formattedDate()}: ${interaction.user.username} used select menu ${interaction.customId}`);
-        
+
         // Handle story select menu interactions
         if (interaction.customId.startsWith('story_')) {
           const storyCommand = interaction.client.commands.get('story');
@@ -112,15 +118,17 @@ async function main() {
             await storyCommand.handleSelectMenuInteraction(connection, interaction);
           }
         }
+      } else {
+        console.log(`${formattedDate()}: Unhandled interaction type ${interaction.type} from ${interaction.user.username} (customId: ${interaction.customId ?? 'n/a'})`);
       }
     } catch (error) {
       const guildId = interaction?.guild?.id || 'unknown';
-      console.error(`${formattedDate()}: [Guild ${guildId}] Error handling interaction:`, error);
-      
+      console.error(`${formattedDate()}:  Error handling interaction:`, error);
+
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: await getConfigValue(connection,'errProcessingRequest', guildId),
-          ephemeral: true
+          flags: MessageFlags.Ephemeral
         }).catch(console.error);
       } else if (interaction.deferred) {
         await interaction.editReply({

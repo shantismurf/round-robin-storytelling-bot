@@ -1,29 +1,27 @@
 import { EventEmitter } from 'events';
-import { DB, getConfigValue, formattedDate } from './utilities.js';
+import { getConfigValue, formattedDate } from './utilities.js';
 import { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from 'announcements.js';
+import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
 
 /**
  * StoryBot.js contains story engine logic and emits 'publish' events when it
  * wants something posted to Discord. index.js owns the Discord client and
- * listens for those events to perform posting.
+ * listens for those events to perform posting. Announcements are handled
+ * in announcements.js which is called from storybot.js and commands/story.js.
  */
 export class StoryBot extends EventEmitter {
   constructor(config) {
     super();
     this.config = config || {};
-    this.db = new DB(config.db);
   }
 
   async start() {
-    // initialize DB connections, schedulers, etc. (no Discord login here)
-    await this.db.connect();
+    // initialize schedulers, etc. (no Discord login here)
     console.log('StoryBot engine initialized');
   }
 
   async stop() {
-    // stop internal timers/workers and DB
-    await this.db.disconnect();
+    // stop internal timers/workers
   }
 
   /**
@@ -40,18 +38,19 @@ export class StoryBot extends EventEmitter {
  * CreateStory function with explicit transaction handling
  */
 export async function CreateStory(connection, interaction, storyInput) {
-  await connection.beginTransaction();
-  
+  const guild_id = interaction.guild.id;
+  const txn = await connection.getConnection();
+  await txn.beginTransaction();
+
   try {
-    const guild_id = interaction.guild.id;
-    
+
     // Step 1: Insert story record
     const storyStatus = (storyInput.delayHours || storyInput.delayWriters) ? 2 : 1; // 2 = paused, 1 = active
-    
-    const [storyResult] = await connection.execute(
-      `INSERT INTO story (guild_id, title, story_status, quick_mode, turn_length_hours, 
-       timeout_reminder_percent, story_turn_privacy, story_delay_hours, story_delay_users) 
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+
+    const [storyResult] = await txn.execute(
+      `INSERT INTO story (guild_id, title, story_status, quick_mode, turn_length_hours,
+       timeout_reminder_percent, story_turn_privacy, show_authors, story_delay_hours, story_delay_users, story_order_type, max_writers)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         guild_id,
         storyInput.storyTitle,
@@ -60,83 +59,91 @@ export async function CreateStory(connection, interaction, storyInput) {
         storyInput.turnLength,
         storyInput.timeoutReminder,
         storyInput.hideTurnThreads,
+        storyInput.showAuthors,
         storyInput.delayHours,
-        storyInput.delayWriters
+        storyInput.delayWriters,
+        storyInput.orderType,
+        storyInput.maxWriters ?? null
       ]
     );
-    
+
     const storyId = storyResult.insertId;
-    
+
     // Step 2: Create delay job if needed
     if (storyInput.delayHours) {
       const delayTime = new Date(Date.now() + (storyInput.delayHours * 60 * 60 * 1000));
-      await connection.execute(
+      await txn.execute(
         `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
         ['checkStoryDelay', JSON.stringify({ storyId }), delayTime, 0]
       );
     }
-    
+
     // Step 3: Get story feed channel and create story thread
     const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
     const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
-    
+
     if (!channel) {
       throw new Error('Story feed channel not found');
     }
-    
+
     // Get thread title template and replace variables
     const threadTitleTemplate = await getConfigValue(connection,'txtStoryThreadTitle', guild_id);
-    const statusText = storyStatus === 1 
+    const statusText = storyStatus === 1
       ? await getConfigValue(connection,'txtActive', guild_id)
       : await getConfigValue(connection,'txtPaused', guild_id);
-    
+
     const threadTitle = threadTitleTemplate
       .replace('[story_id]', storyId)
       .replace('[inputStoryTitle]', storyInput.storyTitle)
       .replace('[story_status]', statusText);
-    
+
     const storyThread = await channel.threads.create({
       name: threadTitle,
       type: ChannelType.PublicThread,
       reason: `Story thread for story ID ${storyId}`
     });
-    
+
     // Step 4: Update story with thread ID
-    await connection.execute(
+    await txn.execute(
       `UPDATE story SET story_thread_id = ? WHERE story_id = ?`,
       [storyThread.id, storyId]
     );
-    
+
     // Step 5: Add creator as first writer
-    const writerResult = await StoryJoin(connection, interaction, storyInput, storyId);
-    
+    const writerResult = await StoryJoin(txn, interaction, storyInput, storyId);
+
     if (!writerResult.success) {
       throw new Error(writerResult.error);
     }
-    
-    // Post story creation announcement to feed channel
-    await postStoryFeedCreationAnnouncement(connection, storyId, interaction, storyInput.storyTitle, storyStatus, storyInput.delayHours, storyInput.delayWriters);
-    
+
+    // Step 6: Start first turn if story is active (no delay)
+    if (storyStatus === 1) {
+      const firstWriterId = await PickNextWriter(txn, storyId);
+      await NextTurn(txn, interaction, firstWriterId);
+    }
+
     // Commit transaction
-    await connection.commit();
-    
+    await txn.commit();
+
+    // Post story creation announcement after commit so writer count is visible
+    await postStoryFeedCreationAnnouncement(connection, storyId, interaction, storyInput.storyTitle, storyStatus, storyInput.delayHours, storyInput.delayWriters);
+
     return {
       success: true,
       message: `✅ **Story "${storyInput.storyTitle}" created successfully!**\n${writerResult.confirmationMessage}`
     };
-    
+
   } catch (error) {
-    // Rollback transaction on any error
-    await connection.rollback();
-    console.error(`${formattedDate()}: [Guild ${guild_id}] CreateStory failed:`, error);
-    
+    await txn.rollback();
+    console.error(`${formattedDate()}:  CreateStory failed:`, error);
+
     const txtThreadCreationFailed = await getConfigValue(connection,'txtThreadCreationFailed', interaction.guild.id);
     return {
       success: false,
       error: txtThreadCreationFailed
     };
   } finally {
-    connection.release();
+    txn.release();
   }
 }
 
@@ -213,7 +220,7 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
     };
     
   } catch (error) {
-    console.error(`${formattedDate()}: [Guild ${guild_id}] StoryJoin failed:`, error);
+    console.error(`${formattedDate()}:  StoryJoin failed:`, error);
     const txtStoryJoinFail = await getConfigValue(connection,'txtStoryJoinFail', interaction.guild.id);
     return {
       success: false,
@@ -297,7 +304,7 @@ export async function checkStoryDelay(connection, storyId) {
     };
     
   } catch (error) {
-    console.error(`${formattedDate()}: [Guild ${story?.guild_id || 'unknown'}] checkStoryDelay failed for story ${storyId}:`, error);
+    console.error(`${formattedDate()}: checkStoryDelay failed for story ${storyId}:`, error);
     return { madeActive: false };
   }
 }
@@ -321,7 +328,7 @@ export async function PickNextWriter(connection, storyId) {
     `SELECT story_order_type FROM story WHERE story_id = ?`,
     [storyId]
   );
-  const story_order_type = storyData[0];
+  const story_order_type = storyData[0]?.story_order_type;
   
   let orderClause;
   switch (story_order_type) {
@@ -364,15 +371,16 @@ export async function PickNextWriter(connection, storyId) {
  * NextTurn function - creates a new turn for a story
  */
 export async function NextTurn(connection, interaction, storyWriterId) {
+  const guild_id = interaction.guild.id;
   try {
-    const guild_id = interaction.guild.id;
     
     // Get story and writer info
     const [writerInfo] = await connection.execute(
       `SELECT sw.story_id, sw.discord_user_id, sw.discord_display_name, sw.turn_privacy, sw.notification_prefs,
-              s.quick_mode, s.turn_length_hours, s.story_thread_id, s.story_turn_privacy, s.title 
-       FROM story_writer sw 
-       JOIN story s ON sw.story_id = s.story_id 
+              s.quick_mode, s.turn_length_hours, s.story_thread_id, s.story_turn_privacy, s.title,
+              s.timeout_reminder_percent, s.guild_id
+       FROM story_writer sw
+       JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_writer_id = ?`,
       [storyWriterId]
     );
@@ -384,20 +392,37 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     const writer = writerInfo[0];
     
     // Insert turn record
+    const turnEndsAt = new Date(Date.now() + (writer.turn_length_hours * 60 * 60 * 1000));
     const [turnResult] = await connection.execute(
-      `INSERT INTO turn (story_writer_id, started_at, turn_status) VALUES (?, NOW(), 1)`,
-      [storyWriterId]
+      `INSERT INTO turn (story_writer_id, started_at, turn_ends_at, turn_status) VALUES (?, NOW(), ?, 1)`,
+      [storyWriterId, turnEndsAt]
     );
     
     const turnId = turnResult.insertId;
-    
+
+    // Schedule turnTimeout job
+    await connection.execute(
+      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+      ['turnTimeout', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id }), turnEndsAt]
+    );
+
+    // Schedule turnReminder job if configured
+    if (writer.timeout_reminder_percent > 0) {
+      const reminderMs = writer.turn_length_hours * (writer.timeout_reminder_percent / 100) * 60 * 60 * 1000;
+      const reminderTime = new Date(Date.now() + reminderMs);
+      await connection.execute(
+        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+        ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime]
+      );
+    }
+
     let threadId = null;
     let dmMessage = '';
     
     // Handle quick mode vs normal mode
     if (writer.quick_mode) {
       // Quick mode - send notifications and post feed announcement
-      await handleQuickModeNotification(interaction, writer, turnId, guild_id);
+      await handleQuickModeNotification(connection, interaction, writer, turnId, guild_id);
       dmMessage = 'Quick mode notification sent';
     } else {
       // Normal mode - create private thread
@@ -409,15 +434,15 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       
       // Get turn end time
       const turnEndTime = turnEndTimeFunction(turnId, writer.turn_length_hours);
-      const discordTimestamp = `<t:${Math.floor(turnEndTime.getTime() / 1000)}:F>`;
-      
-      // Create thread title
+      const formattedEndTime = turnEndTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+
+      // Create thread title (plain date — Discord doesn't render timestamps in thread names)
       const threadTitleTemplate = await getConfigValue(connection,'txtTurnThreadTitle', guild_id);
       const threadTitle = threadTitleTemplate
         .replace('[story_id]', writer.story_id)
         .replace('[storyTurnNumber]', turnNumber)
         .replace('[user display name]', writer.discord_display_name)
-        .replace('[turnEndTime]', discordTimestamp);
+        .replace('[turnEndTime]', formattedEndTime);
       
       // Determine privacy: story-level privacy overrides writer preference
       const isPrivateThread = writer.story_turn_privacy || writer.turn_privacy;
@@ -431,43 +456,19 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       
       threadId = thread.id;
       
-      // Set permissions
-      // threads cant get permission overwrites TODO:
-      // **Fix:** For public threads, rely on 
-      // parent channel permissions. For private threads, 
-      // use `thread.members.add()` to add specific users. 
-      // Remove the permissionOverwrites code.
+      // Set thread membership
       if (isPrivateThread) {
-        // Private thread - add admin role
+        // Private thread — add writer and all admins individually
+        await thread.members.add(writer.discord_user_id);
         const adminRoleName = await getConfigValue(connection,'cfgAdminRoleName', guild_id);
         const adminRole = interaction.guild.roles.cache.find(r => r.name === adminRoleName);
         if (adminRole) {
-          await thread.members.add(interaction.user.id);
-          // Add admin users individually (Discord limitation)
-        }
-      } else {
-        // Public thread - set permission overwrites
-        await thread.permissionOverwrites.create(interaction.guild.roles.everyone, {
-          SendMessages: false,
-          AddReactions: true,
-          ViewChannel: true
-        });
-        
-        await thread.permissionOverwrites.create(interaction.user.id, {
-          SendMessages: true,
-          ViewChannel: true
-        });
-        
-        const adminRoleName = await getConfigValue(connection,'cfgAdminRoleName', guild_id);
-        const adminRole = interaction.guild.roles.cache.find(r => r.name === adminRoleName);
-        if (adminRole) {
-          await thread.permissionOverwrites.create(adminRole.id, {
-            SendMessages: true,
-            ManageMessages: true,
-            ViewChannel: true
-          });
+          for (const member of adminRole.members.values()) {
+            try { await thread.members.add(member.id); } catch {}
+          }
         }
       }
+      // Public threads are visible to all — no membership changes needed
       
       // Update turn with thread ID
       await connection.execute(
@@ -476,10 +477,10 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       );
       
       // Post welcome message with buttons
-      await postWelcomeMessage(thread, writer, guild_id);
+      await postWelcomeMessage(connection, thread, writer, guild_id);
       
       // Send notification to writer
-      await handleWriterNotification(interaction, writer, threadId, guild_id);
+      await handleWriterNotification(connection, interaction, writer, threadId, guild_id);
       dmMessage = 'Normal mode thread created and notification sent';
     }
     
@@ -491,7 +492,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     };
     
   } catch (error) {
-    console.error(`${formattedDate()}: [Guild ${guild_id}] NextTurn failed:`, error);
+    console.error(`${formattedDate()}:  NextTurn failed:`, error);
     return {
       success: false,
       error: 'Failed to create turn'
@@ -502,16 +503,17 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 /**
  * Handle quick mode notification and feed announcement
  */
-async function handleQuickModeNotification(interaction, writer, turnId, guild_id) {
+async function handleQuickModeNotification(connection, interaction, writer, turnId, guild_id) {
   const turnEndTime = turnEndTimeFunction(turnId, writer.turn_length_hours);
   const discordTimestamp = `<t:${Math.floor(turnEndTime.getTime() / 1000)}:F>`;
   
   // Send notification to writer
-  await handleWriterNotification(interaction, writer, writer.story_thread_id, guild_id);
+  await handleWriterNotification(connection, interaction, writer, writer.story_thread_id, guild_id);
   
   // Post feed announcement
   const txtQuickModeTurnStart = await getConfigValue(connection,'txtQuickModeTurnStart', guild_id);
   const feedMessage = txtQuickModeTurnStart
+    .replace('[story_id]', writer.story_id)
     .replace('[story_title]', writer.title)
     .replace('[current_writer]', writer.discord_display_name)
     .replace('[turn_end_date]', discordTimestamp);
@@ -524,7 +526,7 @@ async function handleQuickModeNotification(interaction, writer, turnId, guild_id
 /**
  * Handle writer notification based on their preference
  */
-async function handleWriterNotification(interaction, writer, linkToThreadId, guild_id) {
+async function handleWriterNotification(connection, interaction, writer, linkToThreadId, guild_id) {
   const linkToUse = linkToThreadId || writer.story_thread_id;
   
   // Check notification preference
@@ -557,7 +559,7 @@ async function handleWriterNotification(interaction, writer, linkToThreadId, gui
 /**
  * Post welcome message with buttons to normal mode thread
  */
-async function postWelcomeMessage(thread, writer, guild_id) {
+async function postWelcomeMessage(connection, thread, writer, guild_id) {
   const txtNormalModeWelcome = await getConfigValue(connection,'txtNormalModeWelcome', guild_id);
   const btnFinalizeEntry = await getConfigValue(connection,'btnFinalizeEntry', guild_id);
   const btnSkipTurn = await getConfigValue(connection,'btnSkipTurn', guild_id);
@@ -585,8 +587,8 @@ async function postWelcomeMessage(thread, writer, guild_id) {
  */
 async function getTurnNumber(connection, storyId) {
   const [result] = await connection.execute(
-    `SELECT COUNT(*) + 1 as turn_number FROM turn t 
-     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id  
+    `SELECT COUNT(*) as turn_number FROM turn t
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      WHERE sw.story_id = ?`,
     [storyId]
   );
@@ -600,17 +602,4 @@ export function turnEndTimeFunction(turnId, turnLengthHours) {
   // For now, calculate from current time + turn length
   // In a real implementation, you'd get the turn's started_at from database
   return new Date(Date.now() + (turnLengthHours * 60 * 60 * 1000));
-}
-
-/**
- * Helper to get database connection
- */
-async function getDBConnection() {
-  // This should return a connection from your DB pool
-  // For now, assume we have access to the global connection
-  const { DB } = await import('./utilities.js');
-  const config = await import('./config.json', { assert: { type: 'json' } });
-  const db = new DB(config.default.db);
-  await db.connect();
-  return db.connection;
 }

@@ -24,26 +24,33 @@ export class DB {
   
   async connect() {
     try {
-      this.connection = await mysql.createConnection({
+      this.pool = mysql.createPool({
         host: this.dbConfig.host,
         port: this.dbConfig.port,
         user: this.dbConfig.user,
         password: this.dbConfig.password,
-        database: this.dbConfig.database
+        database: this.dbConfig.database,
+        supportBigNumbers: true,
+        bigNumberStrings: true,
+        connectionLimit: 5,
+        waitForConnections: true,
+        timezone: '+00:00'
       });
+      await this.pool.execute('SELECT 1');
+      this.connection = this.pool;
       console.log('Database connected successfully');
-      return this.connection;
+      return this.pool;
     } catch (error) {
       console.error(`${formattedDate()}: Database connection failed:`, error.message);
       throw error;
     }
   }
-  
+
   async disconnect() {
-    if (this.connection) {
+    if (this.pool) {
       try {
-        await this.connection.end();
-        this.connection = null;
+        await this.pool.end();
+        this.pool = null;
         console.log('Database disconnected successfully');
       } catch (error) {
         console.error(`${formattedDate()}: Database disconnection failed:`, error.message);
@@ -94,32 +101,34 @@ export function sanitizeModalInput(input, maxLength = 1024) {
         .substring(0, maxLength);                 // Flexible length limit
 }
 
-export async function getConfigValue(connection,connection, key, guildID = 1) {
-  try { // Get language code for this guild (system default is 'en')
-    let languageCode = 'en';
-    if (guildID !== 1) {
-      const [langRows] = await connection.execute(
-        'SELECT config_value FROM config WHERE config_key = ? AND guild_id = ?',
-        ['cfgLanguageCode', guildID]
+export async function getConfigValue(connection, key) {
+  try {
+    if (Array.isArray(key)) {
+      const placeholders = key.map(() => '?').join(', ');
+      const [rows] = await connection.execute(
+        `SELECT config_key, config_value FROM config WHERE config_key IN (${placeholders}) AND guild_id = 1`,
+        key
       );
-      languageCode = langRows[0]?.config_value || 'en';
+      const result = {};
+      for (const row of rows) {
+        result[row.config_key] = row.config_value;
+      }
+      // Fall back to key name for any that weren't found
+      for (const k of key) {
+        if (!result[k]) result[k] = k;
+      }
+      return result;
     }
-    let [configRows] = await connection.execute(
-      'SELECT config_value FROM config WHERE config_key = ? AND guild_id = ?',
-      [key, guildID]
+    const [configRows] = await connection.execute(
+      'SELECT config_value FROM config WHERE config_key = ? AND guild_id = 1',
+      [key]
     );
-    let configValue = configRows[0]?.config_value;
-    // Fall back to system defaults for current language if no custom value present
-    if (!configValue) {
-      [configRows] = await connection.execute(
-        'SELECT config_value FROM config WHERE config_key = ? AND language_code = ? AND guild_id = 1',
-        [key, languageCode]
-      );
-      configValue = configRows[0]?.config_value;
-    }
-    return configValue || key;
+    return configRows[0]?.config_value || key;
   } catch (error) {
-    console.error(`${formattedDate()}: [Guild ${guildID}] Config lookup failed for key '${key}':`, error);
+    console.error(`${formattedDate()}: Config lookup failed for key '${Array.isArray(key) ? key.join(', ') : key}':`, error);
+    if (Array.isArray(key)) {
+      return Object.fromEntries(key.map(k => [k, k]));
+    }
     return key;
   }
 }
@@ -143,12 +152,12 @@ export async function sendUserMessage(connection, interaction, storyWriterId, cf
   try {
     const user = await interaction.client.users.fetch(discord_user_id);
     await user.send(dmMessage);
-    return `${formattedDate()}: [Guild ${guild_id}] ` + cfgMessageKey + ' DM sent successfully';
+    return `${formattedDate()}:  ` + cfgMessageKey + ' DM sent successfully';
   } catch (dmError) {
     const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
     const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
     await channel.send(`<@${discord_user_id}> ${mentionMessage}`);
-    return `${formattedDate()}: [Guild ${guild_id}] ` + cfgMessageKey + ' Mention sent in channel';
+    return `${formattedDate()}:  ` + cfgMessageKey + ' Mention sent in channel';
   }
 }
 
@@ -179,7 +188,7 @@ export async function createThread(interaction, guildID, keyValueMap) {
   const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
   
   if (!channel) {
-    throw new Error(`${formattedDate()}: [Guild ${guildID}] Story feed channel not found`);
+    throw new Error(`${formattedDate()}: Story feed channel not found`);
   }
   
   // Get admin role (used for both public and private thread permissions)
@@ -187,7 +196,7 @@ export async function createThread(interaction, guildID, keyValueMap) {
   const adminRole = interaction.guild.roles.cache.find(r => r.name === adminRoleName);
   
   if (!adminRole) {
-    console.error(`${formattedDate()}: [Guild ${guildID}] Admin role '${adminRoleName}' not found - skipping admin permissions`);
+    console.error(`${formattedDate()}: Admin role '${adminRoleName}' not found - skipping admin permissions`);
   }
   
   // Get and build thread title
@@ -231,7 +240,7 @@ export async function createThread(interaction, guildID, keyValueMap) {
         try {
           await thread.members.add(member.id);
         } catch (error) {
-          console.error(`${formattedDate()}: [Guild ${guildID}] Failed to add admin ${member.displayName} to private thread:`, error);
+          console.error(`${formattedDate()}: Failed to add admin ${member.displayName} to private thread:`, error);
         }
       }
     }

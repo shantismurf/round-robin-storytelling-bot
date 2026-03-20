@@ -6,6 +6,9 @@
   "main": "index.js",
   "scripts": {
     "start": "node index.js",
+    "sync-config": "node sync-config.js",
+    "sync-config:apply": "node sync-config.js --apply",
+    "sync-config:set": "node sync-config.js --set",
     "dev": "nodemon index.js",
     "lint": "eslint . || true",
     "test": "echo \"no tests yet\" && exit 0"
@@ -16,6 +19,8 @@
     "node": ">=16"
   },
   "dependencies": {
+    "discord.js": "^14.25.1",
+    "marked": "^17.0.4",
     "mysql2": "^3.15.3"
   }
 }

@@ -37,7 +37,7 @@ This Discord bot manages collaborative round-robin story writing events with the
 - Variables in template text that must be replaced with contextual values use bracket notation: `[story_id]`and use `replaceTemplateVariables()` for processing, passing a valueKeyMap with contextual data.
 
 ### Error Handling Standards
-- Error messages should be sent to the console beginning with: `${formattedDate()}: [Guild ${guild_id}] ` + Error description
+- Error messages should be sent to the console beginning with: `${formattedDate()}: ` + Error description
 - Include function name in error message: `FunctionName failed:` or `Error in FunctionName:`
 - Include key parameters for debugging context where helpful (e.g., IDs, user input)
 - Return structured objects with `success` boolean and `error`/`message` fields

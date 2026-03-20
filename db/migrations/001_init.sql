@@ -13,6 +13,7 @@ CREATE TABLE IF NOT EXISTS story (
   title TEXT NOT NULL,
   ao3_URL VARCHAR(255),
   story_status TINYINT(1) DEFAULT 1,
+  closed_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   quick_mode TINYINT(1) DEFAULT 0,
@@ -21,6 +22,7 @@ CREATE TABLE IF NOT EXISTS story (
   next_writer_id BIGINT NULL,
   story_thread_id BIGINT,
   story_turn_privacy TINYINT(1) DEFAULT 0,
+  show_authors TINYINT(1) DEFAULT 1,
   story_delay_hours INT DEFAULT 0,
   story_delay_users INT DEFAULT NULL,
   story_order_type TINYINT(1) DEFAULT 1, -- 1=random, 2=round-robin, 3=fixed
@@ -62,6 +64,7 @@ CREATE TABLE IF NOT EXISTS turn (
   story_writer_id BIGINT NOT NULL,
   FOREIGN KEY (story_writer_id) REFERENCES story_writer(story_writer_id) ON DELETE CASCADE,
   started_at TIMESTAMP NULL,
+  turn_ends_at TIMESTAMP NULL,
   ended_at TIMESTAMP NULL,
   thread_id VARCHAR(255),
   turn_status TINYINT(1) DEFAULT 0

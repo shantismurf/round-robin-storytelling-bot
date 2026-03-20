@@ -1,0 +1,143 @@
+/**
+ * sync-config.js
+ * Compares sample_config.sql against the live config table.
+ *
+ * Usage:
+ *   npm run sync-config                              -- dry run: shows missing and changed entries, makes no changes
+ *   npm run sync-config -- --apply                   -- inserts missing entries only (never overwrites existing values)
+ *   node sync-config.js --set key value              -- directly sets a single key in the DB
+ */
+
+import fs from 'fs';
+import { DB, loadConfig, formattedDate } from './utilities.js';
+
+function parseConfigEntries(sql) {
+  const entries = [];
+  // Match each VALUES row: ('key', 'value', 'lang', guild_id)
+  // Handles both '' (SQL standard) and \' (MySQL extension) escapes inside strings
+  const rowRegex = /\(\s*'((?:[^'\\]|\\.|'')*)'\s*,\s*'((?:[^'\\]|\\.|'')*)'\s*,\s*'([^']*)'\s*,\s*(\d+)\s*\)/g;
+  let match;
+  while ((match = rowRegex.exec(sql)) !== null) {
+    entries.push({
+      config_key:    match[1].replace(/''/g, "'").replace(/\\'/g, "'"),
+      config_value:  match[2].replace(/''/g, "'").replace(/\\'/g, "'"),
+      language_code: match[3],
+      guild_id:      parseInt(match[4])
+    });
+  }
+  return entries;
+}
+
+async function syncConfig() {
+  const args = process.argv.slice(2);
+  const apply = args.includes('--apply');
+  const setIndex = args.indexOf('--set');
+
+  const config = loadConfig();
+  const db = new DB(config.db);
+  const connection = await db.connect();
+
+  try {
+    // --set key value: directly update a single key and exit
+    if (setIndex !== -1) {
+      const key = args[setIndex + 1];
+      const value = args[setIndex + 2];
+      if (!key || value === undefined) {
+        console.error('Usage: npm run sync-config -- --set <key> <value>');
+        process.exit(1);
+      }
+      const [result] = await connection.execute(
+        'UPDATE config SET config_value = ? WHERE config_key = ? AND guild_id = 1',
+        [value, key]
+      );
+      if (result.affectedRows === 0) {
+        console.log(`Key '${key}' not found in DB (guild 1). Did you mean to insert it?`);
+      } else {
+        console.log(`${formattedDate()}: Set ${key} = ${value}`);
+      }
+      return;
+    }
+
+    if (!apply) {
+      console.log(`${formattedDate()}: DRY RUN — no changes will be made. Use --apply to apply.\n`);
+    }
+
+    const sql = fs.readFileSync('./db/sample_config.sql', 'utf8');
+    const fileEntries = parseConfigEntries(sql);
+
+    if (fileEntries.length === 0) {
+      console.log('No entries parsed from sample_config.sql — check the file format.');
+      return;
+    }
+    console.log(`${formattedDate()}: Parsed ${fileEntries.length} entries from sample_config.sql`);
+
+    // Get all entries currently in the DB
+    const [dbRows] = await connection.execute('SELECT config_key, config_value, guild_id FROM config');
+    const dbMap = new Map(dbRows.map(r => [`${r.guild_id}:${r.config_key}`, r.config_value]));
+    console.log(`${formattedDate()}: Found ${dbRows.length} entries in the database\n`);
+
+    const missing = [];
+    const changed = [];
+
+    for (const entry of fileEntries) {
+      const dbKey = `${entry.guild_id}:${entry.config_key}`;
+      if (!dbMap.has(dbKey)) {
+        missing.push(entry);
+      } else if (dbMap.get(dbKey) !== entry.config_value) {
+        changed.push({ ...entry, old_value: dbMap.get(dbKey) });
+      }
+    }
+
+    // Report / insert missing entries
+    if (missing.length === 0) {
+      console.log('No missing entries.');
+    } else {
+      console.log(`${missing.length} missing entries (would insert):`);
+      for (const entry of missing) {
+        console.log(`  + ${entry.config_key}`);
+        if (apply) {
+          await connection.execute(
+            'INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, ?, ?)',
+            [entry.config_key, entry.config_value, entry.language_code, entry.guild_id]
+          );
+        }
+      }
+    }
+
+    // Report changed entries (--apply never updates; use --set for that)
+    if (changed.length === 0) {
+      console.log('No changed entries.');
+    } else {
+      console.log(`\n${changed.length} changed entries (skipped — use --set to update individual values):`);
+      for (const entry of changed) {
+        console.log(`  ~ ${entry.config_key}`);
+        console.log(`      was: ${entry.old_value}`);
+        console.log(`      now: ${entry.config_value}`);
+      }
+    }
+
+    if (apply) {
+      console.log(`\n${formattedDate()}: Done.`);
+    } else if (missing.length > 0 || changed.length > 0) {
+      console.log(`\nRun with --apply to make these changes.`);
+    } else {
+      console.log(`\n${formattedDate()}: Config is up to date.`);
+    }
+
+    // Report anything in the DB not in the file
+    const fileKeys = new Set(fileEntries.map(e => `${e.guild_id}:${e.config_key}`));
+    const extras = dbRows.filter(r => !fileKeys.has(`${r.guild_id}:${r.config_key}`));
+    if (extras.length > 0) {
+      console.log(`\nNote: ${extras.length} key(s) in DB not found in sample_config.sql (custom or manually added — will not be touched):`);
+      extras.forEach(r => console.log(`  ? ${r.config_key} (guild ${r.guild_id})`));
+    }
+
+  } finally {
+    await db.disconnect();
+  }
+}
+
+syncConfig().catch(err => {
+  console.error(`${formattedDate()}: Sync failed:`, err);
+  process.exit(1);
+});
