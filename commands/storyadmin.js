@@ -237,10 +237,21 @@ async function handleExtend(connection, interaction) {
     );
 
     const [updatedRows] = await connection.execute(
-      `SELECT UNIX_TIMESTAMP(turn_ends_at) as new_end_unix FROM turn WHERE turn_id = ?`,
+      `SELECT UNIX_TIMESTAMP(turn_ends_at) as new_end_unix, turn_ends_at FROM turn WHERE turn_id = ?`,
       [turnId]
     );
-    const newEndUnix = updatedRows[0].new_end_unix;
+    const { new_end_unix: newEndUnix, turn_ends_at: newTurnEndsAt } = updatedRows[0];
+
+    // Cancel the old turnTimeout job and schedule a new one at the updated deadline
+    await connection.execute(
+      `UPDATE job SET job_status = 2 WHERE job_type = 'turnTimeout' AND job_status = 0
+       AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
+      [turnId]
+    );
+    await connection.execute(
+      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+      ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt]
+    );
 
     await logAdminAction(connection, interaction.user.id, 'extend', storyId, null, `+${hours}h`);
     const msg = replaceTemplateVariables(await getConfigValue(connection, 'txtAdminExtendSuccess', guildId), {

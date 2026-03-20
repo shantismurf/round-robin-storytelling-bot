@@ -3,6 +3,8 @@ import { checkStoryDelay, PickNextWriter, NextTurn } from './storybot.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 
 const JOB_POLL_INTERVAL_MS = 60 * 1000;
+const JOB_MAX_ATTEMPTS = 3;
+const JOB_RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 
 export function startJobRunner(connection, client) {
   console.log(`${formattedDate()}: Job runner started, polling every 60s`);
@@ -23,12 +25,14 @@ async function runDueJobs(connection, client) {
 }
 
 async function processJob(connection, client, job) {
-  // Claim the job atomically — prevents double-processing if poll overlaps
+  // Claim the job atomically and increment attempt counter
   const [claimed] = await connection.execute(
-    `UPDATE job SET job_status = 1 WHERE job_id = ? AND job_status = 0`,
+    `UPDATE job SET job_status = 1, attempts = attempts + 1 WHERE job_id = ? AND job_status = 0`,
     [job.job_id]
   );
   if (claimed.affectedRows === 0) return;
+
+  const attemptNumber = job.attempts + 1;
 
   try {
     const payload = JSON.parse(job.payload);
@@ -46,8 +50,18 @@ async function processJob(connection, client, job) {
         console.warn(`${formattedDate()}: Unknown job type: ${job.job_type} (job_id=${job.job_id})`);
     }
   } catch (err) {
-    console.error(`${formattedDate()}: Job ${job.job_id} (${job.job_type}) failed:`, err);
-    await connection.execute(`UPDATE job SET job_status = 2 WHERE job_id = ?`, [job.job_id]);
+    console.error(`${formattedDate()}: Job ${job.job_id} (${job.job_type}) failed on attempt ${attemptNumber}:`, err);
+    if (attemptNumber < JOB_MAX_ATTEMPTS) {
+      const retryAt = new Date(Date.now() + JOB_RETRY_DELAY_MS);
+      await connection.execute(
+        `UPDATE job SET job_status = 0, run_at = ? WHERE job_id = ?`,
+        [retryAt, job.job_id]
+      );
+      console.log(`${formattedDate()}: Job ${job.job_id} scheduled for retry at ${retryAt.toISOString()} (attempt ${attemptNumber}/${JOB_MAX_ATTEMPTS})`);
+    } else {
+      await connection.execute(`UPDATE job SET job_status = 2 WHERE job_id = ?`, [job.job_id]);
+      console.error(`${formattedDate()}: Job ${job.job_id} permanently failed after ${attemptNumber} attempts`);
+    }
   }
 }
 

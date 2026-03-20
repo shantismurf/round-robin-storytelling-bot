@@ -313,15 +313,16 @@ export async function checkStoryDelay(connection, storyId) {
  * PickNextWriter function - selects next writer based on story order type
  */
 export async function PickNextWriter(connection, storyId) {
-  // Get current active writer ID
-  const [activeTurn] = await connection.execute(
+  // Get the most recent turn to determine who just went
+  // (turn is already ended by the time PickNextWriter is called, so don't filter by status)
+  const [lastTurn] = await connection.execute(
     `SELECT sw.story_writer_id FROM turn t
-     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id  
-     WHERE sw.story_id = ? AND t.turn_status = 1
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ?
      ORDER BY t.started_at DESC LIMIT 1`,
     [storyId]
   );
-  const currentWriterId = activeTurn.length > 0 ? activeTurn[0].story_writer_id : null;
+  const currentWriterId = lastTurn.length > 0 ? lastTurn[0].story_writer_id : null;
   
   // Get story order type
   const [storyData] = await connection.execute(
@@ -353,12 +354,11 @@ export async function PickNextWriter(connection, storyId) {
     return writers[0].story_writer_id;
   }
 
-  // Random selection (exclude current writer)
+  // Random selection — exclude previous writer unless they're the only one
   if (story_order_type === 1) {
-    const randomWriters = currentWriterId 
-      ? writers.filter(w => w.story_writer_id !== currentWriterId)
-      : writers;
-    return randomWriters[Math.floor(Math.random() * randomWriters.length)].story_writer_id;
+    const eligible = writers.filter(w => w.story_writer_id !== currentWriterId);
+    const pool = eligible.length > 0 ? eligible : writers;
+    return pool[Math.floor(Math.random() * pool.length)].story_writer_id;
   }
 
   // Sequential selection (same for both round-robin and fixed)

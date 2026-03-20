@@ -1236,7 +1236,7 @@ async function createPreviewEmbed(connection, content, guildId, discordTimestamp
 /**
  * Handle /story list command
  */
-async function handleHelp(interaction) {
+function buildHelpPage1() {
   const embed = new EmbedBuilder()
     .setTitle('📖 Round Robin StoryBot')
     .setColor(0x5865f2)
@@ -1279,9 +1279,118 @@ async function handleHelp(interaction) {
         inline: false
       }
     )
-    .setFooter({ text: 'Story IDs appear in /story list and in story thread titles.' });
+    .setFooter({ text: 'Page 1 of 2 · Story IDs appear in /story list and in story thread titles.' });
 
-  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_help_page_2')
+      .setLabel('📝 Story Creation Guide →')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
+function buildHelpPage2() {
+  const embed = new EmbedBuilder()
+    .setTitle('📝 Create New Story — Option Reference')
+    .setColor(0x5865f2)
+    .addFields(
+      {
+        name: 'Story Title',
+        value: '⚠️ *Required.*',
+        inline: true
+      },
+      {
+        name: 'Max Writers',
+        value: '#️⃣ Optional. Leave blank for no limit.',
+        inline: true
+      },
+      {
+        name: 'Turn Length',
+        value: '⌛ How many hours each writer has per turn. Default: 24h.',
+        inline: true
+      },
+      {
+        name: 'Story Mode',
+        value: [
+          '🟢 **Normal** — Writers get a private or public thread for each turn.',
+          '🟣 **Quick** — Writers submit entries via `/story write`.',
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: 'Writer Order',
+        value: [
+          '🎲 **Random** — Next writer chosen completely at random each turn.',
+          '🔄 **Round Robin** — Rotates randomly, but no one repeats until everyone has had a turn.',
+          '📋 **Fixed Order** — Writers take turns in a fixed sequence based on join order.',
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: 'Hide Threads',
+        value: [
+          '🥷 **On** — Turn threads are private to the current writer and admins only.',
+          '🤡 **Off** — Turn threads are visible to all writers.',
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: 'Show Author Names',
+        value: [
+          '📑 **Yes** — Writer names appear on entries in Discord and in the export file.',
+          '📄 **No** — Entries are posted and exported anonymously.',
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: 'Timeout Reminder',
+        value: '⏰ Send a reminder to the current writer after X% of their turn has elapsed. Default: 50%. Set to 0% to disable.',
+        inline: false
+      },
+      {
+        name: 'Delay Start By',
+        value: '🫸 Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.',
+        inline: false
+      },
+      {
+        name: 'Your AO3 Username',
+        value: '<:ao3:1484674133437714495> Your name as it appears on AO3. Used in story exports. Defaults to your Discord display name if left blank.',
+        inline: false
+      },
+      {
+        name: 'Keep My Turns Private',
+        value: [
+          '🔒 **Yes** — Your turn threads will only be visible to you and admins.',
+          '🔓 **No** — Your turn threads will be visible to other writers.',
+        ].join('\n'),
+        inline: false
+      }
+    )
+    .setFooter({ text: 'Page 2 of 2 · These settings can be edited later by an admin via /storyadmin config.' });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_help_page_1')
+      .setLabel('← Back to Overview')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
+async function handleHelp(interaction) {
+  await interaction.reply({ ...buildHelpPage1(), flags: MessageFlags.Ephemeral });
+}
+
+async function handleHelpNavigation(interaction) {
+  await interaction.deferUpdate();
+  if (interaction.customId === 'story_help_page_2') {
+    await interaction.editReply(buildHelpPage2());
+  } else {
+    await interaction.editReply(buildHelpPage1());
+  }
 }
 
 async function handleListStories(connection, interaction) {
@@ -1438,6 +1547,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_close_cancel_')) {
     await handleCloseCancel(connection, interaction);
+  } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2') {
+    await handleHelpNavigation(interaction);
   }
 }
 
