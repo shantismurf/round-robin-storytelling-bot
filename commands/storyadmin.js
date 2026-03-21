@@ -370,10 +370,12 @@ async function handleNext(connection, interaction) {
       [storyId]
     );
 
+    const targetStoryWriterId = writerRows[0].story_writer_id;
+
     if (activeTurnRows.length === 0) {
       // No active turn — start theirs immediately (clear any existing override first)
       await connection.execute(`UPDATE story SET next_writer_id = NULL WHERE story_id = ?`, [storyId]);
-      await NextTurn(connection, interaction, targetUser.id);
+      await NextTurn(connection, interaction, targetStoryWriterId);
       await logAdminAction(connection, interaction.user.id, 'next', storyId, targetUser.id);
       return await interaction.editReply({
         content: replaceTemplateVariables(
@@ -394,7 +396,7 @@ async function handleNext(connection, interaction) {
     }
 
     // Store override — will be applied when the current turn ends
-    await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [targetUser.id, storyId]);
+    await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [targetStoryWriterId, storyId]);
     await logAdminAction(connection, interaction.user.id, 'next', storyId, targetUser.id);
     await interaction.editReply({
       content: replaceTemplateVariables(

@@ -75,7 +75,6 @@ async function main() {
   });
   // Listen for slash commands and modal interactions
   client.on(Events.InteractionCreate, async interaction => {
-    console.log(`${formattedDate()}: InteractionCreate fired — type: ${interaction.type}, user: ${interaction.user.username}`);
     try {
       if (interaction.isChatInputCommand()) {
         console.log(`${formattedDate()}: ${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`);
