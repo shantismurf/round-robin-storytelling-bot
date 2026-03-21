@@ -7,6 +7,9 @@ import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '
 // Temporary storage for first modal data while user completes second modal
 const pendingStoryData = new Map();
 
+// Pending manage edit sessions keyed by userId
+const pendingManageData = new Map();
+
 // Convert Discord markdown to HTML for export
 function discordMarkdownToHtml(text) {
   // Pre-process Discord blockquote syntax before marked sees it
@@ -132,6 +135,15 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand(subcommand =>
     subcommand
+      .setName('manage')
+      .setDescription('Edit story settings, pause, or resume (creator or admin only)')
+      .addIntegerOption(option =>
+        option.setName('story_id')
+          .setDescription('Story ID to manage')
+          .setRequired(true))
+  )
+  .addSubcommand(subcommand =>
+    subcommand
       .setName('help')
       .setDescription('How to use Round Robin StoryBot')
   );
@@ -152,6 +164,8 @@ async function execute(connection, interaction) {
     await handleRead(connection, interaction);
   } else if (subcommand === 'close') {
     await handleClose(connection, interaction);
+  } else if (subcommand === 'manage') {
+    await handleManage(connection, interaction);
   } else if (subcommand === 'help') {
     await handleHelp(interaction);
   } else {
@@ -335,6 +349,8 @@ async function handleModalSubmit(connection, interaction) {
     await handleWriteModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_')) {
     await handleJoinModalSubmit(connection, interaction);
+  } else if (interaction.customId.startsWith('story_manage_')) {
+    await handleManageModalSubmit(connection, interaction);
   }
 }
 
@@ -1279,7 +1295,7 @@ function buildHelpPage1() {
         inline: false
       }
     )
-    .setFooter({ text: 'Page 1 of 2 · Story IDs appear in /story list and in story thread titles.' });
+    .setFooter({ text: 'Page 1 of 3 · Story IDs appear in /story list and in story thread titles.' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -1368,12 +1384,68 @@ function buildHelpPage2() {
         inline: false
       }
     )
-    .setFooter({ text: 'Page 2 of 2 · These settings can be edited later by an admin via /storyadmin config.' });
+    .setFooter({ text: 'Page 2 of 3 · These settings can be edited later via /story manage.' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_help_page_1')
       .setLabel('← Back to Overview')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_help_page_3')
+      .setLabel('⚙️ Story Manage Guide →')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
+function buildHelpPage3() {
+  const embed = new EmbedBuilder()
+    .setTitle('⚙️ Managing a Story — /story manage')
+    .setColor(0x5865f2)
+    .addFields(
+      {
+        name: 'Who can use /story manage?',
+        value: 'The story creator (the first writer to join) and anyone with the server admin role.',
+        inline: false
+      },
+      {
+        name: 'What can be edited?',
+        value: [
+          '**Turn Length** — How many hours each writer has per turn.',
+          '**Timeout Reminder** — What % into a turn to send the writer a reminder. Set to 0% to disable.',
+          '**Max Writers** — Cap on total writers. Leave blank for no limit.',
+          '**Open to New Writers** — Whether new writers can join after the story has started.',
+          '**Show Author Names** — Whether writer names appear on entries and in the story export.',
+          '**Writer Order** — Cycle between Random, Round Robin, and Fixed Order.',
+          '**Summary** — A freeform description used in story exports.',
+          '**Tags** — Comma-separated tag list used in story exports.',
+        ].join('\n'),
+        inline: false
+      },
+      {
+        name: 'Pausing and Resuming',
+        value: 'The Pause/Resume toggle in /story manage lets the creator or an admin pause the story (freezing the current turn) or resume it. Resuming starts the next turn automatically if no turn is currently active.',
+        inline: false
+      },
+      {
+        name: 'Closing a Story',
+        value: 'Use `/story close <id>` to permanently close a story. This posts a completion message with the full story export. This cannot be undone.',
+        inline: false
+      },
+      {
+        name: 'Admin Force Controls',
+        value: '`/storyadmin skip` · `/storyadmin extend` · `/storyadmin kick` · `/storyadmin next` · `/storyadmin delete`\n\nSee `/storyadmin help` for details.',
+        inline: false
+      }
+    )
+    .setFooter({ text: 'Page 3 of 3' });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_help_page_2')
+      .setLabel('← Story Creation Guide')
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -1388,6 +1460,8 @@ async function handleHelpNavigation(interaction) {
   await interaction.deferUpdate();
   if (interaction.customId === 'story_help_page_2') {
     await interaction.editReply(buildHelpPage2());
+  } else if (interaction.customId === 'story_help_page_3') {
+    await interaction.editReply(buildHelpPage3());
   } else {
     await interaction.editReply(buildHelpPage1());
   }
@@ -1547,7 +1621,9 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_close_cancel_')) {
     await handleCloseCancel(connection, interaction);
-  } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2') {
+  } else if (interaction.customId.startsWith('story_manage_')) {
+    await handleManageButton(connection, interaction);
+  } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
     await handleHelpNavigation(interaction);
   }
 }
@@ -2145,7 +2221,7 @@ async function handleSkipTurn(connection, interaction) {
  */
 async function generateStoryExport(connection, storyId, guildId) {
   const [storyRows] = await connection.execute(
-    `SELECT story_id, title, created_at, story_status, quick_mode, closed_at, show_authors FROM story WHERE story_id = ? AND guild_id = ?`,
+    `SELECT story_id, title, created_at, story_status, quick_mode, closed_at, show_authors, summary, tags FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
   );
   if (storyRows.length === 0) return null;
@@ -2217,6 +2293,7 @@ async function generateStoryExport(connection, storyId, guildId) {
     p { margin: 0 0 1em; }
     .spoiler { background: #222; color: #222; border-radius: 3px; padding: 0 2px; cursor: pointer; }
     .spoiler:hover { color: #fff; }
+    .summary { color: #444; font-style: italic; margin-bottom: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
   </style>
 </head>
 <body>
@@ -2224,9 +2301,9 @@ async function generateStoryExport(connection, storyId, guildId) {
     <h1>${story.title}</h1>
     <div class="meta">Started: ${publishedDate} &nbsp; ${secondDateLabel}: ${secondDate}</div>
     <div class="meta">Story #${story.story_id} &nbsp;·&nbsp; ${modeLabel} &nbsp;·&nbsp; ${turnCount} turn(s) &nbsp;·&nbsp; ~${wordCount.toLocaleString()} words</div>
-    <div class="meta">Writers: ${writersList}</div>
+    <div class="meta">Writers: ${writersList}</div>${story.tags ? `\n    <div class="meta">Tags: ${story.tags}</div>` : ''}
     <div class="meta">Exported: ${exportDate}</div>
-  </div>
+  </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
   ${entriesHtml}
 </body>
 </html>`;
@@ -2257,6 +2334,407 @@ async function handleRead(connection, interaction) {
   } catch (error) {
     console.error(`${formattedDate()}: Error in handleRead:`, error);
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// /story manage — edit story settings (creator or admin)
+// ---------------------------------------------------------------------------
+
+async function checkIsCreator(connection, storyId, userId) {
+  const [rows] = await connection.execute(
+    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC LIMIT 1`,
+    [storyId]
+  );
+  return rows.length > 0 && String(rows[0].discord_user_id) === userId;
+}
+
+function buildManageMessage(cfg, state) {
+  const orderEmojis = { 1: '🎲', 2: '🔄', 3: '📋' };
+  const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
+  const orderEmoji = orderEmojis[state.orderType];
+  const orderLabel = orderLabels[state.orderType];
+  const isPaused = state.targetStatus === 2;
+
+  const embed = new EmbedBuilder()
+    .setTitle(replaceTemplateVariables(cfg.txtAdminConfigTitle, { story_title: state.title }))
+    .setColor(0x5865f2)
+    .addFields(
+      { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
+      { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled', inline: true },
+      { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : '∞', inline: true },
+      { name: cfg.lblOpenToWriters, value: state.allowLateJoins ? 'Yes' : 'No', inline: true },
+      { name: cfg.lblShowAuthors, value: state.showAuthors ? 'Yes' : 'No', inline: true },
+      { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
+      { name: cfg.lblSummary, value: state.summary || '*Not set*', inline: false },
+      { name: cfg.lblTags, value: state.tags || '*Not set*', inline: false },
+      { name: 'Story Status', value: isPaused ? '⏸️ Paused' : '▶️ Active', inline: true }
+    );
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_manage_set_turnlength')
+      .setLabel(cfg.btnSetTurnLength)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_set_reminder')
+      .setLabel(cfg.btnSetTimeout)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_set_maxwriters')
+      .setLabel(`${cfg.btnSetMaxWriters}: ${state.maxWriters ?? '∞'}`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_latejoins')
+      .setLabel(`${cfg.lblOpenToWriters}: ${state.allowLateJoins ? 'Yes' : 'No'}`)
+      .setStyle(state.allowLateJoins ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_authors')
+      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? 'Yes' : 'No'}`)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_manage_cycle_order')
+      .setLabel(`${orderEmoji} ${orderLabel}`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_set_summary')
+      .setLabel(cfg.btnSetSummary)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_set_tags')
+      .setLabel(cfg.btnSetTags)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_status')
+      .setLabel(isPaused ? '▶️ Resume Story' : '⏸️ Pause Story')
+      .setStyle(isPaused ? ButtonStyle.Success : ButtonStyle.Secondary)
+  );
+
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_manage_save')
+      .setLabel(cfg.btnAdminConfigSave)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId('story_manage_cancel')
+      .setLabel(cfg.btnCancel)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embeds: [embed], components: [row1, row2, row3] };
+}
+
+async function handleManage(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const storyId = interaction.options.getInteger('story_id');
+  const guildId = interaction.guild.id;
+
+  try {
+    const [storyRows] = await connection.execute(
+      `SELECT story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
+              max_writers, allow_late_joins, show_authors, story_order_type, summary, tags
+       FROM story WHERE story_id = ? AND guild_id = ?`,
+      [storyId, guildId]
+    );
+    if (storyRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+    }
+    const story = storyRows[0];
+
+    if (story.story_status === 3) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryAlreadyClosed', guildId) });
+    }
+
+    const isCreator = await checkIsCreator(connection, storyId, interaction.user.id);
+    const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
+    const isAdmin = interaction.member.permissions.has('Administrator') ||
+      (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+
+    if (!isCreator && !isAdmin) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtManageNotAuthorized', guildId) });
+    }
+
+    const cfg = await getConfigValue(connection, [
+      'txtAdminConfigTitle', 'btnAdminConfigSave', 'btnCancel',
+      'lblTurnLength', 'btnSetTurnLength',
+      'lblTimeoutReminder', 'btnSetTimeout',
+      'lblMaxWriters', 'btnSetMaxWriters',
+      'lblOpenToWriters', 'lblShowAuthors',
+      'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
+      'lblSummary', 'btnSetSummary',
+      'lblTags', 'btnSetTags'
+    ], guildId);
+
+    const state = {
+      cfg,
+      storyId,
+      guildId,
+      title: story.title,
+      turnLength: story.turn_length_hours,
+      timeoutReminder: story.timeout_reminder_percent ?? 50,
+      maxWriters: story.max_writers,
+      allowLateJoins: story.allow_late_joins,
+      showAuthors: story.show_authors,
+      orderType: story.story_order_type,
+      summary: story.summary ?? '',
+      tags: story.tags ?? '',
+      originalStatus: story.story_status,
+      targetStatus: story.story_status,
+      originalInteraction: interaction
+    };
+
+    pendingManageData.set(interaction.user.id, state);
+    await interaction.editReply(buildManageMessage(cfg, state));
+
+  } catch (error) {
+    console.error(`${formattedDate()}: Error in handleManage:`, error);
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+async function handleManageButton(connection, interaction) {
+  const userId = interaction.user.id;
+  const state = pendingManageData.get(userId);
+
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  const customId = interaction.customId;
+
+  if (customId === 'story_manage_toggle_latejoins') {
+    state.allowLateJoins = state.allowLateJoins ? 0 : 1;
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+
+  } else if (customId === 'story_manage_toggle_authors') {
+    state.showAuthors = state.showAuthors ? 0 : 1;
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+
+  } else if (customId === 'story_manage_cycle_order') {
+    state.orderType = state.orderType === 3 ? 1 : state.orderType + 1;
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+
+  } else if (customId === 'story_manage_toggle_status') {
+    state.targetStatus = state.targetStatus === 1 ? 2 : 1;
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+
+  } else if (customId === 'story_manage_set_turnlength') {
+    await interaction.showModal(
+      new ModalBuilder()
+        .setCustomId('story_manage_turnlength_modal')
+        .setTitle(state.cfg.lblTurnLength)
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('turn_length')
+              .setLabel(state.cfg.lblTurnLength)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true)
+              .setValue(String(state.turnLength))
+              .setPlaceholder('Enter number of hours')
+          )
+        )
+    );
+
+  } else if (customId === 'story_manage_set_reminder') {
+    await interaction.showModal(
+      new ModalBuilder()
+        .setCustomId('story_manage_reminder_modal')
+        .setTitle(state.cfg.lblTimeoutReminder)
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('timeout_reminder')
+              .setLabel(state.cfg.lblTimeoutReminder)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(true)
+              .setValue(String(state.timeoutReminder))
+              .setPlaceholder('Enter: 0, 25, 50, or 75')
+          )
+        )
+    );
+
+  } else if (customId === 'story_manage_set_maxwriters') {
+    await interaction.showModal(
+      new ModalBuilder()
+        .setCustomId('story_manage_maxwriters_modal')
+        .setTitle(state.cfg.lblMaxWriters)
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('max_writers')
+              .setLabel(state.cfg.lblMaxWriters)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(false)
+              .setValue(state.maxWriters != null ? String(state.maxWriters) : '')
+              .setPlaceholder('Enter a number, or leave blank for no limit')
+          )
+        )
+    );
+
+  } else if (customId === 'story_manage_set_summary') {
+    await interaction.showModal(
+      new ModalBuilder()
+        .setCustomId('story_manage_summary_modal')
+        .setTitle(state.cfg.lblSummary)
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('summary')
+              .setLabel(state.cfg.lblSummary)
+              .setStyle(TextInputStyle.Paragraph)
+              .setRequired(false)
+              .setValue(state.summary)
+              .setPlaceholder('Enter a summary for this story (used in exports)')
+          )
+        )
+    );
+
+  } else if (customId === 'story_manage_set_tags') {
+    await interaction.showModal(
+      new ModalBuilder()
+        .setCustomId('story_manage_tags_modal')
+        .setTitle(state.cfg.lblTags)
+        .addComponents(
+          new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('tags')
+              .setLabel(state.cfg.lblTags)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(false)
+              .setValue(state.tags)
+              .setPlaceholder('Comma-separated tags (e.g. fluff, AU, slow burn)')
+          )
+        )
+    );
+
+  } else if (customId === 'story_manage_save') {
+    await interaction.deferUpdate();
+    await handleManageSave(connection, interaction, state);
+
+  } else if (customId === 'story_manage_cancel') {
+    await interaction.deferUpdate();
+    pendingManageData.delete(userId);
+    await state.originalInteraction.editReply({
+      content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
+      embeds: [],
+      components: []
+    });
+  }
+}
+
+async function handleManageSave(connection, interaction, state) {
+  const guildId = interaction.guild.id;
+  try {
+    await connection.execute(
+      `UPDATE story SET turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,
+       allow_late_joins = ?, show_authors = ?, story_order_type = ?,
+       summary = ?, tags = ? WHERE story_id = ?`,
+      [
+        state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
+        state.allowLateJoins, state.showAuthors, state.orderType,
+        state.summary || null, state.tags || null,
+        state.storyId
+      ]
+    );
+
+    // Handle pause/resume if status changed
+    if (state.targetStatus !== state.originalStatus) {
+      await connection.execute(`UPDATE story SET story_status = ? WHERE story_id = ?`, [state.targetStatus, state.storyId]);
+
+      if (state.targetStatus === 1) {
+        // Resuming — check if there's an active turn; if not, start one
+        const [activeTurnRows] = await connection.execute(
+          `SELECT t.turn_id FROM turn t
+           JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+           WHERE sw.story_id = ? AND t.turn_status = 1`,
+          [state.storyId]
+        );
+        if (activeTurnRows.length === 0) {
+          const nextWriterId = await PickNextWriter(connection, state.storyId);
+          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+        }
+      }
+    }
+
+    pendingManageData.delete(interaction.user.id);
+    await state.originalInteraction.editReply({
+      content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
+      embeds: [],
+      components: []
+    });
+  } catch (error) {
+    console.error(`${formattedDate()}: Error saving manage settings:`, error);
+    await state.originalInteraction.editReply({
+      content: await getConfigValue(connection, 'errProcessingRequest', guildId),
+      embeds: [],
+      components: []
+    });
+  }
+}
+
+async function handleManageModalSubmit(connection, interaction) {
+  const userId = interaction.user.id;
+  const state = pendingManageData.get(userId);
+
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  try {
+    if (interaction.customId === 'story_manage_turnlength_modal') {
+      const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('turn_length'), 10));
+      if (isNaN(val) || val < 1) {
+        return await interaction.reply({ content: 'Turn length must be at least 1 hour.', flags: MessageFlags.Ephemeral });
+      }
+      state.turnLength = val;
+
+    } else if (interaction.customId === 'story_manage_reminder_modal') {
+      const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('timeout_reminder'), 10));
+      if (isNaN(val) || val < 0 || val > 100) {
+        return await interaction.reply({ content: 'Timeout reminder must be a number between 0 and 100.', flags: MessageFlags.Ephemeral });
+      }
+      state.timeoutReminder = val;
+
+    } else if (interaction.customId === 'story_manage_maxwriters_modal') {
+      const raw = sanitizeModalInput(interaction.fields.getTextInputValue('max_writers'), 10);
+      if (raw) {
+        const val = parseInt(raw);
+        if (isNaN(val) || val < 1) {
+          return await interaction.reply({ content: 'Max writers must be at least 1, or leave blank for no limit.', flags: MessageFlags.Ephemeral });
+        }
+        state.maxWriters = val;
+      } else {
+        state.maxWriters = null;
+      }
+
+    } else if (interaction.customId === 'story_manage_summary_modal') {
+      state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 2000) ?? '';
+
+    } else if (interaction.customId === 'story_manage_tags_modal') {
+      state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 500) ?? '';
+    }
+
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+    await interaction.deleteReply();
+
+  } catch (error) {
+    console.error(`${formattedDate()}: Error in handleManageModalSubmit:`, error);
+    await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
 }
 

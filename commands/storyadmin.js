@@ -2,9 +2,6 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
 import { PickNextWriter, NextTurn } from '../storybot.js';
 
-// Pending config edit sessions keyed by userId
-const pendingConfigData = new Map();
-
 async function checkIsAdmin(connection, interaction, guildId) {
   const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
   return interaction.member.permissions.has('Administrator') ||
@@ -49,26 +46,16 @@ const data = new SlashCommandBuilder()
         o.setName('user').setDescription('Writer to remove').setRequired(true))
   )
   .addSubcommand(s =>
-    s.setName('pause')
-      .setDescription('Pause a story')
+    s.setName('next')
+      .setDescription('Designate which writer will get the next turn')
       .addIntegerOption(o =>
         o.setName('story_id').setDescription('Story ID').setRequired(true))
-  )
-  .addSubcommand(s =>
-    s.setName('resume')
-      .setDescription('Resume a paused story')
-      .addIntegerOption(o =>
-        o.setName('story_id').setDescription('Story ID').setRequired(true))
+      .addUserOption(o =>
+        o.setName('user').setDescription('Writer to designate as next').setRequired(true))
   )
   .addSubcommand(s =>
     s.setName('delete')
       .setDescription('Permanently delete a story and all its data')
-      .addIntegerOption(o =>
-        o.setName('story_id').setDescription('Story ID').setRequired(true))
-  )
-  .addSubcommand(s =>
-    s.setName('config')
-      .setDescription('View and edit story settings')
       .addIntegerOption(o =>
         o.setName('story_id').setDescription('Story ID').setRequired(true))
   )
@@ -79,7 +66,6 @@ const data = new SlashCommandBuilder()
 
 async function execute(connection, interaction) {
   const guildId = interaction.guild.id;
-
   const subcommand = interaction.options.getSubcommand();
 
   if (subcommand === 'help') return await handleHelp(interaction);
@@ -93,10 +79,8 @@ async function execute(connection, interaction) {
   if (subcommand === 'skip')        await handleSkip(connection, interaction);
   else if (subcommand === 'extend') await handleExtend(connection, interaction);
   else if (subcommand === 'kick')   await handleKick(connection, interaction);
-  else if (subcommand === 'pause')  await handlePause(connection, interaction);
-  else if (subcommand === 'resume') await handleResume(connection, interaction);
+  else if (subcommand === 'next')   await handleNext(connection, interaction);
   else if (subcommand === 'delete') await handleDelete(connection, interaction);
-  else if (subcommand === 'config') await handleConfig(connection, interaction);
 }
 
 // ---------------------------------------------------------------------------
@@ -123,27 +107,17 @@ async function handleHelp(interaction) {
         inline: false
       },
       {
-        name: '/storyadmin pause <story_id>',
-        value: 'Pauses a story. The active turn is preserved and will resume when the story is unpaused.',
-        inline: false
-      },
-      {
-        name: '/storyadmin resume <story_id>',
-        value: 'Resumes a paused story. If no turn is active, a new one is started immediately.',
+        name: '/storyadmin next <story_id> <user>',
+        value: 'Designates who will receive the next turn. If no turn is currently active, starts their turn immediately. Otherwise, the override takes effect when the current turn ends.',
         inline: false
       },
       {
         name: '/storyadmin delete <story_id>',
         value: 'Permanently deletes a story and all its turns, entries, and writer data. Requires confirmation.',
         inline: false
-      },
-      {
-        name: '/storyadmin config <story_id>',
-        value: 'Opens an edit form to change story settings: turn length, max writers, late joins, author visibility, and writer order.',
-        inline: false
       }
     )
-    .setFooter({ text: 'All actions are logged. All commands require the admin role or Discord Administrator.' });
+    .setFooter({ text: 'Story settings (pause, resume, turn length, writer order) are managed via /story manage. All actions are logged. All commands require the admin role or Discord Administrator.' });
 
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
 }
@@ -354,97 +328,83 @@ async function handleKick(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /storyadmin pause
+// /storyadmin next
 // ---------------------------------------------------------------------------
-async function handlePause(connection, interaction) {
+async function handleNext(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const storyId = interaction.options.getInteger('story_id');
+  const targetUser = interaction.options.getUser('user');
   const guildId = interaction.guild.id;
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, title, story_status FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT story_id, story_status FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
     }
-    const story = storyRows[0];
-
-    if (story.story_status === 2) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminAlreadyPaused', guildId) });
-    }
-    if (story.story_status === 3) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryAlreadyClosed', guildId) });
+    if (storyRows[0].story_status !== 1) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotActive', guildId) });
     }
 
-    await connection.execute(`UPDATE story SET story_status = 2 WHERE story_id = ?`, [storyId]);
-    await logAdminAction(connection, interaction.user.id, 'pause', storyId);
-
-    await interaction.editReply({
-      content: replaceTemplateVariables(await getConfigValue(connection, 'txtAdminPauseSuccess', guildId), {
-        story_title: story.title
-      })
-    });
-
-  } catch (error) {
-    console.error(`${formattedDate()}: Error in handlePause:`, error);
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// /storyadmin resume
-// ---------------------------------------------------------------------------
-async function handleResume(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
-  const guildId = interaction.guild.id;
-
-  try {
-    const [storyRows] = await connection.execute(
-      `SELECT story_id, title, story_status FROM story WHERE story_id = ? AND guild_id = ?`,
-      [storyId, guildId]
+    // Verify the target is an active writer
+    const [writerRows] = await connection.execute(
+      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
+      [storyId, targetUser.id]
     );
-    if (storyRows.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
-    }
-    const story = storyRows[0];
-
-    if (story.story_status === 1) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminAlreadyActive', guildId) });
-    }
-    if (story.story_status === 3) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryAlreadyClosed', guildId) });
+    if (writerRows.length === 0) {
+      return await interaction.editReply({
+        content: replaceTemplateVariables(
+          await getConfigValue(connection, 'txtAdminKickNotWriter', guildId),
+          { user_name: targetUser.displayName || targetUser.username }
+        )
+      });
     }
 
-    await connection.execute(`UPDATE story SET story_status = 1 WHERE story_id = ?`, [storyId]);
-
-    // If no active turn exists, start one
+    // Check if there's an active turn
     const [activeTurnRows] = await connection.execute(
-      `SELECT t.turn_id FROM turn t
+      `SELECT t.turn_id, sw.discord_user_id as current_writer_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1`,
       [storyId]
     );
-    let extraNote = '';
+
     if (activeTurnRows.length === 0) {
-      const nextWriterId = await PickNextWriter(connection, storyId);
-      if (nextWriterId) {
-        await NextTurn(connection, interaction, nextWriterId);
-        extraNote = ' The next turn has started.';
-      }
+      // No active turn — start theirs immediately (clear any existing override first)
+      await connection.execute(`UPDATE story SET next_writer_id = NULL WHERE story_id = ?`, [storyId]);
+      await NextTurn(connection, interaction, targetUser.id);
+      await logAdminAction(connection, interaction.user.id, 'next', storyId, targetUser.id);
+      return await interaction.editReply({
+        content: replaceTemplateVariables(
+          await getConfigValue(connection, 'txtAdminNextSuccess', guildId),
+          { user_name: targetUser.displayName || targetUser.username }
+        )
+      });
     }
 
-    await logAdminAction(connection, interaction.user.id, 'resume', storyId);
+    const currentWriterId = activeTurnRows[0].current_writer_id;
+    if (currentWriterId === targetUser.id) {
+      return await interaction.editReply({
+        content: replaceTemplateVariables(
+          await getConfigValue(connection, 'txtAdminNextAlreadyCurrent', guildId),
+          { user_name: targetUser.displayName || targetUser.username }
+        )
+      });
+    }
+
+    // Store override — will be applied when the current turn ends
+    await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [targetUser.id, storyId]);
+    await logAdminAction(connection, interaction.user.id, 'next', storyId, targetUser.id);
     await interaction.editReply({
-      content: replaceTemplateVariables(await getConfigValue(connection, 'txtAdminResumeSuccess', guildId), {
-        story_title: story.title
-      }) + extraNote
+      content: replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminNextSuccess', guildId),
+        { user_name: targetUser.displayName || targetUser.username }
+      )
     });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleResume:`, error);
+    console.error(`${formattedDate()}: Error in handleNext:`, error);
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -548,257 +508,12 @@ async function handleDeleteCancel(connection, interaction) {
   });
 }
 
-// ---------------------------------------------------------------------------
-// /storyadmin config — view and edit story settings
-// ---------------------------------------------------------------------------
-function buildConfigMessage(cfg, state) {
-  const orderEmojis = { 1: '🎲', 2: '🔄', 3: '📋' };
-  const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
-  const orderEmoji = orderEmojis[state.orderType];
-  const orderLabel = orderLabels[state.orderType];
-
-  const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(cfg.txtAdminConfigTitle, { story_title: state.title }))
-    .setColor(0x5865f2)
-    .addFields(
-      { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
-      { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : '∞', inline: true },
-      { name: cfg.lblAllowLateJoins, value: state.allowLateJoins ? 'Yes' : 'No', inline: true },
-      { name: cfg.lblShowAuthors, value: state.showAuthors ? 'Yes' : 'No', inline: true },
-      { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true }
-    );
-
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('storyadmin_config_set_turnlength')
-      .setLabel(cfg.btnSetTurnLength)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('storyadmin_config_set_maxwriters')
-      .setLabel(`${cfg.btnSetMaxWriters}: ${state.maxWriters ?? '∞'}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('storyadmin_config_toggle_latejoins')
-      .setLabel(`${cfg.lblAllowLateJoins}: ${state.allowLateJoins ? 'Yes' : 'No'}`)
-      .setStyle(state.allowLateJoins ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('storyadmin_config_toggle_authors')
-      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? 'Yes' : 'No'}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('storyadmin_config_cycle_order')
-      .setLabel(`${orderEmoji} ${orderLabel}`)
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('storyadmin_config_save')
-      .setLabel(cfg.btnAdminConfigSave)
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('storyadmin_config_cancel')
-      .setLabel(cfg.btnCancel)
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  return { embeds: [embed], components: [row1, row2] };
-}
-
-async function handleConfig(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
-  const guildId = interaction.guild.id;
-
-  try {
-    const [storyRows] = await connection.execute(
-      `SELECT story_id, title, turn_length_hours, max_writers, allow_late_joins, show_authors, story_order_type
-       FROM story WHERE story_id = ? AND guild_id = ?`,
-      [storyId, guildId]
-    );
-    if (storyRows.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
-    }
-    const story = storyRows[0];
-
-    const cfg = await getConfigValue(connection, [
-      'txtAdminConfigTitle', 'btnAdminConfigSave', 'btnCancel',
-      'lblTurnLength', 'btnSetTurnLength',
-      'lblMaxWriters', 'btnSetMaxWriters',
-      'lblAllowLateJoins', 'lblShowAuthors',
-      'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed'
-    ], guildId);
-
-    const state = {
-      cfg,
-      storyId,
-      title: story.title,
-      turnLength: story.turn_length_hours,
-      maxWriters: story.max_writers,
-      allowLateJoins: story.allow_late_joins,
-      showAuthors: story.show_authors,
-      orderType: story.story_order_type,
-      originalInteraction: interaction
-    };
-
-    pendingConfigData.set(interaction.user.id, state);
-    await interaction.editReply(buildConfigMessage(cfg, state));
-
-  } catch (error) {
-    console.error(`${formattedDate()}: Error in handleConfig:`, error);
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
-  }
-}
-
-async function handleConfigButton(connection, interaction) {
-  const userId = interaction.user.id;
-  const state = pendingConfigData.get(userId);
-
-  if (!state) {
-    return await interaction.reply({
-      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-  }
-
-  const customId = interaction.customId;
-
-  if (customId === 'storyadmin_config_toggle_latejoins') {
-    state.allowLateJoins = state.allowLateJoins ? 0 : 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildConfigMessage(state.cfg, state));
-
-  } else if (customId === 'storyadmin_config_toggle_authors') {
-    state.showAuthors = state.showAuthors ? 0 : 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildConfigMessage(state.cfg, state));
-
-  } else if (customId === 'storyadmin_config_cycle_order') {
-    state.orderType = state.orderType === 3 ? 1 : state.orderType + 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildConfigMessage(state.cfg, state));
-
-  } else if (customId === 'storyadmin_config_set_turnlength') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('storyadmin_config_turnlength_modal')
-        .setTitle(state.cfg.lblTurnLength)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('turn_length')
-              .setLabel(state.cfg.lblTurnLength)
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true)
-              .setValue(String(state.turnLength))
-              .setPlaceholder('Enter number of hours')
-          )
-        )
-    );
-
-  } else if (customId === 'storyadmin_config_set_maxwriters') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('storyadmin_config_maxwriters_modal')
-        .setTitle(state.cfg.lblMaxWriters)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('max_writers')
-              .setLabel(state.cfg.lblMaxWriters)
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(state.maxWriters != null ? String(state.maxWriters) : '')
-              .setPlaceholder('Enter a number, or leave blank for no limit')
-          )
-        )
-    );
-
-  } else if (customId === 'storyadmin_config_save') {
-    await interaction.deferUpdate();
-    await handleConfigSave(connection, interaction, state);
-
-  } else if (customId === 'storyadmin_config_cancel') {
-    await interaction.deferUpdate();
-    pendingConfigData.delete(userId);
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
-      embeds: [],
-      components: []
-    });
-  }
-}
-
-async function handleConfigSave(connection, interaction, state) {
-  const guildId = interaction.guild.id;
-  try {
-    await connection.execute(
-      `UPDATE story SET turn_length_hours = ?, max_writers = ?, allow_late_joins = ?,
-       show_authors = ?, story_order_type = ? WHERE story_id = ?`,
-      [state.turnLength, state.maxWriters ?? null, state.allowLateJoins,
-       state.showAuthors, state.orderType, state.storyId]
-    );
-    pendingConfigData.delete(interaction.user.id);
-    await logAdminAction(connection, interaction.user.id, 'config', state.storyId);
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
-      embeds: [],
-      components: []
-    });
-  } catch (error) {
-    console.error(`${formattedDate()}: Error saving config:`, error);
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'errProcessingRequest', guildId),
-      embeds: [],
-      components: []
-    });
-  }
-}
-
-async function handleModalSubmit(connection, interaction) {
-  const userId = interaction.user.id;
-  const state = pendingConfigData.get(userId);
-
-  if (!state) {
-    return await interaction.reply({
-      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-  }
-
-  if (interaction.customId === 'storyadmin_config_turnlength_modal') {
-    const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('turn_length'), 10));
-    if (isNaN(val) || val < 1) {
-      return await interaction.reply({ content: 'Turn length must be at least 1 hour.', flags: MessageFlags.Ephemeral });
-    }
-    state.turnLength = val;
-
-  } else if (interaction.customId === 'storyadmin_config_maxwriters_modal') {
-    const raw = sanitizeModalInput(interaction.fields.getTextInputValue('max_writers'), 10);
-    if (raw) {
-      const val = parseInt(raw);
-      if (isNaN(val) || val < 1) {
-        return await interaction.reply({ content: 'Max writers must be at least 1, or leave blank for no limit.', flags: MessageFlags.Ephemeral });
-      }
-      state.maxWriters = val;
-    } else {
-      state.maxWriters = null;
-    }
-  }
-
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  await state.originalInteraction.editReply(buildConfigMessage(state.cfg, state));
-  await interaction.deleteReply();
-}
-
 async function handleButtonInteraction(connection, interaction) {
   if (interaction.customId.startsWith('storyadmin_delete_confirm_')) {
     await handleDeleteConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('storyadmin_delete_cancel_')) {
     await handleDeleteCancel(connection, interaction);
-  } else if (interaction.customId.startsWith('storyadmin_config_')) {
-    await handleConfigButton(connection, interaction);
   }
 }
 
-export default { data, execute, handleModalSubmit, handleButtonInteraction };
+export default { data, execute, handleButtonInteraction };

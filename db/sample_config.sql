@@ -238,6 +238,18 @@ Words: ~[word_count]', 'en', 1),
 ('btnAdminConfigSave', '✅ Save Changes', 'en', 1),
 ('lblAllowLateJoins', 'Allow Late Joins', 'en', 1),
 
+-- Story Manage
+('lblOpenToWriters', 'Open to New Writers', 'en', 1),
+('lblSummary', 'Story Summary', 'en', 1),
+('btnSetSummary', 'Set Summary', 'en', 1),
+('lblTags', 'Tags', 'en', 1),
+('btnSetTags', 'Set Tags', 'en', 1),
+('txtManageNotAuthorized', '❌ Only the story creator or an admin can manage this story.', 'en', 1),
+
+-- Admin Next
+('txtAdminNextSuccess', '✅ **[user_name]** will receive the next turn.', 'en', 1),
+('txtAdminNextAlreadyCurrent', '❌ **[user_name]** is already the current writer.', 'en', 1),
+
 -- System Configuration
 ('cfgLanguageCode', 'en', 'en', 1),
 ('cfgEntryTimeoutMinutes', '10', 'en', 1),

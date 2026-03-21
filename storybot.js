@@ -313,6 +313,17 @@ export async function checkStoryDelay(connection, storyId) {
  * PickNextWriter function - selects next writer based on story order type
  */
 export async function PickNextWriter(connection, storyId) {
+  // Check for admin-designated next writer override
+  const [overrideRows] = await connection.execute(
+    `SELECT next_writer_id FROM story WHERE story_id = ?`,
+    [storyId]
+  );
+  if (overrideRows[0]?.next_writer_id) {
+    const overrideId = overrideRows[0].next_writer_id;
+    await connection.execute(`UPDATE story SET next_writer_id = NULL WHERE story_id = ?`, [storyId]);
+    return overrideId;
+  }
+
   // Get the most recent turn to determine who just went
   // (turn is already ended by the time PickNextWriter is called, so don't filter by status)
   const [lastTurn] = await connection.execute(
