@@ -1643,31 +1643,65 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseCancel(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageButton(connection, interaction);
+  } else if (interaction.customId === 'story_filter') {
+    await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
     await handleHelpNavigation(interaction);
   }
 }
 
 /**
- * Handle list navigation buttons
+ * Handle list navigation buttons (prev/next page)
  */
 async function handleListNavigation(connection, interaction) {
   const [, , filter, pageStr] = interaction.customId.split('_');
-  const page = parseInt(pageStr);
-  
-  // Update the message with new page
+  await interaction.deferUpdate();
+  await renderStoryListReply(connection, interaction, filter, parseInt(pageStr));
+}
+
+/**
+ * Handle filter button — show a select menu to choose a filter
+ */
+async function handleFilterButton(connection, interaction) {
+  await interaction.deferUpdate();
+  const guildId = interaction.guild.id;
+  const [txtAll, txtJoinable, txtMine, txtActive, txtPaused] = await Promise.all([
+    getConfigValue(connection, 'txtAllStories', guildId),
+    getConfigValue(connection, 'txtJoinableStories', guildId),
+    getConfigValue(connection, 'txtMyStories', guildId),
+    getConfigValue(connection, 'txtActiveStories', guildId),
+    getConfigValue(connection, 'txtPausedStories', guildId),
+  ]);
+  const row = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('story_filter_select')
+      .setPlaceholder('Choose a filter...')
+      .addOptions([
+        { label: txtAll, value: 'all' },
+        { label: txtJoinable, value: 'joinable' },
+        { label: txtMine, value: 'mine' },
+        { label: txtActive, value: 'active' },
+        { label: txtPaused, value: 'paused' },
+      ])
+  );
+  await interaction.editReply({ content: '🔍 **Filter stories:**', embeds: [], components: [row] });
+}
+
+/**
+ * Render the story list embed and navigation into the current reply
+ */
+async function renderStoryListReply(connection, interaction, filter, page) {
   const guildId = interaction.guild.id;
   const itemsPerPage = 5;
-  
-  await interaction.deferUpdate();
-  
+
   const stories = await getStoriesPaginated(connection, guildId, filter, page, itemsPerPage, interaction.user.id);
-  
-  // Get configurable text for embed
-  const txtStoriesPageTitle = await getConfigValue(connection, 'txtStoriesPageTitle', guildId);
-  const txtStoriesPageDesc = await getConfigValue(connection, 'txtStoriesPageDesc', guildId);
-  const filterTitle = await getFilterTitle(connection, filter, guildId);
-  
+
+  const [txtStoriesPageTitle, txtStoriesPageDesc, filterTitle] = await Promise.all([
+    getConfigValue(connection, 'txtStoriesPageTitle', guildId),
+    getConfigValue(connection, 'txtStoriesPageDesc', guildId),
+    getFilterTitle(connection, filter, guildId),
+  ]);
+
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(txtStoriesPageTitle, {
       filter_title: filterTitle,
@@ -1683,21 +1717,18 @@ async function handleListNavigation(connection, interaction) {
 
   for (const story of stories.data) {
     const statusIcon = getStatusIcon(story.story_status);
-    const joinStatus = story.can_join 
-      ? await getConfigValue(connection,'txtMemberStatusCanJoin', guildId)
-      : await getConfigValue(connection,'txtMemberStatusCanNotJoin', guildId);
+    const joinStatus = story.can_join
+      ? await getConfigValue(connection, 'txtMemberStatusCanJoin', guildId)
+      : await getConfigValue(connection, 'txtMemberStatusCanNotJoin', guildId);
     const currentTurn = await getCurrentTurnInfo(story, guildId);
-    
-    // Get configurable labels
-    const lblStoryStatus = await getConfigValue(connection,'lblStoryStatus', guildId);
-    const lblStoryTurn = await getConfigValue(connection,'lblStoryTurn', guildId);
-    const lblStoryWriters = await getConfigValue(connection,'lblStoryWriters', guildId);
-    const lblStoryMode = await getConfigValue(connection,'lblStoryMode', guildId);
-    const lblStoryCreator = await getConfigValue(connection,'lblStoryCreator', guildId);
-    const modeText = story.quick_mode 
-      ? await getConfigValue(connection,'txtModeQuick', guildId)
-      : await getConfigValue(connection,'txtModeNormal', guildId);
-    
+    const [lblStoryStatus, lblStoryTurn, lblStoryWriters, lblStoryMode, lblStoryCreator, modeText] = await Promise.all([
+      getConfigValue(connection, 'lblStoryStatus', guildId),
+      getConfigValue(connection, 'lblStoryTurn', guildId),
+      getConfigValue(connection, 'lblStoryWriters', guildId),
+      getConfigValue(connection, 'lblStoryMode', guildId),
+      getConfigValue(connection, 'lblStoryCreator', guildId),
+      getConfigValue(connection, story.quick_mode ? 'txtModeQuick' : 'txtModeNormal', guildId),
+    ]);
     embed.addFields({
       name: `${statusIcon} "${story.title}" (#${story.story_id})`,
       value: `├ ${lblStoryStatus} ${await getStatusText(connection, story.story_status, guildId)} • ${lblStoryTurn} ${currentTurn}
@@ -1707,13 +1738,12 @@ async function handleListNavigation(connection, interaction) {
     });
   }
 
-  // Update navigation buttons
   const navRow = new ActionRowBuilder();
-  
   if (stories.totalPages > 1) {
-    const btnPrev = await getConfigValue(connection,'btnPrev', guildId);
-    const btnNext = await getConfigValue(connection,'btnNext', guildId);
-    
+    const [btnPrev, btnNext] = await Promise.all([
+      getConfigValue(connection, 'btnPrev', guildId),
+      getConfigValue(connection, 'btnNext', guildId),
+    ]);
     navRow.addComponents(
       new ButtonBuilder()
         .setCustomId(`story_list_${filter}_${page - 1}`)
@@ -1727,8 +1757,8 @@ async function handleListNavigation(connection, interaction) {
         .setDisabled(page === stories.totalPages)
     );
   }
-  
-  const btnFilter = await getConfigValue(connection,'btnFilter', guildId);
+
+  const btnFilter = await getConfigValue(connection, 'btnFilter', guildId);
   navRow.addComponents(
     new ButtonBuilder()
       .setCustomId('story_filter')
@@ -1736,10 +1766,7 @@ async function handleListNavigation(connection, interaction) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  await interaction.editReply({
-    embeds: [embed],
-    components: [navRow]
-  });
+  await interaction.editReply({ content: '', embeds: [embed], components: [navRow] });
 }
 
 /**
@@ -1872,22 +1899,19 @@ async function discardEntry(connection, entryId, interaction) {
 /**
  * Handle select menu interactions
  */
-async function handleSelectMenuInteraction(interaction) {
+async function handleSelectMenuInteraction(connection, interaction) {
   if (interaction.customId === 'story_quick_join') {
     const storyId = interaction.values[0];
-    
-    // Create a synthetic interaction for the join handler
-    const syntheticOptions = {
-      getInteger: (name) => name === 'story_id' ? parseInt(storyId) : null
-    };
-    
     const syntheticInteraction = {
       ...interaction,
-      options: syntheticOptions
+      options: { getInteger: (name) => name === 'story_id' ? parseInt(storyId) : null }
     };
-    
-    // Call the join handler
     await handleJoin(syntheticInteraction);
+
+  } else if (interaction.customId === 'story_filter_select') {
+    const filter = interaction.values[0];
+    await interaction.deferUpdate();
+    await renderStoryListReply(connection, interaction, filter, 1);
   }
 }
 
@@ -2840,6 +2864,27 @@ async function applyResumeActions(connection, interaction, state) {
     [state.storyId]
   );
 
+  // Update story thread title back to Active regardless of turn state
+  try {
+    const [storyInfo] = await connection.execute(
+      `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
+    );
+    if (storyInfo[0]?.story_thread_id) {
+      const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
+      if (storyThread) {
+        const [txtActive, titleTemplate] = await Promise.all([
+          getConfigValue(connection, 'txtActive', state.guildId),
+          getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
+        ]);
+        await storyThread.setName(
+          titleTemplate.replace('[story_id]', state.storyId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
+        );
+      }
+    }
+  } catch (err) {
+    console.error(`${formattedDate()}: Could not update story thread title on resume (story ${state.storyId}):`, err);
+  }
+
   if (activeTurnRows.length === 0) {
     // No active turn — start a new one
     const nextWriterId = await PickNextWriter(connection, state.storyId);
@@ -2924,26 +2969,6 @@ async function applyResumeActions(connection, interaction, state) {
     }
   }
 
-  // Update story thread title back to Active
-  try {
-    const [storyInfo] = await connection.execute(
-      `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
-    );
-    if (storyInfo[0]?.story_thread_id) {
-      const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
-      if (storyThread) {
-        const [txtActive, titleTemplate] = await Promise.all([
-          getConfigValue(connection, 'txtActive', state.guildId),
-          getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
-        ]);
-        await storyThread.setName(
-          titleTemplate.replace('[story_id]', state.storyId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
-        );
-      }
-    }
-  } catch (err) {
-    console.error(`${formattedDate()}: Could not update story thread title on resume (story ${state.storyId}):`, err);
-  }
 }
 
 async function handleManageModalSubmit(connection, interaction) {
