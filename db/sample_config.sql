@@ -255,6 +255,10 @@ Words: ~[word_count]', 'en', 1),
 ('txtStoryThreadWriterJoin', '👋 **[writer_name]** joined the story.', 'en', 1),
 ('txtStoryThreadWriterRemove', '🚫 **[writer_name]** was removed from the story by an admin.', 'en', 1),
 
+-- Finalize entry confirmation
+('txtFinalizeConfirm', '✅ **Finalize your entry?** This will submit everything you''ve written in this thread and advance to the next writer. This cannot be undone.', 'en', 1),
+('btnFinalizeConfirm', 'Yes, Finalize Entry', 'en', 1),
+
 -- Skip turn confirmation
 ('txtSkipConfirmNoContent', '⏭️ **Skip your turn?** This will pass to the next writer without submitting an entry. This cannot be undone.', 'en', 1),
 ('txtSkipConfirmHasContent', '⚠️ **Skip your turn?** You have posted content in this thread — **it will be discarded** if you skip. This cannot be undone.', 'en', 1),

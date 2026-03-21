@@ -1630,6 +1630,11 @@ async function handleButtonInteraction(connection, interaction) {
     await handleEntryConfirmation(connection, interaction);
   } else if (interaction.customId.startsWith('finalize_entry_')) {
     await handleFinalizeEntry(connection, interaction);
+  } else if (interaction.customId.startsWith('story_finalize_confirm_')) {
+    await handleFinalizeConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('story_finalize_cancel_')) {
+    await interaction.deferUpdate();
+    await interaction.editReply({ content: '❌ Finalize cancelled.', components: [] });
   } else if (interaction.customId.startsWith('skip_turn_')) {
     await handleSkipTurn(connection, interaction);
   } else if (interaction.customId.startsWith('story_skip_confirm_')) {
@@ -1717,23 +1722,26 @@ async function renderStoryListReply(connection, interaction, filter, page) {
 
   for (const story of stories.data) {
     const statusIcon = getStatusIcon(story.story_status);
-    const joinStatus = story.can_join
-      ? await getConfigValue(connection, 'txtMemberStatusCanJoin', guildId)
-      : await getConfigValue(connection, 'txtMemberStatusCanNotJoin', guildId);
-    const currentTurn = await getCurrentTurnInfo(story, guildId);
-    const [lblStoryStatus, lblStoryTurn, lblStoryWriters, lblStoryMode, lblStoryCreator, modeText] = await Promise.all([
+    const joinStatus = story.join_status === 2
+      ? await getConfigValue(connection, 'txtMemberStatusJoined', guildId)
+      : story.join_status === 1
+        ? await getConfigValue(connection, 'txtMemberStatusCanJoin', guildId)
+        : await getConfigValue(connection, 'txtMemberStatusCanNotJoin', guildId);
+    const currentTurn = await getCurrentTurnInfo(connection, story, guildId);
+    const [lblStoryStatus, lblStoryTurn, lblStoryWriters, lblStoryMode, lblStoryCreator, modeText, statusText] = await Promise.all([
       getConfigValue(connection, 'lblStoryStatus', guildId),
       getConfigValue(connection, 'lblStoryTurn', guildId),
       getConfigValue(connection, 'lblStoryWriters', guildId),
       getConfigValue(connection, 'lblStoryMode', guildId),
       getConfigValue(connection, 'lblStoryCreator', guildId),
       getConfigValue(connection, story.quick_mode ? 'txtModeQuick' : 'txtModeNormal', guildId),
+      getStatusText(connection, story.story_status, guildId),
     ]);
     embed.addFields({
       name: `${statusIcon} "${story.title}" (#${story.story_id})`,
-      value: `├ ${lblStoryStatus} ${await getStatusText(connection, story.story_status, guildId)} • ${lblStoryTurn} ${currentTurn}
+      value: `├ ${lblStoryStatus} ${statusText} • ${lblStoryTurn} ${currentTurn}
               ├ ${lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${lblStoryMode} ${modeText}
-              └ ${lblStoryCreator} <@${story.creator_id}> • ${joinStatus}`,
+              └ ${lblStoryCreator} ${story.creator_name} • ${joinStatus}`,
       inline: false
     });
   }
@@ -1944,8 +1952,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
         break;
       case 'all':
       default:
-        whereClause += ' AND s.story_status IN (1, 2)';
-        break;
+        break; // no status filter — return all stories including closed
     }
     
     // Get total count
@@ -2082,16 +2089,61 @@ async function getCurrentTurnInfo(connection, story, guildId) {
 }
 
 /**
- * Handle finalize entry button click
+ * Handle finalize entry button click — show confirmation prompt
  */
 async function handleFinalizeEntry(connection, interaction) {
   const storyId = interaction.customId.split('_')[2];
+  const guildId = interaction.guild.id;
 
-  // deferUpdate silently acknowledges the button — no reply message will be sent
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  try {
+    const [turnInfo] = await connection.execute(
+      `SELECT t.turn_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
+      [storyId, interaction.user.id]
+    );
+
+    if (turnInfo.length === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId) });
+      return;
+    }
+
+    const [txtFinalizeConfirm, btnFinalizeConfirm, btnCancel] = await Promise.all([
+      getConfigValue(connection, 'txtFinalizeConfirm', guildId),
+      getConfigValue(connection, 'btnFinalizeConfirm', guildId),
+      getConfigValue(connection, 'btnCancel', guildId),
+    ]);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`story_finalize_confirm_${storyId}`)
+        .setLabel(btnFinalizeConfirm)
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`story_finalize_cancel_${storyId}`)
+        .setLabel(btnCancel)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({ content: txtFinalizeConfirm, components: [row] });
+
+  } catch (error) {
+    console.error(`${formattedDate()}: handleFinalizeEntry failed:`, error);
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', guildId) });
+  }
+}
+
+/**
+ * Handle finalize confirm button — execute the actual finalize
+ */
+async function handleFinalizeConfirm(connection, interaction) {
+  const storyId = interaction.customId.split('_')[3];
+
   await interaction.deferUpdate();
 
   try {
-    // Verify this is the current writer's turn
     const [turnInfo] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id
        FROM turn t
@@ -2101,7 +2153,7 @@ async function handleFinalizeEntry(connection, interaction) {
     );
 
     if (turnInfo.length === 0) {
-      await interaction.followUp({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id), components: [] });
       return;
     }
 
@@ -2109,13 +2161,12 @@ async function handleFinalizeEntry(connection, interaction) {
     const thread = await interaction.guild.channels.fetch(turn.thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
 
-    // Collect writer's messages in chronological order
     const userMessages = messages
       .filter(msg => msg.author.id === interaction.user.id)
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
 
     if (userMessages.size === 0) {
-      await interaction.followUp({ content: await getConfigValue(connection, 'txtEmptyEntry', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', interaction.guild.id), components: [] });
       return;
     }
 
@@ -2127,7 +2178,6 @@ async function handleFinalizeEntry(connection, interaction) {
     for (const msg of userMessages.values()) {
       const parts = [];
       if (msg.content) parts.push(msg.content);
-
       for (const attachment of msg.attachments.values()) {
         if (attachment.contentType?.startsWith('image/')) {
           try {
@@ -2141,13 +2191,11 @@ async function handleFinalizeEntry(connection, interaction) {
           }
         }
       }
-
       if (parts.length > 0) entryParts.push(parts.join('\n'));
     }
 
     const entryContent = entryParts.join('\n\n');
 
-    // Fetch story info for embed
     const [storyInfo] = await connection.execute(
       `SELECT s.show_authors, s.story_thread_id, sw.discord_display_name,
               (SELECT COUNT(*) FROM turn t2 JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -2159,7 +2207,6 @@ async function handleFinalizeEntry(connection, interaction) {
     );
     const { show_authors, story_thread_id, discord_display_name, turn_number } = storyInfo[0];
 
-    // Commit entry and advance turn
     const txn = await connection.getConnection();
     await txn.beginTransaction();
     try {
@@ -2177,7 +2224,6 @@ async function handleFinalizeEntry(connection, interaction) {
     } catch (txnError) {
       await txn.rollback();
       if (txnError.code === 'ER_DUP_ENTRY') {
-        // Double-click: entry was already submitted by a concurrent request
         await interaction.editReply({ content: '✅ Your entry has already been submitted.', components: [] });
         return;
       }
@@ -2186,7 +2232,6 @@ async function handleFinalizeEntry(connection, interaction) {
       txn.release();
     }
 
-    // Post entry embed to story thread
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
       const entryEmbed = new EmbedBuilder().setDescription(entryContent);
@@ -2196,13 +2241,12 @@ async function handleFinalizeEntry(connection, interaction) {
       console.error(`${formattedDate()}: Failed to post finalized entry to story thread:`, embedError);
     }
 
-    // Delete turn thread — posting to story thread is confirmation
     await deleteThreadAndAnnouncement(thread);
 
   } catch (error) {
-    console.error(`${formattedDate()}: Finalize entry failed:`, error);
+    console.error(`${formattedDate()}: handleFinalizeConfirm failed:`, error);
     try {
-      await interaction.followUp({ content: await getConfigValue(connection, 'txtFailedtoFinalize', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', interaction.guild.id), components: [] });
     } catch {}
   }
 }
