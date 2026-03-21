@@ -1260,37 +1260,37 @@ function buildHelpPage1() {
       {
         name: '🔍 Finding & Joining Stories',
         value: [
-          '`/story list` — Browse stories. Filter by: `all` · `joinable` · `mine` · `active` · `paused`',
-          '`/story join <id>` — Join a story as a writer',
-          '`/story read <id>` — Download a story as an HTML file',
+          '- `/story list` — Browse stories. Filter by: `all` · `joinable` · `mine` · `active` · `paused`',
+          '- `/story join <id>` — Join a story as a writer',
+          '- `/story read <id>` — Download a story as an HTML file',
         ].join('\n'),
         inline: false
       },
       {
         name: '📊 Your Dashboard',
         value: [
-          '`/mystory active` — Your active stories and whose turn it is',
-          '`/mystory history` — All stories you\'ve ever been in',
-          '`/mystory catchup <id>` — Read entries written since your last turn',
+          '- `/mystory active` — Your active stories and whose turn it is',
+          '- `/mystory history` — All stories you\'ve ever been in',
+          '- `/mystory catchup <id>` — Read entries written since your last turn',
         ].join('\n'),
         inline: false
       },
       {
         name: '✍️ Writing Your Turn — Normal Mode',
-        value: 'Each turn will have its own private thread for you to write your entry. You can submit as many posts as you\'d like, including images in the order you want them to appear, using standard Discord markdown formatting, and you can edit posts as often as you like until you\'re done. When you click ✅ **Finalize Entry** the bot will pull it all together, ignoring posts from other users or from the bot, for you to review and submit. Click ⏭️ **Skip Turn** to pass.',
+        value: '- Each turn will have its own private thread for you to write your entry. You can submit as many posts as you\'d like, including images in the order you want them to appear, using standard Discord markdown formatting, and you can edit posts as often as you like until you\'re done. When you click ✅ **Finalize Entry** the bot will pull it all together, ignoring posts from other users or from the bot, for you to review and submit. Click ⏭️ **Skip Turn** to pass.',
         inline: false
       },
       {
         name: '⚡ Writing Your Turn — Quick Mode',
-        value: 'Use `/story write <id>` to bring up a form to submit your entry, up to 4,000 characters. No thread — just write and confirm.',
+        value: '- Use `/story write <id>` to bring up a form to submit your entry, up to 4,000 characters. No thread — just write and confirm.',
         inline: false
       },
       {
         name: '⚙️ Managing Your Participation',
         value: [
-          '`/mystory pass <id>` — Skip your current turn',
-          '`/mystory leave <id>` — Leave a story',
-          '`/story close <id>` — Close a story *(story creator only)*',
+          '- `/mystory pass <id>` — Skip your current turn',
+          '- `/mystory leave <id>` — Leave a story',
+          '- `/story close <id>` — Close a story *(story creator only)*',
         ].join('\n'),
         inline: false
       }
@@ -1312,6 +1312,11 @@ function buildHelpPage2() {
     .setTitle('📝 Create New Story — Option Reference')
     .setColor(0x5865f2)
     .addFields(
+      {
+        name: '/t',
+        value: 'After story creation, these settings can be edited by admins or the story creator via `/story manage.`',
+        inline: false
+      },
       {
         name: 'Story Title',
         value: '- ⚠️ *Required.*',
@@ -1348,7 +1353,7 @@ function buildHelpPage2() {
         name: 'Hide Threads',
         value: [
           '- 🥷 **On** — Turn threads are private to the current writer and admins only.',
-          '- 🤡 **Off** — Turn threads are visible to all writers.',
+          '- 🤡 **Off** — Turn threads are visible to all server members.',
         ].join('\n'),
         inline: false
       },
@@ -1371,6 +1376,11 @@ function buildHelpPage2() {
         inline: false
       },
       {
+        name: 'Story Creator\'s Join Options:',
+        value: '/t',
+        inline: false
+      },
+      {
         name: 'Your AO3 Username',
         value: '- <:ao3:1484674133437714495> Your name as it appears on AO3. Used in story exports. Defaults to your Discord display name if left blank.',
         inline: false
@@ -1384,7 +1394,7 @@ function buildHelpPage2() {
         inline: false
       }
     )
-    .setFooter({ text: 'Page 2 of 3 · These settings can be edited by the story creator via /story manage.' });
+    .setFooter({ text: 'Page 2 of 3' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -1407,26 +1417,29 @@ function buildHelpPage3() {
     .addFields(
       {
         name: 'Who can use /story manage?',
-        value: 'The story creator (the first writer to join) and anyone with the server admin role.',
+        value: 'The story creator (the first writer to join) and server admins.',
         inline: false
       },
       {
         name: 'What can be edited?',
         value: [
-          '**Turn Length** — How many hours each writer has per turn.',
-          '**Timeout Reminder** — What % into a turn to send the writer a reminder. Set to 0% to disable.',
-          '**Max Writers** — Cap on total writers. Leave blank for no limit.',
-          '**Open to New Writers** — Whether new writers can join after the story has started.',
-          '**Show Author Names** — Whether writer names appear on entries and in the story export.',
-          '**Writer Order** — Cycle between Random, Round Robin, and Fixed Order.',
-          '**Summary** — A freeform description used in story exports.',
-          '**Tags** — Comma-separated tag list used in story exports.',
+          '- **Turn Length** — How many hours each writer has per turn.',
+          '- **Timeout Reminder** — What % into a turn to send the writer a reminder. Set to 0% to disable.',
+          '- **Max Writers** — Cap on total writers. Leave blank for no limit.',
+          '- **Open to New Writers** — Allows new writers to join.',
+          '- **Show Author Names** —  Writer names appear on entries and in the story export if enabled.',
+          '- **Writer Order** — Choose between Random, Round Robin, and Fixed (Join) Order.',
+          '- **Summary** — A freeform description used in story exports.',
+          '- **Tags** — Comma-separated tag list used in story exports.',
         ].join('\n'),
         inline: false
       },
       {
         name: 'Pausing and Resuming',
-        value: 'The Pause/Resume toggle in /story manage lets the creator or an admin pause the story (freezing the current turn) or resume it. Resuming starts the next turn automatically if no turn is currently active.',
+        value: [
+          '- Sets the story status to paused (freezing the current turn) or resumes a paused story. Resuming starts the next turn automatically if no turn is currently active.',
+          '- Use the button in /story manage, or the command /story close <id>, to permanently close a story. This ends the current turn, posts a completion message with the full story export in the main story feed, but leaves the main story thread open for discussion. This cannot be undone.'
+        ],
         inline: false
       },
       {
@@ -1435,8 +1448,14 @@ function buildHelpPage3() {
         inline: false
       },
       {
-        name: 'Admin Force Controls',
-        value: '`/storyadmin skip` · `/storyadmin extend` · `/storyadmin kick` · `/storyadmin next` · `/storyadmin delete`\n\nSee `/storyadmin help` for details.',
+        name: 'Admin Controls',
+        value: [
+                '- Skip the current turn',
+                '- Extend the current turn.',
+                '- Set the writer who will be selected when the next turn starts.',
+                '- Remove a writer from a story.',
+                '- Delete a story.'
+              ],
         inline: false
       }
     )
@@ -2652,18 +2671,10 @@ async function handleManageSave(connection, interaction, state) {
     if (state.targetStatus !== state.originalStatus) {
       await connection.execute(`UPDATE story SET story_status = ? WHERE story_id = ?`, [state.targetStatus, state.storyId]);
 
-      if (state.targetStatus === 1) {
-        // Resuming — check if there's an active turn; if not, start one
-        const [activeTurnRows] = await connection.execute(
-          `SELECT t.turn_id FROM turn t
-           JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-           WHERE sw.story_id = ? AND t.turn_status = 1`,
-          [state.storyId]
-        );
-        if (activeTurnRows.length === 0) {
-          const nextWriterId = await PickNextWriter(connection, state.storyId);
-          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-        }
+      if (state.targetStatus === 2) {
+        await applyPauseActions(connection, interaction, state);
+      } else if (state.targetStatus === 1) {
+        await applyResumeActions(connection, interaction, state);
       }
     }
 
@@ -2680,6 +2691,147 @@ async function handleManageSave(connection, interaction, state) {
       embeds: [],
       components: []
     });
+  }
+}
+
+async function applyPauseActions(connection, interaction, state) {
+  const [activeTurnRows] = await connection.execute(
+    `SELECT t.turn_id, t.thread_id, sw.discord_display_name
+     FROM turn t
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ? AND t.turn_status = 1`,
+    [state.storyId]
+  );
+  if (activeTurnRows.length === 0) return;
+
+  const { turn_id: turnId, thread_id: threadId, discord_display_name } = activeTurnRows[0];
+
+  // Cancel pending timeout and reminder jobs
+  await connection.execute(
+    `UPDATE job SET job_status = 2 WHERE job_status = 0
+     AND job_type IN ('turnTimeout', 'turnReminder')
+     AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
+    [turnId]
+  );
+
+  if (!threadId) return; // Quick mode — no thread to lock
+
+  try {
+    const thread = await interaction.guild.channels.fetch(threadId);
+    if (!thread) return;
+
+    const [turnCountResult] = await connection.execute(
+      `SELECT COUNT(*) as turn_number FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ?`,
+      [state.storyId]
+    );
+    const turnNumber = turnCountResult[0].turn_number;
+    const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
+    const pausedTitle = threadTitleTemplate
+      .replace('[story_id]', state.storyId)
+      .replace('[storyTurnNumber]', turnNumber)
+      .replace('[user display name]', discord_display_name)
+      .replace('[turnEndTime]', 'PAUSED');
+
+    await thread.setName(pausedTitle);
+    await thread.setLocked(true);
+  } catch (err) {
+    console.error(`${formattedDate()}: Could not lock turn thread on pause (story ${state.storyId}):`, err);
+  }
+}
+
+async function applyResumeActions(connection, interaction, state) {
+  const [activeTurnRows] = await connection.execute(
+    `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.discord_display_name, sw.notification_prefs
+     FROM turn t
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ? AND t.turn_status = 1`,
+    [state.storyId]
+  );
+
+  if (activeTurnRows.length === 0) {
+    // No active turn — start a new one
+    const nextWriterId = await PickNextWriter(connection, state.storyId);
+    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+    return;
+  }
+
+  const activeTurn = activeTurnRows[0];
+  const newTurnEndsAt = new Date(Date.now() + (state.turnLength * 60 * 60 * 1000));
+
+  // Reset turn deadline
+  await connection.execute(
+    `UPDATE turn SET turn_ends_at = ? WHERE turn_id = ?`,
+    [newTurnEndsAt, activeTurn.turn_id]
+  );
+
+  // Cancel any lingering jobs, then reschedule fresh
+  await connection.execute(
+    `UPDATE job SET job_status = 2 WHERE job_status = 0
+     AND job_type IN ('turnTimeout', 'turnReminder')
+     AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
+    [activeTurn.turn_id]
+  );
+  await connection.execute(
+    `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+    ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt]
+  );
+  if (state.timeoutReminder > 0) {
+    const reminderMs = state.turnLength * (state.timeoutReminder / 100) * 60 * 60 * 1000;
+    const reminderTime = new Date(Date.now() + reminderMs);
+    await connection.execute(
+      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+      ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime]
+    );
+  }
+
+  if (activeTurn.thread_id) {
+    // Normal mode — unlock thread, rebuild title, post resumed message
+    try {
+      const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
+      if (thread) {
+        const [turnCountResult] = await connection.execute(
+          `SELECT COUNT(*) as turn_number FROM turn t
+           JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+           WHERE sw.story_id = ?`,
+          [state.storyId]
+        );
+        const turnNumber = turnCountResult[0].turn_number;
+        const formattedEndTime = newTurnEndsAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+        const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
+        const newTitle = threadTitleTemplate
+          .replace('[story_id]', state.storyId)
+          .replace('[storyTurnNumber]', turnNumber)
+          .replace('[user display name]', activeTurn.discord_display_name)
+          .replace('[turnEndTime]', formattedEndTime);
+
+        await thread.setName(newTitle);
+        await thread.setLocked(false);
+
+        const newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
+        const txtTurnThreadResumed = await getConfigValue(connection, 'txtTurnThreadResumed', state.guildId);
+        await thread.send(replaceTemplateVariables(txtTurnThreadResumed, { turn_end_time: newEndTimestamp }));
+      }
+    } catch (err) {
+      console.error(`${formattedDate()}: Could not unlock turn thread on resume (story ${state.storyId}):`, err);
+    }
+  } else {
+    // Quick mode — notify writer via DM or mention that their turn is active again
+    try {
+      const txtDMTurnStart = await getConfigValue(connection, 'txtDMTurnStart', state.guildId);
+      const user = await interaction.client.users.fetch(activeTurn.discord_user_id);
+      await user.send(txtDMTurnStart);
+    } catch {
+      try {
+        const txtMentionTurnStart = await getConfigValue(connection, 'txtMentionTurnStart', state.guildId);
+        const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
+        const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
+        await channel.send(`<@${activeTurn.discord_user_id}> ${txtMentionTurnStart}`);
+      } catch (err) {
+        console.error(`${formattedDate()}: Could not notify writer on resume (story ${state.storyId}):`, err);
+      }
+    }
   }
 }
 

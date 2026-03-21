@@ -245,6 +245,7 @@ Words: ~[word_count]', 'en', 1),
 ('lblTags', 'Tags', 'en', 1),
 ('btnSetTags', 'Set Tags', 'en', 1),
 ('txtManageNotAuthorized', '❌ Only the story creator or an admin can manage this story.', 'en', 1),
+('txtTurnThreadResumed', '▶️ **Story resumed.** Your turn deadline has been reset to [turn_end_time]. Use the buttons above to finalize or skip your turn when ready.', 'en', 1),
 
 -- Admin Next
 ('txtAdminNextSuccess', '✅ **[user_name]** will receive the next turn.', 'en', 1),
