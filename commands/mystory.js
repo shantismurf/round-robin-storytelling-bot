@@ -452,7 +452,7 @@ async function handleCatchUp(connection, interaction) {
 
 async function handleCatchUpNavigation(connection, interaction) {
   await interaction.deferUpdate();
-  const [action, , currentPageStr] = interaction.customId.split('_');
+  const [, action, currentPageStr] = interaction.customId.split('_');
   const currentPage = parseInt(currentPageStr);
   const newPage = action === 'next' ? currentPage + 1 : currentPage - 1;
 
