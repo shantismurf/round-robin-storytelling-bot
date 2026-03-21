@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { getConfigValue, formattedDate } from './utilities.js';
-import { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
 
 /**
@@ -127,6 +127,12 @@ export async function CreateStory(connection, interaction, storyInput) {
 
     // Post story creation announcement after commit so writer count is visible
     await postStoryFeedCreationAnnouncement(connection, storyId, interaction, storyInput.storyTitle, storyStatus, storyInput.delayHours, storyInput.delayWriters);
+
+    // Post initial status message (NextTurn already posted one if story is active;
+    // this covers delayed stories where no turn has started yet)
+    if (storyStatus !== 1) {
+      updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
+    }
 
     return {
       success: true,
@@ -488,20 +494,23 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       );
       
       // Post welcome message with buttons
-      await postWelcomeMessage(connection, thread, writer, guild_id);
+      await postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime);
       
       // Send notification to writer
       await handleWriterNotification(connection, interaction, writer, threadId, guild_id);
       dmMessage = 'Normal mode thread created and notification sent';
     }
     
+    // Update story status message (fire-and-forget — never blocks the turn)
+    updateStoryStatusMessage(connection, interaction.guild, writer.story_id).catch(() => {});
+
     return {
       success: true,
       turnId,
       threadId,
       dmMessage
     };
-    
+
   } catch (error) {
     console.error(`${formattedDate()}:  NextTurn failed:`, error);
     return {
@@ -570,11 +579,18 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
 /**
  * Post welcome message with buttons to normal mode thread
  */
-async function postWelcomeMessage(connection, thread, writer, guild_id) {
+async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime) {
   const txtNormalModeWelcome = await getConfigValue(connection,'txtNormalModeWelcome', guild_id);
   const btnFinalizeEntry = await getConfigValue(connection,'btnFinalizeEntry', guild_id);
   const btnSkipTurn = await getConfigValue(connection,'btnSkipTurn', guild_id);
-  
+
+  const unixTs = Math.floor(turnEndTime.getTime() / 1000);
+  const welcomeContent = txtNormalModeWelcome
+    .replace('[story_title]', writer.title)
+    .replace('[turn_end_full]', `<t:${unixTs}:F>`)
+    .replace('[turn_end_relative]', `<t:${unixTs}:R>`)
+    .replace('[story_id]', writer.story_id);
+
   const row = new ActionRowBuilder()
     .addComponents(
       new ButtonBuilder()
@@ -586,9 +602,9 @@ async function postWelcomeMessage(connection, thread, writer, guild_id) {
         .setLabel(btnSkipTurn)
         .setStyle(ButtonStyle.Secondary)
     );
-  
+
   await thread.send({
-    content: txtNormalModeWelcome,
+    content: welcomeContent,
     components: [row]
   });
 }
@@ -604,6 +620,178 @@ async function getTurnNumber(connection, storyId) {
     [storyId]
   );
   return result[0].turn_number;
+}
+
+/**
+ * Build and post (or update) the persistent status embed in the story thread.
+ * Stores the message ID in story.status_message_id so it can be edited in place.
+ * If the message has been deleted, a new one is posted automatically.
+ */
+export async function updateStoryStatusMessage(connection, guild, storyId) {
+  try {
+    const [storyRows] = await connection.execute(
+      `SELECT story_id, title, story_status, quick_mode, turn_length_hours,
+              timeout_reminder_percent, max_writers, allow_late_joins, show_authors,
+              story_order_type, summary, tags, story_thread_id, status_message_id, guild_id,
+              next_writer_id, closed_at
+       FROM story WHERE story_id = ?`,
+      [storyId]
+    );
+    if (storyRows.length === 0 || !storyRows[0].story_thread_id) return;
+    const story = storyRows[0];
+
+    const [writers] = await connection.execute(
+      `SELECT story_writer_id, discord_display_name, AO3_name, sw_status, writer_order
+       FROM story_writer WHERE story_id = ? ORDER BY joined_at ASC`,
+      [storyId]
+    );
+
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_ends_at, t.story_writer_id, sw.discord_display_name
+       FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 1`,
+      [storyId]
+    );
+    const activeTurn = activeTurnRows[0] ?? null;
+
+    // Entry stats — count confirmed entries, words, and inline images
+    const [confirmedEntries] = await connection.execute(
+      `SELECT se.content FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'`,
+      [storyId]
+    );
+    const entryCount = confirmedEntries.length;
+    const cdnImageRegex = /https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+/g;
+    let wordCount = 0;
+    let imageCount = 0;
+    for (const e of confirmedEntries) {
+      const images = e.content.match(cdnImageRegex) ?? [];
+      imageCount += images.length;
+      // Strip image URLs before counting words so they don't inflate the count
+      const textOnly = e.content.replace(cdnImageRegex, '').trim();
+      wordCount += textOnly.split(/\s+/).filter(w => w.length > 0).length;
+    }
+
+    const [txtActive, txtPaused, txtClosed, txtOrderRandom, txtOrderRoundRobin, txtOrderFixed] = await Promise.all([
+      getConfigValue(connection, 'txtActive', story.guild_id),
+      getConfigValue(connection, 'txtPaused', story.guild_id),
+      getConfigValue(connection, 'txtClosed', story.guild_id),
+      getConfigValue(connection, 'txtOrderRandom', story.guild_id),
+      getConfigValue(connection, 'txtOrderRoundRobin', story.guild_id),
+      getConfigValue(connection, 'txtOrderFixed', story.guild_id),
+    ]);
+
+    const statusMap = { 1: `▶️ ${txtActive}`, 2: `⏸️ ${txtPaused}`, 3: `🔒 ${txtClosed}` };
+    const orderMap = { 1: `🎲 ${txtOrderRandom}`, 2: `🔄 ${txtOrderRoundRobin}`, 3: `📋 ${txtOrderFixed}` };
+    const colorMap = { 1: 0x57f287, 2: 0xfee75c, 3: 0xed4245 };
+
+    const activeWriters = writers.filter(w => w.sw_status === 1);
+    const leftWriters = writers.filter(w => w.sw_status === 0);
+
+    // Creator = first writer to join (first in joined_at ASC order among active writers)
+    const creatorId = activeWriters[0]?.story_writer_id ?? null;
+
+    const writerLines = [
+      ...activeWriters.map(w => {
+        const isCurrent = activeTurn?.story_writer_id === w.story_writer_id;
+        const isCreator = w.story_writer_id === creatorId;
+        const isPinnedNext = story.next_writer_id && w.story_writer_id === story.next_writer_id;
+        const ao3 = w.AO3_name && w.AO3_name !== w.discord_display_name ? ` (${w.AO3_name})` : '';
+        const emojis = [isCreator ? '⭐' : '', isCurrent ? '✍️' : '', isPinnedNext ? '📌' : ''].filter(Boolean).join('');
+        const prefix = emojis ? `${emojis} ` : '';
+        return `${prefix}**${w.discord_display_name}**${ao3}`;
+      }),
+      ...leftWriters.map(w => `*${w.discord_display_name}*`),
+      '',
+      '*⭐ Creator  ·  ✍️ Current turn  ·  📌 Next up*'
+    ];
+
+    let turnValue;
+    if (activeTurn) {
+      const endTimestamp = `<t:${Math.floor(new Date(activeTurn.turn_ends_at).getTime() / 1000)}:R>`;
+      turnValue = `**${activeTurn.discord_display_name}** — ends ${endTimestamp}`;
+    } else {
+      turnValue = story.story_status === 1 ? 'No active turn' : '—';
+    }
+
+    // Next writer prediction
+    let nextWriterValue = '—';
+    if (story.story_status === 1) {
+      if (story.next_writer_id) {
+        const nw = writers.find(w => w.story_writer_id === story.next_writer_id);
+        nextWriterValue = nw ? `📌 **${nw.discord_display_name}** *(manually set)*` : '📌 *(manually set)*';
+      } else if (story.story_order_type === 1) {
+        nextWriterValue = '*Random pick*';
+      } else if (activeTurn) {
+        // Round-robin (2): order by joined_at (already sorted). Fixed (3): order by writer_order.
+        const sorted = story.story_order_type === 3
+          ? [...activeWriters].sort((a, b) => (a.writer_order ?? 999) - (b.writer_order ?? 999))
+          : activeWriters; // already joined_at ASC
+        const currentIdx = sorted.findIndex(w => w.story_writer_id === activeTurn.story_writer_id);
+        if (currentIdx >= 0) {
+          const nextWriter = sorted[(currentIdx + 1) % sorted.length];
+          nextWriterValue = `**${nextWriter.discord_display_name}** *(next in order)*`;
+        }
+      } else {
+        nextWriterValue = story.story_order_type === 1 ? '*Random pick*' : '*Next in order*';
+      }
+    }
+
+    const reminderText = story.timeout_reminder_percent > 0
+      ? ` · reminder at ${story.timeout_reminder_percent}%` : '';
+
+    const imagePart = imageCount > 0 ? ` · ${imageCount} ${imageCount === 1 ? 'image' : 'images'}` : '';
+    const statsValue = entryCount > 0
+      ? `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} · ~${wordCount.toLocaleString()} words${imagePart}`
+      : 'No entries yet';
+
+    const embed = new EmbedBuilder()
+      .setTitle(`📚 ${story.title} (#${story.story_id})`)
+      .setColor(colorMap[story.story_status] ?? 0x5865f2)
+      .addFields(
+        { name: 'Status', value: statusMap[story.story_status] ?? '—', inline: true },
+        { name: 'Mode', value: story.quick_mode ? 'Quick' : 'Normal', inline: true },
+        { name: 'Writer Order', value: orderMap[story.story_order_type] ?? '—', inline: true },
+        { name: 'Turn Length', value: `${story.turn_length_hours}h${reminderText}`, inline: true },
+        { name: 'Writers', value: `${activeWriters.length}/${story.max_writers || '∞'} · Open to new: ${story.allow_late_joins ? 'Yes' : 'No'}`, inline: true },
+        { name: 'Show Authors', value: story.show_authors ? 'Yes' : 'No', inline: true },
+        { name: 'Current Turn', value: turnValue, inline: true },
+        { name: 'Next Writer', value: nextWriterValue, inline: true },
+        { name: 'Entries', value: statsValue, inline: true },
+        { name: 'Writer List', value: writerLines.join('\n') || 'None', inline: false }
+      )
+      .setTimestamp();
+
+    if (story.summary) embed.setDescription(story.summary);
+    if (story.tags) embed.addFields({ name: 'Tags', value: story.tags, inline: false });
+    if (story.story_status === 3 && story.closed_at) {
+      const closedTimestamp = `<t:${Math.floor(new Date(story.closed_at).getTime() / 1000)}:D>`;
+      embed.addFields({ name: 'Closed', value: closedTimestamp, inline: true });
+    }
+
+    const storyThread = await guild.channels.fetch(story.story_thread_id).catch(() => null);
+    if (!storyThread) return;
+
+    let message = null;
+    if (story.status_message_id) {
+      message = await storyThread.messages.fetch(story.status_message_id).catch(() => null);
+    }
+
+    if (message) {
+      await message.edit({ embeds: [embed] });
+    } else {
+      const newMsg = await storyThread.send({ embeds: [embed] });
+      await connection.execute(
+        `UPDATE story SET status_message_id = ? WHERE story_id = ?`,
+        [newMsg.id, storyId]
+      );
+    }
+  } catch (err) {
+    console.error(`${formattedDate()}: Failed to update story status message for story ${storyId}:`, err);
+  }
 }
 
 /**

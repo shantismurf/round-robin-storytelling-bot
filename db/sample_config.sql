@@ -27,7 +27,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtMentionTurnStart', '🎭 **Your turn has started!** You can now write your part of the story.', 'en', 1),
 ('txtDMTurnReminder', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Don''t forget to write your entry.', 'en', 1),
 ('txtMentionTurnReminder', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Don''t forget to write your entry.', 'en', 1),
-('txtNormalModeWelcome', 'Welcome to your turn thread! Write your story entry here, then use the buttons below to finalize or skip your turn.', 'en', 1),
+('txtNormalModeWelcome', '**Welcome to your turn thread for [story_title]!**\nWrite your story entry here in as many posts as you''d like. Edit as needed, use Discord markdown for formatting, and upload images as separate posts in between your text so they''ll appear in that order in the story. Then, use the buttons below to Finalize your turn, or Skip to pass to the next writer without submitting.\nYour turn ends on [turn_end_full], in [turn_end_relative]. If you need to catch up with the story since your last turn, use the command `/mystory catchup story_id:[story_id]`.', 'en', 1),
 ('txtQuickModeTurnStart', '🎭 **[story_title]:** [current_writer]''s turn has started! Please use `/story write [story_id]` to submit your entry. Turn ends [turn_end_date].', 'en', 1),
 ('btnFinalizeEntry', '✅ Finalize Entry', 'en', 1),
 ('btnSkipTurn', '⏭️ Skip Turn', 'en', 1),

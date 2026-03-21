@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
 import { marked } from 'marked';
-import { CreateStory, PickNextWriter, NextTurn } from '../storybot.js';
+import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
 
 // Temporary storage for first modal data while user completes second modal
@@ -888,6 +888,7 @@ async function handleJoinModalSubmit(connection, interaction) {
 
         // Post announcement to story feed channel
         await postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyInfo[0].title);
+        updateStoryStatusMessage(connection, interaction.guild, parseInt(storyId)).catch(() => {});
 
       } else {
         await txn.rollback();
@@ -1439,7 +1440,7 @@ function buildHelpPage3() {
         value: [
           '- Sets the story status to paused (freezing the current turn) or resumes a paused story. Resuming starts the next turn automatically if no turn is currently active.',
           '- Use the button in /story manage, or the command /story close <id>, to permanently close a story. This ends the current turn, posts a completion message with the full story export in the main story feed, but leaves the main story thread open for discussion. This cannot be undone.'
-        ],
+        ].join('\n'),
         inline: false
       },
       {
@@ -1450,12 +1451,12 @@ function buildHelpPage3() {
       {
         name: 'Admin Controls',
         value: [
-                '- Skip the current turn',
-                '- Extend the current turn.',
-                '- Set the writer who will be selected when the next turn starts.',
-                '- Remove a writer from a story.',
-                '- Delete a story.'
-              ],
+          '- Skip the current turn',
+          '- Extend the current turn.',
+          '- Set the writer who will be selected when the next turn starts.',
+          '- Remove a writer from a story.',
+          '- Delete a story.'
+        ].join('\n'),
         inline: false
       }
     )
@@ -2151,6 +2152,11 @@ async function handleFinalizeEntry(connection, interaction) {
       await txn.commit();
     } catch (txnError) {
       await txn.rollback();
+      if (txnError.code === 'ER_DUP_ENTRY') {
+        // Double-click: entry was already submitted by a concurrent request
+        await interaction.editReply({ content: '✅ Your entry has already been submitted.', components: [] });
+        return;
+      }
       throw txnError;
     } finally {
       txn.release();
@@ -2679,6 +2685,7 @@ async function handleManageSave(connection, interaction, state) {
     }
 
     pendingManageData.delete(interaction.user.id);
+    updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
     await state.originalInteraction.editReply({
       content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
       embeds: [],
@@ -2738,6 +2745,27 @@ async function applyPauseActions(connection, interaction, state) {
     await thread.setLocked(true);
   } catch (err) {
     console.error(`${formattedDate()}: Could not lock turn thread on pause (story ${state.storyId}):`, err);
+  }
+
+  // Update story thread title to show PAUSED
+  try {
+    const [storyInfo] = await connection.execute(
+      `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
+    );
+    if (storyInfo[0]?.story_thread_id) {
+      const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
+      if (storyThread) {
+        const [txtPaused, titleTemplate] = await Promise.all([
+          getConfigValue(connection, 'txtPaused', state.guildId),
+          getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
+        ]);
+        await storyThread.setName(
+          titleTemplate.replace('[story_id]', state.storyId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtPaused)
+        );
+      }
+    }
+  } catch (err) {
+    console.error(`${formattedDate()}: Could not update story thread title on pause (story ${state.storyId}):`, err);
   }
 }
 
@@ -2832,6 +2860,27 @@ async function applyResumeActions(connection, interaction, state) {
         console.error(`${formattedDate()}: Could not notify writer on resume (story ${state.storyId}):`, err);
       }
     }
+  }
+
+  // Update story thread title back to Active
+  try {
+    const [storyInfo] = await connection.execute(
+      `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
+    );
+    if (storyInfo[0]?.story_thread_id) {
+      const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
+      if (storyThread) {
+        const [txtActive, titleTemplate] = await Promise.all([
+          getConfigValue(connection, 'txtActive', state.guildId),
+          getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
+        ]);
+        await storyThread.setName(
+          titleTemplate.replace('[story_id]', state.storyId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
+        );
+      }
+    }
+  } catch (err) {
+    console.error(`${formattedDate()}: Could not update story thread title on resume (story ${state.storyId}):`, err);
   }
 }
 
@@ -3036,6 +3085,8 @@ async function handleCloseConfirm(connection, interaction) {
     if (turnCount > 0) {
       await postStoryFeedClosedAnnouncement(connection, interaction, story.title, turnCount, wordCount, writerCount, exportResult);
     }
+
+    updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
 
     // Clear confirmation buttons
     await interaction.editReply({ content: '✅', components: [] });
