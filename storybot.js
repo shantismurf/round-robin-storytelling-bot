@@ -1,6 +1,6 @@
 import { EventEmitter } from 'events';
 import { getConfigValue, formattedDate } from './utilities.js';
-import { ChannelType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
+import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
 
 /**
@@ -825,6 +825,26 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
   } catch (err) {
     console.error(`${formattedDate()}: Failed to update story status message for story ${storyId}:`, err);
   }
+}
+
+/**
+ * Delete a turn/story thread and also remove the "started a thread" system
+ * message Discord posts in the parent channel when the thread was created.
+ * Safe to await directly — errors from the announcement deletion are swallowed
+ * so the thread deletion always proceeds.
+ */
+export async function deleteThreadAndAnnouncement(thread) {
+  try {
+    const parent = thread.parent ?? await thread.guild.channels.fetch(thread.parentId).catch(() => null);
+    if (parent) {
+      const messages = await parent.messages.fetch({ around: thread.id, limit: 5 }).catch(() => null);
+      if (messages) {
+        const announcement = messages.find(m => m.type === MessageType.ThreadCreated && m.thread?.id === thread.id);
+        if (announcement) await announcement.delete().catch(() => {});
+      }
+    }
+  } catch {} // never block thread deletion
+  await thread.delete();
 }
 
 /**

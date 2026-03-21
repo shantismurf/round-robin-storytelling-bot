@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, formattedDate, replaceTemplateVariables } from '../utilities.js';
-import { PickNextWriter, NextTurn } from '../storybot.js';
+import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from '../storybot.js';
 
 // Cached catchup pages keyed by "catchup_<userId>_<storyId>"
 const pendingCatchUpData = new Map();
@@ -601,7 +601,7 @@ async function handleLeaveConfirm(connection, interaction) {
       if (activeTurn.thread_id) {
         try {
           const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (thread) await thread.delete();
+          if (thread) await deleteThreadAndAnnouncement(thread);
         } catch (err) {
           console.error(`${formattedDate()}: Could not delete turn thread on leave:`, err);
         }

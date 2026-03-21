@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
 import { marked } from 'marked';
-import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity } from '../storybot.js';
+import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
 
 // Temporary storage for first modal data while user completes second modal
@@ -2173,7 +2173,7 @@ async function handleFinalizeEntry(connection, interaction) {
     }
 
     // Delete turn thread — posting to story thread is confirmation
-    await thread.delete(`Turn ${turn_number} finalized`);
+    await deleteThreadAndAnnouncement(thread);
 
   } catch (error) {
     console.error(`${formattedDate()}: Finalize entry failed:`, error);
@@ -2284,7 +2284,7 @@ async function handleSkipConfirm(connection, interaction) {
     if (turn.thread_id) {
       try {
         const thread = await interaction.guild.channels.fetch(turn.thread_id);
-        await thread.delete('Turn skipped');
+        await deleteThreadAndAnnouncement(thread);
       } catch (err) {
         console.error(`${formattedDate()}: Failed to delete skipped turn thread:`, err);
       }
@@ -3092,7 +3092,7 @@ async function handleCloseConfirm(connection, interaction) {
       if (!story.quick_mode && activeTurn.thread_id) {
         try {
           const turnThread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (turnThread) await turnThread.delete();
+          if (turnThread) await deleteThreadAndAnnouncement(turnThread);
         } catch (err) {
           console.error(`${formattedDate()}: Could not delete turn thread ${activeTurn.thread_id}:`, err);
         }

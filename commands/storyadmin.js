@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
-import { PickNextWriter, NextTurn, postStoryThreadActivity } from '../storybot.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 
 async function checkIsAdmin(connection, interaction, guildId) {
   const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
@@ -158,7 +158,7 @@ async function handleSkip(connection, interaction) {
     if (activeTurn.thread_id) {
       try {
         const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-        if (thread) await thread.delete();
+        if (thread) await deleteThreadAndAnnouncement(thread);
       } catch (err) {
         console.error(`${formattedDate()}: Could not delete turn thread on admin skip:`, err);
       }
@@ -293,7 +293,7 @@ async function handleKick(connection, interaction) {
       if (activeTurn.thread_id) {
         try {
           const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (thread) await thread.delete();
+          if (thread) await deleteThreadAndAnnouncement(thread);
         } catch (err) {
           console.error(`${formattedDate()}: Could not delete thread on kick:`, err);
         }
@@ -485,7 +485,7 @@ async function handleDeleteConfirm(connection, interaction) {
     if (story.story_thread_id) {
       try {
         const thread = await interaction.guild.channels.fetch(story.story_thread_id);
-        if (thread) await thread.delete();
+        if (thread) await deleteThreadAndAnnouncement(thread);
       } catch (err) {
         console.log(`${formattedDate()}: Story thread already gone for story ${storyId}`);
       }

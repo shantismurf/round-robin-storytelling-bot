@@ -1,5 +1,5 @@
 import { getConfigValue, formattedDate } from './utilities.js';
-import { checkStoryDelay, PickNextWriter, NextTurn, postStoryThreadActivity } from './storybot.js';
+import { checkStoryDelay, PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from './storybot.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 
 const JOB_POLL_INTERVAL_MS = 60 * 1000;
@@ -145,7 +145,7 @@ async function handleTurnTimeout(connection, client, payload) {
   if (activeTurn.thread_id) {
     try {
       const thread = await ctx.guild.channels.fetch(activeTurn.thread_id);
-      if (thread) await thread.delete();
+      if (thread) await deleteThreadAndAnnouncement(thread);
     } catch (err) {
       console.error(`${formattedDate()}: Could not delete thread on timeout for turn ${turnId}:`, err);
     }
