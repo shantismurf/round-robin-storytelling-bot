@@ -1,5 +1,5 @@
 import { getConfigValue, formattedDate } from './utilities.js';
-import { checkStoryDelay, PickNextWriter, NextTurn } from './storybot.js';
+import { checkStoryDelay, PickNextWriter, NextTurn, postStoryThreadActivity } from './storybot.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 
 const JOB_POLL_INTERVAL_MS = 60 * 1000;
@@ -112,7 +112,10 @@ async function handleTurnTimeout(connection, client, payload) {
 
   // Verify turn is still active
   const [turnRows] = await connection.execute(
-    `SELECT turn_id, thread_id FROM turn WHERE turn_id = ? AND turn_status = 1`,
+    `SELECT t.turn_id, t.thread_id, sw.discord_display_name
+     FROM turn t
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE t.turn_id = ? AND t.turn_status = 1`,
     [turnId]
   );
   if (turnRows.length === 0) return; // already ended or advanced by someone else
@@ -150,6 +153,11 @@ async function handleTurnTimeout(connection, client, payload) {
 
   const nextWriterId = await PickNextWriter(connection, storyId);
   if (nextWriterId) await NextTurn(connection, ctx, nextWriterId);
+
+  // Activity log (fire-and-forget)
+  getConfigValue(connection, 'txtStoryThreadTurnTimeout', guildId).then(template =>
+    postStoryThreadActivity(connection, ctx.guild, storyId, template.replace('[writer_name]', activeTurn.discord_display_name))
+  ).catch(() => {});
 }
 
 // ---------------------------------------------------------------------------

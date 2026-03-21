@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
 import { marked } from 'marked';
-import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage } from '../storybot.js';
+import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
 
 // Temporary storage for first modal data while user completes second modal
@@ -890,6 +890,12 @@ async function handleJoinModalSubmit(connection, interaction) {
         await postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyInfo[0].title);
         updateStoryStatusMessage(connection, interaction.guild, parseInt(storyId)).catch(() => {});
 
+        // Activity log (fire-and-forget)
+        const writerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+        getConfigValue(connection, 'txtStoryThreadWriterJoin', interaction.guild.id).then(template =>
+          postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), template.replace('[writer_name]', writerName))
+        ).catch(() => {});
+
       } else {
         await txn.rollback();
         await interaction.editReply({
@@ -1314,11 +1320,6 @@ function buildHelpPage2() {
     .setColor(0x5865f2)
     .addFields(
       {
-        name: '/t',
-        value: 'After story creation, these settings can be edited by admins or the story creator via `/story manage.`',
-        inline: false
-      },
-      {
         name: 'Story Title',
         value: '- ⚠️ *Required.*',
         inline: false
@@ -1377,25 +1378,19 @@ function buildHelpPage2() {
         inline: false
       },
       {
-        name: 'Story Creator\'s Join Options:',
-        value: '/t',
-        inline: false
-      },
-      {
-        name: 'Your AO3 Username',
-        value: '- <:ao3:1484674133437714495> Your name as it appears on AO3. Used in story exports. Defaults to your Discord display name if left blank.',
-        inline: false
-      },
-      {
-        name: 'Keep My Turns Private',
+        name: 'Story Creator\'s Join Options',
         value: [
+          '**Your AO3 Username**',
+          '- <:ao3:1484674133437714495> Your name as it appears on AO3. Used in story exports. Defaults to your Discord display name if left blank.',
+          '',
+          '**Keep My Turns Private**',
           '- 🔒 **Yes** — Your turn threads will only be visible to you and admins.',
           '- 🔓 **No** — Your turn threads will be visible to other writers.',
         ].join('\n'),
         inline: false
       }
     )
-    .setFooter({ text: 'Page 2 of 3' });
+    .setFooter({ text: 'Page 2 of 3 · After story creation, these settings can be edited by admins or the story creator via `/story manage.`'});
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -1637,6 +1632,11 @@ async function handleButtonInteraction(connection, interaction) {
     await handleFinalizeEntry(connection, interaction);
   } else if (interaction.customId.startsWith('skip_turn_')) {
     await handleSkipTurn(connection, interaction);
+  } else if (interaction.customId.startsWith('story_skip_confirm_')) {
+    await handleSkipConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('story_skip_cancel_')) {
+    await interaction.deferUpdate();
+    await interaction.editReply({ content: '❌ Skip cancelled.', components: [] });
   } else if (interaction.customId.startsWith('story_close_confirm_')) {
     await handleCloseConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_close_cancel_')) {
@@ -2188,35 +2188,97 @@ async function handleFinalizeEntry(connection, interaction) {
  */
 async function handleSkipTurn(connection, interaction) {
   const storyId = interaction.customId.split('_')[2];
-  
+  const guildId = interaction.guild.id;
+
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  
+
   try {
-    // Verify this is the current writer's turn
     const [turnInfo] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id
+      `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id, sw.discord_display_name
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
       [storyId, interaction.user.id]
     );
-    
+
     if (turnInfo.length === 0) {
-      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id) });
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId) });
       return;
     }
-    
+
     const turn = turnInfo[0];
-    
-    // Mark turn as skipped
+
+    // Check if the writer has posted any content in the turn thread
+    let hasContent = false;
+    if (turn.thread_id) {
+      try {
+        const thread = await interaction.guild.channels.fetch(turn.thread_id);
+        if (thread) {
+          const messages = await thread.messages.fetch({ limit: 50 });
+          hasContent = messages.some(m => !m.author.bot && m.author.id === interaction.user.id);
+        }
+      } catch {} // thread may not be accessible
+    }
+
+    const [txtConfirm, btnConfirm, btnCancel] = await Promise.all([
+      getConfigValue(connection, hasContent ? 'txtSkipConfirmHasContent' : 'txtSkipConfirmNoContent', guildId),
+      getConfigValue(connection, 'btnSkipConfirm', guildId),
+      getConfigValue(connection, 'btnSkipCancel', guildId)
+    ]);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`story_skip_confirm_${storyId}`)
+        .setLabel(btnConfirm)
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`story_skip_cancel_${storyId}`)
+        .setLabel(btnCancel)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({ content: txtConfirm, components: [row] });
+
+  } catch (error) {
+    console.error(`${formattedDate()}: Skip turn confirmation failed:`, error);
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+async function handleSkipConfirm(connection, interaction) {
+  const storyId = interaction.customId.split('_')[3];
+  const guildId = interaction.guild.id;
+
+  await interaction.deferUpdate();
+
+  try {
+    const [turnInfo] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id, sw.discord_display_name
+       FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
+      [storyId, interaction.user.id]
+    );
+
+    if (turnInfo.length === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId), components: [] });
+      return;
+    }
+
+    const turn = turnInfo[0];
+
     await connection.execute(
       `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
       [turn.turn_id]
     );
-    
-    // Advance to next writer
+
     const nextWriterId = await PickNextWriter(connection, storyId);
     await NextTurn(connection, interaction, nextWriterId);
+
+    // Activity log (fire-and-forget)
+    getConfigValue(connection, 'txtStoryThreadTurnSkip', guildId).then(template =>
+      postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), template.replace('[writer_name]', turn.discord_display_name))
+    ).catch(() => {});
 
     // Delete turn thread
     if (turn.thread_id) {
@@ -2228,11 +2290,11 @@ async function handleSkipTurn(connection, interaction) {
       }
     }
 
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', interaction.guild.id) });
-    
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', guildId), components: [] });
+
   } catch (error) {
     console.error(`${formattedDate()}: Skip turn failed:`, error);
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id) });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
   }
 }
 

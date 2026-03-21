@@ -180,11 +180,18 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
     // Insert story_writer record
     const turnPrivacy = storyInput.turnPrivacy !== undefined ? storyInput.turnPrivacy : storyInput.keepPrivate;
     const notificationPrefs = storyInput.notificationPrefs || 'dm';
-    
+
+    // Assign writer_order = current active writer count + 1 so fixed order works correctly
+    const [countResult] = await connection.execute(
+      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`,
+      [storyId]
+    );
+    const writerOrder = countResult[0].count + 1;
+
     const [writerResult] = await connection.execute(
-      `INSERT INTO story_writer (story_id, discord_user_id, discord_display_name, AO3_name, turn_privacy, notification_prefs) 
-       VALUES (?, ?, ?, ?, ?, ?)`,
-      [storyId, userId, displayName, ao3Name, turnPrivacy, notificationPrefs]
+      `INSERT INTO story_writer (story_id, discord_user_id, discord_display_name, AO3_name, turn_privacy, notification_prefs, writer_order)
+       VALUES (?, ?, ?, ?, ?, ?, ?)`,
+      [storyId, userId, displayName, ao3Name, turnPrivacy, notificationPrefs, writerOrder]
     );
     
     const storyWriterId = writerResult.insertId;
@@ -435,7 +442,11 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 
     let threadId = null;
     let dmMessage = '';
-    
+
+    // Compute turn number and end time here — used by both modes for activity log and thread title
+    const turnNumber = await getTurnNumber(connection, writer.story_id);
+    const turnEndTime = turnEndTimeFunction(turnId, writer.turn_length_hours);
+
     // Handle quick mode vs normal mode
     if (writer.quick_mode) {
       // Quick mode - send notifications and post feed announcement
@@ -445,12 +456,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       // Normal mode - create private thread
       const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
       const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
-      
-      // Get turn number
-      const turnNumber = await getTurnNumber(connection, writer.story_id);
-      
-      // Get turn end time
-      const turnEndTime = turnEndTimeFunction(turnId, writer.turn_length_hours);
+
       const formattedEndTime = turnEndTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 
       // Create thread title (plain date — Discord doesn't render timestamps in thread names)
@@ -501,6 +507,17 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       dmMessage = 'Normal mode thread created and notification sent';
     }
     
+    // Post activity log to story thread (fire-and-forget)
+    const unixTs = Math.floor(turnEndTime.getTime() / 1000);
+    getConfigValue(connection, 'txtStoryThreadTurnStart', guild_id).then(template => {
+      const msg = template
+        .replace('[turn_number]', turnNumber)
+        .replace('[writer_name]', writer.discord_display_name)
+        .replace('[turn_end_full]', `<t:${unixTs}:F>`)
+        .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
+      return postStoryThreadActivity(connection, interaction.guild, writer.story_id, msg);
+    }).catch(() => {});
+
     // Update story status message (fire-and-forget — never blocks the turn)
     updateStoryStatusMessage(connection, interaction.guild, writer.story_id).catch(() => {});
 
@@ -620,6 +637,22 @@ async function getTurnNumber(connection, storyId) {
     [storyId]
   );
   return result[0].turn_number;
+}
+
+/**
+ * Post a short activity message to the story's main thread. Safe to fire-and-forget.
+ */
+export async function postStoryThreadActivity(connection, guild, storyId, message) {
+  try {
+    const [rows] = await connection.execute(
+      `SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]
+    );
+    if (!rows[0]?.story_thread_id) return;
+    const thread = await guild.channels.fetch(rows[0].story_thread_id).catch(() => null);
+    if (thread) await thread.send(message);
+  } catch (err) {
+    console.error(`${formattedDate()}: Could not post activity to story thread ${storyId}:`, err);
+  }
 }
 
 /**

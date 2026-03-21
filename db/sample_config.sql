@@ -251,6 +251,19 @@ Words: ~[word_count]', 'en', 1),
 ('txtAdminNextSuccess', '✅ **[user_name]** will receive the next turn.', 'en', 1),
 ('txtAdminNextAlreadyCurrent', '❌ **[user_name]** is already the current writer.', 'en', 1),
 
+-- Story Thread Activity Log
+('txtStoryThreadTurnStart', '✍️ **Turn [turn_number]:** It''s **[writer_name]**''s turn! Deadline: [turn_end_full] ([turn_end_relative]).', 'en', 1),
+('txtStoryThreadTurnSkip', '⏭️ **[writer_name]** skipped their turn.', 'en', 1),
+('txtStoryThreadTurnTimeout', '⏰ **[writer_name]**''s turn timed out and was automatically skipped.', 'en', 1),
+('txtStoryThreadWriterJoin', '👋 **[writer_name]** joined the story.', 'en', 1),
+('txtStoryThreadWriterRemove', '🚫 **[writer_name]** was removed from the story by an admin.', 'en', 1),
+
+-- Skip turn confirmation
+('txtSkipConfirmNoContent', '⏭️ **Skip your turn?** This will pass to the next writer without submitting an entry. This cannot be undone.', 'en', 1),
+('txtSkipConfirmHasContent', '⚠️ **Skip your turn?** You have posted content in this thread — **it will be discarded** if you skip. This cannot be undone.', 'en', 1),
+('btnSkipConfirm', 'Yes, Skip My Turn', 'en', 1),
+('btnSkipCancel', 'Cancel', 'en', 1),
+
 -- System Configuration
 ('cfgLanguageCode', 'en', 'en', 1),
 ('cfgEntryTimeoutMinutes', '10', 'en', 1),

@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
-import { PickNextWriter, NextTurn } from '../storybot.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity } from '../storybot.js';
 
 async function checkIsAdmin(connection, interaction, guildId) {
   const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
@@ -38,7 +38,7 @@ const data = new SlashCommandBuilder()
         o.setName('hours').setDescription('Hours to add').setRequired(true).setMinValue(1))
   )
   .addSubcommand(s =>
-    s.setName('kick')
+    s.setName('remove')
       .setDescription('Remove a writer from a story')
       .addIntegerOption(o =>
         o.setName('story_id').setDescription('Story ID').setRequired(true))
@@ -78,7 +78,7 @@ async function execute(connection, interaction) {
   }
   if (subcommand === 'skip')        await handleSkip(connection, interaction);
   else if (subcommand === 'extend') await handleExtend(connection, interaction);
-  else if (subcommand === 'kick')   await handleKick(connection, interaction);
+  else if (subcommand === 'remove') await handleKick(connection, interaction);
   else if (subcommand === 'next')   await handleNext(connection, interaction);
   else if (subcommand === 'delete') await handleDelete(connection, interaction);
 }
@@ -102,7 +102,7 @@ async function handleHelp(interaction) {
         inline: false
       },
       {
-        name: '/storyadmin kick <story_id> <user>',
+        name: '/storyadmin remove <story_id> <user>',
         value: 'Removes a writer from a story. If it\'s their turn, advances to the next writer. If they\'re the last writer, the story is closed automatically.',
         inline: false
       },
@@ -241,7 +241,7 @@ async function handleExtend(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /storyadmin kick
+// /storyadmin remove
 // ---------------------------------------------------------------------------
 async function handleKick(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -251,7 +251,7 @@ async function handleKick(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, title FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT story_id, title, story_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
@@ -313,13 +313,19 @@ async function handleKick(connection, interaction) {
       if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
     }
 
-    await logAdminAction(connection, interaction.user.id, 'kick', storyId, targetUser.id);
+    await logAdminAction(connection, interaction.user.id, 'remove', storyId, targetUser.id);
+    const removedName = targetUser.displayName || targetUser.username;
     const successMsg = replaceTemplateVariables(
       await getConfigValue(connection, 'txtAdminKickSuccess', guildId),
-      { user_name: targetUser.displayName || targetUser.username, story_title: story.title }
+      { user_name: removedName, story_title: story.title }
     );
     const closeNote = isLastWriter ? '\n⚠️ Story auto-closed — no writers remain.' : '';
     await interaction.editReply({ content: successMsg + closeNote });
+
+    // Activity log (fire-and-forget)
+    getConfigValue(connection, 'txtStoryThreadWriterRemove', guildId).then(template =>
+      postStoryThreadActivity(connection, interaction.guild, storyId, template.replace('[writer_name]', removedName))
+    ).catch(() => {});
 
   } catch (error) {
     console.error(`${formattedDate()}: Error in handleKick:`, error);
