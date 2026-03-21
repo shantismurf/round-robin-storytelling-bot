@@ -1314,77 +1314,77 @@ function buildHelpPage2() {
     .addFields(
       {
         name: 'Story Title',
-        value: '⚠️ *Required.*',
-        inline: true
+        value: '- ⚠️ *Required.*',
+        inline: false
       },
       {
         name: 'Max Writers',
-        value: '#️⃣ Optional. Leave blank for no limit.',
+        value: '- #️⃣ Optional. Leave blank for no limit.',
         inline: true
       },
       {
         name: 'Turn Length',
-        value: '⌛ How many hours each writer has per turn. Default: 24h.',
+        value: '- ⌛ How many hours each writer has per turn. Default: 24h.',
         inline: true
       },
       {
         name: 'Story Mode',
         value: [
-          '🟢 **Normal** — Writers get a private or public thread for each turn.',
-          '🟣 **Quick** — Writers submit entries via `/story write`.',
+          '- 🟢 **Normal** — Writers get a private or public thread for each turn.',
+          '- 🟣 **Quick** — Writers submit entries via `/story write`.',
         ].join('\n'),
         inline: false
       },
       {
         name: 'Writer Order',
         value: [
-          '🎲 **Random** — Next writer chosen completely at random each turn.',
-          '🔄 **Round Robin** — Rotates randomly, but no one repeats until everyone has had a turn.',
-          '📋 **Fixed Order** — Writers take turns in a fixed sequence based on join order.',
+          '- 🎲 **Random** — Next writer chosen completely at random each turn.',
+          '- 🔄 **Round Robin** — Rotates randomly, but no one repeats until everyone has had a turn.',
+          '- 📋 **Fixed Order** — Writers take turns in a fixed sequence based on join order.',
         ].join('\n'),
         inline: false
       },
       {
         name: 'Hide Threads',
         value: [
-          '🥷 **On** — Turn threads are private to the current writer and admins only.',
-          '🤡 **Off** — Turn threads are visible to all writers.',
+          '- 🥷 **On** — Turn threads are private to the current writer and admins only.',
+          '- 🤡 **Off** — Turn threads are visible to all writers.',
         ].join('\n'),
         inline: false
       },
       {
         name: 'Show Author Names',
         value: [
-          '📑 **Yes** — Writer names appear on entries in Discord and in the export file.',
-          '📄 **No** — Entries are posted and exported anonymously.',
+          '- 📑 **Yes** — Writer names appear on entries in Discord and in the export file.',
+          '- 📄 **No** — Entries are posted and exported anonymously.',
         ].join('\n'),
         inline: false
       },
       {
         name: 'Timeout Reminder',
-        value: '⏰ Send a reminder to the current writer after X% of their turn has elapsed. Default: 50%. Set to 0% to disable.',
+        value: '- ⏰ Send a reminder to the current writer after X% of their turn has elapsed. Default: 50%. Set to 0% to disable.',
         inline: false
       },
       {
         name: 'Delay Start By',
-        value: '🫸 Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.',
+        value: '- 🫸 Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.',
         inline: false
       },
       {
         name: 'Your AO3 Username',
-        value: '<:ao3:1484674133437714495> Your name as it appears on AO3. Used in story exports. Defaults to your Discord display name if left blank.',
+        value: '- <:ao3:1484674133437714495> Your name as it appears on AO3. Used in story exports. Defaults to your Discord display name if left blank.',
         inline: false
       },
       {
         name: 'Keep My Turns Private',
         value: [
-          '🔒 **Yes** — Your turn threads will only be visible to you and admins.',
-          '🔓 **No** — Your turn threads will be visible to other writers.',
+          '- 🔒 **Yes** — Your turn threads will only be visible to you and admins.',
+          '- 🔓 **No** — Your turn threads will be visible to other writers.',
         ].join('\n'),
         inline: false
       }
     )
-    .setFooter({ text: 'Page 2 of 3 · These settings can be edited later via /story manage.' });
+    .setFooter({ text: 'Page 2 of 3 · These settings can be edited by the story creator via /story manage.' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
