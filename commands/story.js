@@ -446,7 +446,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
       const raw = sanitizeModalInput(interaction.fields.getTextInputValue('max_writers'), 10);
       if (raw) {
         const val = parseInt(raw);
-        if (isNaN(val) || val < 1) {
+        if (isNaN(val) || val < 0) {
           await interaction.reply({
             content: replaceTemplateVariables(
               await getConfigValue(connection, 'txtMustBeNo'),
@@ -456,7 +456,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
           });
           return;
         }
-        state.maxWriters = val;
+        state.maxWriters = val > 0 ? val : null; // 0 = no limit
       } else {
         state.maxWriters = null;
       }
@@ -2976,10 +2976,10 @@ async function handleManageModalSubmit(connection, interaction) {
       const raw = sanitizeModalInput(interaction.fields.getTextInputValue('max_writers'), 10);
       if (raw) {
         const val = parseInt(raw);
-        if (isNaN(val) || val < 1) {
+        if (isNaN(val) || val < 0) {
           return await interaction.reply({ content: 'Max writers must be at least 1, or leave blank for no limit.', flags: MessageFlags.Ephemeral });
         }
-        state.maxWriters = val;
+        state.maxWriters = val > 0 ? val : null; // 0 = no limit
       } else {
         state.maxWriters = null;
       }

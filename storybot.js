@@ -45,7 +45,7 @@ export async function CreateStory(connection, interaction, storyInput) {
   try {
 
     // Step 1: Insert story record
-    const storyStatus = (storyInput.delayHours || storyInput.delayWriters) ? 2 : 1; // 2 = paused, 1 = active
+    const storyStatus = (storyInput.delayHours > 0 || storyInput.delayWriters > 0) ? 2 : 1; // 2 = paused, 1 = active
 
     const [storyResult] = await txn.execute(
       `INSERT INTO story (guild_id, title, story_status, quick_mode, turn_length_hours,
@@ -789,7 +789,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         { name: 'Mode', value: story.quick_mode ? 'Quick' : 'Normal', inline: true },
         { name: 'Writer Order', value: orderMap[story.story_order_type] ?? '—', inline: true },
         { name: 'Turn Length', value: `${story.turn_length_hours}h${reminderText}`, inline: true },
-        { name: 'Writers', value: `${activeWriters.length}/${story.max_writers || '∞'} · Open to new: ${story.allow_late_joins ? 'Yes' : 'No'}`, inline: true },
+        { name: 'Writers', value: `${activeWriters.length}/${story.max_writers || '∞'} · ${story.allow_late_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? 'Open' : 'Closed'}`, inline: true },
         { name: 'Show Authors', value: story.show_authors ? 'Yes' : 'No', inline: true },
         { name: 'Current Turn', value: turnValue, inline: true },
         { name: 'Next Writer', value: nextWriterValue, inline: true },
