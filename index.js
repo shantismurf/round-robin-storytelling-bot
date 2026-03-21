@@ -22,6 +22,8 @@ async function main() {
   const connection = await db.connect();
   
   // create Discord client here (index.js owns the client)
+  const processingButtons = new Set();
+
   const client = new Client({ intents: [
     GatewayIntentBits.Guilds, 
     GatewayIntentBits.GuildMessages, 
@@ -100,12 +102,22 @@ async function main() {
       } else if (interaction.isButton()) {
         console.log(`${formattedDate()}: ${interaction.user.username} clicked button ${interaction.customId}`);
 
-        const isStoryadminButton = interaction.customId.startsWith('storyadmin_');
-        const isMystoryButton = interaction.customId.startsWith('catchup_') || interaction.customId.startsWith('mystory_');
-        const commandName = isStoryadminButton ? 'storyadmin' : isMystoryButton ? 'mystory' : 'story';
-        const command = interaction.client.commands.get(commandName);
-        if (command && command.handleButtonInteraction) {
-          await command.handleButtonInteraction(connection, interaction);
+        const dedupKey = `${interaction.user.id}:${interaction.customId}`;
+        if (processingButtons.has(dedupKey)) {
+          await interaction.deferUpdate().catch(() => {});
+        } else {
+          processingButtons.add(dedupKey);
+          try {
+            const isStoryadminButton = interaction.customId.startsWith('storyadmin_');
+            const isMystoryButton = interaction.customId.startsWith('catchup_') || interaction.customId.startsWith('mystory_');
+            const commandName = isStoryadminButton ? 'storyadmin' : isMystoryButton ? 'mystory' : 'story';
+            const command = interaction.client.commands.get(commandName);
+            if (command && command.handleButtonInteraction) {
+              await command.handleButtonInteraction(connection, interaction);
+            }
+          } finally {
+            processingButtons.delete(dedupKey);
+          }
         }
       } else if (interaction.isStringSelectMenu()) {
         console.log(`${formattedDate()}: ${interaction.user.username} used select menu ${interaction.customId}`);
