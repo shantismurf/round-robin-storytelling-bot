@@ -59,57 +59,61 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
  * function postStoryFeedCreationAnnouncement
  * Post announcement to story feed channel when a story is created
  */
-export async function postStoryFeedCreationAnnouncement(connection, storyId, interaction, storyTitle, storyStatus, delayHours, delayWriters) {
-    const guildId = interaction.guild.id;
-    try {
-      const feedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guildId);
-      if (!feedChannelId) {
-        console.log(`${formattedDate()}: Story feed channel not configured - skipping creation announcement`);
-        return;
-      }
-      
-      const creatorName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
-      let announcement;
-      
-      if (storyStatus === 1) {
-        // Story is immediately active
-        const [writerCount] = await connection.execute(`
-          SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1
-        `, [storyId]);
-        
-        const txtStoryFeedCreatedActive = await getConfigValue(connection,'txtStoryFeedCreatedActive', guildId);
-        announcement = replaceTemplateVariables(txtStoryFeedCreatedActive, {
-          story_title: storyTitle,
-          creator_name: creatorName,
-          writer_count: writerCount[0].count
-        });
-      } else if (delayHours) {
-        // Story delayed by time
-        const startTime = new Date(Date.now() + (delayHours * 60 * 60 * 1000));
-        const txtStoryFeedCreatedDelayed = await getConfigValue(connection,'txtStoryFeedCreatedDelayed', guildId);
-        announcement = replaceTemplateVariables(txtStoryFeedCreatedDelayed, {
-          story_title: storyTitle,
-          creator_name: creatorName,
-          start_time: `<t:${Math.floor(startTime.getTime() / 1000)}:f>`
-        });
-      } else if (delayWriters) {
-        // Story delayed by writer count
-        const txtStoryFeedCreatedPending = await getConfigValue(connection,'txtStoryFeedCreatedPending', guildId);
-        announcement = replaceTemplateVariables(txtStoryFeedCreatedPending, {
-          story_title: storyTitle,
-          creator_name: creatorName,
-          writers_needed: delayWriters - 1 // -1 because creator is already added
-        });
-      }
-      
-      if (announcement) {
-        const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
-        if (feedChannel) {
-          await feedChannel.send(announcement);
-        }
-      }
-      
-      console.log(`${formattedDate()}: Story feed creation announcement sent for story ${storyId}`);
+export async function postStoryFeedCreationAnnouncement(connection, storyId, interaction) {
+  const guildId = interaction.guild.id;
+  try {
+    const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
+    if (!feedChannelId) {
+      console.log(`${formattedDate()}: Story feed channel not configured - skipping creation announcement`);
+      return;
+    }
+
+    const [storyRows] = await connection.execute(
+      `SELECT s.title, s.quick_mode, s.story_order_type, s.turn_length_hours,
+              s.max_writers, s.allow_late_joins, s.story_delay_hours, s.story_delay_users,
+              s.created_at, COUNT(sw.story_writer_id) as writer_count
+       FROM story s
+       LEFT JOIN story_writer sw ON sw.story_id = s.story_id AND sw.sw_status = 1
+       WHERE s.story_id = ?
+       GROUP BY s.story_id`,
+      [storyId]
+    );
+    if (storyRows.length === 0) return;
+    const story = storyRows[0];
+
+    const creatorName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
+
+    const modeText = story.quick_mode ? 'Quick' : 'Normal';
+    const orderMap = { 1: 'Random', 2: 'Round-Robin', 3: 'Fixed' };
+    const orderText = orderMap[story.story_order_type] ?? 'Random';
+    const writersText = `${story.writer_count}/${story.max_writers || '∞'} Writers`;
+    const openText = story.allow_late_joins ? 'Open' : 'Closed';
+
+    const delayParts = [];
+    if (story.story_delay_hours > 0) {
+      const startTime = new Date(new Date(story.created_at).getTime() + story.story_delay_hours * 60 * 60 * 1000);
+      delayParts.push(`Starts <t:${Math.floor(startTime.getTime() / 1000)}:f>`);
+    }
+    if (story.story_delay_users > 0) {
+      const needed = story.story_delay_users - story.writer_count;
+      delayParts.push(`Pending until ${needed} more writer${needed === 1 ? '' : 's'} join`);
+    }
+
+    const metaParts = [
+      `${modeText} Mode`,
+      `${orderText} Order`,
+      `${story.turn_length_hours}h Turns`,
+      writersText,
+      openText,
+      ...delayParts
+    ];
+
+    const message = `# 📚 New Story Created: "${story.title}" by ${creatorName}\n-# ${metaParts.join(' · ')}`;
+
+    const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
+    if (feedChannel) await feedChannel.send(message);
+
+    console.log(`${formattedDate()}: Story feed creation announcement sent for story ${storyId}`);
   } catch (error) {
     console.error(`${formattedDate()}: Error in postStoryFeedCreationAnnouncement:`, error);
   }

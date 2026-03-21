@@ -126,7 +126,7 @@ export async function CreateStory(connection, interaction, storyInput) {
     await txn.commit();
 
     // Post story creation announcement after commit so writer count is visible
-    await postStoryFeedCreationAnnouncement(connection, storyId, interaction, storyInput.storyTitle, storyStatus, storyInput.delayHours, storyInput.delayWriters);
+    await postStoryFeedCreationAnnouncement(connection, storyId, interaction);
 
     // Post initial status message (NextTurn already posted one if story is active;
     // this covers delayed stories where no turn has started yet)
