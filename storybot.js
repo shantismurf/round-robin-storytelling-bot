@@ -788,6 +788,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       .setTitle(`📚 ${story.title} (#${story.story_id})`)
       .setColor(colorMap[story.story_status] ?? 0x5865f2)
       .addFields(
+        ...(story.tags ? [{ name: 'Tags', value: story.tags, inline: false }] : []),
         { name: 'Status', value: statusMap[story.story_status] ?? '—', inline: true },
         { name: 'Mode', value: story.quick_mode ? 'Quick' : 'Normal', inline: true },
         { name: 'Writer Order', value: orderMap[story.story_order_type] ?? '—', inline: true },
@@ -802,7 +803,6 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       .setTimestamp();
 
     if (story.summary) embed.setDescription(story.summary);
-    if (story.tags) embed.addFields({ name: 'Tags', value: story.tags, inline: false });
     if (story.story_status === 3 && story.closed_at) {
       const closedTimestamp = `<t:${Math.floor(new Date(story.closed_at).getTime() / 1000)}:D>`;
       embed.addFields({ name: 'Closed', value: closedTimestamp, inline: true });
