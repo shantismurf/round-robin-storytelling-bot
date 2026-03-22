@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, debugLog } from '../utilities.js';
 import { marked } from 'marked';
 import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
@@ -150,7 +150,7 @@ const data = new SlashCommandBuilder()
 
 async function execute(connection, interaction) {
   const subcommand = interaction.options.getSubcommand();
-  console.log(`${formattedDate()}: execute() called with subcommand '${subcommand}'`);
+  debugLog(`${formattedDate()}: execute() called with subcommand '${subcommand}'`);
 
   if (subcommand === 'add') {
     await handleAddStory(connection, interaction);
@@ -174,7 +174,7 @@ async function execute(connection, interaction) {
 }
 
 async function handleAddStory(connection, interaction) {
-  console.log(`${formattedDate()}: handleAddStory() - initializing ephemeral story form`);
+  debugLog(`${formattedDate()}: handleAddStory() - initializing ephemeral story form`);
   try {
     const cfg = await getConfigValue(connection, [
       'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',
@@ -216,7 +216,7 @@ async function handleAddStory(connection, interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await interaction.editReply(buildStoryAddMessage(cfg, state));
 
-    console.log(`${formattedDate()}: handleAddStory() - ephemeral form sent`);
+    debugLog(`${formattedDate()}: handleAddStory() - ephemeral form sent`);
   } catch (error) {
     console.error(`${formattedDate()}: Error in handleAddStory:`, error);
     if (!interaction.replied && !interaction.deferred) {
@@ -1931,7 +1931,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
   try {
     let whereClause = 'WHERE s.guild_id = ?';
     let params = [guildId];
-    console.log(`${formattedDate()}: getStoriesPaginated - guildId: ${guildId}, filter: ${filter}`);
+    debugLog(`${formattedDate()}: getStoriesPaginated - guildId: ${guildId}, filter: ${filter}`);
     
     // Apply filters
     switch (filter) {
@@ -1967,7 +1967,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
     `, params);
     
     const totalCount = countResult[0].total;
-    console.log(`${formattedDate()}: getStoriesPaginated - totalCount: ${totalCount}`);
+    debugLog(`${formattedDate()}: getStoriesPaginated - totalCount: ${totalCount}`);
     const totalPages = Math.ceil(totalCount / itemsPerPage);
     const offset = (page - 1) * itemsPerPage;
     
@@ -1992,7 +1992,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
       ORDER BY s.updated_at DESC
       LIMIT ? OFFSET ?
     `, [userId, ...params, itemsPerPage, offset]);
-    console.log(`${formattedDate()}: getStoriesPaginated - stories rows returned: ${stories.length}`);
+    debugLog(`${formattedDate()}: getStoriesPaginated - stories rows returned: ${stories.length}`);
 
     return {
       data: stories,

@@ -2,13 +2,12 @@
   "token": "YOUR_STORYBOT_TOKEN",
   "clientId": "YOUR_BOT_APPLICATION_ID",
   "guildId": "YOUR_DISCORD_SERVER_ID",
+  "testMode": true,
   "db": {
     "host": "localhost",
     "port": 3306,
     "user": "root",
     "password": "",
     "database": "storybot_dev"
-  },
-  "storyFeedChannelId": "",
-  "storyMediaChannelId": ""
+  }
 }

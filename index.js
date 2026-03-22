@@ -1,15 +1,16 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
 import { StoryBot } from './storybot.js';
-import { loadConfig, formattedDate, DB, getConfigValue } from './utilities.js';
+import { loadConfig, formattedDate, DB, getConfigValue, setTestMode, debugLog } from './utilities.js';
 import { setupDatabase } from './database-setup.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
 
 async function main() {
   const config = loadConfig();
+  setTestMode(config.testMode);
 
   // Setup database before starting bot
-  console.log(`${formattedDate()}: Initializing Round Robin Storybot...`);
+  console.log(`${formattedDate()}: Initializing Round Robin Storybot... (${config.testMode ? 'TEST MODE' : 'production'})`);
   const dbSetupSuccess = await setupDatabase(config);
 
   if (!dbSetupSuccess) {
@@ -79,13 +80,13 @@ async function main() {
   client.on(Events.InteractionCreate, async interaction => {
     try {
       if (interaction.isChatInputCommand()) {
-        console.log(`${formattedDate()}: ${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`);
+        debugLog(`${formattedDate()}: ${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`);
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
           await command.execute(connection, interaction);
         }
       } else if (interaction.isModalSubmit()) {
-        console.log(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
+        debugLog(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
 
         // Handle story modal submissions
         if (interaction.customId.startsWith('story_')) {
@@ -100,7 +101,7 @@ async function main() {
           }
         }
       } else if (interaction.isButton()) {
-        console.log(`${formattedDate()}: ${interaction.user.username} clicked button ${interaction.customId}`);
+        debugLog(`${formattedDate()}: ${interaction.user.username} clicked button ${interaction.customId}`);
 
         const dedupKey = `${interaction.user.id}:${interaction.customId}`;
         if (processingButtons.has(dedupKey)) {
@@ -120,7 +121,7 @@ async function main() {
           }
         }
       } else if (interaction.isStringSelectMenu()) {
-        console.log(`${formattedDate()}: ${interaction.user.username} used select menu ${interaction.customId}`);
+        debugLog(`${formattedDate()}: ${interaction.user.username} used select menu ${interaction.customId}`);
 
         // Handle story select menu interactions
         if (interaction.customId.startsWith('story_')) {

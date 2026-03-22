@@ -1,4 +1,4 @@
-import { getConfigValue, formattedDate } from './utilities.js';
+import { getConfigValue, formattedDate, debugLog } from './utilities.js';
 import { checkStoryDelay, PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from './storybot.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 
@@ -100,7 +100,7 @@ async function handleCheckStoryDelay(connection, client, payload) {
     console.log(`${formattedDate()}: checkStoryDelay job activated story ${storyId}`);
   } else {
     // Writer count condition not yet met — story stays paused until enough writers join
-    console.log(`${formattedDate()}: checkStoryDelay job fired for story ${storyId} but writer count condition not met`);
+    debugLog(`${formattedDate()}: checkStoryDelay job fired for story ${storyId} but writer count condition not met`);
   }
 }
 
@@ -126,7 +126,7 @@ async function handleTurnTimeout(connection, client, payload) {
     [storyId]
   );
   if (storyRows.length === 0 || storyRows[0].story_status !== 1) {
-    console.log(`${formattedDate()}: turnTimeout no-op for turn ${turnId} — story ${storyId} is not active`);
+    debugLog(`${formattedDate()}: turnTimeout no-op for turn ${turnId} — story ${storyId} is not active`);
     return;
   }
 

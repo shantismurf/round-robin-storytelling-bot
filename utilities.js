@@ -101,6 +101,10 @@ export function sanitizeModalInput(input, maxLength = 1024) {
         .substring(0, maxLength);                 // Flexible length limit
 }
 
+let _testMode = false;
+export function setTestMode(value) { _testMode = !!value; }
+export function debugLog(...args) { if (_testMode) console.log(...args); }
+
 export async function getConfigValue(connection, key, guildId = 1) {
   try {
     if (Array.isArray(key)) {

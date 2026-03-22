@@ -9,8 +9,8 @@ async function deploy() {
     console.error('Missing clientId in config.json. Add your bot\'s application ID from the Discord Developer Portal.');
     process.exit(1);
   }
-  if (!config.guildId) {
-    console.error('Missing guildId in config.json. Add your Discord server\'s ID.');
+  if (config.testMode && !config.guildId) {
+    console.error('Missing guildId in config.json. Required for guild-scoped registration in test mode.');
     process.exit(1);
   }
 
@@ -28,14 +28,21 @@ async function deploy() {
 
   const rest = new REST().setToken(config.token);
 
-  console.log(`Registering ${commands.length} command(s) to guild ${config.guildId}...`);
-
-  const result = await rest.put(
-    Routes.applicationGuildCommands(config.clientId, config.guildId),
-    { body: commands }
-  );
-
-  console.log(`Successfully registered ${result.length} command(s).`);
+  if (config.testMode) {
+    console.log(`TEST MODE: Registering ${commands.length} command(s) to guild ${config.guildId} (instant)...`);
+    const result = await rest.put(
+      Routes.applicationGuildCommands(config.clientId, config.guildId),
+      { body: commands }
+    );
+    console.log(`Successfully registered ${result.length} command(s) to guild.`);
+  } else {
+    console.log(`PRODUCTION: Registering ${commands.length} command(s) globally (up to 1 hour to propagate)...`);
+    const result = await rest.put(
+      Routes.applicationCommands(config.clientId),
+      { body: commands }
+    );
+    console.log(`Successfully registered ${result.length} command(s) globally.`);
+  }
 }
 
 deploy().catch(err => {
