@@ -10,6 +10,9 @@ const pendingStoryData = new Map();
 // Pending manage edit sessions keyed by userId
 const pendingManageData = new Map();
 
+// Pending join sessions keyed by userId
+const pendingJoinData = new Map();
+
 // Convert Discord markdown to HTML for export
 function discordMarkdownToHtml(text) {
   // Pre-process Discord blockquote syntax before marked sees it
@@ -356,8 +359,8 @@ async function handleModalSubmit(connection, interaction) {
     await handleAddStoryModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_write_')) {
     await handleWriteModalSubmit(connection, interaction);
-  } else if (interaction.customId.startsWith('story_join_')) {
-    await handleJoinModalSubmit(connection, interaction);
+  } else if (interaction.customId.startsWith('join_ao3_')) {
+    await handleJoinAO3ModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageModalSubmit(connection, interaction);
   }
@@ -712,218 +715,203 @@ async function handleCreateStorySubmit(connection, interaction, state) {
 /**
  * Handle /story join command
  */
+async function buildJoinEmbed(connection, state) {
+  const { storyId, guildId, storyTitle, privacy, notificationPrefs, ao3Name } = state;
+  const cfg = await getConfigValue(connection, [
+    'txtJoinEmbedDesc', 'lblJoinPrivacySelect', 'lblJoinNotifSelect',
+    'lblJoinAO3Name', 'txtJoinAO3NotSet', 'btnJoinSetAO3', 'btnJoinConfirm', 'btnCancel'
+  ], guildId);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🎭 Join "${storyTitle}"`)
+    .setDescription(cfg.txtJoinEmbedDesc)
+    .addFields(
+      { name: cfg.lblJoinPrivacySelect, value: privacy === 'private' ? '🔒 Private' : '🌐 Public', inline: true },
+      { name: cfg.lblJoinNotifSelect, value: notificationPrefs === 'dm' ? '💬 DM' : '📢 Mention in channel', inline: true },
+      { name: cfg.lblJoinAO3Name, value: ao3Name || cfg.txtJoinAO3NotSet, inline: false }
+    );
+
+  const privacyRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`join_privacy_${storyId}`)
+      .addOptions([
+        { label: 'Public', value: 'public', description: 'Your turn thread is visible to all server members', default: privacy === 'public' },
+        { label: 'Private', value: 'private', description: 'Only you and admins can see your turn thread', default: privacy === 'private' }
+      ])
+  );
+
+  const notifRow = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(`join_notif_${storyId}`)
+      .addOptions([
+        { label: 'DM', value: 'dm', description: 'Receive turn notifications in your DMs', default: notificationPrefs === 'dm' },
+        { label: 'Mention in channel', value: 'mention', description: 'Get @mentioned in the story feed channel', default: notificationPrefs === 'mention' }
+      ])
+  );
+
+  const buttonRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`join_set_ao3_${storyId}`)
+      .setLabel(cfg.btnJoinSetAO3)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`join_confirm_${storyId}`)
+      .setLabel(cfg.btnJoinConfirm)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`join_cancel_${storyId}`)
+      .setLabel(cfg.btnCancel)
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  return { embeds: [embed], components: [privacyRow, notifRow, buttonRow] };
+}
+
 async function handleJoin(connection, interaction, buttonStoryId = null) {
   try {
     const guildId = interaction.guild.id;
     const storyId = buttonStoryId ?? interaction.options.getInteger('story_id');
-    
-    // Validate story access and get story info
+
     const storyInfo = await validateStoryAccess(connection, storyId, guildId);
     if (!storyInfo.success) {
-      await interaction.reply({ 
-        content: storyInfo.error, 
-        flags: MessageFlags.Ephemeral 
-      });
+      await interaction.reply({ content: storyInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
-    
-    // Validate join eligibility
+
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
     if (!joinInfo.success) {
-      await interaction.reply({ 
-        content: joinInfo.error, 
-        flags: MessageFlags.Ephemeral 
-      });
+      await interaction.reply({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
-    
-    // Check if user has existing AO3 name from other stories
+
     let existingAO3Name = '';
-      try {
-        const [existingWriter] = await connection.execute(`
-          SELECT AO3_name FROM story_writer 
-          WHERE discord_user_id = ? AND AO3_name IS NOT NULL AND AO3_name != ''
-          ORDER BY joined_at DESC LIMIT 1
-        `, [interaction.user.id]);
-        
-        if (existingWriter.length > 0) {
-          existingAO3Name = existingWriter[0].AO3_name;
-        }
-      } catch (error) {
-      // Continue if lookup fails
-    }
-    
-    // Create modal
-    const modal = new ModalBuilder()
-      .setCustomId(`story_join_${storyId}`)
-      .setTitle(`🎭 Join "${storyInfo.story.title}"`);
+    try {
+      const [rows] = await connection.execute(
+        `SELECT AO3_name FROM story_writer WHERE discord_user_id = ? AND AO3_name IS NOT NULL AND AO3_name != '' ORDER BY joined_at DESC LIMIT 1`,
+        [interaction.user.id]
+      );
+      if (rows.length > 0) existingAO3Name = rows[0].AO3_name;
+    } catch {}
 
-    const cfg = await getConfigValue(connection, [
-      'lblJoinAO3Name', 'txtJoinAO3Placeholder',
-      'lblJoinPrivacy', 'txtJoinPrivacyPlaceholder',
-      'lblJoinNotifications', 'txtJoinNotificationPlaceholder'
-    ], interaction.guild.id);
+    const state = { storyId, guildId, storyTitle: storyInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name };
+    pendingJoinData.set(interaction.user.id, state);
 
-    const ao3NameInput = new TextInputBuilder()
-      .setCustomId('ao3_name')
-      .setLabel(cfg.lblJoinAO3Name)
-      .setStyle(TextInputStyle.Short)
-      .setRequired(false)
-      .setPlaceholder(cfg.txtJoinAO3Placeholder)
-      .setMaxLength(255);
-
-    if (existingAO3Name) {
-      ao3NameInput.setValue(existingAO3Name);
-    }
-
-    modal.addComponents(
-      new ActionRowBuilder().addComponents(ao3NameInput),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('turn_privacy')
-          .setLabel(cfg.lblJoinPrivacy)
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setValue('public')
-          .setPlaceholder(cfg.txtJoinPrivacyPlaceholder)
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('notification_prefs')
-          .setLabel(cfg.lblJoinNotifications)
-          .setStyle(TextInputStyle.Short)
-          .setRequired(true)
-          .setValue('dm')
-          .setPlaceholder(cfg.txtJoinNotificationPlaceholder)
-      )
-    );
-
-    await interaction.showModal(modal);
+    const embedData = await buildJoinEmbed(connection, state);
+    await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
 
   } catch (error) {
     console.error(`${formattedDate()}: Error in handleJoin:`, error);
-    await interaction.reply({
-      content: await getConfigValue(connection,'txtJoinFormFailed', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
+    await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
 }
 
 /**
  * Handle join modal submission
  */
-async function handleJoinModalSubmit(connection, interaction) {
+async function handleJoinSetAO3Button(connection, interaction) {
+  const storyId = interaction.customId.split('_')[3];
+  const cfg = await getConfigValue(connection, ['lblJoinAO3Name', 'txtJoinAO3Placeholder'], interaction.guild.id);
+  const state = pendingJoinData.get(interaction.user.id);
+
+  const modal = new ModalBuilder()
+    .setCustomId(`join_ao3_${storyId}`)
+    .setTitle('Set AO3 Username');
+
+  const input = new TextInputBuilder()
+    .setCustomId('ao3_name')
+    .setLabel(cfg.lblJoinAO3Name)
+    .setStyle(TextInputStyle.Short)
+    .setRequired(false)
+    .setPlaceholder(cfg.txtJoinAO3Placeholder)
+    .setMaxLength(255);
+
+  if (state?.ao3Name) input.setValue(state.ao3Name);
+
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  await interaction.showModal(modal);
+}
+
+async function handleJoinAO3ModalSubmit(connection, interaction) {
+  const storyId = interaction.customId.split('_')[2];
+  const state = pendingJoinData.get(interaction.user.id);
+  if (!state) {
+    await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  state.ao3Name = sanitizeModalInput(interaction.fields.getTextInputValue('ao3_name'), 255) || '';
+  pendingJoinData.set(interaction.user.id, state);
+
+  await interaction.deferUpdate();
+  await interaction.editReply(await buildJoinEmbed(connection, state));
+}
+
+async function handleJoinConfirm(connection, interaction) {
+  const storyId = parseInt(interaction.customId.split('_')[2]);
+  const guildId = interaction.guild.id;
+  const state = pendingJoinData.get(interaction.user.id);
+
+  if (!state) {
+    await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', guildId), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  await interaction.deferUpdate();
+
+  // Re-validate eligibility in case story changed while user was deciding
+  const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
+  if (!joinInfo.success) {
+    await interaction.editReply({ content: joinInfo.error, embeds: [], components: [] });
+    pendingJoinData.delete(interaction.user.id);
+    return;
+  }
+
+  const joinInput = {
+    ao3Name: state.ao3Name || null,
+    turnPrivacy: state.privacy === 'private' ? 1 : 0,
+    notificationPrefs: state.notificationPrefs
+  };
+
+  const { StoryJoin } = await import('../storybot.js');
+  const txn = await connection.getConnection();
+  await txn.beginTransaction();
   try {
-    const guildId = interaction.guild.id;
-    const storyId = interaction.customId.split('_')[2];
-    
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    
-    // Get and validate form values
-    const ao3Name = sanitizeModalInput(interaction.fields.getTextInputValue('ao3_name'), 255);
-    const turnPrivacyRaw = sanitizeModalInput(interaction.fields.getTextInputValue('turn_privacy'), 10);
-    const notificationPrefsRaw = sanitizeModalInput(interaction.fields.getTextInputValue('notification_prefs'), 10);
-    
-    // Get validation error messages
-    const txtValidationErrors = await getConfigValue(connection,'txtValidationErrors', guildId);
-    
-    // Validate inputs
-    const errors = [];
-    
-    // Validate turn privacy
-    const turnPrivacy = turnPrivacyRaw.toLowerCase();
-    if (!['public', 'private'].includes(turnPrivacy)) {
-      errors.push(await getConfigValue(connection,'txtPrivacyValidation', guildId));
-    }
-    
-    // Validate notification preferences
-    const notificationPrefs = notificationPrefsRaw.toLowerCase();
-    if (!['dm', 'mention'].includes(notificationPrefs)) {
-      errors.push(await getConfigValue(connection,'txtNotificationValidation', guildId));
-    }
-    
-    if (errors.length > 0) {
-      await interaction.editReply({
-        content: `${txtValidationErrors}\n${errors.join('\n')}`
+    const result = await StoryJoin(txn, interaction, joinInput, storyId);
+
+    if (result.success) {
+      await txn.commit();
+      pendingJoinData.delete(interaction.user.id);
+
+      const [[writerCount], [storyInfo]] = await Promise.all([
+        connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`, [storyId]),
+        connection.execute(`SELECT title FROM story WHERE story_id = ?`, [storyId])
+      ]);
+
+      const txtJoinSuccess = await getConfigValue(connection, 'txtJoinSuccess', guildId);
+      const successMessage = replaceTemplateVariables(txtJoinSuccess, {
+        story_title: storyInfo[0].title,
+        writer_number: writerCount[0].count
       });
-      return;
-    }
-    
-    // Re-validate join eligibility (in case story changed)
-    const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
-    if (!joinInfo.success) {
-      await interaction.editReply({
-        content: joinInfo.error
-      });
-      return;
-    }
-    
-    // Prepare join input for StoryJoin function
-    const joinInput = {
-      ao3Name: ao3Name || null,
-      turnPrivacy: turnPrivacy === 'private' ? 0 : 1,
-      notificationPrefs: notificationPrefs
-    };
-    
-    // Import StoryJoin function and call it
-    const { StoryJoin } = await import('../storybot.js');
-    const txn = await connection.getConnection();
-    await txn.beginTransaction();
-    try {
-      const result = await StoryJoin(txn, interaction, joinInput, parseInt(storyId));
 
-      if (result.success) {
-        await txn.commit();
+      await interaction.editReply({ content: `${successMessage}${result.confirmationMessage || ''}`, embeds: [], components: [] });
 
-        // Get current writer count for success message
-        const [writerCount] = await connection.execute(`
-          SELECT COUNT(*) as count FROM story_writer
-          WHERE story_id = ? AND sw_status = 1
-        `, [storyId]);
+      await postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyInfo[0].title);
+      updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
 
-        const [storyInfo] = await connection.execute(`
-          SELECT title FROM story WHERE story_id = ?
-        `, [storyId]);
+      const writerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+      getConfigValue(connection, 'txtStoryThreadWriterJoin', guildId).then(template =>
+        postStoryThreadActivity(connection, interaction.guild, storyId, template.replace('[writer_name]', writerName))
+      ).catch(() => {});
 
-        const txtJoinSuccess = await getConfigValue(connection,'txtJoinSuccess', guildId);
-        const successMessage = replaceTemplateVariables(txtJoinSuccess, {
-          story_title: storyInfo[0].title,
-          writer_number: writerCount[0].count
-        });
-
-        await interaction.editReply({
-          content: `${successMessage}${result.confirmationMessage || ''}`
-        });
-
-        // Post announcement to story feed channel
-        await postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyInfo[0].title);
-        updateStoryStatusMessage(connection, interaction.guild, parseInt(storyId)).catch(() => {});
-
-        // Activity log (fire-and-forget)
-        const writerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-        getConfigValue(connection, 'txtStoryThreadWriterJoin', interaction.guild.id).then(template =>
-          postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), template.replace('[writer_name]', writerName))
-        ).catch(() => {});
-
-      } else {
-        await txn.rollback();
-        await interaction.editReply({
-          content: result.error
-        });
-      }
-
-    } catch (error) {
+    } else {
       await txn.rollback();
-      throw error;
-    } finally {
-      txn.release();
+      await interaction.editReply({ content: result.error, embeds: [], components: [] });
     }
-    
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleJoinModalSubmit:`, error);
-    await interaction.editReply({
-      content: await getConfigValue(connection,'txtJoinProcessFailed', interaction.guild.id)
-    });
+    await txn.rollback();
+    console.error(`${formattedDate()}: Error in handleJoinConfirm:`, error);
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtJoinProcessFailed', guildId), embeds: [], components: [] });
+  } finally {
+    txn.release();
   }
 }
 
@@ -1567,6 +1555,13 @@ async function handleButtonInteraction(connection, interaction) {
   } else if (interaction.customId.startsWith('join_story_')) {
     const storyId = parseInt(interaction.customId.split('_')[2]);
     await handleJoin(connection, interaction, storyId);
+  } else if (interaction.customId.startsWith('join_confirm_')) {
+    await handleJoinConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('join_set_ao3_')) {
+    await handleJoinSetAO3Button(connection, interaction);
+  } else if (interaction.customId.startsWith('join_cancel_')) {
+    await interaction.deferUpdate();
+    await interaction.editReply({ content: await getConfigValue(connection, 'btnCancel', interaction.guild.id), embeds: [], components: [] });
   } else if (interaction.customId === 'story_filter') {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
@@ -1828,12 +1823,24 @@ async function discardEntry(connection, entryId, interaction) {
  */
 async function handleSelectMenuInteraction(connection, interaction) {
   if (interaction.customId === 'story_quick_join') {
-    const storyId = interaction.values[0];
-    const syntheticInteraction = {
-      ...interaction,
-      options: { getInteger: (name) => name === 'story_id' ? parseInt(storyId) : null }
-    };
-    await handleJoin(syntheticInteraction);
+    const storyId = parseInt(interaction.values[0]);
+    await handleJoin(connection, interaction, storyId);
+
+  } else if (interaction.customId.startsWith('join_privacy_')) {
+    const state = pendingJoinData.get(interaction.user.id);
+    if (!state) { await interaction.deferUpdate(); return; }
+    state.privacy = interaction.values[0];
+    pendingJoinData.set(interaction.user.id, state);
+    await interaction.deferUpdate();
+    await interaction.editReply(await buildJoinEmbed(connection, state));
+
+  } else if (interaction.customId.startsWith('join_notif_')) {
+    const state = pendingJoinData.get(interaction.user.id);
+    if (!state) { await interaction.deferUpdate(); return; }
+    state.notificationPrefs = interaction.values[0];
+    pendingJoinData.set(interaction.user.id, state);
+    await interaction.deferUpdate();
+    await interaction.editReply(await buildJoinEmbed(connection, state));
 
   } else if (interaction.customId === 'story_filter_select') {
     const filter = interaction.values[0];
