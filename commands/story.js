@@ -1435,138 +1435,17 @@ async function handleHelpNavigation(connection, interaction) {
 }
 
 async function handleListStories(connection, interaction) {
+  const guildId = interaction.guild.id;
+  const filter = interaction.options.getString('filter') || 'all';
+  const page = interaction.options.getInteger('page') || 1;
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
   try {
-    const guildId = interaction.guild.id;
-    const filter = interaction.options.getString('filter') || 'all';
-    const page = interaction.options.getInteger('page') || 1;
-    const itemsPerPage = 5;
-
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-    const stories = await getStoriesPaginated(connection, guildId, filter, page, itemsPerPage, interaction.user.id);
-
-    if (stories.data.length === 0) {
-      const txtNoStoriesFound = await getConfigValue(connection,'txtNoStoriesFound', guildId);
-      const filterTitle = await getFilterTitle(connection, filter, guildId);
-      await interaction.editReply({
-        content: replaceTemplateVariables(txtNoStoriesFound, { filter_name: filterTitle })
-      });
-      return;
-    }
-
-    // Get configurable text for embed
-    const filterTitle = await getFilterTitle(connection, filter, guildId);
-    
-    const embed = new EmbedBuilder()
-      .setTitle(replaceTemplateVariables(await getConfigValue(connection,'txtStoriesPageTitle', guildId), {
-        filter_title: filterTitle,
-        page: page,
-        total_pages: stories.totalPages
-      }))
-      .setDescription(replaceTemplateVariables(await getConfigValue(connection,'txtStoriesPageDesc', guildId), {
-        showing: stories.data.length,
-        total: stories.totalCount
-      }))
-      .setColor(0x3498db)
-      .setTimestamp();
-
-    // Add story fields
-    for (const story of stories.data) {
-      const statusIcon = getStatusIcon(story.story_status);
-      const joinStatus = story.join_status === 2
-        ? await getConfigValue(connection, 'txtMemberStatusJoined', guildId)
-        : story.join_status === 1
-          ? await getConfigValue(connection, 'txtMemberStatusCanJoin', guildId)
-          : await getConfigValue(connection, 'txtMemberStatusCanNotJoin', guildId);
-      const currentTurn = await getCurrentTurnInfo(connection, story, guildId);
-      
-      // Get configurable labels
-      const lblStoryStatus = await getConfigValue(connection,'lblStoryStatus', guildId);
-      const lblStoryTurn = await getConfigValue(connection,'lblStoryTurn', guildId);
-      const lblStoryWriters = await getConfigValue(connection,'lblStoryWriters', guildId);
-      const lblStoryMode = await getConfigValue(connection,'lblStoryMode', guildId);
-      const lblStoryCreator = await getConfigValue(connection,'lblStoryCreator', guildId);
-      const modeText = story.quick_mode 
-        ? await getConfigValue(connection,'txtModeQuick', guildId)
-        : await getConfigValue(connection,'txtModeNormal', guildId);
-      const statusText = await getStatusText(connection, story.story_status, guildId);
-
-      embed.addFields({
-        name: `${statusIcon} "${story.title}" (#${story.story_id})`,
-        value: `├ ${lblStoryStatus} ${statusText} • ${lblStoryTurn} ${currentTurn}
-                ├ ${lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${lblStoryMode} ${modeText}
-                └ ${lblStoryCreator} ${story.creator_name} • ${joinStatus}`,
-        inline: false
-      });
-    }
-
-  // Create navigation buttons
-  const components = [];
-  
-  // Navigation row
-  const navRow = new ActionRowBuilder();
-  
-  if (stories.totalPages > 1) {
-    const btnPrev = await getConfigValue(connection,'btnPrev', guildId);
-    const btnNext = await getConfigValue(connection,'btnNext', guildId);
-    
-    navRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId(`story_list_${filter}_${page - 1}`)
-        .setLabel(btnPrev)
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page === 1),
-      new ButtonBuilder()
-        .setCustomId(`story_list_${filter}_${page + 1}`)
-        .setLabel(btnNext)
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(page === stories.totalPages)
-    );
-  }    navRow.addComponents(
-      new ButtonBuilder()
-        .setCustomId('story_filter')
-        .setLabel('🔍 Filter')
-        .setStyle(ButtonStyle.Secondary)
-    );
-    
-    components.push(navRow);
-
-    // Quick join menu if there are joinable stories
-    const joinableStories = stories.data.filter(s => s.join_status === 1);
-    if (joinableStories.length > 0) {
-      const txtQuickJoinPlaceholder = await getConfigValue(connection,'txtQuickJoinPlaceholder', guildId);
-      const txtQuickJoinDesc = await getConfigValue(connection,'txtQuickJoinDesc', guildId);
-      const txtModeQuick = await getConfigValue(connection,'txtModeQuick', guildId);
-      const txtModeNormal = await getConfigValue(connection,'txtModeNormal', guildId);
-      
-      const joinRow = new ActionRowBuilder()
-        .addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('story_quick_join')
-            .setPlaceholder(txtQuickJoinPlaceholder)
-            .addOptions(joinableStories.map(s => ({
-              label: `${s.title} (#${s.story_id})`,
-              value: s.story_id.toString(),
-              description: replaceTemplateVariables(txtQuickJoinDesc, {
-                'writer_count': s.writer_count,
-                'max_writers': s.max_writers || '∞',
-                'mode': s.quick_mode ? txtModeQuick : txtModeNormal
-              })
-            })))
-        );
-      components.push(joinRow);
-    }
-
-    await interaction.editReply({
-      embeds: [embed],
-      components
-    });
-
+    await renderStoryListReply(connection, interaction, filter, page);
   } catch (error) {
     console.error(`${formattedDate()}: Error in handleListStories:`, error);
-    await interaction.editReply({
-      content: await getConfigValue(connection,'txtStoryListFailed', interaction.guild.id),
-    });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryListFailed', guildId) });
   }
 }
 
@@ -1661,82 +1540,131 @@ async function renderStoryListReply(connection, interaction, filter, page) {
   const guildId = interaction.guild.id;
   const itemsPerPage = 5;
 
-  const stories = await getStoriesPaginated(connection, guildId, filter, page, itemsPerPage, interaction.user.id);
-
-  const [txtStoriesPageTitle, txtStoriesPageDesc, filterTitle] = await Promise.all([
-    getConfigValue(connection, 'txtStoriesPageTitle', guildId),
-    getConfigValue(connection, 'txtStoriesPageDesc', guildId),
-    getFilterTitle(connection, filter, guildId),
+  // Fetch stories and all config values in parallel
+  const [stories, cfg] = await Promise.all([
+    getStoriesPaginated(connection, guildId, filter, page, itemsPerPage, interaction.user.id),
+    getConfigValue(connection, [
+      'txtStoriesPageTitle', 'txtStoriesPageDesc',
+      'lblStoryStatus', 'lblStoryTurn', 'lblStoryWriters', 'lblStoryMode', 'lblStoryCreator',
+      'txtModeQuick', 'txtModeNormal',
+      'txtActive', 'txtPaused', 'txtClosed',
+      'txtMemberStatusJoined', 'txtMemberStatusCanJoin', 'txtMemberStatusCanNotJoin',
+      'txtTurnWaiting', 'txtTurnOverdue', 'txtTurnTimeLeft',
+      'btnPrev', 'btnNext', 'btnFilter',
+      'txtQuickJoinPlaceholder', 'txtQuickJoinDesc',
+    ], guildId),
   ]);
 
+  const filterTitle = await getFilterTitle(connection, filter, guildId);
+  const statusTextMap = { 1: cfg.txtActive, 2: cfg.txtPaused, 3: cfg.txtClosed };
+
+  // Batch fetch active turns for all stories on this page in one query
+  const storyIds = stories.data.map(s => s.story_id);
+  const activeTurnMap = new Map();
+  if (storyIds.length > 0) {
+    const placeholders = storyIds.map(() => '?').join(',');
+    const [turns] = await connection.execute(
+      `SELECT sw.story_id, sw.discord_display_name, t.turn_ends_at
+       FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id IN (${placeholders}) AND t.turn_status = 1`,
+      storyIds
+    );
+    for (const t of turns) activeTurnMap.set(t.story_id, t);
+  }
+
   const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(txtStoriesPageTitle, {
-      filter_title: filterTitle,
-      page: page,
-      total_pages: stories.totalPages
+    .setTitle(replaceTemplateVariables(cfg.txtStoriesPageTitle, {
+      filter_title: filterTitle, page, total_pages: stories.totalPages
     }))
-    .setDescription(replaceTemplateVariables(txtStoriesPageDesc, {
-      showing: stories.data.length,
-      total: stories.totalCount
+    .setDescription(replaceTemplateVariables(cfg.txtStoriesPageDesc, {
+      showing: stories.data.length, total: stories.totalCount
     }))
     .setColor(0x3498db)
     .setTimestamp();
 
   for (const story of stories.data) {
     const statusIcon = getStatusIcon(story.story_status);
-    const joinStatus = story.join_status === 2
-      ? await getConfigValue(connection, 'txtMemberStatusJoined', guildId)
-      : story.join_status === 1
-        ? await getConfigValue(connection, 'txtMemberStatusCanJoin', guildId)
-        : await getConfigValue(connection, 'txtMemberStatusCanNotJoin', guildId);
-    const currentTurn = await getCurrentTurnInfo(connection, story, guildId);
-    const [lblStoryStatus, lblStoryTurn, lblStoryWriters, lblStoryMode, lblStoryCreator, modeText, statusText] = await Promise.all([
-      getConfigValue(connection, 'lblStoryStatus', guildId),
-      getConfigValue(connection, 'lblStoryTurn', guildId),
-      getConfigValue(connection, 'lblStoryWriters', guildId),
-      getConfigValue(connection, 'lblStoryMode', guildId),
-      getConfigValue(connection, 'lblStoryCreator', guildId),
-      getConfigValue(connection, story.quick_mode ? 'txtModeQuick' : 'txtModeNormal', guildId),
-      getStatusText(connection, story.story_status, guildId),
-    ]);
+    const joinStatus = story.join_status === 2 ? cfg.txtMemberStatusJoined
+      : story.join_status === 1 ? cfg.txtMemberStatusCanJoin
+      : cfg.txtMemberStatusCanNotJoin;
+    const modeText = story.quick_mode ? cfg.txtModeQuick : cfg.txtModeNormal;
+    const statusText = statusTextMap[story.story_status] ?? '—';
+
+    let currentTurn;
+    if (story.story_status === 2) {
+      currentTurn = cfg.txtPaused;
+    } else if (story.story_status === 3) {
+      currentTurn = cfg.txtClosed;
+    } else {
+      const turn = activeTurnMap.get(story.story_id);
+      if (!turn) {
+        currentTurn = cfg.txtTurnWaiting;
+      } else {
+        const msLeft = new Date(turn.turn_ends_at).getTime() - Date.now();
+        if (msLeft <= 0) {
+          currentTurn = replaceTemplateVariables(cfg.txtTurnOverdue, { writer_name: turn.discord_display_name });
+        } else {
+          const hoursLeft = Math.ceil(msLeft / (1000 * 60 * 60));
+          currentTurn = replaceTemplateVariables(cfg.txtTurnTimeLeft, { writer_name: turn.discord_display_name, hours: hoursLeft });
+        }
+      }
+    }
+
     embed.addFields({
       name: `${statusIcon} "${story.title}" (#${story.story_id})`,
-      value: `├ ${lblStoryStatus} ${statusText} • ${lblStoryTurn} ${currentTurn}
-              ├ ${lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${lblStoryMode} ${modeText}
-              └ ${lblStoryCreator} ${story.creator_name} • ${joinStatus}`,
+      value: `├ ${cfg.lblStoryStatus} ${statusText} • ${cfg.lblStoryTurn} ${currentTurn}
+├ ${cfg.lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${cfg.lblStoryMode} ${modeText}
+└ ${cfg.lblStoryCreator} ${story.creator_name} • ${joinStatus}`,
       inline: false
     });
   }
 
+  const components = [];
   const navRow = new ActionRowBuilder();
   if (stories.totalPages > 1) {
-    const [btnPrev, btnNext] = await Promise.all([
-      getConfigValue(connection, 'btnPrev', guildId),
-      getConfigValue(connection, 'btnNext', guildId),
-    ]);
     navRow.addComponents(
       new ButtonBuilder()
         .setCustomId(`story_list_${filter}_${page - 1}`)
-        .setLabel(btnPrev)
+        .setLabel(cfg.btnPrev)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page === 1),
       new ButtonBuilder()
         .setCustomId(`story_list_${filter}_${page + 1}`)
-        .setLabel(btnNext)
+        .setLabel(cfg.btnNext)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(page === stories.totalPages)
     );
   }
-
-  const btnFilter = await getConfigValue(connection, 'btnFilter', guildId);
   navRow.addComponents(
     new ButtonBuilder()
       .setCustomId('story_filter')
-      .setLabel(btnFilter)
+      .setLabel(cfg.btnFilter)
       .setStyle(ButtonStyle.Secondary)
   );
+  components.push(navRow);
 
-  await interaction.editReply({ content: '', embeds: [embed], components: [navRow] });
+  // Quick join menu — only stories the user can actually join
+  const joinableStories = stories.data.filter(s => s.join_status === 1);
+  if (joinableStories.length > 0) {
+    const joinRow = new ActionRowBuilder().addComponents(
+      new StringSelectMenuBuilder()
+        .setCustomId('story_quick_join')
+        .setPlaceholder(cfg.txtQuickJoinPlaceholder)
+        .addOptions(joinableStories.map(s => ({
+          label: `${s.title} (#${s.story_id})`,
+          value: s.story_id.toString(),
+          description: replaceTemplateVariables(cfg.txtQuickJoinDesc, {
+            writer_count: s.writer_count,
+            max_writers: s.max_writers || '∞',
+            mode: s.quick_mode ? cfg.txtModeQuick : cfg.txtModeNormal,
+          })
+        })))
+    );
+    components.push(joinRow);
+  }
+
+  await interaction.editReply({ content: '', embeds: [embed], components });
 }
 
 /**
@@ -1910,8 +1838,9 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
     // Apply filters
     switch (filter) {
       case 'joinable':
-        whereClause += ' AND s.story_status IN (1, 2) AND s.allow_joins = 1 AND (s.max_writers IS NULL OR writer_count < s.max_writers)';
-        whereClause += ' AND s.story_id NOT IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)';
+        whereClause += ` AND s.story_status IN (1, 2) AND s.allow_joins = 1
+          AND (s.max_writers IS NULL OR (SELECT COUNT(*) FROM story_writer WHERE story_id = s.story_id AND sw_status = 1) < s.max_writers)
+          AND s.story_id NOT IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)`;
         params.push(userId);
         break;
       case 'mine':
@@ -1954,7 +1883,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
         CASE
           WHEN s.story_id IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)
           THEN 2
-          WHEN s.allow_joins = 1
+          WHEN s.story_status != 3 AND s.allow_joins = 1
            AND (s.max_writers IS NULL OR COUNT(sw.story_writer_id) < s.max_writers)
           THEN 1
           ELSE 0
@@ -2005,62 +1934,6 @@ function getStatusIcon(status) {
   return icons[status] || '❓';
 }
 
-async function getStatusText(connection, status, guildId) {
-  const configKeys = {
-    1: 'txtActive',
-    2: 'txtPaused',
-    3: 'txtClosed'
-  };
-
-  const configKey = configKeys[status];
-  if (configKey) {
-    return await getConfigValue(connection,configKey, guildId);
-  }
-  return 'Unknown';
-}
-
-async function getCurrentTurnInfo(connection, story, guildId) {
-  if (story.story_status === 2) return await getConfigValue(connection,'txtPaused', guildId);
-  if (story.story_status === 3) return await getConfigValue(connection,'txtClosed', guildId);
-
-  // For active stories, get current turn info
-  
-  try {
-    const [turnInfo] = await connection.execute(`
-      SELECT sw.discord_display_name, t.started_at, s.turn_length_hours
-      FROM turn t
-      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-      JOIN story s ON sw.story_id = s.story_id
-      WHERE sw.story_id = ? AND t.turn_status = 1
-      ORDER BY t.started_at DESC LIMIT 1
-    `, [story.story_id]);
-    
-    if (turnInfo.length === 0) {
-      return await getConfigValue(connection,'txtTurnWaiting', guildId);
-    }
-    
-    const turn = turnInfo[0];
-    const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
-    const timeLeft = endTime.getTime() - Date.now();
-    
-    if (timeLeft <= 0) {
-      const txtTurnOverdue = await getConfigValue(connection,'txtTurnOverdue', guildId);
-      return replaceTemplateVariables(txtTurnOverdue, { writer_name: turn.discord_display_name });
-    }
-    
-    const hoursLeft = Math.ceil(timeLeft / (1000 * 60 * 60));
-    const txtTurnTimeLeft = await getConfigValue(connection,'txtTurnTimeLeft', guildId);
-    return replaceTemplateVariables(txtTurnTimeLeft, {
-      writer_name: turn.discord_display_name,
-      hours: hoursLeft
-    });
-    
-  } catch (error) {
-    return await getConfigValue(connection,'txtTurnUnknown', guildId);
-  } finally {
-    // Connection is persistent, no need to release
-  }
-}
 
 /**
  * Handle finalize entry button click — show confirmation prompt
