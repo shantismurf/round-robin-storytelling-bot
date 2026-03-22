@@ -406,7 +406,7 @@ async function handleModalSubmit(connection, interaction) {
     await handleAddStoryModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_write_')) {
     await handleWriteModalSubmit(connection, interaction);
-  } else if (interaction.customId.startsWith('join_ao3_')) {
+  } else if (interaction.customId.startsWith('story_join_ao3_')) {
     await handleJoinAO3ModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageModalSubmit(connection, interaction);
@@ -763,7 +763,7 @@ async function handleCreateStorySubmit(connection, interaction, state) {
  * Handle /story join command
  */
 async function buildJoinEmbed(connection, state) {
-  const { storyId, guildId, storyTitle, privacy, notificationPrefs, ao3Name } = state;
+  const { storyId, guildId, storyTitle, privacy, notificationPrefs, ao3Name, displayName } = state;
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacySelect', 'lblJoinNotifSelect',
     'lblJoinAO3Name', 'txtJoinAO3NotSet', 'btnJoinSetAO3', 'btnJoinConfirm', 'btnCancel'
@@ -775,12 +775,12 @@ async function buildJoinEmbed(connection, state) {
     .addFields(
       { name: cfg.lblJoinPrivacySelect, value: privacy === 'private' ? '🔒 Private' : '🌐 Public', inline: true },
       { name: cfg.lblJoinNotifSelect, value: notificationPrefs === 'dm' ? '💬 DM' : '📢 Mention in channel', inline: true },
-      { name: cfg.lblJoinAO3Name, value: ao3Name || cfg.txtJoinAO3NotSet, inline: false }
+      { name: cfg.lblJoinAO3Name, value: ao3Name || (displayName ? `${displayName} (Discord display name)` : cfg.txtJoinAO3NotSet), inline: false }
     );
 
   const privacyRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`join_privacy_${storyId}`)
+      .setCustomId(`story_join_privacy_${storyId}`)
       .addOptions([
         { label: 'Public', value: 'public', description: 'Your turn thread is visible to all server members', default: privacy === 'public' },
         { label: 'Private', value: 'private', description: 'Only you and admins can see your turn thread', default: privacy === 'private' }
@@ -789,7 +789,7 @@ async function buildJoinEmbed(connection, state) {
 
   const notifRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
-      .setCustomId(`join_notif_${storyId}`)
+      .setCustomId(`story_join_notif_${storyId}`)
       .addOptions([
         { label: 'DM', value: 'dm', description: 'Receive turn notifications in your DMs', default: notificationPrefs === 'dm' },
         { label: 'Mention in channel', value: 'mention', description: 'Get @mentioned in the story feed channel', default: notificationPrefs === 'mention' }
@@ -798,15 +798,15 @@ async function buildJoinEmbed(connection, state) {
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`join_set_ao3_${storyId}`)
+      .setCustomId(`story_join_set_ao3_${storyId}`)
       .setLabel(cfg.btnJoinSetAO3)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId(`join_confirm_${storyId}`)
+      .setCustomId(`story_join_confirm_${storyId}`)
       .setLabel(cfg.btnJoinConfirm)
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`join_cancel_${storyId}`)
+      .setCustomId(`story_join_cancel_${storyId}`)
       .setLabel(cfg.btnCancel)
       .setStyle(ButtonStyle.Danger)
   );
@@ -840,7 +840,8 @@ async function handleJoin(connection, interaction, buttonStoryId = null) {
       if (rows.length > 0) existingAO3Name = rows[0].AO3_name;
     } catch {}
 
-    const state = { storyId, guildId, storyTitle: storyInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name };
+    const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+    const state = { storyId, guildId, storyTitle: storyInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
@@ -856,12 +857,12 @@ async function handleJoin(connection, interaction, buttonStoryId = null) {
  * Handle join modal submission
  */
 async function handleJoinSetAO3Button(connection, interaction) {
-  const storyId = interaction.customId.split('_')[3];
+  const storyId = interaction.customId.split('_').at(-1);
   const cfg = await getConfigValue(connection, ['lblJoinAO3Name', 'txtJoinAO3Placeholder'], interaction.guild.id);
   const state = pendingJoinData.get(interaction.user.id);
 
   const modal = new ModalBuilder()
-    .setCustomId(`join_ao3_${storyId}`)
+    .setCustomId(`story_join_ao3_${storyId}`)
     .setTitle('Set AO3 Username');
 
   const input = new TextInputBuilder()
@@ -879,7 +880,7 @@ async function handleJoinSetAO3Button(connection, interaction) {
 }
 
 async function handleJoinAO3ModalSubmit(connection, interaction) {
-  const storyId = interaction.customId.split('_')[2];
+  const storyId = interaction.customId.split('_').at(-1);
   const state = pendingJoinData.get(interaction.user.id);
   if (!state) {
     await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
@@ -893,7 +894,7 @@ async function handleJoinAO3ModalSubmit(connection, interaction) {
 }
 
 async function handleJoinConfirm(connection, interaction) {
-  const storyId = parseInt(interaction.customId.split('_')[2]);
+  const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
   const state = pendingJoinData.get(interaction.user.id);
 
@@ -1599,16 +1600,16 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseCancel(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageButton(connection, interaction);
-  } else if (interaction.customId.startsWith('join_story_')) {
-    const storyId = parseInt(interaction.customId.split('_')[2]);
-    await handleJoin(connection, interaction, storyId);
-  } else if (interaction.customId.startsWith('join_confirm_')) {
+  } else if (interaction.customId.startsWith('story_join_confirm_')) {
     await handleJoinConfirm(connection, interaction);
-  } else if (interaction.customId.startsWith('join_set_ao3_')) {
+  } else if (interaction.customId.startsWith('story_join_set_ao3_')) {
     await handleJoinSetAO3Button(connection, interaction);
-  } else if (interaction.customId.startsWith('join_cancel_')) {
+  } else if (interaction.customId.startsWith('story_join_cancel_')) {
     await interaction.deferUpdate();
     await interaction.editReply({ content: await getConfigValue(connection, 'btnCancel', interaction.guild.id), embeds: [], components: [] });
+  } else if (interaction.customId.startsWith('story_join_')) {
+    const storyId = parseInt(interaction.customId.split('_').at(-1));
+    await handleJoin(connection, interaction, storyId);
   } else if (interaction.customId === 'story_filter') {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
@@ -1873,7 +1874,7 @@ async function handleSelectMenuInteraction(connection, interaction) {
     const storyId = parseInt(interaction.values[0]);
     await handleJoin(connection, interaction, storyId);
 
-  } else if (interaction.customId.startsWith('join_privacy_')) {
+  } else if (interaction.customId.startsWith('story_join_privacy_')) {
     const state = pendingJoinData.get(interaction.user.id);
     if (!state) { await interaction.deferUpdate(); return; }
     state.privacy = interaction.values[0];
@@ -1881,7 +1882,7 @@ async function handleSelectMenuInteraction(connection, interaction) {
     await interaction.deferUpdate();
     await interaction.editReply(await buildJoinEmbed(connection, state));
 
-  } else if (interaction.customId.startsWith('join_notif_')) {
+  } else if (interaction.customId.startsWith('story_join_notif_')) {
     const state = pendingJoinData.get(interaction.user.id);
     if (!state) { await interaction.deferUpdate(); return; }
     state.notificationPrefs = interaction.values[0];

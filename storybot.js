@@ -834,7 +834,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       const btnJoinStory = await getConfigValue(connection, 'btnJoinStory', story.guild_id);
       components.push(new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`join_story_${storyId}`)
+          .setCustomId(`story_join_${storyId}`)
           .setLabel(btnJoinStory)
           .setStyle(ButtonStyle.Primary)
       ));
