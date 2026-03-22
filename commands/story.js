@@ -2213,6 +2213,9 @@ async function handleFinalizeConfirm(connection, interaction) {
       console.error(`${formattedDate()}: Failed to post finalized entry to story thread:`, embedError);
     }
 
+    // Reply before deleting thread — interaction context is tied to the thread
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', interaction.guild.id), components: [] });
+
     await deleteThreadAndAnnouncement(thread);
 
   } catch (error) {
@@ -2320,6 +2323,9 @@ async function handleSkipConfirm(connection, interaction) {
       postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), template.replace('[writer_name]', turn.discord_display_name))
     ).catch(() => {});
 
+    // Reply before deleting thread — interaction context is tied to the thread
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtSkipSuccess', guildId), components: [] });
+
     // Delete turn thread
     if (turn.thread_id) {
       try {
@@ -2329,8 +2335,6 @@ async function handleSkipConfirm(connection, interaction) {
         console.error(`${formattedDate()}: Failed to delete skipped turn thread:`, err);
       }
     }
-
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', guildId), components: [] });
 
   } catch (error) {
     console.error(`${formattedDate()}: Skip turn failed:`, error);

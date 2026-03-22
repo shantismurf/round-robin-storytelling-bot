@@ -79,6 +79,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtEmptyEntry','You need to write something in the thread before finalizing your entry.', 'en', 1),
 ('txtNoActiveTurn','You do not have an active turn in this story.', 'en', 1),
 ('txtEntryFinalized','✅ Entry finalized successfully! The turn has been completed.', 'en', 1),
+('txtSkipSuccess', '✅ Turn skipped. The next writer has been notified.', 'en', 1),
 ('txtFailedtoFinalize', 'Failed to finalize entry. Please try again.', 'en', 1),
 
 -- Shared UI
