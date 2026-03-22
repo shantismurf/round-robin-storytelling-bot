@@ -168,10 +168,11 @@ async function handleTurnReminder(connection, client, payload) {
 
   // Verify turn is still active
   const [turnRows] = await connection.execute(
-    `SELECT turn_id FROM turn WHERE turn_id = ? AND turn_status = 1`,
+    `SELECT turn_id, turn_ends_at FROM turn WHERE turn_id = ? AND turn_status = 1`,
     [turnId]
   );
   if (turnRows.length === 0) return;
+  const unixTs = Math.floor(new Date(turnRows[0].turn_ends_at).getTime() / 1000);
 
   // Verify story is still active
   const [storyRows] = await connection.execute(
@@ -194,24 +195,31 @@ async function handleTurnReminder(connection, client, payload) {
   const ctx = await buildSyntheticContext(client, guildId);
 
   if (notificationPrefs === 'mention') {
-    await sendMentionReminder(connection, ctx, guildId, story, writerUserId);
+    await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs);
   } else {
     try {
       const user = await client.users.fetch(writerUserId);
       const txtDMTurnReminder = await getConfigValue(connection, 'txtDMTurnReminder', guildId);
-      await user.send(txtDMTurnReminder.replace('[story_title]', story.title));
+      await user.send(txtDMTurnReminder
+        .replace('[story_title]', story.title)
+        .replace('[turn_end_full]', `<t:${unixTs}:F>`)
+        .replace('[turn_end_relative]', `<t:${unixTs}:R>`));
     } catch (dmErr) {
       // DM failed — fall back to channel mention
-      await sendMentionReminder(connection, ctx, guildId, story, writerUserId);
+      await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs);
     }
   }
 
   console.log(`${formattedDate()}: Turn reminder sent for turn ${turnId} (story ${storyId})`);
 }
 
-async function sendMentionReminder(connection, ctx, guildId, story, writerUserId) {
+async function sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs) {
   const txtMentionTurnReminder = await getConfigValue(connection, 'txtMentionTurnReminder', guildId);
   const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
   const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
-  await channel.send(`<@${writerUserId}> ${txtMentionTurnReminder.replace('[story_title]', story.title)}`);
+  const msg = txtMentionTurnReminder
+    .replace('[story_title]', story.title)
+    .replace('[turn_end_full]', `<t:${unixTs}:F>`)
+    .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
+  await channel.send(`<@${writerUserId}> ${msg}`);
 }
