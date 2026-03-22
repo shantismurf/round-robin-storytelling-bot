@@ -17,7 +17,7 @@ export class StoryBot extends EventEmitter {
 
   async start() {
     // initialize schedulers, etc. (no Discord login here)
-    console.log('StoryBot engine initialized');
+    console.log('Round Robin StoryBot engine initialized');
   }
 
   async stop() {

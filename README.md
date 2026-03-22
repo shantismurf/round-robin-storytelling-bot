@@ -1,4 +1,4 @@
-# Round-Robin Storytelling Bot
+# Round Robin StoryBot
 
 A Discord bot for running collaborative relay-style stories where writers take turns contributing entries. When one writer finalizes their turn, the next participant is automatically selected and notified.
 
@@ -30,5 +30,5 @@ All user-facing text and server settings are stored in the database config table
 
 Server-specific variables are:
 - cfgStoryFeedChannelId - ID of the channel where all story and turn threads and story activity will take place. This must be present.
-- cfgMediaChannelId - Images posted in story turn threads are reposted to this channel to be preserved for story export. If not set, images are silently skipped during finalization and only text content is saved.
-- cfgAdminRoleName - All story administration is allowed by server admins, and to some extent also story creators, so if the role isn't found, the system can still be managed, but it allows for non-server admins to manage settings and users in all stories.
+- cfgMediaChannelId - Images posted in story turn threads are reposted to this channel to be preserved for story export. If not set, images are silently skipped during finalization and only text content is saved. Alternate help text is used that does not mention images.
+- cfgAdminRoleName - All story administration is allowed for server admins, and to some extent also story creators, so the system can still be managed if the role isn't found, but it allows for non-server admins to manage settings and users in all stories.

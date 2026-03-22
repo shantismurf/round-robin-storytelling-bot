@@ -62,13 +62,18 @@ const data = new SlashCommandBuilder()
   .addSubcommand(s =>
     s.setName('help')
       .setDescription('Show all admin commands and what they do')
+  )
+  .addSubcommand(s =>
+    s.setName('setup')
+      .setDescription('Configure Round Robin StoryBot for this server')
   );
 
 async function execute(connection, interaction) {
   const guildId = interaction.guild.id;
   const subcommand = interaction.options.getSubcommand();
 
-  if (subcommand === 'help') return await handleHelp(interaction);
+  if (subcommand === 'help')  return await handleHelp(connection, interaction, guildId);
+  if (subcommand === 'setup') return await handleSetup(connection, interaction);
 
   if (!await checkIsAdmin(connection, interaction, guildId)) {
     return await interaction.reply({
@@ -86,40 +91,141 @@ async function execute(connection, interaction) {
 // ---------------------------------------------------------------------------
 // /storyadmin help
 // ---------------------------------------------------------------------------
-async function handleHelp(interaction) {
+async function handleHelp(connection, interaction, guildId) {
+  const cfg = await getConfigValue(connection, [
+    'txtAdminHelpTitle', 'txtAdminHelpFooter',
+    'lblAdminHelpSkip', 'txtAdminHelpSkip',
+    'lblAdminHelpExtend', 'txtAdminHelpExtend',
+    'lblAdminHelpRemove', 'txtAdminHelpRemove',
+    'lblAdminHelpNext', 'txtAdminHelpNext',
+    'lblAdminHelpDelete', 'txtAdminHelpDelete',
+    'lblAdminHelpSetup', 'txtAdminHelpSetup'
+  ], guildId);
+
   const embed = new EmbedBuilder()
-    .setTitle('⚙️ StoryAdmin Commands')
+    .setTitle(cfg.txtAdminHelpTitle)
     .setColor(0x5865f2)
     .addFields(
-      {
-        name: '/storyadmin skip <story_id>',
-        value: 'Force-ends the active turn, deletes its thread, and advances to the next writer.',
-        inline: false
-      },
-      {
-        name: '/storyadmin extend <story_id> <hours>',
-        value: 'Adds hours to the current turn deadline.',
-        inline: false
-      },
-      {
-        name: '/storyadmin remove <story_id> <user>',
-        value: 'Removes a writer from a story. If it\'s their turn, advances to the next writer. If they\'re the last writer, the story is closed automatically.',
-        inline: false
-      },
-      {
-        name: '/storyadmin next <story_id> <user>',
-        value: 'Designates who will receive the next turn. If no turn is currently active, starts their turn immediately. Otherwise, the override takes effect when the current turn ends.',
-        inline: false
-      },
-      {
-        name: '/storyadmin delete <story_id>',
-        value: 'Permanently deletes a story and all its turns, entries, and writer data. Requires confirmation.',
-        inline: false
-      }
+      { name: cfg.lblAdminHelpSkip,   value: cfg.txtAdminHelpSkip,   inline: false },
+      { name: cfg.lblAdminHelpExtend, value: cfg.txtAdminHelpExtend, inline: false },
+      { name: cfg.lblAdminHelpRemove, value: cfg.txtAdminHelpRemove, inline: false },
+      { name: cfg.lblAdminHelpNext,   value: cfg.txtAdminHelpNext,   inline: false },
+      { name: cfg.lblAdminHelpDelete, value: cfg.txtAdminHelpDelete, inline: false },
+      { name: cfg.lblAdminHelpSetup,  value: cfg.txtAdminHelpSetup,  inline: false }
     )
-    .setFooter({ text: 'Story settings (pause, resume, turn length, writer order) are managed via /story manage. All actions are logged. All commands require the admin role or Discord Administrator.' });
+    .setFooter({ text: cfg.txtAdminHelpFooter });
 
   await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+}
+
+// ---------------------------------------------------------------------------
+// /storyadmin setup
+// ---------------------------------------------------------------------------
+async function handleSetup(connection, interaction) {
+  if (!interaction.member.permissions.has('ManageGuild')) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  const guildId = interaction.guild.id;
+  const cfg = await getConfigValue(connection, [
+    'txtSetupModalTitle',
+    'lblSetupFeedChannel', 'txtSetupFeedChannelPlaceholder',
+    'lblSetupMediaChannel', 'txtSetupMediaChannelPlaceholder',
+    'lblSetupAdminRole', 'txtSetupAdminRolePlaceholder',
+    'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName'
+  ], guildId);
+
+  const modal = new ModalBuilder()
+    .setCustomId('storyadmin_setup_modal')
+    .setTitle(cfg.txtSetupModalTitle);
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('feed_channel')
+        .setLabel(cfg.lblSetupFeedChannel)
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(cfg.txtSetupFeedChannelPlaceholder)
+        .setValue(cfg.cfgStoryFeedChannelId !== 'cfgStoryFeedChannelId' ? cfg.cfgStoryFeedChannelId : '')
+        .setRequired(true)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('media_channel')
+        .setLabel(cfg.lblSetupMediaChannel)
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(cfg.txtSetupMediaChannelPlaceholder)
+        .setValue(cfg.cfgMediaChannelId !== 'cfgMediaChannelId' ? cfg.cfgMediaChannelId : '')
+        .setRequired(false)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('admin_role')
+        .setLabel(cfg.lblSetupAdminRole)
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(cfg.txtSetupAdminRolePlaceholder)
+        .setValue(cfg.cfgAdminRoleName !== 'cfgAdminRoleName' ? cfg.cfgAdminRoleName : '')
+        .setRequired(false)
+    )
+  );
+
+  await interaction.showModal(modal);
+}
+
+async function handleSetupModalSubmit(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+
+  const feedRaw  = sanitizeModalInput(interaction.fields.getTextInputValue('feed_channel'), 30);
+  const mediaRaw = sanitizeModalInput(interaction.fields.getTextInputValue('media_channel'), 30);
+  const roleRaw  = sanitizeModalInput(interaction.fields.getTextInputValue('admin_role'), 100);
+
+  // Extract channel ID from mention (<#ID>) or raw ID
+  const feedChannelId  = feedRaw.match(/\d+/)?.[0];
+  const mediaChannelId = mediaRaw.match(/\d+/)?.[0];
+
+  // Validate feed channel exists
+  const feedChannel = feedChannelId
+    ? await interaction.guild.channels.fetch(feedChannelId).catch(() => null)
+    : null;
+
+  if (!feedChannel) {
+    return await interaction.editReply({
+      content: await getConfigValue(connection, 'txtSetupFeedChannelInvalid', guildId)
+    });
+  }
+
+  // Validate media channel if provided
+  if (mediaChannelId) {
+    const mediaChannel = await interaction.guild.channels.fetch(mediaChannelId).catch(() => null);
+    if (!mediaChannel) {
+      return await interaction.editReply({
+        content: await getConfigValue(connection, 'txtSetupMediaChannelInvalid', guildId)
+      });
+    }
+  }
+
+  // Write config values — INSERT or UPDATE if already set
+  const upsert = (key, value) => connection.execute(
+    `INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, 'en', ?)
+     ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
+    [key, value, guildId]
+  );
+
+  await upsert('cfgStoryFeedChannelId', feedChannelId);
+  if (mediaChannelId) await upsert('cfgMediaChannelId', mediaChannelId);
+  if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
+
+  const saved = [`✅ Story feed channel: <#${feedChannelId}>`];
+  if (mediaChannelId) saved.push(`✅ Media channel: <#${mediaChannelId}>`);
+  if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**`);
+  if (!mediaChannelId) saved.push(`ℹ️ No media channel set — images will not be processed.`);
+  if (!roleRaw)        saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
+
+  await interaction.editReply({ content: saved.join('\n') });
 }
 
 // ---------------------------------------------------------------------------
@@ -524,4 +630,10 @@ async function handleButtonInteraction(connection, interaction) {
   }
 }
 
-export default { data, execute, handleButtonInteraction };
+async function handleModalSubmit(connection, interaction) {
+  if (interaction.customId === 'storyadmin_setup_modal') {
+    await handleSetupModalSubmit(connection, interaction);
+  }
+}
+
+export default { data, execute, handleButtonInteraction, handleModalSubmit };

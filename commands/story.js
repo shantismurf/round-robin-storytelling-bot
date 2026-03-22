@@ -178,7 +178,7 @@ async function handleAddStory(connection, interaction) {
 
   if (!await isGuildConfigured(connection, interaction.guild.id)) {
     await interaction.reply({
-      content: 'StoryBot has not been configured for this server yet. A server admin must run `/storyadmin setup` first.',
+      content: await getConfigValue(connection, 'txtNotConfigured', interaction.guild.id),
       flags: MessageFlags.Ephemeral
     });
     return;

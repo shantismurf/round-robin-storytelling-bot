@@ -10,7 +10,7 @@ async function main() {
   setTestMode(config.testMode);
 
   // Setup database before starting bot
-  console.log(`${formattedDate()}: Initializing Round Robin Storybot... (${config.testMode ? 'TEST MODE' : 'production'})`);
+  console.log(`${formattedDate()}: Initializing Round Robin StoryBot... (${config.testMode ? 'TEST MODE' : 'production'})`);
   const dbSetupSuccess = await setupDatabase(config);
 
   if (!dbSetupSuccess) {
@@ -153,6 +153,6 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error(`${formattedDate()}: Fatal error starting StoryBot:`, err);
+  console.error(`${formattedDate()}: Fatal error starting Round Robin StoryBot:`, err);
   process.exit(1);
 });
