@@ -2172,22 +2172,26 @@ async function handleFinalizeConfirm(connection, interaction) {
 
     // Forward images to media channel and build entry content with images inline
     const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', interaction.guild.id);
-    const mediaChannel = await interaction.guild.channels.fetch(mediaChannelId);
+    const mediaChannel = (mediaChannelId && mediaChannelId !== 'cfgMediaChannelId')
+      ? await interaction.guild.channels.fetch(mediaChannelId).catch(() => null)
+      : null;
     const entryParts = [];
 
     for (const msg of userMessages.values()) {
       const parts = [];
       if (msg.content) parts.push(msg.content);
-      for (const attachment of msg.attachments.values()) {
-        if (attachment.contentType?.startsWith('image/')) {
-          try {
-            const forwarded = await mediaChannel.send({
-              content: `📎 Story #${storyId} — Turn ${turn.turn_id}`,
-              files: [attachment.url]
-            });
-            parts.push(forwarded.attachments.first().url);
-          } catch (err) {
-            console.error(`${formattedDate()}: Failed to forward image to media channel:`, err);
+      if (mediaChannel) {
+        for (const attachment of msg.attachments.values()) {
+          if (attachment.contentType?.startsWith('image/')) {
+            try {
+              const forwarded = await mediaChannel.send({
+                content: `📎 Story #${storyId} — Turn ${turn.turn_id}`,
+                files: [attachment.url]
+              });
+              parts.push(forwarded.attachments.first().url);
+            } catch (err) {
+              console.error(`${formattedDate()}: Failed to forward image to media channel:`, err);
+            }
           }
         }
       }
