@@ -14,13 +14,60 @@ const pendingManageData = new Map();
 const pendingJoinData = new Map();
 
 // Convert Discord markdown to HTML for export
-function discordMarkdownToHtml(text) {
-  // Pre-process Discord blockquote syntax before marked sees it
+// guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
+async function discordMarkdownToHtml(text, guild = null) {
+  // Custom emoji <:name:id> → Discord CDN img (static)
+  text = text.replace(/<:([^:>]+):(\d+)>/g, (_, name, id) =>
+    `<img src="https://cdn.discordapp.com/emojis/${id}.png" height="20" alt=":${name}:" style="vertical-align:middle">`
+  );
+  // Animated emoji <a:name:id> → Discord CDN img (animated gif)
+  text = text.replace(/<a:([^:>]+):(\d+)>/g, (_, name, id) =>
+    `<img src="https://cdn.discordapp.com/emojis/${id}.gif" height="20" alt=":${name}:" style="vertical-align:middle">`
+  );
+
+  // Discord timestamps <t:unix:format> → [timestamp]
+  text = text.replace(/<t:\d+(?::[A-Za-z])?>/g, '[timestamp]');
+
+  // Resolve mentions
+  if (guild) {
+    // Batch-fetch all mentioned users first (avoid duplicate requests)
+    const userIds = [...new Set([...text.matchAll(/<@!?(\d+)>/g)].map(m => m[1]))];
+    const memberMap = new Map();
+    for (const userId of userIds) {
+      try {
+        const member = await guild.members.fetch(userId);
+        memberMap.set(userId, member.displayName);
+      } catch {
+        memberMap.set(userId, userId);
+      }
+    }
+    text = text.replace(/<@!?(\d+)>/g, (_, id) => `@${memberMap.get(id) ?? id}`);
+    text = text.replace(/<#(\d+)>/g, (_, id) => {
+      const ch = guild.channels.cache.get(id);
+      return ch ? `#${ch.name}` : `#${id}`;
+    });
+    text = text.replace(/<@&(\d+)>/g, (_, id) => {
+      const role = guild.roles.cache.get(id);
+      return role ? `@${role.name}` : `@${id}`;
+    });
+  } else {
+    text = text.replace(/<@!?(\d+)>/g, '@[user]');
+    text = text.replace(/<#(\d+)>/g, '#[channel]');
+    text = text.replace(/<@&(\d+)>/g, '@[role]');
+  }
+
+  // Pre-process Discord blockquote syntax and -# subtext before marked sees it
   const lines = text.split('\n');
   const processed = [];
   let i = 0;
   while (i < lines.length) {
     const line = lines[i];
+    // -# subtext → wrapped in a styled paragraph (HTML block, marked leaves it alone)
+    if (line.startsWith('-# ')) {
+      processed.push(`<p class="subtext">${line.slice(3)}</p>`);
+      i++;
+      continue;
+    }
     // Discord >>> multi-line quote: everything from here to end is one blockquote
     if (line.startsWith('>>> ') || line === '>>>') {
       const firstContent = line.startsWith('>>> ') ? line.slice(4) : '';
@@ -58,7 +105,7 @@ function discordMarkdownToHtml(text) {
   // Run through marked with breaks:true so single newlines render as line breaks (matching Discord behaviour)
   let html = marked.parse(text, { breaks: true });
 
-  // Convert Discord CDN image URLs to clickable <img> tags after marked has run
+  // Convert Discord CDN attachment image URLs to clickable <img> tags after marked has run
   // so marked can't escape the HTML we inject
   html = html.replace(
     /(?<!href=")(https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+)/g,
@@ -2058,7 +2105,11 @@ async function handleFinalizeEntry(connection, interaction) {
         }
       }
     }
-    const previewContent = previewParts.join('\n');
+
+    // Convert elements that Discord embeds don't render (headers → bold, -# → italic)
+    const previewContent = previewParts.join('\n')
+      .replace(/^#{1,3} (.+)$/gm, '**$1**')
+      .replace(/^-# (.+)$/gm, '*$1*');
 
     const [txtFinalizeConfirm, txtFinalizeConfirmDesc, btnFinalizeConfirm, btnCancel, lblPreviewEntry] = await Promise.all([
       getConfigValue(connection, 'txtFinalizeConfirm', guildId),
@@ -2350,7 +2401,7 @@ async function handleSkipConfirm(connection, interaction) {
  * Used by both /story read and /story close.
  * Returns null if story not found, or an object with { hasEntries, buffer, filename, title, turnCount, wordCount, writerCount }.
  */
-async function generateStoryExport(connection, storyId, guildId) {
+async function generateStoryExport(connection, storyId, guildId, guild = null) {
   const [storyRows] = await connection.execute(
     `SELECT story_id, title, created_at, story_status, quick_mode, closed_at, show_authors, summary, tags FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
@@ -2406,7 +2457,7 @@ async function generateStoryExport(connection, storyId, guildId) {
         : '';
       entriesHtml += `<div class="turn">${turnHeader}`;
     }
-    entriesHtml += discordMarkdownToHtml(entry.content);
+    entriesHtml += await discordMarkdownToHtml(entry.content, guild);
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
@@ -2424,7 +2475,9 @@ async function generateStoryExport(connection, storyId, guildId) {
     p { margin: 0 0 1em; }
     .spoiler { background: #222; color: #222; border-radius: 3px; padding: 0 2px; cursor: pointer; }
     .spoiler:hover { color: #fff; }
+    .subtext { font-size: 0.75em; color: #888; margin: 0 0 0.5em; }
     .summary { color: #444; font-style: italic; margin-bottom: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
+    .export-note { font-size: 0.8em; color: #999; border-top: 1px solid #eee; margin-top: 60px; padding-top: 16px; }
   </style>
 </head>
 <body>
@@ -2436,6 +2489,12 @@ async function generateStoryExport(connection, storyId, guildId) {
     <div class="meta">Exported: ${exportDate}</div>
   </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
   ${entriesHtml}
+  <div class="export-note">
+    <p><strong>Export note:</strong> This file was generated by Round Robin StoryBot.
+    Timestamps from Discord (e.g. turn deadlines in entries) are not included.
+    Story images are hosted on Discord's CDN — if you need them to persist long-term,
+    download and re-upload them to a permanent image host and update the links in this file.</p>
+  </div>
 </body>
 </html>`;
 
@@ -2450,7 +2509,7 @@ async function handleRead(connection, interaction) {
   const guildId = interaction.guild.id;
 
   try {
-    const result = await generateStoryExport(connection, storyId, guildId);
+    const result = await generateStoryExport(connection, storyId, guildId, interaction.guild);
     if (!result) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
     }
@@ -3151,7 +3210,7 @@ async function handleCloseConfirm(connection, interaction) {
     );
 
     // Generate export (story is now marked closed so closed_at will be set in the file)
-    const exportResult = await generateStoryExport(connection, storyId, guildId);
+    const exportResult = await generateStoryExport(connection, storyId, guildId, interaction.guild);
     const turnCount = exportResult?.turnCount ?? 0;
     const wordCount = exportResult?.wordCount ?? 0;
     const writerCount = exportResult?.writerCount ?? 0;
