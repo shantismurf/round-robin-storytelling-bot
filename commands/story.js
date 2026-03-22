@@ -167,7 +167,7 @@ async function execute(connection, interaction) {
   } else if (subcommand === 'manage') {
     await handleManage(connection, interaction);
   } else if (subcommand === 'help') {
-    await handleHelp(interaction);
+    await handleHelp(connection, interaction);
   } else {
     console.log(`${formattedDate()}: execute() - unrecognized subcommand '${subcommand}', no handler matched`);
   }
@@ -1268,226 +1268,132 @@ async function createPreviewEmbed(connection, content, guildId, discordTimestamp
 /**
  * Handle /story list command
  */
-function buildHelpPage1() {
+async function buildHelpPage1(connection, guildId) {
+  const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guildId);
+  const mediaConfigured = mediaChannelId && mediaChannelId !== 'cfgMediaChannelId';
+  const writeNormalKey = mediaConfigured ? 'txtHelp1WriteNormal' : 'txtHelp1WriteNormalNoMedia';
+
+  const cfg = await getConfigValue(connection, [
+    'txtHelp1Title', 'txtHelp1Footer', 'btnHelp1ToPage2',
+    'lblHelp1FindJoin', 'txtHelp1FindJoin',
+    'lblHelp1Dashboard', 'txtHelp1Dashboard',
+    'lblHelp1WriteNormal', writeNormalKey,
+    'lblHelp1WriteQuick', 'txtHelp1WriteQuick',
+    'lblHelp1ManageParticipation', 'txtHelp1ManageParticipation'
+  ], guildId);
+
   const embed = new EmbedBuilder()
-    .setTitle('📖 Round Robin StoryBot')
+    .setTitle(cfg.txtHelp1Title)
     .setColor(0x5865f2)
     .addFields(
-      {
-        name: '🔍 Finding & Joining Stories',
-        value: [
-          '- `/story list` — Browse stories. Filter by: `all` · `joinable` · `mine` · `active` · `paused`',
-          '- `/story join <id>` — Join a story as a writer',
-          '- `/story read <id>` — Download a story as an HTML file',
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: '📊 Your Dashboard',
-        value: [
-          '- `/mystory active` — Your active stories and whose turn it is',
-          '- `/mystory history` — All stories you\'ve ever been in',
-          '- `/mystory catchup <id>` — Read entries written since your last turn',
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: '✍️ Writing Your Turn — Normal Mode',
-        value: '- Each turn will have its own private thread for you to write your entry. You can submit as many posts as you\'d like, including images in the order you want them to appear, using standard Discord markdown formatting, and you can edit posts as often as you like until you\'re done. When you click ✅ **Finalize Entry** the bot will pull it all together, ignoring posts from other users or from the bot, for you to review and submit. Click ⏭️ **Skip Turn** to pass.',
-        inline: false
-      },
-      {
-        name: '⚡ Writing Your Turn — Quick Mode',
-        value: '- Use `/story write <id>` to bring up a form to submit your entry, up to 4,000 characters. No thread — just write and confirm.',
-        inline: false
-      },
-      {
-        name: '⚙️ Managing Your Participation',
-        value: [
-          '- `/mystory pass <id>` — Skip your current turn',
-          '- `/mystory leave <id>` — Leave a story',
-          '- `/story close <id>` — Close a story *(story creator only)*',
-        ].join('\n'),
-        inline: false
-      }
+      { name: cfg.lblHelp1FindJoin, value: cfg.txtHelp1FindJoin, inline: false },
+      { name: cfg.lblHelp1Dashboard, value: cfg.txtHelp1Dashboard, inline: false },
+      { name: cfg.lblHelp1WriteNormal, value: cfg[writeNormalKey], inline: false },
+      { name: cfg.lblHelp1WriteQuick, value: cfg.txtHelp1WriteQuick, inline: false },
+      { name: cfg.lblHelp1ManageParticipation, value: cfg.txtHelp1ManageParticipation, inline: false }
     )
-    .setFooter({ text: 'Page 1 of 3 · Story IDs appear in /story list and in story thread titles.' });
+    .setFooter({ text: cfg.txtHelp1Footer });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_help_page_2')
-      .setLabel('📝 Story Creation Guide →')
+      .setLabel(cfg.btnHelp1ToPage2)
       .setStyle(ButtonStyle.Secondary)
   );
 
   return { embeds: [embed], components: [row] };
 }
 
-function buildHelpPage2() {
+async function buildHelpPage2(connection, guildId) {
+  const cfg = await getConfigValue(connection, [
+    'txtHelp2Title', 'txtHelp2Footer', 'btnHelp2ToPage1', 'btnHelp2ToPage3',
+    'lblHelp2StoryTitle', 'txtHelp2StoryTitle',
+    'lblHelp2MaxWriters', 'txtHelp2MaxWriters',
+    'lblHelp2TurnLength', 'txtHelp2TurnLength',
+    'lblHelp2StoryMode', 'txtHelp2StoryMode',
+    'lblHelp2WriterOrder', 'txtHelp2WriterOrder',
+    'lblHelp2HideThreads', 'txtHelp2HideThreads',
+    'lblHelp2ShowAuthors', 'txtHelp2ShowAuthors',
+    'lblHelp2TimeoutReminder', 'txtHelp2TimeoutReminder',
+    'lblHelp2DelayStart', 'txtHelp2DelayStart',
+    'lblHelp2CreatorOptions', 'txtHelp2CreatorOptions'
+  ], guildId);
+
   const embed = new EmbedBuilder()
-    .setTitle('📝 Create New Story — Option Reference')
+    .setTitle(cfg.txtHelp2Title)
     .setColor(0x5865f2)
     .addFields(
-      {
-        name: 'Story Title',
-        value: '- ⚠️ *Required.*',
-        inline: false
-      },
-      {
-        name: 'Max Writers',
-        value: '- #️⃣ Optional. Leave blank for no limit.',
-        inline: true
-      },
-      {
-        name: 'Turn Length',
-        value: '- ⌛ How many hours each writer has per turn. Default: 24h.',
-        inline: true
-      },
-      {
-        name: 'Story Mode',
-        value: [
-          '- 🟢 **Normal** — Writers get a private or public thread for each turn.',
-          '- 🟣 **Quick** — Writers submit entries via `/story write`.',
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: 'Writer Order',
-        value: [
-          '- 🎲 **Random** — Next writer chosen completely at random each turn.',
-          '- 🔄 **Round Robin** — Rotates randomly, but no one repeats until everyone has had a turn.',
-          '- 📋 **Fixed Order** — Writers take turns in a fixed sequence based on join order.',
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: 'Hide Threads',
-        value: [
-          '- 🥷 **On** — Turn threads are private to the current writer and admins only.',
-          '- 🤡 **Off** — Turn threads are visible to all server members.',
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: 'Show Author Names',
-        value: [
-          '- 📑 **Yes** — Writer names appear on entries in Discord and in the export file.',
-          '- 📄 **No** — Entries are posted and exported anonymously.',
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: 'Timeout Reminder',
-        value: '- ⏰ Send a reminder to the current writer after X% of their turn has elapsed. Default: 50%. Set to 0% to disable.',
-        inline: false
-      },
-      {
-        name: 'Delay Start By',
-        value: '- 🫸 Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.',
-        inline: false
-      },
-      {
-        name: 'Story Creator\'s Join Options',
-        value: [
-          '**Your AO3 Username**',
-          '- <:ao3:1484674133437714495> Your name as it appears on AO3. Used in story exports. Defaults to your Discord display name if left blank.',
-          '',
-          '**Keep My Turns Private**',
-          '- 🔒 **Yes** — Your turn threads will only be visible to you and admins.',
-          '- 🔓 **No** — Your turn threads will be visible to other writers.',
-        ].join('\n'),
-        inline: false
-      }
+      { name: cfg.lblHelp2StoryTitle, value: cfg.txtHelp2StoryTitle, inline: false },
+      { name: cfg.lblHelp2MaxWriters, value: cfg.txtHelp2MaxWriters, inline: true },
+      { name: cfg.lblHelp2TurnLength, value: cfg.txtHelp2TurnLength, inline: true },
+      { name: cfg.lblHelp2StoryMode, value: cfg.txtHelp2StoryMode, inline: false },
+      { name: cfg.lblHelp2WriterOrder, value: cfg.txtHelp2WriterOrder, inline: false },
+      { name: cfg.lblHelp2HideThreads, value: cfg.txtHelp2HideThreads, inline: false },
+      { name: cfg.lblHelp2ShowAuthors, value: cfg.txtHelp2ShowAuthors, inline: false },
+      { name: cfg.lblHelp2TimeoutReminder, value: cfg.txtHelp2TimeoutReminder, inline: false },
+      { name: cfg.lblHelp2DelayStart, value: cfg.txtHelp2DelayStart, inline: false },
+      { name: cfg.lblHelp2CreatorOptions, value: cfg.txtHelp2CreatorOptions, inline: false }
     )
-    .setFooter({ text: 'Page 2 of 3 · After story creation, these settings can be edited by admins or the story creator via `/story manage.`'});
+    .setFooter({ text: cfg.txtHelp2Footer });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_help_page_1')
-      .setLabel('← Back to Overview')
+      .setLabel(cfg.btnHelp2ToPage1)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_help_page_3')
-      .setLabel('⚙️ Story Manage Guide →')
+      .setLabel(cfg.btnHelp2ToPage3)
       .setStyle(ButtonStyle.Secondary)
   );
 
   return { embeds: [embed], components: [row] };
 }
 
-function buildHelpPage3() {
+async function buildHelpPage3(connection, guildId) {
+  const cfg = await getConfigValue(connection, [
+    'txtHelp3Title', 'txtHelp3Footer', 'btnHelp3ToPage2',
+    'lblHelp3WhoCanUse', 'txtHelp3WhoCanUse',
+    'lblHelp3WhatEdit', 'txtHelp3WhatEdit',
+    'lblHelp3PauseResume', 'txtHelp3PauseResume',
+    'lblHelp3Closing', 'txtHelp3Closing',
+    'lblHelp3AdminControls', 'txtHelp3AdminControls'
+  ], guildId);
+
   const embed = new EmbedBuilder()
-    .setTitle('⚙️ Managing a Story — /story manage')
+    .setTitle(cfg.txtHelp3Title)
     .setColor(0x5865f2)
     .addFields(
-      {
-        name: 'Who can use /story manage?',
-        value: 'The story creator (the first writer to join) and server admins.',
-        inline: false
-      },
-      {
-        name: 'What can be edited?',
-        value: [
-          '- **Turn Length** — How many hours each writer has per turn.',
-          '- **Timeout Reminder** — What % into a turn to send the writer a reminder. Set to 0% to disable.',
-          '- **Max Writers** — Cap on total writers. Leave blank for no limit.',
-          '- **Open to New Writers** — Allows new writers to join.',
-          '- **Show Author Names** —  Writer names appear on entries and in the story export if enabled.',
-          '- **Writer Order** — Choose between Random, Round Robin, and Fixed (Join) Order.',
-          '- **Summary** — A freeform description used in story exports.',
-          '- **Tags** — Comma-separated tag list used in story exports.',
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: 'Pausing and Resuming',
-        value: [
-          '- Sets the story status to paused (freezing the current turn) or resumes a paused story. Resuming starts the next turn automatically if no turn is currently active.',
-          '- Use the button in /story manage, or the command /story close <id>, to permanently close a story. This ends the current turn, posts a completion message with the full story export in the main story feed, but leaves the main story thread open for discussion. This cannot be undone.'
-        ].join('\n'),
-        inline: false
-      },
-      {
-        name: 'Closing a Story',
-        value: 'Use `/story close <id>` to permanently close a story. This posts a completion message with the full story export. This cannot be undone.',
-        inline: false
-      },
-      {
-        name: 'Admin Controls',
-        value: [
-          '- Skip the current turn',
-          '- Extend the current turn.',
-          '- Set the writer who will be selected when the next turn starts.',
-          '- Remove a writer from a story.',
-          '- Delete a story.'
-        ].join('\n'),
-        inline: false
-      }
+      { name: cfg.lblHelp3WhoCanUse, value: cfg.txtHelp3WhoCanUse, inline: false },
+      { name: cfg.lblHelp3WhatEdit, value: cfg.txtHelp3WhatEdit, inline: false },
+      { name: cfg.lblHelp3PauseResume, value: cfg.txtHelp3PauseResume, inline: false },
+      { name: cfg.lblHelp3Closing, value: cfg.txtHelp3Closing, inline: false },
+      { name: cfg.lblHelp3AdminControls, value: cfg.txtHelp3AdminControls, inline: false }
     )
-    .setFooter({ text: 'Page 3 of 3' });
+    .setFooter({ text: cfg.txtHelp3Footer });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_help_page_2')
-      .setLabel('← Story Creation Guide')
+      .setLabel(cfg.btnHelp3ToPage2)
       .setStyle(ButtonStyle.Secondary)
   );
 
   return { embeds: [embed], components: [row] };
 }
 
-async function handleHelp(interaction) {
-  await interaction.reply({ ...buildHelpPage1(), flags: MessageFlags.Ephemeral });
+async function handleHelp(connection, interaction) {
+  await interaction.reply({ ...await buildHelpPage1(connection, interaction.guild.id), flags: MessageFlags.Ephemeral });
 }
 
-async function handleHelpNavigation(interaction) {
+async function handleHelpNavigation(connection, interaction) {
   await interaction.deferUpdate();
   if (interaction.customId === 'story_help_page_2') {
-    await interaction.editReply(buildHelpPage2());
+    await interaction.editReply(await buildHelpPage2(connection, interaction.guild.id));
   } else if (interaction.customId === 'story_help_page_3') {
-    await interaction.editReply(buildHelpPage3());
+    await interaction.editReply(await buildHelpPage3(connection, interaction.guild.id));
   } else {
-    await interaction.editReply(buildHelpPage1());
+    await interaction.editReply(await buildHelpPage1(connection, interaction.guild.id));
   }
 }
 
@@ -1660,7 +1566,7 @@ async function handleButtonInteraction(connection, interaction) {
   } else if (interaction.customId === 'story_filter') {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
-    await handleHelpNavigation(interaction);
+    await handleHelpNavigation(connection, interaction);
   }
 }
 
