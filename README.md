@@ -30,5 +30,5 @@ All user-facing text and server settings are stored in the database config table
 
 Server-specific variables are:
 - cfgStoryFeedChannelId - ID of the channel where all story and turn threads and story activity will take place. This must be present.
-- cfgMediaChannelId - Images posted in story turn threads are reposted to this channel ID to be accessed when the story is read (exported). If the value is not set, no images will be processed and no error generated, so it is somewhat optional. You'd want to make a guild-specific version of all the user-facing text that mentions images to remove that if you don't want to use that feature.
+- cfgMediaChannelId - Images posted in story turn threads are reposted to this channel to be preserved for story export. If not set, images are silently skipped during finalization and only text content is saved.
 - cfgAdminRoleName - All story administration is allowed by server admins, and to some extent also story creators, so if the role isn't found, the system can still be managed, but it allows for non-server admins to manage settings and users in all stories.
