@@ -667,7 +667,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
   try {
     const [storyRows] = await connection.execute(
       `SELECT story_id, title, story_status, quick_mode, turn_length_hours,
-              timeout_reminder_percent, max_writers, allow_late_joins, show_authors,
+              timeout_reminder_percent, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, status_message_id, guild_id,
               next_writer_id, closed_at
        FROM story WHERE story_id = ?`,
@@ -792,7 +792,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         { name: 'Mode', value: story.quick_mode ? 'Quick' : 'Normal', inline: true },
         { name: 'Writer Order', value: orderMap[story.story_order_type] ?? '—', inline: true },
         { name: 'Turn Length', value: `${story.turn_length_hours}h${reminderText}`, inline: true },
-        { name: 'Writers', value: `${activeWriters.length}/${story.max_writers || '∞'} · ${story.allow_late_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? 'Open' : 'Closed'}`, inline: true },
+        { name: 'Writers', value: `${activeWriters.length}/${story.max_writers || '∞'} · ${story.allow_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? 'Open' : 'Closed'}`, inline: true },
         { name: 'Show Authors', value: story.show_authors ? 'Yes' : 'No', inline: true },
         { name: 'Current Turn', value: turnValue, inline: true },
         { name: 'Next Writer', value: nextWriterValue, inline: true },

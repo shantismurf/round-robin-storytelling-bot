@@ -70,7 +70,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
 
     const [storyRows] = await connection.execute(
       `SELECT s.title, s.quick_mode, s.story_order_type, s.turn_length_hours,
-              s.max_writers, s.allow_late_joins, s.story_delay_hours, s.story_delay_users,
+              s.max_writers, s.allow_joins, s.story_delay_hours, s.story_delay_users,
               s.created_at, COUNT(sw.story_writer_id) as writer_count
        FROM story s
        LEFT JOIN story_writer sw ON sw.story_id = s.story_id AND sw.sw_status = 1
@@ -87,7 +87,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
     const orderMap = { 1: 'Random', 2: 'Round-Robin', 3: 'Fixed' };
     const orderText = orderMap[story.story_order_type] ?? 'Random';
     const writersText = `${story.writer_count}/${story.max_writers || '∞'} Writers`;
-    const openText = story.allow_late_joins ? 'Open' : 'Closed';
+    const openText = story.allow_joins ? 'Open' : 'Closed';
 
     const delayParts = [];
     if (story.story_delay_hours > 0) {

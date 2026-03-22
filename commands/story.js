@@ -1174,7 +1174,7 @@ async function validateJoinEligibility(connection, storyId, guildId, userId) {
     }
     
     // Check if story allows late joins (if story has started)
-    if (story.story_status === 1 && !story.allow_late_joins) {
+    if (story.story_status === 1 && !story.allow_joins) {
       return { success: false, error: await getConfigValue(connection,'txtJoinNotAllowed', guildId) };
     }
     
@@ -1851,7 +1851,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
     // Apply filters
     switch (filter) {
       case 'joinable':
-        whereClause += ' AND s.story_status IN (1, 2) AND s.allow_late_joins = 1 AND (s.max_writers IS NULL OR writer_count < s.max_writers)';
+        whereClause += ' AND s.story_status IN (1, 2) AND s.allow_joins = 1 AND (s.max_writers IS NULL OR writer_count < s.max_writers)';
         whereClause += ' AND s.story_id NOT IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)';
         params.push(userId);
         break;
@@ -1895,7 +1895,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
         CASE
           WHEN s.story_id IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)
           THEN 2
-          WHEN s.allow_late_joins = 1
+          WHEN s.allow_joins = 1
            AND (s.max_writers IS NULL OR COUNT(sw.story_writer_id) < s.max_writers)
           THEN 1
           ELSE 0
@@ -2437,7 +2437,7 @@ function buildManageMessage(cfg, state) {
       { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
       { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled', inline: true },
       { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : '∞', inline: true },
-      { name: cfg.lblOpenToWriters, value: state.allowLateJoins ? 'Yes' : 'No', inline: true },
+      { name: cfg.lblOpenToWriters, value: state.allowJoins ? 'Yes' : 'No', inline: true },
       { name: cfg.lblShowAuthors, value: state.showAuthors ? 'Yes' : 'No', inline: true },
       { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
       { name: cfg.lblSummary, value: state.summary || '*Not set*', inline: false },
@@ -2460,8 +2460,8 @@ function buildManageMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_latejoins')
-      .setLabel(`${cfg.lblOpenToWriters}: ${state.allowLateJoins ? 'Yes' : 'No'}`)
-      .setStyle(state.allowLateJoins ? ButtonStyle.Success : ButtonStyle.Secondary),
+      .setLabel(`${cfg.lblOpenToWriters}: ${state.allowJoins ? 'Yes' : 'No'}`)
+      .setStyle(state.allowJoins ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_authors')
       .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? 'Yes' : 'No'}`)
@@ -2509,7 +2509,7 @@ async function handleManage(connection, interaction) {
   try {
     const [storyRows] = await connection.execute(
       `SELECT story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
-              max_writers, allow_late_joins, show_authors, story_order_type, summary, tags
+              max_writers, allow_joins, show_authors, story_order_type, summary, tags
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
@@ -2550,7 +2550,7 @@ async function handleManage(connection, interaction) {
       turnLength: story.turn_length_hours,
       timeoutReminder: story.timeout_reminder_percent ?? 50,
       maxWriters: story.max_writers,
-      allowLateJoins: story.allow_late_joins,
+      allowJoins: story.allow_joins,
       showAuthors: story.show_authors,
       orderType: story.story_order_type,
       summary: story.summary ?? '',
@@ -2583,7 +2583,7 @@ async function handleManageButton(connection, interaction) {
   const customId = interaction.customId;
 
   if (customId === 'story_manage_toggle_latejoins') {
-    state.allowLateJoins = state.allowLateJoins ? 0 : 1;
+    state.allowJoins = state.allowJoins ? 0 : 1;
     await interaction.deferUpdate();
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
 
@@ -2712,11 +2712,11 @@ async function handleManageSave(connection, interaction, state) {
   try {
     await connection.execute(
       `UPDATE story SET turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,
-       allow_late_joins = ?, show_authors = ?, story_order_type = ?,
+       allow_joins = ?, show_authors = ?, story_order_type = ?,
        summary = ?, tags = ? WHERE story_id = ?`,
       [
         state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
-        state.allowLateJoins, state.showAuthors, state.orderType,
+        state.allowJoins, state.showAuthors, state.orderType,
         state.summary || null, state.tags || null,
         state.storyId
       ]

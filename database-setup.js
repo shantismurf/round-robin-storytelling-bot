@@ -28,7 +28,7 @@ export async function setupDatabase(config) {
       console.log(`${formattedDate()}: Creating database schema...`);
       
       // Read and execute schema file
-      const schemaSQL = fs.readFileSync('db/migrations/001_init.sql', 'utf8');
+      const schemaSQL = fs.readFileSync('db/init.sql', 'utf8');
       
       // Split by semicolon and execute each statement
       const statements = schemaSQL.split(';').filter(stmt => stmt.trim().length > 0);

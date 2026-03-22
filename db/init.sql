@@ -29,7 +29,10 @@ CREATE TABLE IF NOT EXISTS story (
   max_writers INT DEFAULT NULL,
   min_entry_length INT DEFAULT 0,
   max_entry_length INT DEFAULT 5000,
-  allow_late_joins TINYINT(1) DEFAULT 1
+  allow_joins TINYINT(1) DEFAULT 1,
+  summary TEXT NULL,
+  tags TEXT NULL,
+  status_message_id VARCHAR(20) NULL
 );
 
 CREATE TABLE IF NOT EXISTS story_writer (
@@ -81,11 +84,12 @@ CREATE TABLE IF NOT EXISTS job (
 
 CREATE TABLE IF NOT EXISTS config (
   config_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  config_key VARCHAR(255) NOT NULL UNIQUE,
+  config_key VARCHAR(255) NOT NULL,
   config_value TEXT NOT NULL,
   language_code VARCHAR(10) DEFAULT 'en',
-  guild_id BIGINT DEFAULT NULL,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+  guild_id BIGINT NOT NULL DEFAULT 1,
+  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  UNIQUE KEY uq_config_key_guild (config_key, guild_id)
 );
 
 CREATE TABLE admin_action_log (
