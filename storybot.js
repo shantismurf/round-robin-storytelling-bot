@@ -811,6 +811,19 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const storyThread = await guild.channels.fetch(story.story_thread_id).catch(() => null);
     if (!storyThread) return;
 
+    // Keep story thread title in sync with current status
+    try {
+      const titleTemplate = await getConfigValue(connection, 'txtStoryThreadTitle', story.guild_id);
+      const statusLabel = { 1: txtActive, 2: txtPaused, 3: txtClosed }[story.story_status] ?? txtActive;
+      const expectedTitle = titleTemplate
+        .replace('[story_id]', storyId)
+        .replace('[inputStoryTitle]', story.title)
+        .replace('[story_status]', statusLabel);
+      if (storyThread.name !== expectedTitle) {
+        await storyThread.setName(expectedTitle).catch(() => {});
+      }
+    } catch {}
+
     // Add Join button if story is open for new writers
     const isJoinable = story.story_status !== 3
       && story.allow_joins

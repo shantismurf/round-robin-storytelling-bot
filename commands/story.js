@@ -1173,8 +1173,8 @@ async function validateJoinEligibility(connection, storyId, guildId, userId) {
       return { success: false, error: await getConfigValue(connection,'txtJoinStoryClosed', guildId) };
     }
     
-    // Check if story allows late joins (if story has started)
-    if (story.story_status === 1 && !story.allow_joins) {
+    // Check if story allows new writers
+    if (!story.allow_joins) {
       return { success: false, error: await getConfigValue(connection,'txtJoinNotAllowed', guildId) };
     }
     
