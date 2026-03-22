@@ -1,9 +1,33 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
-import { StoryBot } from './storybot.js';
+import { StoryBot, updateStoryStatusMessage } from './storybot.js';
 import { loadConfig, formattedDate, DB, getConfigValue, setTestMode, debugLog } from './utilities.js';
 import { setupDatabase } from './database-setup.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
+
+/**
+ * On startup, refresh status embeds for all active/paused stories so buttons
+ * and content never go stale after a bot restart.
+ */
+async function refreshAllStatusMessages(connection, client) {
+  try {
+    const [stories] = await connection.execute(
+      `SELECT story_id, guild_id FROM story WHERE story_status IN (1, 2) AND story_thread_id IS NOT NULL`
+    );
+    console.log(`${formattedDate()}: Refreshing status messages for ${stories.length} active/paused story/stories...`);
+    for (const story of stories) {
+      try {
+        const guild = await client.guilds.fetch(story.guild_id);
+        await updateStoryStatusMessage(connection, guild, story.story_id);
+      } catch (err) {
+        console.error(`${formattedDate()}: Failed to refresh status for story ${story.story_id}:`, err);
+      }
+    }
+    console.log(`${formattedDate()}: Status message refresh complete.`);
+  } catch (err) {
+    console.error(`${formattedDate()}: refreshAllStatusMessages failed:`, err);
+  }
+}
 
 async function main() {
   const config = loadConfig();
@@ -75,6 +99,7 @@ async function main() {
     await bot.start();
     await loadCommands('./commands');
     startJobRunner(connection, client);
+    refreshAllStatusMessages(connection, client);
   });
   // Listen for slash commands and modal interactions
   client.on(Events.InteractionCreate, async interaction => {
