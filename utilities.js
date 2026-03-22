@@ -105,6 +105,11 @@ let _testMode = false;
 export function setTestMode(value) { _testMode = !!value; }
 export function debugLog(...args) { if (_testMode) console.log(...args); }
 
+export async function isGuildConfigured(connection, guildId) {
+  const val = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
+  return val && val !== 'cfgStoryFeedChannelId';
+}
+
 export async function getConfigValue(connection, key, guildId = 1) {
   try {
     if (Array.isArray(key)) {

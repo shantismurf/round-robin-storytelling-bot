@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, debugLog } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, debugLog, isGuildConfigured } from '../utilities.js';
 import { marked } from 'marked';
 import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
@@ -175,6 +175,15 @@ async function execute(connection, interaction) {
 
 async function handleAddStory(connection, interaction) {
   debugLog(`${formattedDate()}: handleAddStory() - initializing ephemeral story form`);
+
+  if (!await isGuildConfigured(connection, interaction.guild.id)) {
+    await interaction.reply({
+      content: 'StoryBot has not been configured for this server yet. A server admin must run `/storyadmin setup` first.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
   try {
     const cfg = await getConfigValue(connection, [
       'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',

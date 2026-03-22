@@ -597,7 +597,10 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
  * Post welcome message with buttons to normal mode thread
  */
 async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime) {
-  const txtNormalModeWelcome = await getConfigValue(connection,'txtNormalModeWelcome', guild_id);
+  const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guild_id);
+  const mediaConfigured = mediaChannelId && mediaChannelId !== 'cfgMediaChannelId';
+  const welcomeKey = mediaConfigured ? 'txtNormalModeWelcome' : 'txtNormalModeWelcomeNoMedia';
+  const txtNormalModeWelcome = await getConfigValue(connection, welcomeKey, guild_id);
   const btnFinalizeEntry = await getConfigValue(connection,'btnFinalizeEntry', guild_id);
   const btnSkipTurn = await getConfigValue(connection,'btnSkipTurn', guild_id);
 
