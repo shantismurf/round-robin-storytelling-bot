@@ -1,5 +1,5 @@
 /**
- * Database setup utility for Round Robin Storybot
+ * Database setup utility for Round Robin StoryBot
  * This module provides functions to initialize the database schema and configuration
  */
 
