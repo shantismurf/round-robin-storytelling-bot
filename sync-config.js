@@ -20,7 +20,7 @@ function parseConfigEntries(sql) {
   while ((match = rowRegex.exec(sql)) !== null) {
     entries.push({
       config_key:    match[1].replace(/''/g, "'").replace(/\\'/g, "'"),
-      config_value:  match[2].replace(/''/g, "'").replace(/\\'/g, "'"),
+      config_value:  match[2].replace(/''/g, "'").replace(/\\'/g, "'").replace(/\\n/g, '\n'),
       language_code: match[3],
       guild_id:      parseInt(match[4])
     });

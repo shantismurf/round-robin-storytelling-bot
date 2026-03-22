@@ -2025,7 +2025,7 @@ async function handleFinalizeEntry(connection, interaction) {
 
   try {
     const [turnInfo] = await connection.execute(
-      `SELECT t.turn_id FROM turn t
+      `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
       [storyId, interaction.user.id]
@@ -2036,11 +2036,53 @@ async function handleFinalizeEntry(connection, interaction) {
       return;
     }
 
-    const [txtFinalizeConfirm, btnFinalizeConfirm, btnCancel] = await Promise.all([
+    // Collect user messages from thread to build preview
+    const thread = await interaction.guild.channels.fetch(turnInfo[0].thread_id);
+    const messages = await thread.messages.fetch({ limit: 100 });
+    const userMessages = messages
+      .filter(msg => msg.author.id === interaction.user.id)
+      .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+
+    if (userMessages.size === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', guildId) });
+      return;
+    }
+
+    // Build preview content — images shown as filename placeholders (not forwarded yet)
+    const previewParts = [];
+    for (const msg of userMessages.values()) {
+      if (msg.content) previewParts.push(msg.content);
+      for (const attachment of msg.attachments.values()) {
+        if (attachment.contentType?.startsWith('image/')) {
+          previewParts.push(`📎 ${attachment.name}`);
+        }
+      }
+    }
+    const previewContent = previewParts.join('\n');
+
+    const [txtFinalizeConfirm, txtFinalizeConfirmDesc, btnFinalizeConfirm, btnCancel, lblPreviewEntry] = await Promise.all([
       getConfigValue(connection, 'txtFinalizeConfirm', guildId),
+      getConfigValue(connection, 'txtFinalizeConfirmDesc', guildId),
       getConfigValue(connection, 'btnFinalizeConfirm', guildId),
       getConfigValue(connection, 'btnCancel', guildId),
+      getConfigValue(connection, 'lblFinalizePreviewEntry', guildId),
     ]);
+
+    const maxFieldLength = 1024;
+    const embed = new EmbedBuilder()
+      .setTitle(txtFinalizeConfirm)
+      .setDescription(txtFinalizeConfirmDesc)
+      .setColor(0xffd700);
+
+    // Split preview into fields if needed
+    let remaining = previewContent;
+    let fieldCount = 0;
+    while (remaining.length > 0) {
+      const chunk = remaining.length > maxFieldLength ? remaining.substring(0, maxFieldLength) : remaining;
+      embed.addFields({ name: fieldCount === 0 ? lblPreviewEntry : '​', value: chunk, inline: false });
+      remaining = remaining.substring(chunk.length);
+      fieldCount++;
+    }
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
@@ -2053,7 +2095,7 @@ async function handleFinalizeEntry(connection, interaction) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    await interaction.editReply({ content: txtFinalizeConfirm, components: [row] });
+    await interaction.editReply({ embeds: [embed], components: [row] });
 
   } catch (error) {
     console.error(`${formattedDate()}: handleFinalizeEntry failed:`, error);

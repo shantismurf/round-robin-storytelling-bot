@@ -348,7 +348,9 @@ Words: ~[word_count]', 'en', 1),
 ('txtStoryThreadWriterRemove', '🚫 **[writer_name]** was removed from the story by an admin.', 'en', 1),
 
 -- Finalize entry confirmation
-('txtFinalizeConfirm', '✅ **Finalize your entry?** This will submit everything you''ve written in this thread and advance to the next writer. This cannot be undone.', 'en', 1),
+('txtFinalizeConfirm', 'Finalize your entry?', 'en', 1),
+('txtFinalizeConfirmDesc', 'This will submit everything shown below and advance to the next writer. This cannot be undone.', 'en', 1),
+('lblFinalizePreviewEntry', 'Your Entry', 'en', 1),
 ('btnFinalizeConfirm', 'Yes, Finalize Entry', 'en', 1),
 
 -- Skip turn confirmation
