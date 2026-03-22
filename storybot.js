@@ -811,15 +811,31 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const storyThread = await guild.channels.fetch(story.story_thread_id).catch(() => null);
     if (!storyThread) return;
 
+    // Add Join button if story is open for new writers
+    const isJoinable = story.story_status !== 3
+      && story.allow_joins
+      && (!story.max_writers || activeWriters.length < story.max_writers);
+
+    const components = [];
+    if (isJoinable) {
+      const btnJoinStory = await getConfigValue(connection, 'btnJoinStory', story.guild_id);
+      components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`join_story_${storyId}`)
+          .setLabel(btnJoinStory)
+          .setStyle(ButtonStyle.Primary)
+      ));
+    }
+
     let message = null;
     if (story.status_message_id) {
       message = await storyThread.messages.fetch(story.status_message_id).catch(() => null);
     }
 
     if (message) {
-      await message.edit({ embeds: [embed] });
+      await message.edit({ embeds: [embed], components });
     } else {
-      const newMsg = await storyThread.send({ embeds: [embed] });
+      const newMsg = await storyThread.send({ embeds: [embed], components });
       await connection.execute(
         `UPDATE story SET status_message_id = ? WHERE story_id = ?`,
         [newMsg.id, storyId]

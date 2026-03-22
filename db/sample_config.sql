@@ -32,6 +32,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtQuickModeTurnStart', '🎭 **[story_title]:** [current_writer]''s turn has started! Please use `/story write [story_id]` to submit your entry. Turn ends [turn_end_date].', 'en', 1),
 ('btnFinalizeEntry', '✅ Finalize Entry', 'en', 1),
 ('btnSkipTurn', '⏭️ Skip Turn', 'en', 1),
+('btnJoinStory', '✋ Join This Story', 'en', 1),
 ('txtAlreadyJoined', 'You have already joined this story!', 'en', 1),
 ('txtStoryJoinFail', 'You were not added to the story. Please contact an administrator.', 'en', 1),
 ('txtStoryActive', 'Your story is now active!', 'en', 1),

@@ -4,7 +4,7 @@
  *
  * Usage:
  *   npm run sync-config                              -- dry run: shows missing and changed entries, makes no changes
- *   npm run sync-config -- --apply                   -- inserts missing entries only (never overwrites existing values)
+ *   npm run sync-config -- --apply                   -- inserts missing entries and updates changed entries
  *   node sync-config.js --set key value              -- directly sets a single key in the DB
  */
 
@@ -104,15 +104,21 @@ async function syncConfig() {
       }
     }
 
-    // Report changed entries (--apply never updates; use --set for that)
+    // Report / update changed entries
     if (changed.length === 0) {
       console.log('No changed entries.');
     } else {
-      console.log(`\n${changed.length} changed entries (skipped — use --set to update individual values):`);
+      console.log(`\n${changed.length} changed entries${apply ? ' (updating)' : ' (dry run)'}:`);
       for (const entry of changed) {
         console.log(`  ~ ${entry.config_key}`);
         console.log(`      was: ${entry.old_value}`);
         console.log(`      now: ${entry.config_value}`);
+        if (apply) {
+          await connection.execute(
+            'UPDATE config SET config_value = ? WHERE config_key = ? AND guild_id = ?',
+            [entry.config_value, entry.config_key, entry.guild_id]
+          );
+        }
       }
     }
 

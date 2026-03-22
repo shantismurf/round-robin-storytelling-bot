@@ -712,10 +712,10 @@ async function handleCreateStorySubmit(connection, interaction, state) {
 /**
  * Handle /story join command
  */
-async function handleJoin(connection, interaction) {
+async function handleJoin(connection, interaction, buttonStoryId = null) {
   try {
     const guildId = interaction.guild.id;
-    const storyId = interaction.options.getInteger('story_id');
+    const storyId = buttonStoryId ?? interaction.options.getInteger('story_id');
     
     // Validate story access and get story info
     const storyInfo = await validateStoryAccess(connection, storyId, guildId);
@@ -1306,7 +1306,8 @@ async function buildHelpPage1(connection, guildId) {
 
 async function buildHelpPage2(connection, guildId) {
   const cfg = await getConfigValue(connection, [
-    'txtHelp2Title', 'txtHelp2Footer', 'btnHelp2ToPage1', 'btnHelp2ToPage3',
+    'txtHelp2Title', 'txtHelp2Footer', 
+    'btnHelp2ToPage1', 'btnHelp2ToPage3',
     'lblHelp2StoryTitle', 'txtHelp2StoryTitle',
     'lblHelp2MaxWriters', 'txtHelp2MaxWriters',
     'lblHelp2TurnLength', 'txtHelp2TurnLength',
@@ -1563,6 +1564,9 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseCancel(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageButton(connection, interaction);
+  } else if (interaction.customId.startsWith('join_story_')) {
+    const storyId = parseInt(interaction.customId.split('_')[2]);
+    await handleJoin(connection, interaction, storyId);
   } else if (interaction.customId === 'story_filter') {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
