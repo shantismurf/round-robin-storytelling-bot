@@ -101,17 +101,20 @@ export function sanitizeModalInput(input, maxLength = 1024) {
         .substring(0, maxLength);                 // Flexible length limit
 }
 
-export async function getConfigValue(connection, key) {
+export async function getConfigValue(connection, key, guildId = 1) {
   try {
     if (Array.isArray(key)) {
       const placeholders = key.map(() => '?').join(', ');
       const [rows] = await connection.execute(
-        `SELECT config_key, config_value FROM config WHERE config_key IN (${placeholders}) AND guild_id = 1`,
-        key
+        `SELECT config_key, config_value, guild_id FROM config WHERE config_key IN (${placeholders}) AND guild_id IN (1, ?)`,
+        [...key, guildId]
       );
       const result = {};
       for (const row of rows) {
-        result[row.config_key] = row.config_value;
+        // Prefer guild-specific value over system default
+        if (!result[row.config_key] || row.guild_id == guildId) {
+          result[row.config_key] = row.config_value;
+        }
       }
       // Fall back to key name for any that weren't found
       for (const k of key) {
@@ -120,8 +123,8 @@ export async function getConfigValue(connection, key) {
       return result;
     }
     const [configRows] = await connection.execute(
-      'SELECT config_value FROM config WHERE config_key = ? AND guild_id = 1',
-      [key]
+      `SELECT config_value FROM config WHERE config_key = ? AND guild_id IN (1, ?) ORDER BY (guild_id = ?) DESC LIMIT 1`,
+      [key, guildId, guildId]
     );
     return configRows[0]?.config_value || key;
   } catch (error) {

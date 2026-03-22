@@ -190,7 +190,7 @@ async function handleAddStory(connection, interaction) {
       'txtOrderRandomDesc', 'txtOrderRoundRobinDesc', 'txtOrderFixedDesc',
       'lblShowAuthors', 'txtShowAuthorsOnDesc', 'txtShowAuthorsOffDesc',
       'lblMaxWriters', 'btnSetMaxWriters'
-    ]);
+    ], interaction.guild.id);
 
     const state = {
       cfg,
@@ -221,7 +221,7 @@ async function handleAddStory(connection, interaction) {
     console.error(`${formattedDate()}: Error in handleAddStory:`, error);
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
-        content: await getConfigValue(connection, 'txtFormOpenError'),
+        content: await getConfigValue(connection, 'txtFormOpenError', interaction.guild.id),
         flags: MessageFlags.Ephemeral
       });
     }
@@ -361,7 +361,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
 
   if (!state) {
     await interaction.reply({
-      content: await getConfigValue(connection, 'txtStoryAddSessionExpired'),
+      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
       flags: MessageFlags.Ephemeral
     });
     return;
@@ -383,7 +383,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
       if (isNaN(val) || val < 1) {
         await interaction.reply({
           content: replaceTemplateVariables(
-            await getConfigValue(connection, 'txtMustBeNo'),
+            await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id),
             { 'Field label text': state.cfg.lblTurnLength }
           ),
           flags: MessageFlags.Ephemeral
@@ -396,7 +396,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
       const raw = sanitizeModalInput(interaction.fields.getTextInputValue('timeout_reminder'), 10);
       const val = parseInt(raw);
       if (isNaN(val) || val < 0 || val > 100) {
-        await interaction.reply({ content: await getConfigValue(connection, 'txtTimeoutReminderValidation'), flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: await getConfigValue(connection, 'txtTimeoutReminderValidation', interaction.guild.id), flags: MessageFlags.Ephemeral });
         return;
       }
       state.timeoutReminder = val;
@@ -411,7 +411,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
         if (isNaN(val) || val < 0) {
           await interaction.reply({
             content: replaceTemplateVariables(
-              await getConfigValue(connection, 'txtMustBeNo'),
+              await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id),
               { 'Field label text': state.cfg.lblNoHours }
             ),
             flags: MessageFlags.Ephemeral
@@ -430,7 +430,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
         if (isNaN(val) || val < 0) {
           await interaction.reply({
             content: replaceTemplateVariables(
-              await getConfigValue(connection, 'txtMustBeNo'),
+              await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id),
               { 'Field label text': state.cfg.lblNoWriters }
             ),
             flags: MessageFlags.Ephemeral
@@ -449,7 +449,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
         if (isNaN(val) || val < 0) {
           await interaction.reply({
             content: replaceTemplateVariables(
-              await getConfigValue(connection, 'txtMustBeNo'),
+              await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id),
               { 'Field label text': state.cfg.lblMaxWriters }
             ),
             flags: MessageFlags.Ephemeral
@@ -482,7 +482,7 @@ async function handleAddStoryButton(connection, interaction) {
 
   if (!state) {
     await interaction.reply({
-      content: await getConfigValue(connection, 'txtStoryAddSessionExpired'),
+      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
       flags: MessageFlags.Ephemeral
     });
     return;
@@ -693,7 +693,7 @@ async function handleCreateStorySubmit(connection, interaction, state) {
   } catch (error) {
     console.error(`${formattedDate()}: Error creating story:`, error);
     await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'txtStoryCreationError'),
+      content: await getConfigValue(connection, 'txtStoryCreationError', interaction.guild.id),
       embeds: [],
       components: []
     });
@@ -753,7 +753,7 @@ async function handleJoin(connection, interaction) {
       'lblJoinAO3Name', 'txtJoinAO3Placeholder',
       'lblJoinPrivacy', 'txtJoinPrivacyPlaceholder',
       'lblJoinNotifications', 'txtJoinNotificationPlaceholder'
-    ]);
+    ], interaction.guild.id);
 
     const ao3NameInput = new TextInputBuilder()
       .setCustomId('ao3_name')
@@ -967,9 +967,9 @@ async function handleWrite(connection, interaction) {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('entry_content')
-          .setLabel(await getConfigValue(connection, 'lblWriteEntry'))
+          .setLabel(await getConfigValue(connection, 'lblWriteEntry', interaction.guild.id))
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder(`⚠️ ${txtWriteWarning}\n\n${await getConfigValue(connection, 'txtWritePlaceholder')}`)
+          .setPlaceholder(`⚠️ ${txtWriteWarning}\n\n${await getConfigValue(connection, 'txtWritePlaceholder', interaction.guild.id)}`)
           .setMaxLength(4000)
           .setMinLength(10)
           .setRequired(true)
