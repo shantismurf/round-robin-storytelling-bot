@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, formattedDate, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, formattedDate, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from '../storybot.js';
 
 // Cached catchup pages keyed by "catchup_<userId>_<storyId>"
@@ -84,7 +84,7 @@ async function handleStatus(connection, interaction) {
     ], guildId);
 
     const [stories] = await connection.execute(
-      `SELECT s.story_id, s.title, s.story_status, s.quick_mode
+      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
        WHERE sw.discord_user_id = ? AND sw.sw_status = 1 AND s.guild_id = ? AND s.story_status != 3
@@ -138,7 +138,7 @@ async function handleStatus(connection, interaction) {
       let turnLine = '';
       if (isMyTurn) {
         if (story.quick_mode) {
-          turnLine = replaceTemplateVariables(cfg.txtMyTurnQuick, { story_id: story.story_id });
+          turnLine = replaceTemplateVariables(cfg.txtMyTurnQuick, { story_id: story.guild_story_id });
         } else {
           const threadRef = activeTurn.thread_id ? ` · <#${activeTurn.thread_id}>` : '';
           const endsAt = activeTurn.turn_ends_at_unix
@@ -175,7 +175,7 @@ async function handleStatus(connection, interaction) {
       }
 
       embed.addFields({
-        name: `${statusIcon} ${story.title} (#${story.story_id}) · ${modeLabel}`,
+        name: `${statusIcon} ${story.title} (#${story.guild_story_id}) · ${modeLabel}`,
         value: fieldValue,
         inline: false
       });
@@ -202,7 +202,7 @@ async function handleHistory(connection, interaction) {
 
   try {
     const [stories] = await connection.execute(
-      `SELECT s.story_id, s.title, s.story_status, s.quick_mode, s.created_at, s.closed_at,
+      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode, s.created_at, s.closed_at,
               sw.sw_status,
               COUNT(DISTINCT t.turn_id) as my_turn_count,
               COALESCE(SUM(LENGTH(se.content) - LENGTH(REPLACE(se.content, ' ', '')) + 1), 0) as my_word_count,
@@ -260,7 +260,7 @@ async function handleHistory(connection, interaction) {
         : 'Story total: 0 turns';
 
       embed.addFields({
-        name: `${statusIcon(story.story_status)} ${story.title} (#${story.story_id}) · ${modeLabel} · ${statusText(story.story_status)}`,
+        name: `${statusIcon(story.story_status)} ${story.title} (#${story.guild_story_id}) · ${modeLabel} · ${statusText(story.story_status)}`,
         value: `├ ${myStats} · ${totalTurns}\n└ ${dateRange}`,
         inline: false
       });
@@ -336,7 +336,7 @@ async function handleHistoryNavigation(connection, interaction) {
       : 'Story total: 0 turns';
 
     embed.addFields({
-      name: `${statusIcon(story.story_status)} ${story.title} (#${story.story_id}) · ${modeLabel} · ${statusText(story.story_status)}`,
+      name: `${statusIcon(story.story_status)} ${story.title} (#${story.guild_story_id}) · ${modeLabel} · ${statusText(story.story_status)}`,
       value: `├ ${myStats} · ${totalTurns}\n└ ${dateRange}`,
       inline: false
     });
@@ -363,8 +363,11 @@ async function handleHistoryNavigation(connection, interaction) {
  */
 async function handleCatchUp(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
   const userId = interaction.user.id;
 
   try {
@@ -493,8 +496,11 @@ function buildCatchUpNavRow(currentPage, totalPages) {
  */
 async function handleLeave(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
   const userId = interaction.user.id;
 
   try {
@@ -650,8 +656,11 @@ async function handleLeaveCancel(connection, interaction) {
  */
 async function handlePass(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
   const userId = interaction.user.id;
 
   try {

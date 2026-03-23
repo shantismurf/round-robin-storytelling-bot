@@ -9,6 +9,7 @@ DROP TABLE IF EXISTS config;
 -- initial schema (story, story_writer, turn, job)
 CREATE TABLE IF NOT EXISTS story (
   story_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  guild_story_id INT UNSIGNED NOT NULL DEFAULT 0,
   guild_id BIGINT DEFAULT NULL,
   title TEXT NOT NULL,
   ao3_URL VARCHAR(255),
@@ -32,7 +33,8 @@ CREATE TABLE IF NOT EXISTS story (
   allow_joins TINYINT(1) DEFAULT 1,
   summary TEXT NULL,
   tags TEXT NULL,
-  status_message_id VARCHAR(20) NULL
+  status_message_id VARCHAR(20) NULL,
+  UNIQUE KEY uq_guild_story (guild_id, guild_story_id)
 );
 
 CREATE TABLE IF NOT EXISTS story_writer (

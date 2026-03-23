@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 
 async function checkIsAdmin(connection, interaction, guildId) {
@@ -233,8 +233,11 @@ async function handleSetupModalSubmit(connection, interaction) {
 // ---------------------------------------------------------------------------
 async function handleSkip(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const [storyRows] = await connection.execute(
@@ -287,9 +290,12 @@ async function handleSkip(connection, interaction) {
 // ---------------------------------------------------------------------------
 async function handleExtend(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
-  const hours = interaction.options.getInteger('hours');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const hours = interaction.options.getInteger('hours');
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const [storyRows] = await connection.execute(
@@ -351,9 +357,12 @@ async function handleExtend(connection, interaction) {
 // ---------------------------------------------------------------------------
 async function handleKick(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
-  const targetUser = interaction.options.getUser('user');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const targetUser = interaction.options.getUser('user');
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const [storyRows] = await connection.execute(
@@ -444,9 +453,12 @@ async function handleKick(connection, interaction) {
 // ---------------------------------------------------------------------------
 async function handleNext(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
-  const targetUser = interaction.options.getUser('user');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const targetUser = interaction.options.getUser('user');
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const [storyRows] = await connection.execute(
@@ -528,8 +540,11 @@ async function handleNext(connection, interaction) {
 // ---------------------------------------------------------------------------
 async function handleDelete(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const [storyRows] = await connection.execute(

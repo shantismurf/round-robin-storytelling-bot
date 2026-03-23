@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, debugLog, isGuildConfigured } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, debugLog, isGuildConfigured, resolveStoryId } from '../utilities.js';
 import { marked } from 'marked';
 import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
@@ -817,7 +817,16 @@ async function buildJoinEmbed(connection, state) {
 async function handleJoin(connection, interaction, buttonStoryId = null) {
   try {
     const guildId = interaction.guild.id;
-    const storyId = buttonStoryId ?? interaction.options.getInteger('story_id');
+    let storyId;
+    if (buttonStoryId !== null) {
+      storyId = buttonStoryId;
+    } else {
+      storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+      if (storyId === null) {
+        await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
+        return;
+      }
+    }
 
     const storyInfo = await validateStoryAccess(connection, storyId, guildId);
     if (!storyInfo.success) {
@@ -969,7 +978,11 @@ async function handleJoinConfirm(connection, interaction) {
 async function handleWrite(connection, interaction) {
   try {
     const guildId = interaction.guild.id;
-    const storyId = interaction.options.getInteger('story_id');
+    const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+    if (storyId === null) {
+      await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
+      return;
+    }
     
     // Validate story access and get story info
     const storyInfo = await validateStoryAccess(connection, storyId, guildId);
@@ -1612,7 +1625,7 @@ async function renderStoryListReply(connection, interaction, filter, page) {
     }
 
     embed.addFields({
-      name: `${statusIcon} "${story.title}" (#${story.story_id})`,
+      name: `${statusIcon} "${story.title}" (#${story.guild_story_id})`,
       value: `├ ${cfg.lblStoryStatus} ${statusText} • ${cfg.lblStoryTurn} ${currentTurn}
 ├ ${cfg.lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${cfg.lblStoryMode} ${modeText}
 └ ${cfg.lblStoryCreator} ${story.creator_name} • ${joinStatus}`,
@@ -1652,7 +1665,7 @@ async function renderStoryListReply(connection, interaction, filter, page) {
         .setCustomId('story_quick_join')
         .setPlaceholder(cfg.txtQuickJoinPlaceholder)
         .addOptions(joinableStories.map(s => ({
-          label: `${s.title} (#${s.story_id})`,
+          label: `${s.title} (#${s.guild_story_id})`,
           value: s.story_id.toString(),
           description: replaceTemplateVariables(cfg.txtQuickJoinDesc, {
             writer_count: s.writer_count,
@@ -2277,7 +2290,7 @@ async function handleSkipConfirm(connection, interaction) {
  */
 async function generateStoryExport(connection, storyId, guildId, guild = null) {
   const [storyRows] = await connection.execute(
-    `SELECT story_id, title, created_at, story_status, quick_mode, closed_at, show_authors, summary, tags FROM story WHERE story_id = ? AND guild_id = ?`,
+    `SELECT story_id, guild_story_id, title, created_at, story_status, quick_mode, closed_at, show_authors, summary, tags FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
   );
   if (storyRows.length === 0) return null;
@@ -2358,7 +2371,7 @@ async function generateStoryExport(connection, storyId, guildId, guild = null) {
   <div class="meta-block">
     <h1>${story.title}</h1>
     <div class="meta">Started: ${publishedDate} &nbsp; ${secondDateLabel}: ${secondDate}</div>
-    <div class="meta">Story #${story.story_id} &nbsp;·&nbsp; ${modeLabel} &nbsp;·&nbsp; ${turnCount} turn(s) &nbsp;·&nbsp; ~${wordCount.toLocaleString()} words</div>
+    <div class="meta">Story #${story.guild_story_id} &nbsp;·&nbsp; ${modeLabel} &nbsp;·&nbsp; ${turnCount} turn(s) &nbsp;·&nbsp; ~${wordCount.toLocaleString()} words</div>
     <div class="meta">Writers: ${writersList}</div>${story.tags ? `\n    <div class="meta">Tags: ${story.tags}</div>` : ''}
     <div class="meta">Exported: ${exportDate}</div>
   </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
@@ -2379,8 +2392,11 @@ async function generateStoryExport(connection, storyId, guildId, guild = null) {
 
 async function handleRead(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const result = await generateStoryExport(connection, storyId, guildId, interaction.guild);
@@ -2493,12 +2509,15 @@ function buildManageMessage(cfg, state) {
 
 async function handleManage(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
+      `SELECT story_id, guild_story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
@@ -2535,6 +2554,7 @@ async function handleManage(connection, interaction) {
     const state = {
       cfg,
       storyId,
+      guildStoryId: story.guild_story_id,
       guildId,
       title: story.title,
       turnLength: story.turn_length_hours,
@@ -2775,7 +2795,7 @@ async function applyPauseActions(connection, interaction, state) {
     const turnNumber = turnCountResult[0].turn_number;
     const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
     const pausedTitle = threadTitleTemplate
-      .replace('[story_id]', state.storyId)
+      .replace('[story_id]', state.guildStoryId)
       .replace('[storyTurnNumber]', turnNumber)
       .replace('[user display name]', discord_display_name)
       .replace('[turnEndTime]', 'PAUSED');
@@ -2799,7 +2819,7 @@ async function applyPauseActions(connection, interaction, state) {
           getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
         ]);
         await storyThread.setName(
-          titleTemplate.replace('[story_id]', state.storyId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtPaused)
+          titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtPaused)
         );
       }
     }
@@ -2830,7 +2850,7 @@ async function applyResumeActions(connection, interaction, state) {
           getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
         ]);
         await storyThread.setName(
-          titleTemplate.replace('[story_id]', state.storyId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
+          titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
         );
       }
     }
@@ -2889,7 +2909,7 @@ async function applyResumeActions(connection, interaction, state) {
         const formattedEndTime = newTurnEndsAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
         const newTitle = threadTitleTemplate
-          .replace('[story_id]', state.storyId)
+          .replace('[story_id]', state.guildStoryId)
           .replace('[storyTurnNumber]', turnNumber)
           .replace('[user display name]', activeTurn.discord_display_name)
           .replace('[turnEndTime]', formattedEndTime);
@@ -2981,8 +3001,11 @@ async function handleManageModalSubmit(connection, interaction) {
 
 async function handleClose(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const storyId = interaction.options.getInteger('story_id');
   const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
 
   try {
     const [storyRows] = await connection.execute(
@@ -3045,7 +3068,7 @@ async function handleCloseConfirm(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, title, story_status, story_thread_id, quick_mode FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT story_id, guild_story_id, title, story_status, story_thread_id, quick_mode FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0 || storyRows[0].story_status === 3) {
@@ -3100,7 +3123,7 @@ async function handleCloseConfirm(connection, interaction) {
             getConfigValue(connection, 'txtClosed', guildId)
           ]);
           const updatedTitle = threadTitleTemplate
-            .replace('[story_id]', storyId)
+            .replace('[story_id]', story.guild_story_id)
             .replace('[inputStoryTitle]', story.title)
             .replace('[story_status]', txtClosed);
           await storyThread.setName(updatedTitle);

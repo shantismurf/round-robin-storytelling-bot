@@ -105,6 +105,23 @@ let _testMode = false;
 export function setTestMode(value) { _testMode = !!value; }
 export function debugLog(...args) { if (_testMode) console.log(...args); }
 
+/**
+ * Resolve a guild-local story number (guild_story_id) to the internal PK (story_id).
+ * Returns the internal story_id, or null if not found.
+ */
+export async function resolveStoryId(connection, guildId, guildStoryId) {
+  try {
+    const [rows] = await connection.execute(
+      `SELECT story_id FROM story WHERE guild_id = ? AND guild_story_id = ?`,
+      [guildId, guildStoryId]
+    );
+    return rows[0]?.story_id ?? null;
+  } catch (err) {
+    console.error(`${formattedDate()}: resolveStoryId failed:`, err);
+    return null;
+  }
+}
+
 export async function isGuildConfigured(connection, guildId) {
   const val = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
   return val && val !== 'cfgStoryFeedChannelId';

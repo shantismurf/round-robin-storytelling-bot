@@ -47,12 +47,19 @@ export async function CreateStory(connection, interaction, storyInput) {
     // Step 1: Insert story record
     const storyStatus = (storyInput.delayHours > 0 || storyInput.delayWriters > 0) ? 2 : 1; // 2 = paused, 1 = active
 
+    // Calculate next guild-local story number
+    const [[{ nextGuildStoryId }]] = await txn.execute(
+      `SELECT COALESCE(MAX(guild_story_id), 0) + 1 AS nextGuildStoryId FROM story WHERE guild_id = ?`,
+      [guild_id]
+    );
+
     const [storyResult] = await txn.execute(
-      `INSERT INTO story (guild_id, title, story_status, quick_mode, turn_length_hours,
+      `INSERT INTO story (guild_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
        timeout_reminder_percent, story_turn_privacy, show_authors, story_delay_hours, story_delay_users, story_order_type, max_writers)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         guild_id,
+        nextGuildStoryId,
         storyInput.storyTitle,
         storyStatus,
         storyInput.quickMode,
@@ -68,6 +75,7 @@ export async function CreateStory(connection, interaction, storyInput) {
     );
 
     const storyId = storyResult.insertId;
+    const guildStoryId = nextGuildStoryId;
 
     // Step 2: Create delay job if needed
     if (storyInput.delayHours) {
@@ -93,14 +101,14 @@ export async function CreateStory(connection, interaction, storyInput) {
       : await getConfigValue(connection,'txtPaused', guild_id);
 
     const threadTitle = threadTitleTemplate
-      .replace('[story_id]', storyId)
+      .replace('[story_id]', guildStoryId)
       .replace('[inputStoryTitle]', storyInput.storyTitle)
       .replace('[story_status]', statusText);
 
     const storyThread = await channel.threads.create({
       name: threadTitle,
       type: ChannelType.PublicThread,
-      reason: `Story thread for story ID ${storyId}`
+      reason: `Story thread for story ID ${guildStoryId}`
     });
 
     // Step 4: Update story with thread ID
@@ -402,7 +410,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     const [writerInfo] = await connection.execute(
       `SELECT sw.story_id, sw.discord_user_id, sw.discord_display_name, sw.turn_privacy, sw.notification_prefs,
               s.quick_mode, s.turn_length_hours, s.story_thread_id, s.story_turn_privacy, s.title,
-              s.timeout_reminder_percent, s.guild_id
+              s.timeout_reminder_percent, s.guild_id, s.guild_story_id
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_writer_id = ?`,
@@ -462,7 +470,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       // Create thread title (plain date — Discord doesn't render timestamps in thread names)
       const threadTitleTemplate = await getConfigValue(connection,'txtTurnThreadTitle', guild_id);
       const threadTitle = threadTitleTemplate
-        .replace('[story_id]', writer.story_id)
+        .replace('[story_id]', writer.guild_story_id)
         .replace('[storyTurnNumber]', turnNumber)
         .replace('[user display name]', writer.discord_display_name)
         .replace('[turnEndTime]', formattedEndTime);
@@ -550,7 +558,7 @@ async function handleQuickModeNotification(connection, interaction, writer, turn
   // Post feed announcement
   const txtQuickModeTurnStart = await getConfigValue(connection,'txtQuickModeTurnStart', guild_id);
   const feedMessage = txtQuickModeTurnStart
-    .replace('[story_id]', writer.story_id)
+    .replace('[story_id]', writer.guild_story_id)
     .replace('[story_title]', writer.title)
     .replace('[current_writer]', writer.discord_display_name)
     .replace('[turn_end_date]', discordTimestamp);
@@ -609,7 +617,7 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
     .replace('[story_title]', writer.title)
     .replace('[turn_end_full]', `<t:${unixTs}:F>`)
     .replace('[turn_end_relative]', `<t:${unixTs}:R>`)
-    .replace('[story_id]', writer.story_id);
+    .replace('[story_id]', writer.guild_story_id);
 
   const row = new ActionRowBuilder()
     .addComponents(
@@ -666,7 +674,7 @@ export async function postStoryThreadActivity(connection, guild, storyId, messag
 export async function updateStoryStatusMessage(connection, guild, storyId) {
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, title, story_status, quick_mode, turn_length_hours,
+      `SELECT story_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
               timeout_reminder_percent, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, status_message_id, guild_id,
               next_writer_id, closed_at
@@ -785,7 +793,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       : 'No entries yet';
 
     const embed = new EmbedBuilder()
-      .setTitle(`📚 ${story.title} (#${story.story_id})`)
+      .setTitle(`📚 ${story.title} (#${story.guild_story_id})`)
       .setColor(colorMap[story.story_status] ?? 0x5865f2)
       .addFields(
         ...(story.tags ? [{ name: 'Tags', value: story.tags, inline: false }] : []),
@@ -816,7 +824,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       const titleTemplate = await getConfigValue(connection, 'txtStoryThreadTitle', story.guild_id);
       const statusLabel = { 1: txtActive, 2: txtPaused, 3: txtClosed }[story.story_status] ?? txtActive;
       const expectedTitle = titleTemplate
-        .replace('[story_id]', storyId)
+        .replace('[story_id]', story.guild_story_id)
         .replace('[inputStoryTitle]', story.title)
         .replace('[story_status]', statusLabel);
       if (storyThread.name !== expectedTitle) {
