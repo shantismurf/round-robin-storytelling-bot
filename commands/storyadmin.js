@@ -219,9 +219,24 @@ async function handleSetupModalSubmit(connection, interaction) {
   if (mediaChannelId) await upsert('cfgMediaChannelId', mediaChannelId);
   if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
 
+  // Grant admin role Manage Threads on the story feed channel so they can
+  // see private turn threads without being explicitly added to each one.
+  let threadPermissionNote = '';
+  if (roleRaw) {
+    const adminRole = interaction.guild.roles.cache.find(r => r.name === roleRaw)
+      ?? await interaction.guild.roles.fetch().then(roles => roles.find(r => r.name === roleRaw)).catch(() => null);
+    if (adminRole) {
+      await feedChannel.permissionOverwrites.edit(adminRole, {
+        ViewChannel: true,
+        ManageThreads: true
+      }).catch(() => {});
+      threadPermissionNote = ` *(Manage Threads granted on feed channel)*`;
+    }
+  }
+
   const saved = [`✅ Story feed channel: <#${feedChannelId}>`];
   if (mediaChannelId) saved.push(`✅ Media channel: <#${mediaChannelId}>`);
-  if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**`);
+  if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**${threadPermissionNote}`);
   if (!mediaChannelId) saved.push(`ℹ️ No media channel set — images will not be processed.`);
   if (!roleRaw)        saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
 

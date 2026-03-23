@@ -231,6 +231,16 @@ async function execute(connection, interaction) {
   }
 }
 
+async function getPreviousAO3Name(connection, userId) {
+  try {
+    const [rows] = await connection.execute(
+      `SELECT AO3_name FROM story_writer WHERE discord_user_id = ? AND AO3_name IS NOT NULL AND AO3_name != '' ORDER BY joined_at DESC LIMIT 1`,
+      [userId]
+    );
+    return rows[0]?.AO3_name ?? null;
+  } catch { return null; }
+}
+
 async function handleAddStory(connection, interaction) {
   debugLog(`${formattedDate()}: handleAddStory() - initializing ephemeral story form`);
 
@@ -258,7 +268,7 @@ async function handleAddStory(connection, interaction) {
       hideThreads: 0,
       turnLength: 24,
       timeoutReminder: 50,
-      ao3Name: interaction.member?.displayName || interaction.user.displayName,
+      ao3Name: (await getPreviousAO3Name(connection, interaction.user.id)) || interaction.member?.displayName || interaction.user.displayName,
       keepPrivate: 0,
       delayHours: null,
       delayWriters: null,
@@ -840,15 +850,7 @@ async function handleJoin(connection, interaction, buttonStoryId = null) {
       return;
     }
 
-    let existingAO3Name = '';
-    try {
-      const [rows] = await connection.execute(
-        `SELECT AO3_name FROM story_writer WHERE discord_user_id = ? AND AO3_name IS NOT NULL AND AO3_name != '' ORDER BY joined_at DESC LIMIT 1`,
-        [interaction.user.id]
-      );
-      if (rows.length > 0) existingAO3Name = rows[0].AO3_name;
-    } catch {}
-
+    const existingAO3Name = await getPreviousAO3Name(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
     const state = { storyId, guildId, storyTitle: storyInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
     pendingJoinData.set(interaction.user.id, state);
@@ -2013,11 +2015,16 @@ async function handleFinalizeEntry(connection, interaction) {
       .setColor(0xffd700);
 
     // Split preview into fields if needed
+    // First field gets a visual divider between the label and content
+    const divider = '─────────────────────\n';
+    const firstChunkMax = maxFieldLength - divider.length;
     let remaining = previewContent;
     let fieldCount = 0;
     while (remaining.length > 0) {
-      const chunk = remaining.length > maxFieldLength ? remaining.substring(0, maxFieldLength) : remaining;
-      embed.addFields({ name: fieldCount === 0 ? lblPreviewEntry : '​', value: chunk, inline: false });
+      const limit = fieldCount === 0 ? firstChunkMax : maxFieldLength;
+      const chunk = remaining.length > limit ? remaining.substring(0, limit) : remaining;
+      const value = fieldCount === 0 ? `${divider}${chunk}` : chunk;
+      embed.addFields({ name: fieldCount === 0 ? lblPreviewEntry : '​', value, inline: false });
       remaining = remaining.substring(chunk.length);
       fieldCount++;
     }
@@ -2445,6 +2452,7 @@ function buildManageMessage(cfg, state) {
       { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : '∞', inline: true },
       { name: cfg.lblOpenToWriters, value: state.allowJoins ? 'Yes' : 'No', inline: true },
       { name: cfg.lblShowAuthors, value: state.showAuthors ? 'Yes' : 'No', inline: true },
+      { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? 'Private' : 'Public', inline: true },
       { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
       { name: cfg.lblSummary, value: state.summary || '*Not set*', inline: false },
       { name: cfg.lblTags, value: state.tags || '*Not set*', inline: false },
@@ -2479,6 +2487,10 @@ function buildManageMessage(cfg, state) {
       .setCustomId('story_manage_cycle_order')
       .setLabel(`${orderEmoji} ${orderLabel}`)
       .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_privacy')
+      .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? 'Private' : 'Public'}`)
+      .setStyle(state.turnPrivacy ? ButtonStyle.Danger : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_summary')
       .setLabel(cfg.btnSetSummary)
@@ -2518,7 +2530,7 @@ async function handleManage(connection, interaction) {
   try {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
-              max_writers, allow_joins, show_authors, story_order_type, summary, tags
+              max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
@@ -2548,7 +2560,8 @@ async function handleManage(connection, interaction) {
       'lblOpenToWriters', 'lblShowAuthors',
       'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
       'lblSummary', 'btnSetSummary',
-      'lblTags', 'btnSetTags'
+      'lblTags', 'btnSetTags',
+      'lblPrivateToggle'
     ], guildId);
 
     const state = {
@@ -2563,6 +2576,7 @@ async function handleManage(connection, interaction) {
       allowJoins: story.allow_joins,
       showAuthors: story.show_authors,
       orderType: story.story_order_type,
+      turnPrivacy: story.story_turn_privacy,
       summary: story.summary ?? '',
       tags: story.tags ?? '',
       originalStatus: story.story_status,
@@ -2599,6 +2613,11 @@ async function handleManageButton(connection, interaction) {
 
   } else if (customId === 'story_manage_toggle_authors') {
     state.showAuthors = state.showAuthors ? 0 : 1;
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+
+  } else if (customId === 'story_manage_toggle_privacy') {
+    state.turnPrivacy = state.turnPrivacy ? 0 : 1;
     await interaction.deferUpdate();
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
 
@@ -2723,11 +2742,11 @@ async function handleManageSave(connection, interaction, state) {
     await connection.execute(
       `UPDATE story SET turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,
        allow_joins = ?, show_authors = ?, story_order_type = ?,
-       summary = ?, tags = ? WHERE story_id = ?`,
+       story_turn_privacy = ?, summary = ?, tags = ? WHERE story_id = ?`,
       [
         state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
         state.allowJoins, state.showAuthors, state.orderType,
-        state.summary || null, state.tags || null,
+        state.turnPrivacy, state.summary || null, state.tags || null,
         state.storyId
       ]
     );

@@ -489,15 +489,9 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       
       // Set thread membership
       if (isPrivateThread) {
-        // Private thread — add writer and all admins individually
+        // Private thread — add writer only.
+        // Admin role members have Manage Threads on the feed channel and can see all threads.
         await thread.members.add(writer.discord_user_id);
-        const adminRoleName = await getConfigValue(connection,'cfgAdminRoleName', guild_id);
-        const adminRole = interaction.guild.roles.cache.find(r => r.name === adminRoleName);
-        if (adminRole) {
-          for (const member of adminRole.members.values()) {
-            try { await thread.members.add(member.id); } catch {}
-          }
-        }
       }
       // Public threads are visible to all — no membership changes needed
       
@@ -857,6 +851,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       await message.edit({ embeds: [embed], components });
     } else {
       const newMsg = await storyThread.send({ embeds: [embed], components });
+      await newMsg.pin().catch(() => {});
       await connection.execute(
         `UPDATE story SET status_message_id = ? WHERE story_id = ?`,
         [newMsg.id, storyId]
