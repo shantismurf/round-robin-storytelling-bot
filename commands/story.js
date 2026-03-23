@@ -1257,65 +1257,46 @@ async function validateJoinEligibility(connection, storyId, guildId, userId) {
 }
 
 /**
- * Create entry preview embed
+ * Build an entry preview embed.
+ * Content goes in the description (4096 limit), footer holds the instruction text,
+ * and any extra fields (e.g. expiry, stats) are appended after overflow chunks.
+ */
+function buildEntryPreviewEmbed(content, title, footerText, extraFields = []) {
+  const chunks = splitAtParagraphs(content, 4096);
+  const embed = new EmbedBuilder()
+    .setTitle(title)
+    .setDescription(chunks[0])
+    .setColor(0xffd700)
+    .setFooter({ text: footerText });
+
+  for (let i = 1; i < chunks.length; i++) {
+    embed.addFields({ name: '​', value: chunks[i], inline: false });
+  }
+
+  if (extraFields.length > 0) embed.addFields(...extraFields);
+
+  return embed;
+}
+
+/**
+ * Create entry preview embed for quick mode (/story write)
  */
 async function createPreviewEmbed(connection, content, guildId, discordTimestamp) {
-  const lblYourEntry = await getConfigValue(connection,'lblYourEntry', guildId);
-  const lblEntryContinued = await getConfigValue(connection,'lblEntryContinued', guildId);
-  const txtEntryStatsTemplate = await getConfigValue(connection,'txtEntryStatsTemplate', guildId);
-  
-  const embed = new EmbedBuilder()
-    .setTitle(await getConfigValue(connection,'txtPreviewTitle', guildId))
-    .setDescription(await getConfigValue(connection,'txtPreviewDescription', guildId))
-    .setColor(0xffd700)
-    .addFields({ name: await getConfigValue(connection,'txtPreviewExpires', guildId), value: discordTimestamp, inline: false });
-    
-  // Handle long content by splitting into multiple fields
-  const maxFieldLength = 1024;
-  if (content.length <= maxFieldLength) {
-    embed.addFields({
-      name: lblYourEntry,
-      value: content,
-      inline: false
-    });
-  } else {
-    let remainingContent = content;
-    let fieldCount = 1;
-    
-    while (remainingContent.length > 0) {
-      const fieldContent = remainingContent.length > maxFieldLength 
-        ? remainingContent.substring(0, maxFieldLength)
-        : remainingContent;
-        
-      const fieldName = fieldCount === 1 
-        ? lblYourEntry 
-        : replaceTemplateVariables(lblEntryContinued, { count: fieldCount });
-        
-      embed.addFields({
-        name: fieldName,
-        value: fieldContent,
-        inline: false
-      });
-      
-      remainingContent = remainingContent.substring(maxFieldLength);
-      fieldCount++;
-    }
-  }
-  
-  // Add stats
-  const wordCount = content.split(/\s+/).filter(word => word.length > 0).length;
-  const statsText = replaceTemplateVariables(txtEntryStatsTemplate, {
-    char_count: content.length,
-    word_count: wordCount
-  });
-    
-  embed.addFields({
-    name: await getConfigValue(connection,'lblEntryStats', guildId),
-    value: statsText,
-    inline: true
-  });
-  
-  return embed;
+  const [title, footer, expiresLabel, statsLabel, statsTemplate] = await Promise.all([
+    getConfigValue(connection, 'txtPreviewTitle', guildId),
+    getConfigValue(connection, 'txtPreviewDescription', guildId),
+    getConfigValue(connection, 'txtPreviewExpires', guildId),
+    getConfigValue(connection, 'lblEntryStats', guildId),
+    getConfigValue(connection, 'txtEntryStatsTemplate', guildId),
+  ]);
+
+  const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
+  const statsText = replaceTemplateVariables(statsTemplate, { char_count: content.length, word_count: wordCount });
+
+  return buildEntryPreviewEmbed(content, title, footer, [
+    { name: expiresLabel, value: discordTimestamp, inline: true },
+    { name: statsLabel, value: statsText, inline: true },
+  ]);
 }
 
 /**
@@ -1748,6 +1729,12 @@ async function confirmEntry(connection, entryId, interaction) {
 
     const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, turn_number } = entryInfo[0];
 
+    // Cancel the 5-minute reminder timeout if still pending
+    if (pendingReminderTimeouts.has(entryId)) {
+      clearTimeout(pendingReminderTimeouts.get(entryId));
+      pendingReminderTimeouts.delete(entryId);
+    }
+
     // End current turn
     await txn.execute(`
       UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?
@@ -2004,34 +1991,14 @@ async function handleFinalizeEntry(connection, interaction) {
       .replace(/^#{1,3} (.+)$/gm, '**$1**')
       .replace(/^-# (.+)$/gm, '*$1*');
 
-    const [txtFinalizeConfirm, txtFinalizeConfirmDesc, btnFinalizeConfirm, btnCancel, lblPreviewEntry] = await Promise.all([
+    const [txtFinalizeConfirm, txtFinalizeConfirmDesc, btnFinalizeConfirm, btnCancel] = await Promise.all([
       getConfigValue(connection, 'txtFinalizeConfirm', guildId),
       getConfigValue(connection, 'txtFinalizeConfirmDesc', guildId),
       getConfigValue(connection, 'btnFinalizeConfirm', guildId),
       getConfigValue(connection, 'btnCancel', guildId),
-      getConfigValue(connection, 'lblFinalizePreviewEntry', guildId),
     ]);
 
-    const maxFieldLength = 1024;
-    const embed = new EmbedBuilder()
-      .setTitle(txtFinalizeConfirm)
-      .setDescription(txtFinalizeConfirmDesc)
-      .setColor(0xffd700);
-
-    // Split preview into fields if needed
-    // First field gets a visual divider between the label and content
-    const divider = '─────────────────────\n';
-    const firstChunkMax = maxFieldLength - divider.length;
-    let remaining = previewContent;
-    let fieldCount = 0;
-    while (remaining.length > 0) {
-      const limit = fieldCount === 0 ? firstChunkMax : maxFieldLength;
-      const chunk = remaining.length > limit ? remaining.substring(0, limit) : remaining;
-      const value = fieldCount === 0 ? `${divider}${chunk}` : chunk;
-      embed.addFields({ name: fieldCount === 0 ? lblPreviewEntry : '​', value, inline: false });
-      remaining = remaining.substring(chunk.length);
-      fieldCount++;
-    }
+    const embed = buildEntryPreviewEmbed(previewContent, txtFinalizeConfirm, txtFinalizeConfirmDesc);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
