@@ -16,7 +16,7 @@ import { formattedDate } from './utilities.js';
  * Run schema migrations that need to apply to existing databases.
  * Each migration is idempotent — safe to run repeatedly.
  */
-async function runMigrations(connection) {
+export async function runMigrations(connection) {
   // Migration: add guild_story_id column and backfill per-guild sequential IDs
   const [cols] = await connection.execute(
     `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS

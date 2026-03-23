@@ -5,6 +5,7 @@
   "type": "module",
   "main": "index.js",
   "scripts": {
+    "deploy": "node deploy.js",
     "start": "node index.js",
     "sync-config": "node sync-config.js",
     "sync-config:apply": "node sync-config.js --apply",
