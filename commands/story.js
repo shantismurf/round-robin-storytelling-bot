@@ -202,6 +202,14 @@ async function execute(connection, interaction) {
   const subcommand = interaction.options.getSubcommand();
   debugLog(`${formattedDate()}: execute() called with subcommand '${subcommand}'`);
 
+  if (!await isGuildConfigured(connection, interaction.guild.id)) {
+    await interaction.reply({
+      content: await getConfigValue(connection, 'txtNotConfigured', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
   if (subcommand === 'add') {
     await handleAddStory(connection, interaction);
   } else if (subcommand === 'list') {
@@ -225,14 +233,6 @@ async function execute(connection, interaction) {
 
 async function handleAddStory(connection, interaction) {
   debugLog(`${formattedDate()}: handleAddStory() - initializing ephemeral story form`);
-
-  if (!await isGuildConfigured(connection, interaction.guild.id)) {
-    await interaction.reply({
-      content: await getConfigValue(connection, 'txtNotConfigured', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-    return;
-  }
 
   try {
     const cfg = await getConfigValue(connection, [
