@@ -142,6 +142,12 @@ export async function CreateStory(connection, interaction, storyInput) {
       updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
     }
 
+    // Post creator tip to story thread (fire-and-forget — lands after status embed and turn log)
+    getConfigValue(connection, 'txtStoryThreadCreatorTip', guild_id).then(template => {
+      const msg = template.replace('[story_id]', guildStoryId);
+      return postStoryThreadActivity(connection, interaction.guild, storyId, msg);
+    }).catch(() => {});
+
     return {
       success: true,
       message: `✅ **Story "${storyInput.storyTitle}" created successfully!**\n${writerResult.confirmationMessage}`
@@ -509,19 +515,19 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       dmMessage = 'Normal mode thread created and notification sent';
     }
     
-    // Post activity log to story thread (fire-and-forget)
+    // Update status embed first, then post activity log — order matters in the story thread
     const unixTs = Math.floor(turnEndTime.getTime() / 1000);
-    getConfigValue(connection, 'txtStoryThreadTurnStart', guild_id).then(template => {
-      const msg = template
-        .replace('[turn_number]', turnNumber)
-        .replace('[writer_name]', writer.discord_display_name)
-        .replace('[turn_end_full]', `<t:${unixTs}:F>`)
-        .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
-      return postStoryThreadActivity(connection, interaction.guild, writer.story_id, msg);
-    }).catch(() => {});
-
-    // Update story status message (fire-and-forget — never blocks the turn)
-    updateStoryStatusMessage(connection, interaction.guild, writer.story_id).catch(() => {});
+    updateStoryStatusMessage(connection, interaction.guild, writer.story_id)
+      .then(() => getConfigValue(connection, 'txtStoryThreadTurnStart', guild_id))
+      .then(template => {
+        const msg = template
+          .replace('[turn_number]', turnNumber)
+          .replace('[writer_name]', writer.discord_display_name)
+          .replace('[turn_end_full]', `<t:${unixTs}:F>`)
+          .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
+        return postStoryThreadActivity(connection, interaction.guild, writer.story_id, msg);
+      })
+      .catch(() => {});
 
     return {
       success: true,
@@ -851,7 +857,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       await message.edit({ embeds: [embed], components });
     } else {
       const newMsg = await storyThread.send({ embeds: [embed], components });
-      await newMsg.pin().catch(() => {});
+      await newMsg.pin().catch(err => console.error(`${formattedDate()}: Failed to pin status message in story thread ${storyId}:`, err.message));
       await connection.execute(
         `UPDATE story SET status_message_id = ? WHERE story_id = ?`,
         [newMsg.id, storyId]

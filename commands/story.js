@@ -117,6 +117,7 @@ async function discordMarkdownToHtml(text, guild = null) {
 
 // Tracks pending DM reminder timeouts by entryId so they can be cancelled on confirm/discard
 const pendingReminderTimeouts = new Map();
+const pendingReadData = new Map(); // userId -> { pages, currentPage, storyId, title, wordCount, showAuthors, guildId }
 
 const data = new SlashCommandBuilder()
   .setName('story')
@@ -168,10 +169,10 @@ const data = new SlashCommandBuilder()
   .addSubcommand(subcommand =>
     subcommand
       .setName('read')
-      .setDescription('Download the full story so far as a file')
+      .setDescription('Read the story in Discord, with an option to download as HTML')
       .addIntegerOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID to export')
+          .setDescription('Story ID to read')
           .setRequired(true))
   )
   .addSubcommand(subcommand =>
@@ -245,6 +246,8 @@ async function handleAddStory(connection, interaction) {
   debugLog(`${formattedDate()}: handleAddStory() - initializing ephemeral story form`);
 
   try {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
     const cfg = await getConfigValue(connection, [
       'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',
       'txtNormalModeDesc', 'txtQuickModeDesc',
@@ -282,7 +285,6 @@ async function handleAddStory(connection, interaction) {
       originalInteraction: interaction
     });
 
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await interaction.editReply(buildStoryAddMessage(cfg, state));
 
     debugLog(`${formattedDate()}: handleAddStory() - ephemeral form sent`);
@@ -1508,6 +1510,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
     await handleHelpNavigation(connection, interaction);
+  } else if (interaction.customId.startsWith('story_read_')) {
+    await handleReadNav(connection, interaction);
   }
 }
 
@@ -2397,6 +2401,88 @@ async function generateStoryExport(connection, storyId, guildId, guild = null) {
   return { hasEntries: true, title: story.title, turnCount, wordCount, writerCount, buffer, filename };
 }
 
+// Split text into chunks at paragraph breaks, staying under maxLen chars each.
+function splitAtParagraphs(text, maxLen = 4000) {
+  if (text.length <= maxLen) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let splitAt = remaining.lastIndexOf('\n\n', maxLen);
+    if (splitAt < maxLen * 0.4) splitAt = remaining.lastIndexOf('\n', maxLen);
+    if (splitAt < 50) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
+}
+
+// Build the pages array for a read session from raw story entries.
+function buildPages(entries, showAuthors) {
+  const pages = [];
+  // Group raw entry rows by turn number (multiple rows per turn in normal mode)
+  const turnMap = new Map();
+  for (const row of entries) {
+    if (!turnMap.has(row.turn_number)) {
+      turnMap.set(row.turn_number, { turnNumber: row.turn_number, writerName: row.discord_display_name, parts: [] });
+    }
+    turnMap.get(row.turn_number).parts.push(row.content.trim());
+  }
+  for (const turn of turnMap.values()) {
+    const fullContent = turn.parts.join('\n\n');
+    const chunks = splitAtParagraphs(fullContent);
+    chunks.forEach((chunk, i) => {
+      pages.push({
+        turnNumber: turn.turnNumber,
+        writerName: showAuthors ? turn.writerName : null,
+        content: chunk,
+        partIndex: chunks.length > 1 ? i + 1 : null,
+        partCount: chunks.length > 1 ? chunks.length : null
+      });
+    });
+  }
+  return pages;
+}
+
+// Build the embed + navigation buttons for a given page index.
+function buildReadEmbed(session, pageIndex) {
+  const page = session.pages[pageIndex];
+  const totalPages = session.pages.length;
+
+  let turnLabel = `Turn ${page.turnNumber}`;
+  if (page.writerName) turnLabel += ` — ${page.writerName}`;
+  if (page.partIndex) turnLabel += ` (part ${page.partIndex}/${page.partCount})`;
+
+  const embed = new EmbedBuilder()
+    .setTitle(`📖 ${session.title}`)
+    .setDescription(page.content)
+    .setColor(0x5865f2)
+    .setFooter({ text: `${turnLabel} · Page ${pageIndex + 1} of ${totalPages} · ~${session.wordCount.toLocaleString()} words total` });
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_read_prev')
+      .setLabel('← Previous')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(pageIndex === 0),
+    new ButtonBuilder()
+      .setCustomId('story_read_next')
+      .setLabel('Next →')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(pageIndex === totalPages - 1),
+    new ButtonBuilder()
+      .setCustomId('story_read_download')
+      .setLabel('⬇ Download HTML')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_read_close')
+      .setLabel('✕ Close')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
 async function handleRead(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
@@ -2406,22 +2492,83 @@ async function handleRead(connection, interaction) {
   }
 
   try {
-    const result = await generateStoryExport(connection, storyId, guildId, interaction.guild);
-    if (!result) {
+    const [storyRows] = await connection.execute(
+      `SELECT title, show_authors, guild_story_id FROM story WHERE story_id = ? AND guild_id = ?`,
+      [storyId, guildId]
+    );
+    if (storyRows.length === 0) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
     }
-    if (!result.hasEntries) {
+    const story = storyRows[0];
+
+    const [entries] = await connection.execute(
+      `SELECT se.content,
+              (SELECT COUNT(DISTINCT t2.turn_id)
+               FROM turn t2
+               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+               WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) AS turn_number,
+              sw.discord_display_name
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+       ORDER BY t.started_at, se.order_in_turn`,
+      [storyId]
+    );
+
+    if (entries.length === 0) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtNoConfirmedEntries', guildId) });
     }
-    const { buffer, filename, title, turnCount, wordCount } = result;
-    await interaction.editReply({
-      content: `📖 Here is **${title}** (#${storyId} · ${turnCount} turn(s) · ~${wordCount.toLocaleString()} words).`,
-      files: [{ attachment: buffer, name: filename }]
-    });
+
+    const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
+    const pages = buildPages(entries, story.show_authors);
+
+    const session = { pages, currentPage: 0, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId };
+    pendingReadData.set(interaction.user.id, session);
+
+    await interaction.editReply(buildReadEmbed(session, 0));
   } catch (error) {
     console.error(`${formattedDate()}: Error in handleRead:`, error);
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
+}
+
+async function handleReadNav(connection, interaction) {
+  const userId = interaction.user.id;
+  const session = pendingReadData.get(userId);
+
+  if (!session) {
+    await interaction.update({ content: 'This reading session has expired. Use `/story read` again.', embeds: [], components: [] });
+    return;
+  }
+
+  if (interaction.customId === 'story_read_close') {
+    pendingReadData.delete(userId);
+    await interaction.update({ content: '📖 Reading session closed.', embeds: [], components: [] });
+    return;
+  }
+
+  if (interaction.customId === 'story_read_download') {
+    await interaction.deferUpdate();
+    try {
+      const result = await generateStoryExport(connection, session.storyId, session.guildId, interaction.guild);
+      if (result?.hasEntries) {
+        await interaction.followUp({ files: [{ attachment: result.buffer, name: result.filename }], flags: MessageFlags.Ephemeral });
+      }
+    } catch (err) {
+      console.error(`${formattedDate()}: Error generating HTML download from read session:`, err);
+    }
+    return;
+  }
+
+  if (interaction.customId === 'story_read_prev') {
+    session.currentPage = Math.max(0, session.currentPage - 1);
+  } else if (interaction.customId === 'story_read_next') {
+    session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 1);
+  }
+
+  await interaction.update(buildReadEmbed(session, session.currentPage));
 }
 
 // ---------------------------------------------------------------------------
