@@ -459,12 +459,12 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 
     // Compute turn number and end time here — used by both modes for activity log and thread title
     const turnNumber = await getTurnNumber(connection, writer.story_id);
-    const turnEndTime = turnEndTimeFunction(turnId, writer.turn_length_hours);
+    const turnEndTime = turnEndTimeFunction(writer.turn_length_hours);
 
     // Handle quick mode vs normal mode
     if (writer.quick_mode) {
       // Quick mode - send notifications and post feed announcement
-      await handleQuickModeNotification(connection, interaction, writer, turnId, guild_id);
+      await handleQuickModeNotification(connection, interaction, writer, guild_id);
       dmMessage = 'Quick mode notification sent';
     } else {
       // Normal mode - create private thread
@@ -548,8 +548,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 /**
  * Handle quick mode notification and feed announcement
  */
-async function handleQuickModeNotification(connection, interaction, writer, turnId, guild_id) {
-  const turnEndTime = turnEndTimeFunction(turnId, writer.turn_length_hours);
+async function handleQuickModeNotification(connection, interaction, writer, guild_id) {
+  const turnEndTime = turnEndTimeFunction(writer.turn_length_hours);
   const discordTimestamp = `<t:${Math.floor(turnEndTime.getTime() / 1000)}:F>`;
   
   // Send notification to writer
@@ -761,26 +761,25 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       turnValue = story.story_status === 1 ? 'No active turn' : '—';
     }
 
-    // Next writer prediction
+    // Next writer — only deterministic for Fixed order; Random and Round Robin are selected at turn change
     let nextWriterValue = '—';
     if (story.story_status === 1) {
       if (story.next_writer_id) {
+        // Manually pinned via /storyadmin next
         const nw = writers.find(w => w.story_writer_id === story.next_writer_id);
         nextWriterValue = nw ? `📌 **${nw.discord_display_name}** *(manually set)*` : '📌 *(manually set)*';
-      } else if (story.story_order_type === 1) {
-        nextWriterValue = '*Random pick*';
-      } else if (activeTurn) {
-        // Round-robin (2): order by joined_at (already sorted). Fixed (3): order by writer_order.
-        const sorted = story.story_order_type === 3
-          ? [...activeWriters].sort((a, b) => (a.writer_order ?? 999) - (b.writer_order ?? 999))
-          : activeWriters; // already joined_at ASC
+      } else if (story.story_order_type === 3 && activeTurn) {
+        // Fixed order — deterministic, safe to predict
+        const sorted = [...activeWriters].sort((a, b) => (a.writer_order ?? 999) - (b.writer_order ?? 999));
         const currentIdx = sorted.findIndex(w => w.story_writer_id === activeTurn.story_writer_id);
         if (currentIdx >= 0) {
           const nextWriter = sorted[(currentIdx + 1) % sorted.length];
           nextWriterValue = `**${nextWriter.discord_display_name}** *(next in order)*`;
         }
+      } else if (story.story_order_type === 2) {
+        nextWriterValue = '*Round Robin selection*';
       } else {
-        nextWriterValue = story.story_order_type === 1 ? '*Random pick*' : '*Next in order*';
+        nextWriterValue = '*Random selection*';
       }
     }
 
@@ -862,6 +861,12 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         `UPDATE story SET status_message_id = ? WHERE story_id = ?`,
         [newMsg.id, storyId]
       );
+      // Post creator tip immediately after the first status embed so it's always message #2
+      const creatorTip = await getConfigValue(connection, 'txtStoryThreadCreatorTip', story.guild_id).catch(() => null);
+      if (creatorTip) {
+        const tipMsg = creatorTip.replace('[story_id]', story.guild_story_id);
+        await storyThread.send(tipMsg).catch(() => {});
+      }
     }
   } catch (err) {
     console.error(`${formattedDate()}: Failed to update story status message for story ${storyId}:`, err);
@@ -891,8 +896,6 @@ export async function deleteThreadAndAnnouncement(thread) {
 /**
  * turnEndTime function - calculates when a turn ends
  */
-export function turnEndTimeFunction(turnId, turnLengthHours) {
-  // For now, calculate from current time + turn length
-  // In a real implementation, you'd get the turn's started_at from database
+export function turnEndTimeFunction(turnLengthHours) {
   return new Date(Date.now() + (turnLengthHours * 60 * 60 * 1000));
 }

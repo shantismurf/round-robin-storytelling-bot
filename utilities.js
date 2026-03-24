@@ -92,13 +92,21 @@ export function sanitize(input, maxLength = 1021) {
     }
     return input;
 }
-export function sanitizeModalInput(input, maxLength = 1024) {
+export function sanitizeModalInput(input, maxLength = 1024, multiline = false) {
     if (!input) return '';
-    return input
-        .trim()                                    // Remove leading/trailing whitespace
-        .replace(/[\u200B-\u200D\uFEFF]/g, '')    // Remove zero-width chars
-        .replace(/\s+/g, ' ')                     // Normalize whitespace
-        .substring(0, maxLength);                 // Flexible length limit
+    let out = input
+        .replace(/[\u200B-\u200D\uFEFF]/g, '');   // Remove zero-width chars
+    if (multiline) {
+        out = out
+            .replace(/\r\n/g, '\n')               // Normalize line endings
+            .replace(/[ \t]+/g, ' ')              // Collapse spaces/tabs but keep newlines
+            .trim();
+    } else {
+        out = out
+            .replace(/\s+/g, ' ')                 // Collapse all whitespace including newlines
+            .trim();
+    }
+    return out.substring(0, maxLength);
 }
 
 let _testMode = false;

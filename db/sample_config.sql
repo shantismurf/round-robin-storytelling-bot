@@ -347,7 +347,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtStoryThreadTurnTimeout', '⏰ **[writer_name]**''s turn timed out and was automatically skipped.', 'en', 1),
 ('txtStoryThreadWriterJoin', '👋 **[writer_name]** joined the story.', 'en', 1),
 ('txtStoryThreadWriterRemove', '🚫 **[writer_name]** was removed from the story by an admin.', 'en', 1),
-('txtStoryThreadCreatorTip', '-# 📝 **Story creator:** Use `/story manage [story_id]` to add a summary, tags, and adjust settings at any time.', 'en', 1),
+('txtStoryThreadCreatorTip', '-# ⭐ **Story creator:** Use `/story manage [story_id]` to add a summary, tags, and adjust settings at any time.', 'en', 1),
 
 -- Finalize entry confirmation
 ('txtFinalizeConfirm', 'Finalize your entry?', 'en', 1),

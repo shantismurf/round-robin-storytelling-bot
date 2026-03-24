@@ -219,6 +219,19 @@ async function handleSetupModalSubmit(connection, interaction) {
   if (mediaChannelId) await upsert('cfgMediaChannelId', mediaChannelId);
   if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
 
+  // Grant the bot ManageMessages on the feed channel so it can pin the status embed.
+  const botMember = interaction.guild.members.me;
+  if (botMember) {
+    await feedChannel.permissionOverwrites.edit(botMember, {
+      ViewChannel: true,
+      SendMessages: true,
+      ManageMessages: true,
+      CreatePublicThreads: true,
+      CreatePrivateThreads: true,
+      ManageThreads: true,
+    }).catch(() => {});
+  }
+
   // Grant admin role Manage Threads on the story feed channel so they can
   // see private turn threads without being explicitly added to each one.
   let threadPermissionNote = '';

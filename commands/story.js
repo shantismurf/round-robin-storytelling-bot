@@ -2812,6 +2812,7 @@ async function handleManageButton(connection, interaction) {
               .setStyle(TextInputStyle.Paragraph)
               .setRequired(false)
               .setValue(state.summary)
+              .setMaxLength(4000)
               .setPlaceholder('Enter a summary for this story (used in exports)')
           )
         )
@@ -3116,7 +3117,7 @@ async function handleManageModalSubmit(connection, interaction) {
       }
 
     } else if (interaction.customId === 'story_manage_summary_modal') {
-      state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 2000) ?? '';
+      state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 4000, true) ?? '';
 
     } else if (interaction.customId === 'story_manage_tags_modal') {
       state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 500) ?? '';
