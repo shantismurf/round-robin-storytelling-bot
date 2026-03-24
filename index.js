@@ -105,13 +105,18 @@ async function main() {
   client.on(Events.InteractionCreate, async interaction => {
     try {
       if (interaction.isChatInputCommand()) {
-        debugLog(`${formattedDate()}: ${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`);
+        console.log(`${formattedDate()}: ${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`);
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
           await command.execute(connection, interaction);
         }
       } else if (interaction.isModalSubmit()) {
-        debugLog(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
+        const significantModal = interaction.customId === 'storyadmin_setup_modal' || interaction.customId === 'story_add_title_modal';
+        if (significantModal) {
+          console.log(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
+        } else {
+          debugLog(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
+        }
 
         // Handle story modal submissions
         if (interaction.customId.startsWith('story_')) {
