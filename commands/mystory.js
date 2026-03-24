@@ -44,6 +44,10 @@ const data = new SlashCommandBuilder()
         o.setName('story_id')
           .setDescription('Story ID where you want to pass your turn')
           .setRequired(true))
+  )
+  .addSubcommand(s =>
+    s.setName('help')
+      .setDescription('Quick reference for all writer commands')
   );
 
 async function execute(connection, interaction) {
@@ -53,6 +57,7 @@ async function execute(connection, interaction) {
   else if (subcommand === 'catchup') await handleCatchUp(connection, interaction);
   else if (subcommand === 'leave') await handleLeave(connection, interaction);
   else if (subcommand === 'pass') await handlePass(connection, interaction);
+  else if (subcommand === 'help') await handleHelp(connection, interaction);
 }
 
 async function handleButtonInteraction(connection, interaction) {
@@ -65,6 +70,31 @@ async function handleButtonInteraction(connection, interaction) {
   } else if (interaction.customId.startsWith('mystory_leave_cancel_')) {
     await handleLeaveCancel(connection, interaction);
   }
+}
+
+/**
+ * /mystory help — quick reference for all writer-facing commands
+ */
+async function handleHelp(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+
+  const cfg = await getConfigValue(connection, [
+    'txtMyHelpTitle', 'txtMyHelpFooter',
+    'lblMyHelpDashboard', 'txtMyHelpDashboard',
+    'lblMyHelpTurn', 'txtMyHelpTurn',
+  ], guildId);
+
+  const embed = new EmbedBuilder()
+    .setTitle(cfg.txtMyHelpTitle)
+    .setColor(0x5865f2)
+    .addFields(
+      { name: cfg.lblMyHelpDashboard, value: cfg.txtMyHelpDashboard, inline: false },
+      { name: cfg.lblMyHelpTurn,      value: cfg.txtMyHelpTurn,      inline: false },
+    )
+    .setFooter({ text: cfg.txtMyHelpFooter });
+
+  await interaction.editReply({ embeds: [embed] });
 }
 
 /**

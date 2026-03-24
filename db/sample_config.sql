@@ -23,8 +23,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtMustBeNo', '[Field label text] must be a number.', 'en', 1),
 ('txtStoryThreadTitle', 'Story ID: [story_id] - [inputStoryTitle] - [story_status]', 'en', 1),
 ('txtTurnThreadTitle', 'Story ID: [story_id] - Turn [storyTurnNumber] - [user display name] - Ends [turnEndTime]', 'en', 1),
-('txtDMTurnStart', '🎭 **Your turn has started!** You can now write your part of the story.', 'en', 1),
-('txtMentionTurnStart', '🎭 **Your turn has started!** You can now write your part of the story.', 'en', 1),
+('txtDMTurnStart', '🎭 **Your turn has started!** You can now write your part of the story.\n-# Use `/mystory help` to see your writer commands.', 'en', 1),
+('txtMentionTurnStart', '🎭 **Your turn has started!** You can now write your part of the story.\n-# Use `/mystory help` to see your writer commands.', 'en', 1),
 ('txtDMTurnReminder', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Your deadline is [turn_end_full] ([turn_end_relative]). Don''t forget to write your entry.', 'en', 1),
 ('txtMentionTurnReminder', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Your deadline is [turn_end_full] ([turn_end_relative]). Don''t forget to write your entry.', 'en', 1),
 ('txtNormalModeWelcome', '## Welcome to your turn thread for *[story_title]*\nWrite your story entry here in as many posts as you''d like. Edit as needed, use Discord markdown for formatting, and upload images as separate posts in between your text so they''ll appear in that order in the story. Use the buttons below to Finalize your turn, or Skip to pass to the next writer without submitting.\n\nYour turn ends on [turn_end_full], in [turn_end_relative].\n-# If you need to catch up with the story since your last turn, use the command `/mystory catchup story_id:[story_id]`.', 'en', 1),
@@ -279,6 +279,14 @@ Words: ~[word_count]', 'en', 1),
 ('txtHelp3Closing', '- Use `/story close <id>` to permanently close a story. This posts a completion message with the full story export and ends the current turn, but leaves the story thread open for discussion. This cannot be undone.', 'en', 1),
 ('lblHelp3AdminControls', 'Admin Controls', 'en', 1),
 ('txtHelp3AdminControls', '- Skip the current turn\n- Extend the current turn\n- Set the writer who will be selected when the next turn starts\n- Remove a writer from a story\n- Delete a story', 'en', 1),
+
+-- /mystory help
+('txtMyHelpTitle', '📋 Writer Command Reference', 'en', 1),
+('txtMyHelpFooter', 'For story creation, modes, and settings — use /story help', 'en', 1),
+('lblMyHelpDashboard', '📊 Your Dashboard', 'en', 1),
+('txtMyHelpDashboard', '- `/mystory active` — Your active stories and whose turn it is\n- `/mystory history` — All stories you''ve ever been in\n- `/mystory catchup <id>` — Read entries written since your last turn', 'en', 1),
+('lblMyHelpTurn', '✍️ Your Turn', 'en', 1),
+('txtMyHelpTurn', '- `/story write <id>` — Submit your entry *(quick mode)*\n- `/story read <id>` — Read the story in Discord\n- `/mystory pass <id>` — Skip your current turn\n- `/mystory leave <id>` — Leave a story', 'en', 1),
 
 -- Storyadmin Help
 ('txtAdminHelpTitle', '⚙️ StoryAdmin Commands', 'en', 1),

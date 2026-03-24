@@ -108,7 +108,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
       ...delayParts
     ];
 
-    const message = `# 📚 New Story Created: "${story.title}" by ${creatorName}\n-# ${metaParts.join(' · ')}`;
+    const message = `# 📚 New Story Created by ${creatorName}: "${story.title}"\n-# ${metaParts.join(' · ')}`;
 
     const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
     if (feedChannel) await feedChannel.send(message);
