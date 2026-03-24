@@ -219,17 +219,22 @@ async function handleSetupModalSubmit(connection, interaction) {
   if (mediaChannelId) await upsert('cfgMediaChannelId', mediaChannelId);
   if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
 
-  // Grant the bot ManageMessages on the feed channel so it can pin the status embed.
+  // Grant the bot PinMessages on the feed channel so it can pin the status embed.
+  // Note: As of January 12, 2026, PinMessages is a separate permission from ManageMessages.
   const botMember = interaction.guild.members.me;
+  let botPermNote = '';
   if (botMember) {
-    await feedChannel.permissionOverwrites.edit(botMember, {
+    const ok = await feedChannel.permissionOverwrites.edit(botMember, {
       ViewChannel: true,
       SendMessages: true,
-      ManageMessages: true,
+      PinMessages: true,
       CreatePublicThreads: true,
       CreatePrivateThreads: true,
       ManageThreads: true,
-    }).catch(() => {});
+    }).then(() => true).catch(() => false);
+    botPermNote = ok
+      ? ' *(bot permissions set — pinning enabled)*'
+      : ' *(⚠️ could not set bot permissions — check bot role)*';
   }
 
   // Grant admin role Manage Threads on the story feed channel so they can
@@ -247,7 +252,7 @@ async function handleSetupModalSubmit(connection, interaction) {
     }
   }
 
-  const saved = [`✅ Story feed channel: <#${feedChannelId}>`];
+  const saved = [`✅ Story feed channel: <#${feedChannelId}>${botPermNote}`];
   if (mediaChannelId) saved.push(`✅ Media channel: <#${mediaChannelId}>`);
   if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**${threadPermissionNote}`);
   if (!mediaChannelId) saved.push(`ℹ️ No media channel set — images will not be processed.`);

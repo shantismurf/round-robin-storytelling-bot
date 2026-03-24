@@ -1671,7 +1671,8 @@ async function renderStoryListReply(connection, interaction, filter, page) {
  * Handle entry confirmation/discard
  */
 async function handleEntryConfirmation(connection, interaction) {
-  const [action, , entryId] = interaction.customId.split('_');
+  const [action, , entryIdStr] = interaction.customId.split('_');
+  const entryId = parseInt(entryIdStr);
   
   try {
     await interaction.deferUpdate();
@@ -1728,12 +1729,6 @@ async function confirmEntry(connection, entryId, interaction) {
     }
 
     const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, turn_number } = entryInfo[0];
-
-    // Cancel the 5-minute reminder timeout if still pending
-    if (pendingReminderTimeouts.has(entryId)) {
-      clearTimeout(pendingReminderTimeouts.get(entryId));
-      pendingReminderTimeouts.delete(entryId);
-    }
 
     // End current turn
     await txn.execute(`
@@ -2512,7 +2507,7 @@ async function handleReadNav(connection, interaction) {
 
   if (interaction.customId === 'story_read_close') {
     pendingReadData.delete(userId);
-    await interaction.update({ content: '📖 Reading session closed.', embeds: [], components: [] });
+    await interaction.deleteReply();
     return;
   }
 
