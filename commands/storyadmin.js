@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 
 async function checkIsAdmin(connection, interaction, guildId) {
@@ -16,7 +16,7 @@ async function logAdminAction(connection, adminUserId, actionType, storyId, targ
       [adminUserId, actionType, storyId ?? null, targetUserId ?? null, reason ?? null]
     );
   } catch (err) {
-    console.error(`${formattedDate()}: Failed to log admin action:`, err);
+    log(`Failed to log admin action: ${err}`, { show: true });
   }
 }
 
@@ -302,7 +302,7 @@ async function handleSkip(connection, interaction) {
         const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
         if (thread) await deleteThreadAndAnnouncement(thread);
       } catch (err) {
-        console.error(`${formattedDate()}: Could not delete turn thread on admin skip:`, err);
+        log(`Could not delete turn thread on admin skip: ${err}`, { show: true, guildName: interaction?.guild?.name });
       }
     }
 
@@ -313,7 +313,7 @@ async function handleSkip(connection, interaction) {
     await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminSkipSuccess', guildId) });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleSkip:`, error);
+    log(`Error in handleSkip: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -380,7 +380,7 @@ async function handleExtend(connection, interaction) {
     await interaction.editReply({ content: msg });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleExtend:`, error);
+    log(`Error in handleExtend: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -443,7 +443,7 @@ async function handleKick(connection, interaction) {
           const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
           if (thread) await deleteThreadAndAnnouncement(thread);
         } catch (err) {
-          console.error(`${formattedDate()}: Could not delete thread on kick:`, err);
+          log(`Could not delete thread on kick: ${err}`, { show: true, guildName: interaction?.guild?.name });
         }
       }
     }
@@ -455,7 +455,7 @@ async function handleKick(connection, interaction) {
 
     if (isLastWriter) {
       await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
-      console.log(`${formattedDate()}: Story ${storyId} auto-closed after admin kick of last writer`);
+      log(`Story ${storyId} auto-closed after admin kick of last writer`, { show: true, guildName: interaction?.guild?.name });
     } else if (activeTurnRows.length > 0) {
       const nextWriterId = await PickNextWriter(connection, storyId);
       if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
@@ -476,7 +476,7 @@ async function handleKick(connection, interaction) {
     ).catch(() => {});
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleKick:`, error);
+    log(`Error in handleKick: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -563,7 +563,7 @@ async function handleNext(connection, interaction) {
     });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleNext:`, error);
+    log(`Error in handleNext: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -612,7 +612,7 @@ async function handleDelete(connection, interaction) {
     });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleDelete:`, error);
+    log(`Error in handleDelete: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -641,7 +641,7 @@ async function handleDeleteConfirm(connection, interaction) {
         const thread = await interaction.guild.channels.fetch(story.story_thread_id);
         if (thread) await deleteThreadAndAnnouncement(thread);
       } catch (err) {
-        console.log(`${formattedDate()}: Story thread already gone for story ${storyId}`);
+        log(`Story thread already gone for story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
       }
     }
 
@@ -657,7 +657,7 @@ async function handleDeleteConfirm(connection, interaction) {
     });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleDeleteConfirm:`, error);
+    log(`Error in handleDeleteConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
   }
 }

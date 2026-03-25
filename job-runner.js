@@ -1,4 +1,4 @@
-import { getConfigValue, formattedDate, debugLog } from './utilities.js';
+import { getConfigValue, log } from './utilities.js';
 import { checkStoryDelay, PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from './storybot.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 
@@ -7,7 +7,7 @@ const JOB_MAX_ATTEMPTS = 3;
 const JOB_RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 
 export function startJobRunner(connection, client) {
-  console.log(`${formattedDate()}: Job runner started, polling every 60s`);
+  log('Job runner started, polling every 60s', { show: true });
   setInterval(() => runDueJobs(connection, client), JOB_POLL_INTERVAL_MS);
 }
 
@@ -20,7 +20,7 @@ async function runDueJobs(connection, client) {
       await processJob(connection, client, job);
     }
   } catch (err) {
-    console.error(`${formattedDate()}: Job runner poll error:`, err);
+    log(`Job runner poll error: ${err}`, { show: true });
   }
 }
 
@@ -47,20 +47,20 @@ async function processJob(connection, client, job) {
         await handleTurnReminder(connection, client, payload);
         break;
       default:
-        console.warn(`${formattedDate()}: Unknown job type: ${job.job_type} (job_id=${job.job_id})`);
+        log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
     }
   } catch (err) {
-    console.error(`${formattedDate()}: Job ${job.job_id} (${job.job_type}) failed on attempt ${attemptNumber}:`, err);
+    log(`Job ${job.job_id} (${job.job_type}) failed on attempt ${attemptNumber}: ${err}`, { show: true });
     if (attemptNumber < JOB_MAX_ATTEMPTS) {
       const retryAt = new Date(Date.now() + JOB_RETRY_DELAY_MS);
       await connection.execute(
         `UPDATE job SET job_status = 0, run_at = ? WHERE job_id = ?`,
         [retryAt, job.job_id]
       );
-      console.log(`${formattedDate()}: Job ${job.job_id} scheduled for retry at ${retryAt.toISOString()} (attempt ${attemptNumber}/${JOB_MAX_ATTEMPTS})`);
+      log(`Job ${job.job_id} scheduled for retry at ${retryAt.toISOString()} (attempt ${attemptNumber}/${JOB_MAX_ATTEMPTS})`, { show: true });
     } else {
       await connection.execute(`UPDATE job SET job_status = 2 WHERE job_id = ?`, [job.job_id]);
-      console.error(`${formattedDate()}: Job ${job.job_id} permanently failed after ${attemptNumber} attempts`);
+      log(`Job ${job.job_id} permanently failed after ${attemptNumber} attempts`, { show: true });
     }
   }
 }
@@ -97,10 +97,10 @@ async function handleCheckStoryDelay(connection, client, payload) {
     await postStoryFeedActivationAnnouncement(connection, storyId, ctx, title);
     const nextWriterId = await PickNextWriter(connection, storyId);
     if (nextWriterId) await NextTurn(connection, ctx, nextWriterId);
-    console.log(`${formattedDate()}: checkStoryDelay job activated story ${storyId}`);
+    log(`checkStoryDelay job activated story ${storyId}`, { show: true, guildName: ctx.guild?.name });
   } else {
     // Writer count condition not yet met — story stays paused until enough writers join
-    debugLog(`${formattedDate()}: checkStoryDelay job fired for story ${storyId} but writer count condition not met`);
+    log(`checkStoryDelay job fired for story ${storyId} but writer count condition not met`, { show: false });
   }
 }
 
@@ -126,7 +126,7 @@ async function handleTurnTimeout(connection, client, payload) {
     [storyId]
   );
   if (storyRows.length === 0 || storyRows[0].story_status !== 1) {
-    debugLog(`${formattedDate()}: turnTimeout no-op for turn ${turnId} — story ${storyId} is not active`);
+    log(`turnTimeout no-op for turn ${turnId} — story ${storyId} is not active`, { show: false });
     return;
   }
 
@@ -137,9 +137,9 @@ async function handleTurnTimeout(connection, client, payload) {
     `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
     [turnId]
   );
-  console.log(`${formattedDate()}: Turn ${turnId} timed out for story ${storyId}`);
 
   const ctx = await buildSyntheticContext(client, guildId);
+  log(`Turn ${turnId} timed out for story ${storyId}`, { show: true, guildName: ctx.guild?.name });
 
   // Delete turn thread if one exists
   if (activeTurn.thread_id) {
@@ -147,7 +147,7 @@ async function handleTurnTimeout(connection, client, payload) {
       const thread = await ctx.guild.channels.fetch(activeTurn.thread_id);
       if (thread) await deleteThreadAndAnnouncement(thread);
     } catch (err) {
-      console.error(`${formattedDate()}: Could not delete thread on timeout for turn ${turnId}:`, err);
+      log(`Could not delete thread on timeout for turn ${turnId}: ${err}`, { show: true, guildName: ctx.guild?.name });
     }
   }
 
@@ -210,7 +210,7 @@ async function handleTurnReminder(connection, client, payload) {
     }
   }
 
-  console.log(`${formattedDate()}: Turn reminder sent for turn ${turnId} (story ${storyId})`);
+  log(`Turn reminder sent for turn ${turnId} (story ${storyId})`, { show: true, guildName: ctx.guild?.name });
 }
 
 async function sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs) {

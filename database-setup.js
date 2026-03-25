@@ -4,8 +4,7 @@
  */
 
 import fs from 'fs';
-import { DB } from './utilities.js';
-import { formattedDate } from './utilities.js';
+import { DB, log } from './utilities.js';
 
 /**
  * Setup database schema and configuration
@@ -23,7 +22,7 @@ export async function runMigrations(connection) {
      WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'story' AND COLUMN_NAME = 'guild_story_id'`
   );
   if (cols.length === 0) {
-    console.log(`${formattedDate()}: Migration: adding guild_story_id column...`);
+    log('Migration: adding guild_story_id column...', { show: true });
     await connection.execute(
       `ALTER TABLE story ADD COLUMN guild_story_id INT UNSIGNED NOT NULL DEFAULT 0 AFTER story_id`
     );
@@ -40,24 +39,24 @@ export async function runMigrations(connection) {
     await connection.execute(
       `ALTER TABLE story ADD UNIQUE KEY uq_guild_story (guild_id, guild_story_id)`
     );
-    console.log(`${formattedDate()}: Migration: guild_story_id column added and backfilled.`);
+    log('Migration: guild_story_id column added and backfilled.', { show: true });
   }
 }
 
 export async function setupDatabase(config) {
-  console.log(`${formattedDate()}: Starting database setup...`);
+  log('Starting database setup...', { show: true });
   
   try {
     // Initialize database connection
     const db = new DB(config.db);
     await db.connect();
-    console.log(`${formattedDate()}: Database connection successful`);
+    log('Database connection successful', { show: true });
 
     // Check if tables exist
     const [tables] = await db.connection.execute("SHOW TABLES LIKE 'story'");
     
     if (tables.length === 0) {
-      console.log(`${formattedDate()}: Creating database schema...`);
+      log('Creating database schema...', { show: true });
       
       // Read and execute schema file
       const schemaSQL = fs.readFileSync('db/init.sql', 'utf8');
@@ -71,9 +70,9 @@ export async function setupDatabase(config) {
         }
       }
       
-      console.log(`${formattedDate()}: Database schema created successfully`);
+      log('Database schema created successfully', { show: true });
     } else {
-      console.log(`${formattedDate()}: Database schema already exists`);
+      log('Database schema already exists', { show: true });
     }
 
     // Run schema migrations for existing databases
@@ -84,7 +83,7 @@ export async function setupDatabase(config) {
     const configCount = configRows[0].count;
 
     if (configCount === 0) {
-      console.log(`${formattedDate()}: Loading configuration data...`);
+      log('Loading configuration data...', { show: true });
       
       // Read and execute config file
       const configSQL = fs.readFileSync('db/sample_config.sql', 'utf8');
@@ -98,19 +97,19 @@ export async function setupDatabase(config) {
         }
       }
       
-      console.log(`${formattedDate()}: Configuration data loaded successfully`);
+      log('Configuration data loaded successfully', { show: true });
     } else {
-      console.log(`${formattedDate()}: Configuration data already exists (${configCount} entries)`);
+      log(`Configuration data already exists (${configCount} entries)`, { show: true });
     }
 
     // Close connection
     await db.disconnect();
     
-    console.log(`${formattedDate()}: Database setup completed successfully`);
+    log('Database setup completed successfully', { show: true });
     return true;
     
   } catch (error) {
-    console.error(`${formattedDate()}: Database setup failed:`, error);
+    log(`Database setup failed: ${error}`, { show: true });
     return false;
   }
 }

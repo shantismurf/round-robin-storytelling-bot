@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { getConfigValue, formattedDate } from './utilities.js';
+import { getConfigValue, log } from './utilities.js';
 import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
 
@@ -17,7 +17,7 @@ export class StoryBot extends EventEmitter {
 
   async start() {
     // initialize schedulers, etc. (no Discord login here)
-    console.log('Round Robin StoryBot engine initialized');
+    log('Round Robin StoryBot engine initialized', { show: true });
   }
 
   async stop() {
@@ -155,7 +155,7 @@ export async function CreateStory(connection, interaction, storyInput) {
 
   } catch (error) {
     await txn.rollback();
-    console.error(`${formattedDate()}:  CreateStory failed:`, error);
+    log(`CreateStory failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
 
     const txtThreadCreationFailed = await getConfigValue(connection,'txtThreadCreationFailed', interaction.guild.id);
     return {
@@ -247,7 +247,7 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
     };
     
   } catch (error) {
-    console.error(`${formattedDate()}:  StoryJoin failed:`, error);
+    log(`StoryJoin failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     const txtStoryJoinFail = await getConfigValue(connection,'txtStoryJoinFail', interaction.guild.id);
     return {
       success: false,
@@ -331,7 +331,7 @@ export async function checkStoryDelay(connection, storyId) {
     };
     
   } catch (error) {
-    console.error(`${formattedDate()}: checkStoryDelay failed for story ${storyId}:`, error);
+    log(`checkStoryDelay failed for story ${storyId}: ${error}`, { show: true });
     return { madeActive: false };
   }
 }
@@ -537,7 +537,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     };
 
   } catch (error) {
-    console.error(`${formattedDate()}:  NextTurn failed:`, error);
+    log(`NextTurn failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     return {
       success: false,
       error: 'Failed to create turn'
@@ -662,7 +662,7 @@ export async function postStoryThreadActivity(connection, guild, storyId, messag
     const thread = await guild.channels.fetch(rows[0].story_thread_id).catch(() => null);
     if (thread) await thread.send(message);
   } catch (err) {
-    console.error(`${formattedDate()}: Could not post activity to story thread ${storyId}:`, err);
+    log(`Could not post activity to story thread ${storyId}: ${err}`, { show: true, guildName: guild?.name });
   }
 }
 
@@ -856,7 +856,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       await message.edit({ embeds: [embed], components });
     } else {
       const newMsg = await storyThread.send({ embeds: [embed], components });
-      await newMsg.pin().catch(err => console.error(`${formattedDate()}: Failed to pin status message in story thread ${storyId}:`, err.message));
+      await newMsg.pin().catch(err => log(`Failed to pin status message in story thread ${storyId}: ${err.message}`, { show: true, guildName: guild?.name }));
       await connection.execute(
         `UPDATE story SET status_message_id = ? WHERE story_id = ?`,
         [newMsg.id, storyId]
@@ -869,7 +869,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       }
     }
   } catch (err) {
-    console.error(`${formattedDate()}: Failed to update story status message for story ${storyId}:`, err);
+    log(`Failed to update story status message for story ${storyId}: ${err}`, { show: true, guildName: guild?.name });
   }
 }
 

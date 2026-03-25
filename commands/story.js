@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, formattedDate, replaceTemplateVariables, debugLog, isGuildConfigured, resolveStoryId } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, isGuildConfigured, resolveStoryId } from '../utilities.js';
 import { marked } from 'marked';
 import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
@@ -201,7 +201,7 @@ const data = new SlashCommandBuilder()
 
 async function execute(connection, interaction) {
   const subcommand = interaction.options.getSubcommand();
-  debugLog(`${formattedDate()}: execute() called with subcommand '${subcommand}'`);
+  log(`execute() called with subcommand '${subcommand}'`, { show: false, guildName: interaction?.guild?.name });
 
   if (!await isGuildConfigured(connection, interaction.guild.id)) {
     await interaction.reply({
@@ -228,7 +228,7 @@ async function execute(connection, interaction) {
   } else if (subcommand === 'help') {
     await handleHelp(connection, interaction);
   } else {
-    console.log(`${formattedDate()}: execute() - unrecognized subcommand '${subcommand}', no handler matched`);
+    log(`execute() - unrecognized subcommand '${subcommand}', no handler matched`, { show: false, guildName: interaction?.guild?.name });
   }
 }
 
@@ -243,7 +243,7 @@ async function getPreviousAO3Name(connection, userId) {
 }
 
 async function handleAddStory(connection, interaction) {
-  debugLog(`${formattedDate()}: handleAddStory() - initializing ephemeral story form`);
+  log('handleAddStory() - initializing ephemeral story form', { show: false, guildName: interaction?.guild?.name });
 
   try {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -287,9 +287,9 @@ async function handleAddStory(connection, interaction) {
 
     await interaction.editReply(buildStoryAddMessage(cfg, state));
 
-    debugLog(`${formattedDate()}: handleAddStory() - ephemeral form sent`);
+    log('handleAddStory() - ephemeral form sent', { show: false, guildName: interaction?.guild?.name });
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleAddStory:`, error);
+    log(`Error in handleAddStory: ${error}`, { show: true, guildName: interaction?.guild?.name });
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({
         content: await getConfigValue(connection, 'txtFormOpenError', interaction.guild.id),
@@ -539,7 +539,7 @@ async function handleAddStoryModalSubmit(connection, interaction) {
     await interaction.deleteReply();
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleAddStoryModalSubmit:`, error);
+    log(`Error in handleAddStoryModalSubmit: ${error}`, { show: true, guildName: interaction?.guild?.name });
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: 'Failed to update. Please try again.', flags: MessageFlags.Ephemeral });
     }
@@ -762,7 +762,7 @@ async function handleCreateStorySubmit(connection, interaction, state) {
       });
     }
   } catch (error) {
-    console.error(`${formattedDate()}: Error creating story:`, error);
+    log(`Error creating story: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await state.originalInteraction.editReply({
       content: await getConfigValue(connection, 'txtStoryCreationError', interaction.guild.id),
       embeds: [],
@@ -861,7 +861,7 @@ async function handleJoin(connection, interaction, buttonStoryId = null) {
     await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleJoin:`, error);
+    log(`Error in handleJoin: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
 }
@@ -969,7 +969,7 @@ async function handleJoinConfirm(connection, interaction) {
     }
   } catch (error) {
     await txn.rollback();
-    console.error(`${formattedDate()}: Error in handleJoinConfirm:`, error);
+    log(`Error in handleJoinConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'txtJoinProcessFailed', guildId), embeds: [], components: [] });
   } finally {
     txn.release();
@@ -1041,7 +1041,7 @@ async function handleWrite(connection, interaction) {
     await interaction.showModal(modal);
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleWrite:`, error);
+    log(`Error in handleWrite: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({
       content: await getConfigValue(connection,'txtWriteFormFailed', interaction.guild.id),
       flags: MessageFlags.Ephemeral
@@ -1131,13 +1131,13 @@ async function handleWriteModalSubmit(connection, interaction) {
         const user = await interaction.client.users.fetch(interaction.user.id);
         await user.send(`${await getConfigValue(connection,'txtDMReminder', guildId)}\n\n${await getConfigValue(connection,'txtRecoveryInstructions', guildId)}\n\n⏰ Expires: ${discordTimestamp}`);
       } catch (error) {
-        console.log(`${formattedDate()}: Could not send DM reminder to user ${interaction.user.id}`);
+        log(`Could not send DM reminder to user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
       }
     }, 5 * 60 * 1000);
     pendingReminderTimeouts.set(entryId, reminderTimeout);
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleWriteModalSubmit:`, error);
+    log(`Error in handleWriteModalSubmit: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({
       content: await getConfigValue(connection,'txtEntryProcessFailed', interaction.guild.id)
     });
@@ -1169,7 +1169,7 @@ async function validateStoryAccess(connection, storyId, guildId) {
     
     return { success: true, story };
   } catch (error) {
-    console.error(`${formattedDate()}: Error in validateStoryAccess:`, error);
+    log(`Error in validateStoryAccess: ${error}`, { show: true });
   }
 }
 
@@ -1197,7 +1197,7 @@ async function validateActiveWriter(connection, userId, storyId) {
     
     return { success: true };
   } catch (error) {
-    console.error(`${formattedDate()}: Error in validateActiveWriter:`, error);
+    log(`Error in validateActiveWriter: ${error}`, { show: true });
   }
 }
 
@@ -1442,7 +1442,7 @@ async function handleListStories(connection, interaction) {
   try {
     await renderStoryListReply(connection, interaction, filter, page);
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleListStories:`, error);
+    log(`Error in handleListStories: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryListFailed', guildId) });
   }
 }
@@ -1684,7 +1684,7 @@ async function handleEntryConfirmation(connection, interaction) {
     }
     
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleEntryConfirmation:`, error);
+    log(`Error in handleEntryConfirmation: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({
       content: await getConfigValue(connection,'txtActionFailed', interaction.guild.id),
       components: []
@@ -1749,7 +1749,7 @@ async function confirmEntry(connection, entryId, interaction) {
       if (show_authors) entryEmbed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name}` });
       await storyThread.send({ embeds: [entryEmbed] });
     } catch (threadError) {
-      console.error(`${formattedDate()}: Failed to post entry to story thread:`, threadError);
+      log(`Failed to post entry to story thread: ${threadError}`, { show: true, guildName: interaction?.guild?.name });
     }
 
     await interaction.editReply({
@@ -1760,7 +1760,7 @@ async function confirmEntry(connection, entryId, interaction) {
 
   } catch (error) {
     await txn.rollback();
-    console.error(`${formattedDate()}: Error in confirmEntry:`, error);
+    log(`Error in confirmEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
     throw error;
   } finally {
     txn.release();
@@ -1788,7 +1788,7 @@ async function discardEntry(connection, entryId, interaction) {
     });
     
   } catch (error) {
-    console.error(`${formattedDate()}: Error in discardEntry:`, error);
+    log(`Error in discardEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
     throw error;
   } finally {
     // Connection is persistent, no need to release
@@ -1834,7 +1834,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
   try {
     let whereClause = 'WHERE s.guild_id = ?';
     let params = [guildId];
-    debugLog(`${formattedDate()}: getStoriesPaginated - guildId: ${guildId}, filter: ${filter}`);
+    log(`getStoriesPaginated - guildId: ${guildId}, filter: ${filter}`, { show: false });
     
     // Apply filters
     switch (filter) {
@@ -1871,7 +1871,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
     `, params);
     
     const totalCount = countResult[0].total;
-    debugLog(`${formattedDate()}: getStoriesPaginated - totalCount: ${totalCount}`);
+    log(`getStoriesPaginated - totalCount: ${totalCount}`, { show: false });
     const totalPages = Math.ceil(totalCount / itemsPerPage);
     const offset = (page - 1) * itemsPerPage;
     
@@ -1896,7 +1896,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
       ORDER BY s.updated_at DESC
       LIMIT ? OFFSET ?
     `, [userId, ...params, itemsPerPage, offset]);
-    debugLog(`${formattedDate()}: getStoriesPaginated - stories rows returned: ${stories.length}`);
+    log(`getStoriesPaginated - stories rows returned: ${stories.length}`, { show: false });
 
     return {
       data: stories,
@@ -2009,7 +2009,7 @@ async function handleFinalizeEntry(connection, interaction) {
     await interaction.editReply({ embeds: [embed], components: [row] });
 
   } catch (error) {
-    console.error(`${formattedDate()}: handleFinalizeEntry failed:`, error);
+    log(`handleFinalizeEntry failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', guildId) });
   }
 }
@@ -2069,7 +2069,7 @@ async function handleFinalizeConfirm(connection, interaction) {
               });
               parts.push(forwarded.attachments.first().url);
             } catch (err) {
-              console.error(`${formattedDate()}: Failed to forward image to media channel:`, err);
+              log(`Failed to forward image to media channel: ${err}`, { show: true, guildName: interaction?.guild?.name });
             }
           }
         }
@@ -2121,7 +2121,7 @@ async function handleFinalizeConfirm(connection, interaction) {
       if (show_authors) entryEmbed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name}` });
       await storyThread.send({ embeds: [entryEmbed] });
     } catch (embedError) {
-      console.error(`${formattedDate()}: Failed to post finalized entry to story thread:`, embedError);
+      log(`Failed to post finalized entry to story thread: ${embedError}`, { show: true, guildName: interaction?.guild?.name });
     }
 
     // Reply before deleting thread — interaction context is tied to the thread
@@ -2130,7 +2130,7 @@ async function handleFinalizeConfirm(connection, interaction) {
     await deleteThreadAndAnnouncement(thread);
 
   } catch (error) {
-    console.error(`${formattedDate()}: handleFinalizeConfirm failed:`, error);
+    log(`handleFinalizeConfirm failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     try {
       await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', interaction.guild.id), components: [] });
     } catch {}
@@ -2194,7 +2194,7 @@ async function handleSkipTurn(connection, interaction) {
     await interaction.editReply({ content: txtConfirm, components: [row] });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Skip turn confirmation failed:`, error);
+    log(`Skip turn confirmation failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -2243,12 +2243,12 @@ async function handleSkipConfirm(connection, interaction) {
         const thread = await interaction.guild.channels.fetch(turn.thread_id);
         await deleteThreadAndAnnouncement(thread);
       } catch (err) {
-        console.error(`${formattedDate()}: Failed to delete skipped turn thread:`, err);
+        log(`Failed to delete skipped turn thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
       }
     }
 
   } catch (error) {
-    console.error(`${formattedDate()}: Skip turn failed:`, error);
+    log(`Skip turn failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
   }
 }
@@ -2491,7 +2491,7 @@ async function handleRead(connection, interaction) {
 
     await interaction.editReply(buildReadEmbed(session, 0));
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleRead:`, error);
+    log(`Error in handleRead: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -2519,7 +2519,7 @@ async function handleReadNav(connection, interaction) {
         await interaction.followUp({ files: [{ attachment: result.buffer, name: result.filename }], flags: MessageFlags.Ephemeral });
       }
     } catch (err) {
-      console.error(`${formattedDate()}: Error generating HTML download from read session:`, err);
+      log(`Error generating HTML download from read session: ${err}`, { show: true, guildName: interaction?.guild?.name });
     }
     return;
   }
@@ -2697,7 +2697,7 @@ async function handleManage(connection, interaction) {
     await interaction.editReply(buildManageMessage(cfg, state));
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleManage:`, error);
+    log(`Error in handleManage: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -2880,7 +2880,7 @@ async function handleManageSave(connection, interaction, state) {
       components: []
     });
   } catch (error) {
-    console.error(`${formattedDate()}: Error saving manage settings:`, error);
+    log(`Error saving manage settings: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await state.originalInteraction.editReply({
       content: await getConfigValue(connection, 'errProcessingRequest', guildId),
       embeds: [],
@@ -2932,7 +2932,7 @@ async function applyPauseActions(connection, interaction, state) {
     await thread.setName(pausedTitle);
     await thread.setLocked(true);
   } catch (err) {
-    console.error(`${formattedDate()}: Could not lock turn thread on pause (story ${state.storyId}):`, err);
+    log(`Could not lock turn thread on pause (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
   }
 
   // Update story thread title to show PAUSED
@@ -2953,7 +2953,7 @@ async function applyPauseActions(connection, interaction, state) {
       }
     }
   } catch (err) {
-    console.error(`${formattedDate()}: Could not update story thread title on pause (story ${state.storyId}):`, err);
+    log(`Could not update story thread title on pause (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
@@ -2984,7 +2984,7 @@ async function applyResumeActions(connection, interaction, state) {
       }
     }
   } catch (err) {
-    console.error(`${formattedDate()}: Could not update story thread title on resume (story ${state.storyId}):`, err);
+    log(`Could not update story thread title on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
   }
 
   if (activeTurnRows.length === 0) {
@@ -3051,7 +3051,7 @@ async function applyResumeActions(connection, interaction, state) {
         await thread.send(replaceTemplateVariables(txtTurnThreadResumed, { turn_end_time: newEndTimestamp }));
       }
     } catch (err) {
-      console.error(`${formattedDate()}: Could not unlock turn thread on resume (story ${state.storyId}):`, err);
+      log(`Could not unlock turn thread on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
     }
   } else {
     // Quick mode — notify writer via DM or mention that their turn is active again
@@ -3066,7 +3066,7 @@ async function applyResumeActions(connection, interaction, state) {
         const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
         await channel.send(`<@${activeTurn.discord_user_id}> ${txtMentionTurnStart}`);
       } catch (err) {
-        console.error(`${formattedDate()}: Could not notify writer on resume (story ${state.storyId}):`, err);
+        log(`Could not notify writer on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
       }
     }
   }
@@ -3123,7 +3123,7 @@ async function handleManageModalSubmit(connection, interaction) {
     await interaction.deleteReply();
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleManageModalSubmit:`, error);
+    log(`Error in handleManageModalSubmit: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
 }
@@ -3185,7 +3185,7 @@ async function handleClose(connection, interaction) {
     await interaction.editReply({ content: confirmMsg, components: [row] });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleClose:`, error);
+    log(`Error in handleClose: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -3224,7 +3224,7 @@ async function handleCloseConfirm(connection, interaction) {
           const turnThread = await interaction.guild.channels.fetch(activeTurn.thread_id);
           if (turnThread) await deleteThreadAndAnnouncement(turnThread);
         } catch (err) {
-          console.error(`${formattedDate()}: Could not delete turn thread ${activeTurn.thread_id}:`, err);
+          log(`Could not delete turn thread ${activeTurn.thread_id}: ${err}`, { show: true, guildName: interaction?.guild?.name });
         }
       }
     }
@@ -3269,7 +3269,7 @@ async function handleCloseConfirm(connection, interaction) {
           await storyThread.send(messageOptions);
         }
       } catch (err) {
-        console.log(`${formattedDate()}: Story thread not available for close post (story ${storyId})`);
+        log(`Story thread not available for close post (story ${storyId})`, { show: false, guildName: interaction?.guild?.name });
       }
     }
 
@@ -3284,7 +3284,7 @@ async function handleCloseConfirm(connection, interaction) {
     await interaction.editReply({ content: '✅', components: [] });
 
   } catch (error) {
-    console.error(`${formattedDate()}: Error in handleCloseConfirm:`, error);
+    log(`Error in handleCloseConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
   }
 }

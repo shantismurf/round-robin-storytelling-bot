@@ -5,7 +5,7 @@ import mysql from 'mysql2/promise';
 export function loadConfig() {
   const cfgPath = path.resolve(process.cwd(), 'config.json');
   if (!fs.existsSync(cfgPath)) {
-    console.error(`${formattedDate()}: Missing config.json. Copy config.example.json and fill values.`);
+    log('Missing config.json. Copy config.example.json and fill values.', { show: true });
     process.exit(1);
   }
   return JSON.parse(fs.readFileSync(cfgPath, 'utf8'));
@@ -38,10 +38,10 @@ export class DB {
       });
       await this.pool.execute('SELECT 1');
       this.connection = this.pool;
-      console.log('Database connected successfully');
+      log('Database connected successfully', { show: true });
       return this.pool;
     } catch (error) {
-      console.error(`${formattedDate()}: Database connection failed:`, error.message);
+      log(`Database connection failed: ${error.message}`, { show: true });
       throw error;
     }
   }
@@ -51,9 +51,9 @@ export class DB {
       try {
         await this.pool.end();
         this.pool = null;
-        console.log('Database disconnected successfully');
+        log('Database disconnected successfully', { show: true });
       } catch (error) {
-        console.error(`${formattedDate()}: Database disconnection failed:`, error.message);
+        log(`Database disconnection failed: ${error.message}`, { show: true });
         throw error;
       }
     }
@@ -111,7 +111,11 @@ export function sanitizeModalInput(input, maxLength = 1024, multiline = false) {
 
 let _testMode = false;
 export function setTestMode(value) { _testMode = !!value; }
-export function debugLog(...args) { if (_testMode) console.log(...args); }
+export function log(message, { show = false, guildName = null } = {}) {
+  if (!_testMode && !show) return;
+  const guildTag = guildName ? ` (${guildName})` : '';
+  console.log(`${formattedDate()}${guildTag}: ${message}`);
+}
 
 /**
  * Resolve a guild-local story number (guild_story_id) to the internal PK (story_id).
@@ -125,7 +129,7 @@ export async function resolveStoryId(connection, guildId, guildStoryId) {
     );
     return rows[0]?.story_id ?? null;
   } catch (err) {
-    console.error(`${formattedDate()}: resolveStoryId failed:`, err);
+    log(`resolveStoryId failed: ${err}`, { show: true });
     return null;
   }
 }
@@ -162,7 +166,7 @@ export async function getConfigValue(connection, key, guildId = 1) {
     );
     return configRows[0]?.config_value || key;
   } catch (error) {
-    console.error(`${formattedDate()}: Config lookup failed for key '${Array.isArray(key) ? key.join(', ') : key}':`, error);
+    log(`Config lookup failed for key '${Array.isArray(key) ? key.join(', ') : key}': ${error}`, { show: true });
     if (Array.isArray(key)) {
       return Object.fromEntries(key.map(k => [k, k]));
     }
@@ -233,7 +237,7 @@ export async function createThread(interaction, guildID, keyValueMap) {
   const adminRole = interaction.guild.roles.cache.find(r => r.name === adminRoleName);
   
   if (!adminRole) {
-    console.error(`${formattedDate()}: Admin role '${adminRoleName}' not found - skipping admin permissions`);
+    log(`Admin role '${adminRoleName}' not found - skipping admin permissions`, { show: true });
   }
   
   // Get and build thread title
@@ -277,7 +281,7 @@ export async function createThread(interaction, guildID, keyValueMap) {
         try {
           await thread.members.add(member.id);
         } catch (error) {
-          console.error(`${formattedDate()}: Failed to add admin ${member.displayName} to private thread:`, error);
+          log(`Failed to add admin ${member.displayName} to private thread: ${error}`, { show: true });
         }
       }
     }

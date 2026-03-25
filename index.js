@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
 import { StoryBot, updateStoryStatusMessage } from './storybot.js';
-import { loadConfig, formattedDate, DB, getConfigValue, setTestMode, debugLog } from './utilities.js';
+import { loadConfig, DB, getConfigValue, setTestMode, log } from './utilities.js';
 import { setupDatabase } from './database-setup.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
@@ -14,18 +14,18 @@ async function refreshAllStatusMessages(connection, client) {
     const [stories] = await connection.execute(
       `SELECT story_id, guild_id FROM story WHERE story_status IN (1, 2) AND story_thread_id IS NOT NULL`
     );
-    console.log(`${formattedDate()}: Refreshing status messages for ${stories.length} active/paused story/stories...`);
+    log(`Refreshing status messages for ${stories.length} active/paused story/stories...`, { show: true });
     for (const story of stories) {
       try {
         const guild = await client.guilds.fetch(story.guild_id);
         await updateStoryStatusMessage(connection, guild, story.story_id);
       } catch (err) {
-        console.error(`${formattedDate()}: Failed to refresh status for story ${story.story_id}:`, err);
+        log(`Failed to refresh status for story ${story.story_id}: ${err}`, { show: true });
       }
     }
-    console.log(`${formattedDate()}: Status message refresh complete.`);
+    log('Status message refresh complete.', { show: true });
   } catch (err) {
-    console.error(`${formattedDate()}: refreshAllStatusMessages failed:`, err);
+    log(`refreshAllStatusMessages failed: ${err}`, { show: true });
   }
 }
 
@@ -34,11 +34,11 @@ async function main() {
   setTestMode(config.testMode);
 
   // Setup database before starting bot
-  console.log(`${formattedDate()}: Initializing Round Robin StoryBot... (${config.testMode ? 'TEST MODE' : 'production'})`);
+  log(`Initializing Round Robin StoryBot... (${config.testMode ? 'TEST MODE' : 'production'})`, { show: true });
   const dbSetupSuccess = await setupDatabase(config);
 
   if (!dbSetupSuccess) {
-    console.error(`${formattedDate()}: Failed to setup database. Exiting...`);
+    log('Failed to setup database. Exiting...', { show: true });
     process.exit(1);
   }
 
@@ -67,7 +67,7 @@ async function main() {
       );
       await channel.send({ content: botContent.content || null, embeds, files: botContent.files });
     } catch (err) {
-      console.error(`${formattedDate()}: Failed to publish botContent:`, err, botContent);
+      log(`Failed to publish botContent: ${err}`, { show: true });
     }
   });
   // Create initiate slash commands
@@ -83,19 +83,19 @@ async function main() {
         } else if (file.endsWith('.js')) {
           const command = await import(filePath);
           if (command.default && command.default.data) {
-            console.log(`Loaded command: ${command.default.data.name}`);
+            log(`Loaded command: ${command.default.data.name}`, { show: true });
             client.commands.set(command.default.data.name, command.default);
           } else {
-            console.log(`Skipping file ${filePath} as it doesn't export a command`);
+            log(`Skipping file ${filePath} as it doesn't export a command`, { show: false });
           }
         }
       }
     } catch (error) {
-      console.error(`${formattedDate()}: Error loading commands:`, error);
+      log(`Error loading commands: ${error}`, { show: true });
     }
   }
   client.once(Events.ClientReady, async () => {
-    console.log(`Discord client ready as ${client.user.tag}`);
+    log(`Discord client ready as ${client.user.tag}`, { show: true });
     await bot.start();
     await loadCommands('./commands');
     startJobRunner(connection, client);
@@ -105,7 +105,7 @@ async function main() {
   client.on(Events.InteractionCreate, async interaction => {
     try {
       if (interaction.isChatInputCommand()) {
-        console.log(`${formattedDate()}: ${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`);
+        log(`${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`, { show: true, guildName: interaction?.guild?.name });
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
           await command.execute(connection, interaction);
@@ -113,9 +113,9 @@ async function main() {
       } else if (interaction.isModalSubmit()) {
         const significantModal = interaction.customId === 'storyadmin_setup_modal' || interaction.customId === 'story_add_title_modal';
         if (significantModal) {
-          console.log(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
+          log(`${interaction.user.username} submitted modal ${interaction.customId}`, { show: true, guildName: interaction?.guild?.name });
         } else {
-          debugLog(`${formattedDate()}: ${interaction.user.username} submitted modal ${interaction.customId}`);
+          log(`${interaction.user.username} submitted modal ${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
         }
 
         // Handle story modal submissions
@@ -131,7 +131,7 @@ async function main() {
           }
         }
       } else if (interaction.isButton()) {
-        debugLog(`${formattedDate()}: ${interaction.user.username} clicked button ${interaction.customId}`);
+        log(`${interaction.user.username} clicked button ${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
 
         const dedupKey = `${interaction.user.id}:${interaction.customId}`;
         if (processingButtons.has(dedupKey)) {
@@ -151,7 +151,7 @@ async function main() {
           }
         }
       } else if (interaction.isStringSelectMenu()) {
-        debugLog(`${formattedDate()}: ${interaction.user.username} used select menu ${interaction.customId}`);
+        log(`${interaction.user.username} used select menu ${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
 
         // Handle story select menu interactions
         if (interaction.customId.startsWith('story_')) {
@@ -161,11 +161,11 @@ async function main() {
           }
         }
       } else {
-        console.log(`${formattedDate()}: Unhandled interaction type ${interaction.type} from ${interaction.user.username} (customId: ${interaction.customId ?? 'n/a'})`);
+        log(`Unhandled interaction type ${interaction.type} from ${interaction.user.username} (customId: ${interaction.customId ?? 'n/a'})`, { show: true, guildName: interaction?.guild?.name });
       }
     } catch (error) {
       const guildId = interaction?.guild?.id || 'unknown';
-      console.error(`${formattedDate()}:  Error handling interaction:`, error);
+      log(`Error handling interaction: ${error}`, { show: true, guildName: interaction?.guild?.name });
 
       if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
@@ -183,6 +183,6 @@ async function main() {
 }
 
 main().catch(err => {
-  console.error(`${formattedDate()}: Fatal error starting Round Robin StoryBot:`, err);
+  log(`Fatal error starting Round Robin StoryBot: ${err}`, { show: true });
   process.exit(1);
 });

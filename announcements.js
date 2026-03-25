@@ -1,4 +1,4 @@
-import { getConfigValue, formattedDate, replaceTemplateVariables } from './utilities.js';
+import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
 /**
  * All announcements sent to story feed channel are handled here
  * Join is called from commands/story.js
@@ -12,7 +12,7 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
     try {
       const feedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guildId);
       if (!feedChannelId) {
-        console.log(`${formattedDate()}: Story feed channel not configured - skipping join announcement`);
+        log('Story feed channel not configured - skipping join announcement', { show: true, guildName: interaction?.guild?.name });
         return;
       }
       
@@ -49,9 +49,9 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
       if (feedChannel) {
         await feedChannel.send(announcement);
       }
-      console.log(`${formattedDate()}: Story feed join announcement sent for story ${storyId}`);
+      log(`Story feed join announcement sent for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
   } catch (error) {
-    console.error(`${formattedDate()}: Error in postStoryFeedJoinAnnouncement:`, error);
+    log(`Error in postStoryFeedJoinAnnouncement: ${error}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
@@ -64,7 +64,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
   try {
     const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
     if (!feedChannelId) {
-      console.log(`${formattedDate()}: Story feed channel not configured - skipping creation announcement`);
+      log('Story feed channel not configured - skipping creation announcement', { show: true, guildName: interaction?.guild?.name });
       return;
     }
 
@@ -113,9 +113,9 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
     const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
     if (feedChannel) await feedChannel.send(message);
 
-    console.log(`${formattedDate()}: Story feed creation announcement sent for story ${storyId}`);
+    log(`Story feed creation announcement sent for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
   } catch (error) {
-    console.error(`${formattedDate()}: Error in postStoryFeedCreationAnnouncement:`, error);
+    log(`Error in postStoryFeedCreationAnnouncement: ${error}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
@@ -128,7 +128,7 @@ export async function postStoryFeedClosedAnnouncement(connection, interaction, s
   try {
     const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
     if (!feedChannelId) {
-      console.log(`${formattedDate()}: Story feed channel not configured - skipping closed announcement`);
+      log('Story feed channel not configured - skipping closed announcement', { show: true, guildName: interaction?.guild?.name });
       return;
     }
     const txtStoryFeedClosed = await getConfigValue(connection, 'txtStoryFeedClosed', guildId);
@@ -144,9 +144,9 @@ export async function postStoryFeedClosedAnnouncement(connection, interaction, s
       if (exportResult?.hasEntries) messageOptions.files = [{ attachment: exportResult.buffer, name: exportResult.filename }];
       await feedChannel.send(messageOptions);
     }
-    console.log(`${formattedDate()}: Story feed closed announcement sent`);
+    log('Story feed closed announcement sent', { show: true, guildName: interaction?.guild?.name });
   } catch (error) {
-    console.error(`${formattedDate()}: Error in postStoryFeedClosedAnnouncement:`, error);
+    log(`Error in postStoryFeedClosedAnnouncement: ${error}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
@@ -159,7 +159,7 @@ export async function postStoryFeedActivationAnnouncement(connection, storyId, i
     try {
       const feedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guildId);
       if (!feedChannelId) {
-        console.log(`${formattedDate()}: Story feed channel not configured - skipping activation announcement`);
+        log('Story feed channel not configured - skipping activation announcement', { show: true, guildName: interaction?.guild?.name });
         return;
       }
       
@@ -189,8 +189,8 @@ export async function postStoryFeedActivationAnnouncement(connection, storyId, i
           await feedChannel.send(announcement);
         }
       }
-      console.log(`${formattedDate()}: Story feed activation announcement sent for story ${storyId}`);
+      log(`Story feed activation announcement sent for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
   } catch (error) {
-    console.error(`${formattedDate()}: Error in postStoryFeedActivationAnnouncement:`, error);
+    log(`Error in postStoryFeedActivationAnnouncement: ${error}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
