@@ -101,11 +101,33 @@ async function main() {
     startJobRunner(connection, client);
     refreshAllStatusMessages(connection, client);
   });
+  function formatCommandLog(interaction) {
+    const subcommand = interaction.options.getSubcommand(false);
+    const subOptions = subcommand
+      ? (interaction.options.data[0]?.options ?? [])
+      : interaction.options.data;
+    const storyIdOpt = subOptions.find(o => o.name === 'story_id');
+    const params = subOptions
+      .filter(o => o.name !== 'story_id')
+      .map(o => {
+        if (o.type === 6) { // USER
+          const user = interaction.options.getUser(o.name);
+          return `${o.name}=${user?.username ?? o.value}`;
+        }
+        return `${o.name}=${o.value}`;
+      })
+      .join(' ');
+    const parts = [subcommand, params].filter(Boolean).join(' ');
+    const channel = interaction.channel?.name ?? 'DM';
+    const storyPart = storyIdOpt ? ` for story ${storyIdOpt.value}` : '';
+    return `${interaction.user.username} triggered ${interaction.commandName}${parts ? ` ${parts}` : ''} in #${channel}${storyPart}.`;
+  }
+
   // Listen for slash commands and modal interactions
   client.on(Events.InteractionCreate, async interaction => {
     try {
       if (interaction.isChatInputCommand()) {
-        log(`${interaction.user.username} in #${interaction.channel.name} triggered ${interaction.commandName}.`, { show: true, guildName: interaction?.guild?.name });
+        log(formatCommandLog(interaction), { show: true, guildName: interaction?.guild?.name });
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
           await command.execute(connection, interaction);

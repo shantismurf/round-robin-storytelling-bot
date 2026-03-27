@@ -987,39 +987,30 @@ async function handleWrite(connection, interaction) {
       await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
       return;
     }
-    
-    // Validate story access and get story info
-    const storyInfo = await validateStoryAccess(connection, storyId, guildId);
+
+    // Run all validation and config fetches in parallel
+    const [storyInfo, writerInfo, txtWriteWarning, lblWriteEntry, txtWritePlaceholder, txtNormalModeWrite] = await Promise.all([
+      validateStoryAccess(connection, storyId, guildId),
+      validateActiveWriter(connection, interaction.user.id, storyId),
+      getConfigValue(connection, 'txtWriteWarning', guildId),
+      getConfigValue(connection, 'lblWriteEntry', guildId),
+      getConfigValue(connection, 'txtWritePlaceholder', guildId),
+      getConfigValue(connection, 'txtNormalModeWrite', guildId),
+    ]);
+
     if (!storyInfo.success) {
-      await interaction.reply({ 
-        content: storyInfo.error, 
-        flags: MessageFlags.Ephemeral 
-      });
+      await interaction.reply({ content: storyInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
-    
-    // Validate active writer
-    const writerInfo = await validateActiveWriter(connection, interaction.user.id, storyId);
     if (!writerInfo.success) {
-      await interaction.reply({ 
-        content: writerInfo.error, 
-        flags: MessageFlags.Ephemeral 
-      });
+      await interaction.reply({ content: writerInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
-    
-    // Check if story is quick mode
     if (!storyInfo.story.quick_mode) {
-      await interaction.reply({ 
-        content: await getConfigValue(connection,'txtNormalModeWrite', guildId), 
-        flags: MessageFlags.Ephemeral 
-      });
+      await interaction.reply({ content: txtNormalModeWrite, flags: MessageFlags.Ephemeral });
       return;
     }
-    
-    // Get configurable text for warnings (used multiple times)
-    const txtWriteWarning = await getConfigValue(connection,'txtWriteWarning', guildId);
-    
+
     // Create modal
     const modal = new ModalBuilder()
       .setCustomId(`story_write_${storyId}`)
@@ -1029,9 +1020,9 @@ async function handleWrite(connection, interaction) {
       new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('entry_content')
-          .setLabel(await getConfigValue(connection, 'lblWriteEntry', interaction.guild.id))
+          .setLabel(lblWriteEntry)
           .setStyle(TextInputStyle.Paragraph)
-          .setPlaceholder(`⚠️ ${txtWriteWarning}\n\n${await getConfigValue(connection, 'txtWritePlaceholder', interaction.guild.id)}`)
+          .setPlaceholder(`⚠️ ${txtWriteWarning}\n\n${txtWritePlaceholder}`)
           .setMaxLength(4000)
           .setMinLength(10)
           .setRequired(true)
@@ -1067,14 +1058,14 @@ async function handleWriteModalSubmit(connection, interaction) {
         SELECT story_entry_id FROM story_entry se
         JOIN turn t ON se.turn_id = t.turn_id
         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-        WHERE sw.story_id = ? AND sw.discord_user_id = ? 
-        AND se.entry_status = 'pending'
+        WHERE sw.story_id = ? AND sw.discord_user_id = ?
+        AND se.entry_status IN ('pending', 'discarded')
       `, [storyId, interaction.user.id]);
-      
+
       if (pendingEntry.length > 0) {
-        // Update existing pending entry
+        // Update existing entry (re-draft after discard counts too)
         await connection.execute(`
-          UPDATE story_entry SET content = ?, created_at = NOW() 
+          UPDATE story_entry SET content = ?, entry_status = 'pending', created_at = NOW()
           WHERE story_entry_id = ?
         `, [content, pendingEntry[0].story_entry_id]);
         entryId = pendingEntry[0].story_entry_id;
