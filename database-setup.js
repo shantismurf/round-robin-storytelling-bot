@@ -41,6 +41,17 @@ export async function runMigrations(connection) {
     );
     log('Migration: guild_story_id column added and backfilled.', { show: true });
   }
+
+  // Migration: add turn_id column to job table for turn-level job cancellation
+  const [jobCols] = await connection.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'job' AND COLUMN_NAME = 'turn_id'`
+  );
+  if (jobCols.length === 0) {
+    log('Migration: adding turn_id column to job table...', { show: true });
+    await connection.execute(`ALTER TABLE job ADD COLUMN turn_id BIGINT NULL`);
+    log('Migration: turn_id column added to job table.', { show: true });
+  }
 }
 
 export async function setupDatabase(config) {

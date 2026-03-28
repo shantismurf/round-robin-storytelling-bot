@@ -428,7 +428,21 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     }
     
     const writer = writerInfo[0];
-    
+
+    // Cancel any pending jobs for the story's current active turn before starting the next one
+    const [activeTurnRows] = await connection.execute(
+      `SELECT turn_id FROM turn WHERE story_writer_id IN (
+         SELECT story_writer_id FROM story_writer WHERE story_id = ?
+       ) AND turn_status = 1 LIMIT 1`,
+      [writer.story_id]
+    );
+    if (activeTurnRows.length > 0) {
+      await connection.execute(
+        `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
+        [activeTurnRows[0].turn_id]
+      );
+    }
+
     // Insert turn record
     const turnEndsAt = new Date(Date.now() + (writer.turn_length_hours * 60 * 60 * 1000));
     const [turnResult] = await connection.execute(
@@ -440,8 +454,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 
     // Schedule turnTimeout job
     await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-      ['turnTimeout', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id }), turnEndsAt]
+      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+      ['turnTimeout', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id }), turnEndsAt, turnId]
     );
 
     // Schedule turnReminder job if configured
@@ -449,8 +463,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       const reminderMs = writer.turn_length_hours * (writer.timeout_reminder_percent / 100) * 60 * 60 * 1000;
       const reminderTime = new Date(Date.now() + reminderMs);
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-        ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+        ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime, turnId]
       );
     }
 

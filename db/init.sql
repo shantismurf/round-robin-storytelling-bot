@@ -81,7 +81,8 @@ CREATE TABLE IF NOT EXISTS job (
   payload JSON,
   run_at TIMESTAMP,
   attempts INT DEFAULT 0,
-  job_status TINYINT(1) DEFAULT 0
+  job_status TINYINT(1) DEFAULT 0,
+  turn_id BIGINT NULL
 );
 
 CREATE TABLE IF NOT EXISTS config (
