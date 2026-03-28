@@ -132,9 +132,13 @@ async function handleTurnTimeout(connection, client, payload) {
 
   const activeTurn = turnRows[0];
 
-  // End the turn
+  // End the turn and cancel its pending jobs
   await connection.execute(
     `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
+    [turnId]
+  );
+  await connection.execute(
+    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
     [turnId]
   );
 

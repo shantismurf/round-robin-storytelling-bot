@@ -51,6 +51,11 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(connection, interaction) {
+  if (!interaction.guild) {
+    await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
   const subcommand = interaction.options.getSubcommand();
   if (subcommand === 'active') await handleStatus(connection, interaction);
   else if (subcommand === 'history') await handleHistory(connection, interaction);

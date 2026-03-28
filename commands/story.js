@@ -200,6 +200,11 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(connection, interaction) {
+  if (!interaction.guild) {
+    await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
   const subcommand = interaction.options.getSubcommand();
   log(`execute() called with subcommand '${subcommand}'`, { show: false, guildName: interaction?.guild?.name });
 
@@ -1174,6 +1179,7 @@ async function validateActiveWriter(connection, userId, storyId) {
       FROM turn t
       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
       WHERE sw.story_id = ? AND t.turn_status = 1
+      ORDER BY t.turn_id DESC LIMIT 1
     `, [storyId]);
     
     if (writerInfo.length === 0 || writerInfo[0].current_writer !== userId) {
@@ -1721,10 +1727,24 @@ async function confirmEntry(connection, entryId, interaction) {
 
     const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, turn_number } = entryInfo[0];
 
-    // End current turn
-    await txn.execute(`
-      UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?
-    `, [turn_id]);
+    // Verify turn is still active — it may have timed out while the writer was composing
+    const [turnCheck] = await txn.execute(
+      `SELECT turn_status FROM turn WHERE turn_id = ?`,
+      [turn_id]
+    );
+    if (turnCheck.length === 0 || turnCheck[0].turn_status !== 1) {
+      await txn.rollback();
+      await interaction.editReply({
+        content: 'Your turn has already ended — the story has moved on.',
+        embeds: [],
+        components: []
+      });
+      return;
+    }
+
+    // End current turn and cancel its pending jobs
+    await txn.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [turn_id]);
+    await txn.execute(`UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`, [turn_id]);
 
     // Advance to next writer
     const nextWriterId = await PickNextWriter(txn, story_id);

@@ -69,6 +69,11 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(connection, interaction) {
+  if (!interaction.guild) {
+    await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
   const guildId = interaction.guild.id;
   const subcommand = interaction.options.getSubcommand();
 
@@ -294,6 +299,10 @@ async function handleSkip(connection, interaction) {
     const activeTurn = activeTurnRows[0];
     await connection.execute(
       `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
+      [activeTurn.turn_id]
+    );
+    await connection.execute(
+      `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
       [activeTurn.turn_id]
     );
 
