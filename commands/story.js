@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, isGuildConfigured, resolveStoryId } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, isGuildConfigured, resolveStoryId, chunkEntryContent } from '../utilities.js';
 import { marked } from 'marked';
 import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
@@ -12,6 +12,9 @@ const pendingManageData = new Map();
 
 // Pending join sessions keyed by userId
 const pendingJoinData = new Map();
+
+// Pending edit sessions keyed by userId
+const pendingEditData = new Map();
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
@@ -197,6 +200,20 @@ const data = new SlashCommandBuilder()
     subcommand
       .setName('help')
       .setDescription('How to use Round Robin StoryBot')
+  )
+  .addSubcommand(subcommand =>
+    subcommand
+      .setName('edit')
+      .setDescription('Edit a confirmed story entry')
+      .addIntegerOption(option =>
+        option.setName('story_id')
+          .setDescription('Story ID (your guild-scoped story number)')
+          .setRequired(true))
+      .addIntegerOption(option =>
+        option.setName('turn')
+          .setDescription('Turn number (as shown in /story read)')
+          .setRequired(true)
+          .setMinValue(1))
   );
 
 async function execute(connection, interaction) {
@@ -232,6 +249,8 @@ async function execute(connection, interaction) {
     await handleManage(connection, interaction);
   } else if (subcommand === 'help') {
     await handleHelp(connection, interaction);
+  } else if (subcommand === 'edit') {
+    await handleEdit(connection, interaction);
   } else {
     log(`execute() - unrecognized subcommand '${subcommand}', no handler matched`, { show: false, guildName: interaction?.guild?.name });
   }
@@ -427,6 +446,8 @@ async function handleModalSubmit(connection, interaction) {
     await handleJoinAO3ModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageModalSubmit(connection, interaction);
+  } else if (interaction.customId === 'story_edit_content_modal') {
+    await handleEditModalSubmit(connection, interaction);
   }
 }
 
@@ -1087,8 +1108,8 @@ async function handleWriteModalSubmit(connection, interaction) {
         }
         
         const [result] = await connection.execute(`
-          INSERT INTO story_entry (turn_id, content, entry_status, order_in_turn)
-          VALUES (?, ?, 'pending', 1)
+          INSERT INTO story_entry (turn_id, content, entry_status)
+          VALUES (?, ?, 'pending')
         `, [turnInfo[0].turn_id, content]);
         
         entryId = result.insertId;
@@ -1488,6 +1509,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
     await handleHelpNavigation(connection, interaction);
+  } else if (interaction.customId.startsWith('story_edit_')) {
+    await handleEditButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_read_')) {
     await handleReadNav(connection, interaction);
   }
@@ -2295,7 +2318,7 @@ async function generateStoryExport(connection, storyId, guildId, guild = null) {
      JOIN turn t ON se.turn_id = t.turn_id
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
-     ORDER BY t.started_at, se.order_in_turn`,
+     ORDER BY t.started_at`,
     [storyId]
   );
 
@@ -2391,13 +2414,20 @@ function splitAtParagraphs(text, maxLen = 4000) {
 }
 
 // Build the pages array for a read session from raw story entries.
-function buildPages(entries, showAuthors) {
+// editInfoMap: Map<story_entry_id, { editedByName, editedAt }> — populated by handleRead for footnotes
+function buildPages(entries, showAuthors, editInfoMap = new Map()) {
   const pages = [];
-  // Group raw entry rows by turn number (multiple rows per turn in normal mode)
+  // Group raw entry rows by turn number
   const turnMap = new Map();
   for (const row of entries) {
     if (!turnMap.has(row.turn_number)) {
-      turnMap.set(row.turn_number, { turnNumber: row.turn_number, writerName: row.discord_display_name, parts: [] });
+      turnMap.set(row.turn_number, {
+        turnNumber: row.turn_number,
+        writerName: row.discord_display_name,
+        parts: [],
+        storyEntryId: row.story_entry_id,
+        originalAuthorId: String(row.original_author_id)
+      });
     }
     turnMap.get(row.turn_number).parts.push(row.content.trim());
   }
@@ -2410,7 +2440,11 @@ function buildPages(entries, showAuthors) {
         writerName: showAuthors ? turn.writerName : null,
         content: chunk,
         partIndex: chunks.length > 1 ? i + 1 : null,
-        partCount: chunks.length > 1 ? chunks.length : null
+        partCount: chunks.length > 1 ? chunks.length : null,
+        storyEntryId: turn.storyEntryId,
+        originalAuthorId: turn.originalAuthorId,
+        isFirstChunk: i === 0,
+        editInfo: i === 0 ? (editInfoMap.get(turn.storyEntryId) ?? null) : null
       });
     });
   }
@@ -2426,18 +2460,38 @@ function buildReadEmbed(session, pageIndex) {
   if (page.writerName) turnLabel += ` — ${page.writerName}`;
   if (page.partIndex) turnLabel += ` (part ${page.partIndex}/${page.partCount})`;
 
+  let description = page.content;
+  if (page.editInfo) {
+    description += `\n\n*edited by ${page.editInfo.editedByName} · ${page.editInfo.editedAt}*`;
+  }
+
   const embed = new EmbedBuilder()
     .setTitle(`📖 ${session.title}`)
-    .setDescription(page.content)
+    .setDescription(description)
     .setColor(0x5865f2)
     .setFooter({ text: `${turnLabel} · Page ${pageIndex + 1} of ${totalPages} · ~${session.wordCount.toLocaleString()} words total` });
 
-  const row = new ActionRowBuilder().addComponents(
+  // Edit button appears between ← Previous and Next → when the user can edit this entry
+  const canEdit = page.isFirstChunk && (
+    session.isAdmin || page.originalAuthorId === session.userId
+  );
+
+  const buttons = [
     new ButtonBuilder()
       .setCustomId('story_read_prev')
       .setLabel('← Previous')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(pageIndex === 0),
+  ];
+  if (canEdit) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId(`story_read_edit_${page.storyEntryId}`)
+        .setLabel('Edit')
+        .setStyle(ButtonStyle.Primary)
+    );
+  }
+  buttons.push(
     new ButtonBuilder()
       .setCustomId('story_read_next')
       .setLabel('Next →')
@@ -2453,6 +2507,7 @@ function buildReadEmbed(session, pageIndex) {
       .setStyle(ButtonStyle.Danger)
   );
 
+  const row = new ActionRowBuilder().addComponents(...buttons);
   return { embeds: [embed], components: [row] };
 }
 
@@ -2475,7 +2530,7 @@ async function handleRead(connection, interaction) {
     const story = storyRows[0];
 
     const [entries] = await connection.execute(
-      `SELECT se.content,
+      `SELECT se.content, se.story_entry_id, se.created_at, sw.discord_user_id AS original_author_id,
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -2486,7 +2541,7 @@ async function handleRead(connection, interaction) {
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
-       ORDER BY t.started_at, se.order_in_turn`,
+       ORDER BY t.started_at`,
       [storyId]
     );
 
@@ -2494,10 +2549,44 @@ async function handleRead(connection, interaction) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtNoConfirmedEntries', guildId) });
     }
 
-    const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
-    const pages = buildPages(entries, story.show_authors);
+    // Batched query for edit footnotes — one query for all entries, avoids per-entry lookups
+    const editInfoMap = new Map();
+    const entryIds = entries.map(e => e.story_entry_id);
+    if (entryIds.length > 0) {
+      const placeholders = entryIds.map(() => '?').join(',');
+      const [editRows] = await connection.execute(
+        `SELECT see.entry_id, see.edited_by, see.edited_by_name, see.edited_at
+         FROM story_entry_edit see
+         INNER JOIN (
+           SELECT entry_id, MAX(edited_at) AS max_edited_at
+           FROM story_entry_edit
+           WHERE entry_id IN (${placeholders})
+           GROUP BY entry_id
+         ) latest ON see.entry_id = latest.entry_id AND see.edited_at = latest.max_edited_at`,
+        entryIds
+      );
+      for (const row of editRows) {
+        const entry = entries.find(e => e.story_entry_id === row.entry_id);
+        if (!entry) continue;
+        const createdMs = new Date(entry.created_at).getTime();
+        const editedMs  = new Date(row.edited_at).getTime();
+        const isGrace = String(row.edited_by) === String(entry.original_author_id) &&
+                        (editedMs - createdMs) <= 60 * 60 * 1000;
+        if (!isGrace) {
+          editInfoMap.set(row.entry_id, { editedByName: row.edited_by_name, editedAt: row.edited_at });
+        }
+      }
+    }
 
-    const session = { pages, currentPage: 0, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId };
+    // Check admin status for contextual Edit button in buildReadEmbed
+    const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
+    const isAdmin = interaction.member.permissions.has('Administrator') ||
+      (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+
+    const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
+    const pages = buildPages(entries, story.show_authors, editInfoMap);
+
+    const session = { pages, currentPage: 0, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin };
     pendingReadData.set(interaction.user.id, session);
 
     await interaction.editReply(buildReadEmbed(session, 0));
@@ -2505,6 +2594,11 @@ async function handleRead(connection, interaction) {
     log(`Error in handleRead: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
+}
+
+async function handleReadEditButton(connection, interaction, session, entryId) {
+  await interaction.deferUpdate();
+  await openEditSession(connection, interaction, session.guildId, session.storyId, null, entryId);
 }
 
 async function handleReadNav(connection, interaction) {
@@ -2519,6 +2613,13 @@ async function handleReadNav(connection, interaction) {
   if (interaction.customId === 'story_read_close') {
     pendingReadData.delete(userId);
     await interaction.deleteReply();
+    return;
+  }
+
+  // story_read_edit_<entryId> — opens edit session; full handler wired in Step 4
+  if (interaction.customId.startsWith('story_read_edit_')) {
+    const entryId = parseInt(interaction.customId.split('_').at(-1));
+    await handleReadEditButton(connection, interaction, session, entryId);
     return;
   }
 
@@ -2542,6 +2643,461 @@ async function handleReadNav(connection, interaction) {
   }
 
   await interaction.update(buildReadEmbed(session, session.currentPage));
+}
+
+// ---------------------------------------------------------------------------
+// /story edit — edit a confirmed story entry
+// ---------------------------------------------------------------------------
+
+async function handleEdit(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (!storyId) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  const turnNumber = interaction.options.getInteger('turn');
+  await openEditSession(connection, interaction, guildId, storyId, turnNumber, null);
+}
+
+// Shared session-setup used by both /story edit (handleEdit) and the contextual
+// Edit button in /story read (handleReadEditButton).
+// Pass turnNumber to resolve by turn, or entryId to resolve directly.
+async function openEditSession(connection, interaction, guildId, storyId, turnNumber, entryId) {
+  let entryRows;
+
+  if (entryId != null) {
+    // Path B: resolve directly from a known entry ID
+    [entryRows] = await connection.execute(
+      `SELECT se.story_entry_id, se.content, se.created_at, se.entry_status,
+              sw.discord_user_id AS original_author_id, sw.discord_display_name AS author_name,
+              s.guild_story_id, s.title,
+              (SELECT COUNT(DISTINCT t2.turn_id)
+               FROM turn t2
+               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id
+                 AND se2.entry_status IN ('confirmed', 'deleted')
+               WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
+              ) AS turn_number
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE se.story_entry_id = ?
+         AND se.entry_status IN ('confirmed', 'deleted')`,
+      [entryId]
+    );
+  } else {
+    // Path A: resolve by turn number
+    [entryRows] = await connection.execute(
+      `SELECT se.story_entry_id, se.content, se.created_at, se.entry_status,
+              sw.discord_user_id AS original_author_id, sw.discord_display_name AS author_name,
+              s.guild_story_id, s.title
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE sw.story_id = ?
+         AND se.entry_status IN ('confirmed', 'deleted')
+         AND (
+           SELECT COUNT(DISTINCT t2.turn_id)
+           FROM turn t2
+           JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+           JOIN story_entry se2 ON se2.turn_id = t2.turn_id
+             AND se2.entry_status IN ('confirmed', 'deleted')
+           WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
+         ) = ?`,
+      [storyId, turnNumber]
+    );
+  }
+
+  if (entryRows.length === 0) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', guildId) });
+  }
+  const entry = entryRows[0];
+  const resolvedTurnNumber = turnNumber ?? entry.turn_number;
+
+  const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
+  const isAdmin = interaction.member.permissions.has('Administrator') ||
+    (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+  const isAuthor = String(entry.original_author_id) === interaction.user.id;
+
+  if (!isAdmin && !isAuthor) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditNotAuthorized', guildId) });
+  }
+
+  const [histRows] = await connection.execute(
+    `SELECT COUNT(*) AS cnt FROM story_entry_edit WHERE entry_id = ?`,
+    [entry.story_entry_id]
+  );
+  const hasHistory = histRows[0].cnt > 0;
+  const chunks = chunkEntryContent(entry.content);
+  const storyTitle = entry.title.length > 50 ? entry.title.slice(0, 50) + '…' : entry.title;
+
+  pendingEditData.set(interaction.user.id, {
+    entryId: entry.story_entry_id,
+    entryStatus: entry.entry_status,
+    storyId,
+    guildId,
+    originalAuthorId: String(entry.original_author_id),
+    createdAt: entry.created_at,
+    currentContent: entry.content,
+    chunks,
+    chunkPage: 0,
+    hasHistory,
+    historyPage: 0,
+    turnNumber: resolvedTurnNumber,
+    storyTitle,
+    guildStoryId: entry.guild_story_id,
+    originalInteraction: interaction
+  });
+
+  await interaction.editReply(buildEditMessage(chunks, 0, hasHistory, resolvedTurnNumber, storyTitle, entry.guild_story_id));
+}
+
+function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle, guildStoryId) {
+  const chunk = chunks[chunkPage];
+  const isFirstPage = chunkPage === 0;
+  const pageLabel = chunks.length > 1 ? ` · Page ${chunkPage + 1} of ${chunks.length}` : '';
+
+  const embed = new EmbedBuilder()
+    .setTitle(`#${guildStoryId} ${storyTitle} · Turn #${turnNumber}${pageLabel}`)
+    .setDescription(chunk.text)
+    .setFooter({ text: `${chunk.text.length} / 3500 characters on this page` })
+    .setColor(0xffd700);
+
+  // All 4 buttons always rendered in fixed positions: ← Prev | Next → | Edit | History
+  // Edit and History are disabled on pages 2+ since both operate on the full entry from page 1.
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_edit_prev')
+      .setLabel('← Prev')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(chunkPage === 0),
+    new ButtonBuilder()
+      .setCustomId('story_edit_next')
+      .setLabel('Next →')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(chunkPage === chunks.length - 1),
+    new ButtonBuilder()
+      .setCustomId('story_edit_open_modal')
+      .setLabel('Edit')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(!isFirstPage),
+    new ButtonBuilder()
+      .setCustomId('story_edit_browse_history')
+      .setLabel('History')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!isFirstPage || !hasHistory)
+  );
+
+  return { embeds: [embed], components: [row] };
+}
+
+async function handleEditButton(connection, interaction) {
+  const userId = interaction.user.id;
+  const state = pendingEditData.get(userId);
+
+  if (!state) {
+    await interaction.deferUpdate();
+    return;
+  }
+
+  const customId = interaction.customId;
+
+  if (customId === 'story_edit_prev') {
+    await interaction.deferUpdate();
+    state.chunkPage = Math.max(0, state.chunkPage - 1);
+    await state.originalInteraction.editReply(
+      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId)
+    );
+
+  } else if (customId === 'story_edit_next') {
+    await interaction.deferUpdate();
+    state.chunkPage = Math.min(state.chunks.length - 1, state.chunkPage + 1);
+    await state.originalInteraction.editReply(
+      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId)
+    );
+
+  } else if (customId === 'story_edit_open_modal') {
+    // No defer — showModal must be the first response
+    const modal = new ModalBuilder()
+      .setCustomId('story_edit_content_modal')
+      .setTitle('Edit Entry');
+    const input = new TextInputBuilder()
+      .setCustomId('entry_content')
+      .setLabel('Entry content')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(4000)
+      .setValue(state.chunks[state.chunkPage].text.slice(0, 4000))
+      .setPlaceholder('Edit this section. If you hit the character limit, save and return to continue on the next page.');
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    await interaction.showModal(modal);
+
+  } else if (customId === 'story_edit_browse_history') {
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(
+      await renderHistoryPage(connection, interaction, state, 0, 0)
+    );
+
+  } else if (customId === 'story_edit_history_prev') {
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(
+      await renderHistoryPage(connection, interaction, state, Math.max(0, state.historyPage - 1), 0)
+    );
+
+  } else if (customId === 'story_edit_history_next') {
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(
+      await renderHistoryPage(connection, interaction, state, state.historyPage + 1, 0)
+    );
+
+  } else if (customId === 'story_edit_hist_chunk_prev') {
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(
+      await renderHistoryPage(connection, interaction, state, state.historyPage, (state.histChunkPage ?? 0) - 1)
+    );
+
+  } else if (customId === 'story_edit_hist_chunk_next') {
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(
+      await renderHistoryPage(connection, interaction, state, state.historyPage, (state.histChunkPage ?? 0) + 1)
+    );
+
+  } else if (customId.startsWith('story_edit_restore_confirm_')) {
+    const editId = parseInt(customId.split('_').at(-1));
+    await handleRestoreExecute(connection, interaction, editId);
+
+  } else if (customId.startsWith('story_edit_restore_')) {
+    const editId = parseInt(customId.split('_').at(-1));
+    await handleRestoreConfirm(connection, interaction, editId);
+
+  } else if (customId === 'story_edit_restore_cancel') {
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(
+      await renderHistoryPage(connection, interaction, state, state.historyPage, state.histChunkPage ?? 0)
+    );
+
+  } else if (customId === 'story_edit_back') {
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(
+      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId)
+    );
+
+  } else if (customId === 'story_edit_close') {
+    pendingEditData.delete(userId);
+    await interaction.deleteReply();
+  }
+}
+
+async function renderHistoryPage(connection, interaction, state, histPage, histChunkPage = 0) {
+  const [rows] = await connection.execute(
+    `SELECT edit_id, content, edited_by_name, edited_at
+     FROM story_entry_edit
+     WHERE entry_id = ? ORDER BY edited_at DESC LIMIT 1 OFFSET ?`,
+    [state.entryId, histPage]
+  );
+  const [countRow] = await connection.execute(
+    `SELECT COUNT(*) AS cnt FROM story_entry_edit WHERE entry_id = ?`,
+    [state.entryId]
+  );
+  const total = countRow[0].cnt;
+
+  if (rows.length === 0) {
+    return buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId);
+  }
+
+  const histRow = rows[0];
+  state.historyPage = histPage;
+  state.histChunkPage = histChunkPage;
+
+  const histChunks = chunkEntryContent(histRow.content);
+  const chunk = histChunks[histChunkPage];
+  const pageLabel = histChunks.length > 1 ? ` · Page ${histChunkPage + 1} of ${histChunks.length}` : '';
+
+  const embed = new EmbedBuilder()
+    .setTitle(`Edit History — Version ${total - histPage} of ${total}${pageLabel}`)
+    .setDescription(chunk.text)
+    .setFooter({ text: `Edited by ${histRow.edited_by_name} · ${histRow.edited_at}` })
+    .setColor(0x99aab5);
+
+  if (histChunkPage === 0 && histChunks.length > 1) {
+    embed.addFields({ name: '\u200b', value: '*This version spans multiple pages. Restoring will replace your entire current entry and will alter the story\'s turn count.*' });
+  } else if (histChunkPage === 0) {
+    embed.addFields({ name: '\u200b', value: '*Restoring will replace your entire current entry and will alter the story\'s turn count.*' });
+  }
+
+  const buttons = [];
+
+  if (histPage > 0) {
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_history_prev').setLabel('← Newer').setStyle(ButtonStyle.Secondary));
+  }
+  if (histChunkPage > 0) {
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_hist_chunk_prev').setLabel('← Prev Page').setStyle(ButtonStyle.Secondary));
+  }
+  if (histChunkPage === 0) {
+    buttons.push(new ButtonBuilder()
+      .setCustomId(`story_edit_restore_${histRow.edit_id}`)
+      .setLabel('Restore This Version')
+      .setStyle(ButtonStyle.Primary));
+  }
+  if (histChunkPage < histChunks.length - 1) {
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_hist_chunk_next').setLabel('Next Page →').setStyle(ButtonStyle.Secondary));
+  }
+  if (histPage < total - 1) {
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_history_next').setLabel('Older →').setStyle(ButtonStyle.Secondary));
+  }
+  buttons.push(new ButtonBuilder().setCustomId('story_edit_back').setLabel('← Back to Entry').setStyle(ButtonStyle.Secondary));
+  buttons.push(new ButtonBuilder().setCustomId('story_edit_close').setLabel('✕ Close').setStyle(ButtonStyle.Danger));
+
+  const components = [];
+  for (let i = 0; i < buttons.length; i += 5) {
+    components.push(new ActionRowBuilder().addComponents(...buttons.slice(i, i + 5)));
+  }
+
+  return { embeds: [embed], components };
+}
+
+async function handleRestoreConfirm(connection, interaction, editId) {
+  await interaction.deferUpdate();
+  const state = pendingEditData.get(interaction.user.id);
+  if (!state) return;
+
+  const confirmText = state.entryStatus === 'deleted'
+    ? 'Restore this entry to the story? It will reappear in `/story read` and exports, and will alter the story\'s turn count.'
+    : 'Restore this version? This will replace your entire current entry, including content not shown on this page, and will alter the story\'s turn count.';
+
+  const embed = new EmbedBuilder()
+    .setTitle('Confirm Restore')
+    .setDescription(confirmText)
+    .setColor(0xff6b6b);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`story_edit_restore_confirm_${editId}`)
+      .setLabel('Confirm Restore')
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId('story_edit_restore_cancel')
+      .setLabel('Cancel')
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await state.originalInteraction.editReply({ embeds: [embed], components: [row] });
+}
+
+async function handleRestoreExecute(connection, interaction, editId) {
+  await interaction.deferUpdate();
+  const state = pendingEditData.get(interaction.user.id);
+  if (!state) return;
+
+  const [histRows] = await connection.execute(
+    `SELECT content FROM story_entry_edit WHERE edit_id = ?`, [editId]
+  );
+  if (histRows.length === 0) {
+    return await state.originalInteraction.editReply({ content: 'History version not found.', embeds: [], components: [] });
+  }
+
+  const editorName = interaction.member?.displayName ?? interaction.user.username;
+
+  const txn = await connection.getConnection();
+  await txn.beginTransaction();
+  try {
+    if (state.entryStatus === 'deleted') {
+      await txn.execute(
+        `UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?`,
+        [state.entryId]
+      );
+    } else {
+      const [current] = await txn.execute(
+        `SELECT content FROM story_entry WHERE story_entry_id = ?`, [state.entryId]
+      );
+      await txn.execute(
+        `INSERT INTO story_entry_edit (entry_id, content, edited_by, edited_by_name) VALUES (?, ?, ?, ?)`,
+        [state.entryId, current[0].content, interaction.user.id, editorName]
+      );
+      await txn.execute(
+        `UPDATE story_entry SET content = ? WHERE story_entry_id = ?`,
+        [histRows[0].content, state.entryId]
+      );
+    }
+    await txn.commit();
+  } catch (err) {
+    await txn.rollback();
+    log(`handleRestoreExecute failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
+    throw err;
+  } finally {
+    txn.release();
+  }
+
+  pendingEditData.delete(interaction.user.id);
+  await state.originalInteraction.editReply({
+    content: await getConfigValue(connection, 'txtEditRestoreSuccess', state.guildId),
+    embeds: [],
+    components: []
+  });
+}
+
+async function handleEditModalSubmit(connection, interaction) {
+  const userId = interaction.user.id;
+  const state = pendingEditData.get(userId);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtEditSessionExpired', interaction.guild?.id ?? state?.guildId),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  const editedChunk = sanitizeModalInput(
+    interaction.fields.getTextInputValue('entry_content'),
+    4000, true
+  );
+  if (!editedChunk) {
+    return await interaction.reply({ content: 'Entry content cannot be empty.', flags: MessageFlags.Ephemeral });
+  }
+
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const [entryRows] = await connection.execute(
+    `SELECT content FROM story_entry WHERE story_entry_id = ?`, [state.entryId]
+  );
+  if (entryRows.length === 0) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId) });
+  }
+
+  const currentContent = entryRows[0].content;
+  const chunk = state.chunks[state.chunkPage];
+  const newContent = currentContent.slice(0, chunk.start) + editedChunk + currentContent.slice(chunk.end);
+
+  const editorName = interaction.member?.displayName ?? interaction.user.username;
+
+  const txn = await connection.getConnection();
+  await txn.beginTransaction();
+  try {
+    await txn.execute(
+      `INSERT INTO story_entry_edit (entry_id, content, edited_by, edited_by_name) VALUES (?, ?, ?, ?)`,
+      [state.entryId, currentContent, userId, editorName]
+    );
+    await txn.execute(
+      `UPDATE story_entry SET content = ? WHERE story_entry_id = ?`,
+      [newContent, state.entryId]
+    );
+    await txn.commit();
+  } catch (err) {
+    await txn.rollback();
+    log(`handleEditModalSubmit failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
+    throw err;
+  } finally {
+    txn.release();
+  }
+
+  state.currentContent = newContent;
+  state.chunks = chunkEntryContent(newContent);
+  state.hasHistory = true;
+
+  pendingEditData.delete(userId);
+  await interaction.editReply({ content: await getConfigValue(connection, 'txtEditSuccess', state.guildId) });
 }
 
 // ---------------------------------------------------------------------------

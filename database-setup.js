@@ -52,6 +52,37 @@ export async function runMigrations(connection) {
     await connection.execute(`ALTER TABLE job ADD COLUMN turn_id BIGINT NULL`);
     log('Migration: turn_id column added to job table.', { show: true });
   }
+
+  // Migration: add 'deleted' to story_entry.entry_status enum
+  const [enumCols] = await connection.execute(
+    `SELECT COLUMN_TYPE FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'story_entry' AND COLUMN_NAME = 'entry_status'`
+  );
+  if (enumCols.length > 0 && !enumCols[0].COLUMN_TYPE.includes('deleted')) {
+    log('Migration: adding deleted status to story_entry.entry_status...', { show: true });
+    await connection.execute(
+      `ALTER TABLE story_entry MODIFY COLUMN entry_status ENUM('pending','confirmed','discarded','deleted') DEFAULT 'pending'`
+    );
+    log('Migration: story_entry.entry_status updated.', { show: true });
+  }
+
+  // Migration: create story_entry_edit table
+  const [editTable] = await connection.execute(`SHOW TABLES LIKE 'story_entry_edit'`);
+  if (editTable.length === 0) {
+    log('Migration: creating story_entry_edit table...', { show: true });
+    await connection.execute(`
+      CREATE TABLE story_entry_edit (
+        edit_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        entry_id BIGINT NOT NULL,
+        content TEXT NOT NULL,
+        edited_by VARCHAR(30) NOT NULL,
+        edited_by_name VARCHAR(100) NOT NULL,
+        edited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (entry_id) REFERENCES story_entry(story_entry_id) ON DELETE CASCADE
+      )
+    `);
+    log('Migration: story_entry_edit table created.', { show: true });
+  }
 }
 
 export async function setupDatabase(config) {

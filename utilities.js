@@ -202,6 +202,77 @@ export async function sendUserMessage(connection, interaction, storyWriterId, cf
   }
 }
 
+/**
+ * Split entry content into chunks with character positions.
+ * Used by the edit flow to paginate long entries without losing position info.
+ * @param {string} content
+ * @param {number} maxChunkSize - max chars per chunk (default 3500, leaves modal headroom)
+ * @returns {{ text: string, start: number, end: number }[]}
+ */
+export function chunkEntryContent(content, maxChunkSize = 3500) {
+  if (content.length <= maxChunkSize) {
+    return [{ text: content, start: 0, end: content.length }];
+  }
+
+  const chunks = [];
+  let pos = 0;
+
+  while (pos < content.length) {
+    const remaining = content.slice(pos);
+    if (remaining.length <= maxChunkSize) {
+      chunks.push({ text: remaining, start: pos, end: content.length });
+      break;
+    }
+
+    // Try splitting on double line breaks
+    let splitAt = -1;
+    const doubleBreak = remaining.lastIndexOf('\n\n', maxChunkSize);
+    if (doubleBreak > 0) {
+      splitAt = doubleBreak + 2; // include the \n\n in the preceding chunk
+    }
+
+    // Fall back to single line break
+    if (splitAt <= 0) {
+      const singleBreak = remaining.lastIndexOf('\n', maxChunkSize);
+      if (singleBreak > 0) splitAt = singleBreak + 1;
+    }
+
+    // Fall back to last word boundary
+    if (splitAt <= 0) {
+      const wordBreak = remaining.lastIndexOf(' ', maxChunkSize);
+      if (wordBreak > 0) splitAt = wordBreak + 1;
+    }
+
+    // Hard split if no break found
+    if (splitAt <= 0) splitAt = maxChunkSize;
+
+    chunks.push({ text: remaining.slice(0, splitAt), start: pos, end: pos + splitAt });
+    pos += splitAt;
+  }
+
+  return chunks;
+}
+
+/**
+ * Returns the most recent edit info for an entry, or null if none or within grace period.
+ * Grace period: author edits within 1 hour of entry creation suppress the read-view footnote.
+ */
+export async function getEntryEditInfo(connection, entryId, originalAuthorId, createdAt) {
+  const [rows] = await connection.execute(
+    `SELECT edited_by, edited_by_name, edited_at FROM story_entry_edit
+     WHERE entry_id = ? ORDER BY edited_at DESC LIMIT 1`,
+    [entryId]
+  );
+  if (rows.length === 0) return null;
+  const { edited_by, edited_by_name, edited_at } = rows[0];
+  const createdMs = new Date(createdAt).getTime();
+  const editedMs  = new Date(edited_at).getTime();
+  if (String(edited_by) === String(originalAuthorId) && (editedMs - createdMs) <= 60 * 60 * 1000) {
+    return null;
+  }
+  return { editedByName: edited_by_name, editedAt: edited_at };
+}
+
 export function replaceTemplateVariables(template, keyValueMap) {
   let result = template;
   for (const [key, value] of Object.entries(keyValueMap)) {

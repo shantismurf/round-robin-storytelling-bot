@@ -375,4 +375,11 @@ Words: ~[word_count]', 'en', 1),
 ('cfgStoryFeedChannelId', '1432779418631274566', 'en', 1),
 ('cfgAdminRoleName', 'Round Robin Admin', 'en', 1), -- Admin role name for story management
 ('cfgMediaChannelId', '1432779683497250867', 'en', 1), -- Channel for forwarded story images
-('errProcessingRequest', 'An error occurred while processing your request.', 'en', 1);
+('errProcessingRequest', 'An error occurred while processing your request.', 'en', 1),
+
+-- Entry edit system
+('txtEditEntryNotFound', 'Entry not found or not yet confirmed.', 'en', 1),
+('txtEditNotAuthorized', 'You don''t have permission to edit this entry.', 'en', 1),
+('txtEditSessionExpired', 'Your edit session has expired. Please run /story edit again.', 'en', 1),
+('txtEditSuccess', 'Entry updated.', 'en', 1),
+('txtEditRestoreSuccess', 'Entry restored.', 'en', 1);

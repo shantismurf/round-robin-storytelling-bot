@@ -53,15 +53,23 @@ CREATE TABLE IF NOT EXISTS story_writer (
   UNIQUE KEY (story_id, discord_user_id)
 );
 
-CREATE TABLE story_entry (
+CREATE TABLE IF NOT EXISTS story_entry (
   story_entry_id BIGINT PRIMARY KEY AUTO_INCREMENT,
   turn_id BIGINT NOT NULL,
   FOREIGN KEY (turn_id) REFERENCES turn(turn_id) ON DELETE CASCADE,
   content TEXT NOT NULL,
-  order_in_turn INT DEFAULT 1,
-  entry_status ENUM('pending', 'confirmed', 'discarded') DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  UNIQUE KEY unique_turn_order (turn_id, order_in_turn)
+  entry_status ENUM('pending', 'confirmed', 'discarded', 'deleted') DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS story_entry_edit (
+  edit_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+  entry_id BIGINT NOT NULL,
+  content TEXT NOT NULL,
+  edited_by VARCHAR(30) NOT NULL,
+  edited_by_name VARCHAR(100) NOT NULL,
+  edited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (entry_id) REFERENCES story_entry(story_entry_id) ON DELETE CASCADE
 );
 
 CREATE TABLE IF NOT EXISTS turn (
