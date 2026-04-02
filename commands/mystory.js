@@ -434,7 +434,7 @@ async function handleCatchUp(connection, interaction) {
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND se.entry_status = 'confirmed' AND t.started_at > ?
-       ORDER BY t.started_at, se.order_in_turn`,
+       ORDER BY t.started_at`,
       [storyId, afterTime]
     );
 
