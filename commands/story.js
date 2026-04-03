@@ -2362,16 +2362,16 @@ async function generateStoryExport(connection, storyId, guildId, guild = null) {
   <title>${story.title}</title>
   <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
   <style>
-    body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.7; }
+    body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.7; }
     h1 { font-size: 2em; margin-bottom: 8px; }
-    .meta { color: #666; font-size: 0.9em; margin-bottom: 8px; }
-    .meta-block { border-bottom: 1px solid #ddd; padding-bottom: 24px; margin-bottom: 40px; }
-    .turn { margin-bottom: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
+    .meta { font-size: 0.9em; margin-bottom: 8px; }
+    .meta-block { border-bottom: 1px solid; padding-bottom: 24px; margin-bottom: 40px; }
+    .turn { margin-bottom: 40px; border-top: 1px solid; padding-top: 20px; }
     p { margin: 0 0 1em; }
     .spoiler { background: #222; color: #222; border-radius: 3px; padding: 0 2px; cursor: pointer; }
     .spoiler:hover { color: #fff; }
     .subtext { font-size: 0.75em; color: #888; margin: 0 0 0.5em; }
-    .summary { color: #444; font-style: italic; margin-bottom: 40px; border-top: 1px solid #ddd; padding-top: 20px; }
+    .summary { font-style: italic; margin-bottom: 40px; border-top: 1px solid; padding-top: 20px; }
     .export-note { font-size: 0.8em; color: #999; border-top: 1px solid #eee; margin-top: 60px; padding-top: 16px; }
   </style>
 </head>
