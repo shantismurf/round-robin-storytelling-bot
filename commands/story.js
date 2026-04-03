@@ -2360,6 +2360,7 @@ async function generateStoryExport(connection, storyId, guildId, guild = null) {
 <head>
   <meta charset="UTF-8">
   <title>${story.title}</title>
+  <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
   <style>
     body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; color: #222; line-height: 1.7; }
     h1 { font-size: 2em; margin-bottom: 8px; }
