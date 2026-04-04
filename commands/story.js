@@ -173,7 +173,7 @@ const data = new SlashCommandBuilder()
   .addSubcommand(subcommand =>
     subcommand
       .setName('read')
-      .setDescription('Read the story in Discord, with an option to download as HTML')
+      .setDescription('Read the story in Discord, page by page, with an option to export as HTML')
       .addIntegerOption(option =>
         option.setName('story_id')
           .setDescription('Story ID to read')
@@ -2476,7 +2476,8 @@ function splitAtParagraphs(text, maxLen = 4000) {
 
 // Build the pages array for a read session from raw story entries.
 // editInfoMap: Map<story_entry_id, { editedByName, editedAt }> — populated by handleRead for footnotes
-function buildPages(entries, showAuthors, editInfoMap = new Map()) {
+// hasAnyEditSet: Set<story_entry_id> — all entries with any edit row, regardless of grace period
+function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAnyEditSet = new Set()) {
   const pages = [];
   // Group raw entry rows by turn number
   const turnMap = new Map();
@@ -2505,6 +2506,7 @@ function buildPages(entries, showAuthors, editInfoMap = new Map()) {
         storyEntryId: turn.storyEntryId,
         originalAuthorId: turn.originalAuthorId,
         isFirstChunk: i === 0,
+        hasHistory: i === 0 ? hasAnyEditSet.has(turn.storyEntryId) : false,
         editInfo: i === 0 ? (editInfoMap.get(turn.storyEntryId) ?? null) : null
       });
     });
@@ -2600,7 +2602,7 @@ function buildReadEmbed(session, pageIndex) {
     new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('story_read_download')
-        .setLabel('⬇ Download HTML')
+        .setLabel('⬇ Export Story')
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId('story_read_close')
@@ -2652,6 +2654,7 @@ async function handleRead(connection, interaction) {
 
     // Batched query for edit footnotes — one query for all entries, avoids per-entry lookups
     const editInfoMap = new Map();
+    const hasAnyEditSet = new Set();
     const entryIds = entries.map(e => e.story_entry_id);
     if (entryIds.length > 0) {
       const placeholders = entryIds.map(() => '?').join(',');
@@ -2667,6 +2670,7 @@ async function handleRead(connection, interaction) {
         entryIds
       );
       for (const row of editRows) {
+        hasAnyEditSet.add(row.entry_id); // track before grace-period filter
         const entry = entries.find(e => e.story_entry_id === row.entry_id);
         if (!entry) continue;
         const createdMs = new Date(entry.created_at).getTime();
@@ -2679,18 +2683,24 @@ async function handleRead(connection, interaction) {
       }
     }
 
+    // Build content map for read-path edit session (entryId → full content string)
+    const contentMap = new Map();
+    for (const entry of entries) {
+      contentMap.set(entry.story_entry_id, entry.content);
+    }
+
     // Check admin status for contextual Edit button in buildReadEmbed
     const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
     const isAdmin = interaction.member.permissions.has('Administrator') ||
       (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
-    const pages = buildPages(entries, story.show_authors, editInfoMap);
+    const pages = buildPages(entries, story.show_authors, editInfoMap, hasAnyEditSet);
 
     const savedPage = lastReadPage.get(`${interaction.user.id}_${storyId}`) ?? 0;
     const startPage = Math.min(savedPage, pages.length - 1);
 
-    const session = { pages, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin };
+    const session = { pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin };
     pendingReadData.set(interaction.user.id, session);
 
     await interaction.editReply(buildReadEmbed(session, startPage));
@@ -2701,8 +2711,48 @@ async function handleRead(connection, interaction) {
 }
 
 async function handleReadEditButton(connection, interaction, session, entryId) {
-  await interaction.deferUpdate();
-  await openEditSession(connection, interaction, session.guildId, session.storyId, null, entryId);
+  // Load state entirely from the read session — no DB query needed, so showModal can be
+  // the first (and only) response to this interaction within the 3-second window.
+  const page = session.pages.find(p => p.storyEntryId === entryId && p.isFirstChunk);
+  const fullContent = session.contentMap?.get(entryId) ?? null;
+  if (!page || fullContent === null) {
+    await interaction.reply({ content: 'Entry not found in session. Please use `/story read` again.', flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const chunks = chunkEntryContent(fullContent);
+
+  pendingEditData.set(interaction.user.id, {
+    entryId,
+    entryStatus: 'confirmed',
+    storyId: session.storyId,
+    guildId: session.guildId,
+    originalAuthorId: page.originalAuthorId,
+    createdAt: null,
+    currentContent: fullContent,
+    chunks,
+    chunkPage: 0,
+    hasHistory: page.hasHistory,
+    historyPage: 0,
+    turnNumber: page.turnNumber,
+    storyTitle: session.title,
+    guildStoryId: session.guildStoryId,
+    originalInteraction: interaction
+  });
+
+  // No defer — showModal must be the first response
+  const modal = new ModalBuilder()
+    .setCustomId('story_edit_content_modal')
+    .setTitle('Edit Entry');
+  const input = new TextInputBuilder()
+    .setCustomId('entry_content')
+    .setLabel('Entry content')
+    .setStyle(TextInputStyle.Paragraph)
+    .setMaxLength(4000)
+    .setValue(chunks[0].text.slice(0, 4000))
+    .setPlaceholder('Edit this section. If you hit the character limit, save and return to continue on the next page.');
+  modal.addComponents(new ActionRowBuilder().addComponents(input));
+  await interaction.showModal(modal);
 }
 
 async function handleReadNav(connection, interaction) {
@@ -2735,7 +2785,7 @@ async function handleReadNav(connection, interaction) {
         await interaction.followUp({ files: [{ attachment: result.buffer, name: result.filename }], flags: MessageFlags.Ephemeral });
       }
     } catch (err) {
-      log(`Error generating HTML download from read session: ${err}`, { show: true, guildName: interaction?.guild?.name });
+      log(`Error generating HTML export from read session: ${err}`, { show: true, guildName: interaction?.guild?.name });
     }
     return;
   }
@@ -3185,13 +3235,16 @@ async function handleEditModalSubmit(connection, interaction) {
     return await interaction.reply({ content: 'Entry content cannot be empty.', flags: MessageFlags.Ephemeral });
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // deferUpdate so Discord resolves which message to update based on which button
+  // triggered the modal: edit embed (command path) or read embed (read-button path).
+  await interaction.deferUpdate();
 
   const [entryRows] = await connection.execute(
     `SELECT content FROM story_entry WHERE story_entry_id = ?`, [state.entryId]
   );
   if (entryRows.length === 0) {
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId) });
+    await interaction.followUp({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId), flags: MessageFlags.Ephemeral });
+    return;
   }
 
   const currentContent = entryRows[0].content;
@@ -3220,13 +3273,18 @@ async function handleEditModalSubmit(connection, interaction) {
     txn.release();
   }
 
-  pendingEditData.delete(userId);
+  state.currentContent = newContent;
+  state.chunks = chunkEntryContent(newContent);
+  state.hasHistory = true;
 
-  const [btnRepostEntry, txtEditSuccess] = await Promise.all([
-    getConfigValue(connection, 'btnRepostEntry', state.guildId),
-    getConfigValue(connection, 'txtEditSuccess', state.guildId),
-  ]);
+  // Rebuild the edit embed with updated content so the user can continue editing,
+  // and add a Repost button as a second row for optional public reposting.
+  const editMsg = buildEditMessage(
+    state.chunks, state.chunkPage, state.hasHistory,
+    state.turnNumber, state.storyTitle, state.guildStoryId
+  );
 
+  const btnRepostEntry = await getConfigValue(connection, 'btnRepostEntry', state.guildId);
   const repostRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`story_repost_entry_${state.entryId}`)
@@ -3234,7 +3292,7 @@ async function handleEditModalSubmit(connection, interaction) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  await interaction.editReply({ content: txtEditSuccess, components: [repostRow] });
+  await interaction.editReply({ ...editMsg, components: [...editMsg.components, repostRow] });
 }
 
 /**
