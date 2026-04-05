@@ -369,37 +369,47 @@ export async function PickNextWriter(connection, storyId) {
   );
   const story_order_type = storyData[0]?.story_order_type;
   
-  let orderClause;
-  switch (story_order_type) {
-    case 1: // Random
-    default:
-      orderClause = '';
-      break;
-    case 2: // Round-robin by join time
-      orderClause = 'ORDER BY joined_at';
-      break;
-    case 3: // Fixed order
-      orderClause = 'ORDER BY writer_order';
-      break;
+  if (story_order_type === 2) {
+    // Round-robin: pick randomly from whoever has the fewest confirmed entries.
+    // Skipped/timed-out turns don't count — a writer who skipped hasn't contributed
+    // to the story yet, so they should remain eligible for the current cycle.
+    const [writerCounts] = await connection.execute(
+      `SELECT sw.story_writer_id, COUNT(se.story_entry_id) AS turn_count
+       FROM story_writer sw
+       LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id
+       LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+       WHERE sw.story_id = ? AND sw.sw_status = 1
+       GROUP BY sw.story_writer_id`,
+      [storyId]
+    );
+    if (writerCounts.length === 0) return null;
+    if (!currentWriterId) return writerCounts[0].story_writer_id;
+
+    const minCount = Math.min(...writerCounts.map(w => w.turn_count));
+    const eligible = writerCounts.filter(w => w.turn_count === minCount && w.story_writer_id !== currentWriterId);
+    // If excluding previous writer leaves nobody (solo story, or everyone tied and previous is the only option), allow repeat
+    const pool = eligible.length > 0 ? eligible : writerCounts.filter(w => w.turn_count === minCount);
+    return pool[Math.floor(Math.random() * pool.length)].story_writer_id;
   }
+
+  const orderClause = story_order_type === 3 ? 'ORDER BY writer_order' : '';
   const [writers] = await connection.execute(
-    `SELECT story_writer_id FROM story_writer 
+    `SELECT story_writer_id FROM story_writer
      WHERE story_id = ? AND sw_status = 1 ${orderClause}`,
     [storyId]
   );
   if (!currentWriterId) {
-    // No active turn - default to first writer
     return writers[0].story_writer_id;
   }
 
-  // Random selection — exclude previous writer unless they're the only one
+  // Random (type 1) — exclude previous writer unless they're the only one
   if (story_order_type === 1) {
     const eligible = writers.filter(w => w.story_writer_id !== currentWriterId);
     const pool = eligible.length > 0 ? eligible : writers;
     return pool[Math.floor(Math.random() * pool.length)].story_writer_id;
   }
 
-  // Sequential selection (same for both round-robin and fixed)
+  // Fixed order (type 3) — strict sequential rotation by writer_order
   const currentIndex = writers.findIndex(w => w.story_writer_id === currentWriterId);
   const nextIndex = (currentIndex + 1) % writers.length;
   return writers[nextIndex].story_writer_id;
