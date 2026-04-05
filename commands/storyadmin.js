@@ -54,6 +54,20 @@ const data = new SlashCommandBuilder()
         o.setName('user').setDescription('Writer to designate as next').setRequired(true))
   )
   .addSubcommand(s =>
+    s.setName('deleteentry')
+      .setDescription('Soft-delete a specific story entry (hidden from read/export, restorable)')
+      .addIntegerOption(o =>
+        o.setName('story_id').setDescription('Story ID').setRequired(true))
+      .addIntegerOption(o =>
+        o.setName('turn').setDescription('Turn number (as shown in /story read)').setRequired(true).setMinValue(1))
+  )
+  .addSubcommand(s =>
+    s.setName('restoreentry')
+      .setDescription('Restore a previously deleted story entry')
+      .addIntegerOption(o =>
+        o.setName('entry_id').setDescription('Entry ID (shown when entry was deleted)').setRequired(true))
+  )
+  .addSubcommand(s =>
     s.setName('delete')
       .setDescription('Permanently delete a story and all its data')
       .addIntegerOption(o =>
@@ -86,11 +100,13 @@ async function execute(connection, interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
-  if (subcommand === 'skip')        await handleSkip(connection, interaction);
-  else if (subcommand === 'extend') await handleExtend(connection, interaction);
-  else if (subcommand === 'remove') await handleKick(connection, interaction);
-  else if (subcommand === 'next')   await handleNext(connection, interaction);
-  else if (subcommand === 'delete') await handleDelete(connection, interaction);
+  if (subcommand === 'skip')             await handleSkip(connection, interaction);
+  else if (subcommand === 'extend')      await handleExtend(connection, interaction);
+  else if (subcommand === 'remove')      await handleKick(connection, interaction);
+  else if (subcommand === 'next')        await handleNext(connection, interaction);
+  else if (subcommand === 'deleteentry')  await handleDeleteEntry(connection, interaction);
+  else if (subcommand === 'restoreentry') await handleRestoreEntry(connection, interaction);
+  else if (subcommand === 'delete')       await handleDelete(connection, interaction);
 }
 
 // ---------------------------------------------------------------------------
@@ -580,6 +596,152 @@ async function handleNext(connection, interaction) {
 // ---------------------------------------------------------------------------
 // /storyadmin delete
 // ---------------------------------------------------------------------------
+// ---------------------------------------------------------------------------
+// /storyadmin deleteentry — soft-delete a specific story entry
+// ---------------------------------------------------------------------------
+
+async function handleDeleteEntry(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  const turnNumber = interaction.options.getInteger('turn');
+
+  try {
+    const [entryRows] = await connection.execute(
+      `SELECT se.story_entry_id, se.content, sw.discord_display_name
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ?
+         AND se.entry_status = 'confirmed'
+         AND (
+           SELECT COUNT(DISTINCT t2.turn_id)
+           FROM turn t2
+           JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+           JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+           WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
+         ) = ?`,
+      [storyId, turnNumber]
+    );
+
+    if (entryRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', guildId) });
+    }
+
+    const entry = entryRows[0];
+    const preview = entry.content.length > 300 ? entry.content.slice(0, 300) + '…' : entry.content;
+
+    const embed = new EmbedBuilder()
+      .setTitle(`Delete Turn ${turnNumber} — ${entry.discord_display_name}?`)
+      .setDescription(preview)
+      .addFields({ name: '\u200b', value: 'This entry will be hidden from `/story read` and exports. The entry ID shown after deletion can be used to restore it.' })
+      .setColor(0xff6b6b);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_deleteentry_confirm_${entry.story_entry_id}`)
+        .setLabel('Delete Entry')
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId('storyadmin_deleteentry_cancel')
+        .setLabel('Cancel')
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
+
+  } catch (error) {
+    log(`Error in handleDeleteEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+async function handleDeleteEntryConfirm(connection, interaction) {
+  await interaction.deferUpdate();
+  const entryId = parseInt(interaction.customId.split('_').at(-1));
+  const guildId = interaction.guild.id;
+
+  try {
+    const [rows] = await connection.execute(
+      `SELECT se.story_entry_id, se.entry_status, sw.discord_display_name, sw.story_id
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE se.story_entry_id = ? AND s.guild_id = ?`,
+      [entryId, guildId]
+    );
+
+    if (rows.length === 0) {
+      return await interaction.editReply({ content: 'Entry not found.', embeds: [], components: [] });
+    }
+    if (rows[0].entry_status === 'deleted') {
+      return await interaction.editReply({ content: 'This entry has already been deleted.', embeds: [], components: [] });
+    }
+
+    await connection.execute(
+      `UPDATE story_entry SET entry_status = 'deleted' WHERE story_entry_id = ?`,
+      [entryId]
+    );
+
+    await logAdminAction(connection, interaction.user.id, 'deleteentry', rows[0].story_id);
+
+    await interaction.editReply({
+      content: `Entry by **${rows[0].discord_display_name}** has been deleted. Entry ID: \`${entryId}\` — to restore, use \`/storyadmin restoreentry entry_id:${entryId}\`.`,
+      embeds: [],
+      components: []
+    });
+
+  } catch (error) {
+    log(`Error in handleDeleteEntryConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), embeds: [], components: [] });
+  }
+}
+
+async function handleRestoreEntry(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const entryId = interaction.options.getInteger('entry_id');
+
+  try {
+    const [rows] = await connection.execute(
+      `SELECT se.story_entry_id, se.entry_status, sw.discord_display_name, sw.story_id
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE se.story_entry_id = ? AND s.guild_id = ?`,
+      [entryId, guildId]
+    );
+
+    if (rows.length === 0) {
+      return await interaction.editReply({ content: 'Entry not found.' });
+    }
+    if (rows[0].entry_status !== 'deleted') {
+      return await interaction.editReply({ content: 'That entry is not deleted — nothing to restore.' });
+    }
+
+    await connection.execute(
+      `UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?`,
+      [entryId]
+    );
+
+    await logAdminAction(connection, interaction.user.id, 'restoreentry', rows[0].story_id);
+
+    await interaction.editReply({
+      content: `Entry by **${rows[0].discord_display_name}** has been restored and will appear in \`/story read\` and exports again.`
+    });
+
+  } catch (error) {
+    log(`Error in handleRestoreEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
 async function handleDelete(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
@@ -680,7 +842,12 @@ async function handleDeleteCancel(connection, interaction) {
 }
 
 async function handleButtonInteraction(connection, interaction) {
-  if (interaction.customId.startsWith('storyadmin_delete_confirm_')) {
+  if (interaction.customId.startsWith('storyadmin_deleteentry_confirm_')) {
+    await handleDeleteEntryConfirm(connection, interaction);
+  } else if (interaction.customId === 'storyadmin_deleteentry_cancel') {
+    await interaction.deferUpdate();
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
+  } else if (interaction.customId.startsWith('storyadmin_delete_confirm_')) {
     await handleDeleteConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('storyadmin_delete_cancel_')) {
     await handleDeleteCancel(connection, interaction);
