@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { getConfigValue, log } from './utilities.js';
+import { getConfigValue, getTurnNumber, log } from './utilities.js';
 import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
 
@@ -651,18 +651,6 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
   });
 }
 
-/**
- * Helper function to get turn number for a story
- */
-async function getTurnNumber(connection, storyId) {
-  const [result] = await connection.execute(
-    `SELECT COUNT(*) as turn_number FROM turn t
-     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ?`,
-    [storyId]
-  );
-  return result[0].turn_number;
-}
 
 /**
  * Post a short activity message to the story's main thread. Safe to fire-and-forget.

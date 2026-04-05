@@ -273,6 +273,25 @@ export async function getEntryEditInfo(connection, entryId, originalAuthorId, cr
   return { editedByName: edited_by_name, editedAt: edited_at };
 }
 
+/**
+ * Returns the turn number that will be assigned to the next confirmed entry in a story.
+ * Counts only turns that produced a confirmed entry — skipped and timed-out turns are
+ * excluded, keeping this consistent with the numbering shown in /story read.
+ * Call this at the START of a new turn (before an entry exists), so +1 accounts for
+ * the turn that is just beginning.
+ */
+export async function getTurnNumber(connection, storyId) {
+  const [result] = await connection.execute(
+    `SELECT COUNT(DISTINCT t.turn_id) + 1 AS turn_number
+     FROM turn t
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+     WHERE sw.story_id = ?`,
+    [storyId]
+  );
+  return result[0].turn_number;
+}
+
 export function replaceTemplateVariables(template, keyValueMap) {
   let result = template;
   for (const [key, value] of Object.entries(keyValueMap)) {

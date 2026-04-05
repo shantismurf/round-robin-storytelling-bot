@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, isGuildConfigured, resolveStoryId, chunkEntryContent } from '../utilities.js';
+import { getConfigValue, getTurnNumber, sanitizeModalInput, log, replaceTemplateVariables, isGuildConfigured, resolveStoryId, chunkEntryContent } from '../utilities.js';
 import { marked } from 'marked';
 import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
@@ -1730,13 +1730,16 @@ async function confirmEntry(connection, entryId, interaction) {
       UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?
     `, [entryId]);
 
-    // Get story info for turn advancement and entry posting
+    // Get story info for turn advancement and entry posting.
+    // turn_number: count only confirmed-entry turns up to this one — matches /story read numbering.
     const [entryInfo] = await txn.execute(`
       SELECT se.turn_id, se.content, sw.story_id, sw.discord_user_id, sw.discord_display_name,
              s.story_thread_id, s.show_authors,
-             (SELECT COUNT(*) FROM turn t2
+             (SELECT COUNT(DISTINCT t2.turn_id)
+              FROM turn t2
               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-              WHERE sw2.story_id = sw.story_id) as turn_number
+              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+              WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
       FROM story_entry se
       JOIN turn t ON se.turn_id = t.turn_id
       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
@@ -2114,15 +2117,13 @@ async function handleFinalizeConfirm(connection, interaction) {
     const entryContent = entryParts.join('\n\n');
 
     const [storyInfo] = await connection.execute(
-      `SELECT s.show_authors, s.story_thread_id, sw.discord_display_name,
-              (SELECT COUNT(*) FROM turn t2 JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-               WHERE sw2.story_id = ?) as turn_number
+      `SELECT s.show_authors, s.story_thread_id, sw.discord_display_name
        FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
        WHERE s.story_id = ?`,
-      [storyId, interaction.user.id, storyId]
+      [interaction.user.id, storyId]
     );
-    const { show_authors, story_thread_id, discord_display_name, turn_number } = storyInfo[0];
+    const { show_authors, story_thread_id, discord_display_name } = storyInfo[0];
 
     const txn = await connection.getConnection();
     await txn.beginTransaction();
@@ -2148,6 +2149,17 @@ async function handleFinalizeConfirm(connection, interaction) {
     } finally {
       txn.release();
     }
+
+    // Fetch turn number after commit so the confirmed entry is included in the count
+    const [turnNumResult] = await connection.execute(
+      `SELECT COUNT(DISTINCT t2.turn_id) AS turn_number
+       FROM turn t2
+       JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+       JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+       WHERE sw2.story_id = ? AND t2.started_at <= (SELECT started_at FROM turn WHERE turn_id = ?)`,
+      [storyId, turn.turn_id]
+    );
+    const turn_number = turnNumResult[0].turn_number;
 
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
@@ -2669,7 +2681,7 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
   let entryRows;
 
   if (entryId != null) {
-    // Path B: resolve directly from a known entry ID
+    // Path B: resolve directly from a known entry ID (from the read view Edit button)
     [entryRows] = await connection.execute(
       `SELECT se.story_entry_id, se.content, se.created_at, se.entry_status,
               sw.discord_user_id AS original_author_id, sw.discord_display_name AS author_name,
@@ -2678,7 +2690,7 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
                JOIN story_entry se2 ON se2.turn_id = t2.turn_id
-                 AND se2.entry_status IN ('confirmed', 'deleted')
+                 AND se2.entry_status = 'confirmed'
                WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
               ) AS turn_number
        FROM story_entry se
@@ -2686,11 +2698,11 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story s ON sw.story_id = s.story_id
        WHERE se.story_entry_id = ?
-         AND se.entry_status IN ('confirmed', 'deleted')`,
+         AND se.entry_status = 'confirmed'`,
       [entryId]
     );
   } else {
-    // Path A: resolve by turn number
+    // Path A: resolve by turn number — uses confirmed-only count to match /story read numbering
     [entryRows] = await connection.execute(
       `SELECT se.story_entry_id, se.content, se.created_at, se.entry_status,
               sw.discord_user_id AS original_author_id, sw.discord_display_name AS author_name,
@@ -2700,13 +2712,13 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_id = ?
-         AND se.entry_status IN ('confirmed', 'deleted')
+         AND se.entry_status = 'confirmed'
          AND (
            SELECT COUNT(DISTINCT t2.turn_id)
            FROM turn t2
            JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
            JOIN story_entry se2 ON se2.turn_id = t2.turn_id
-             AND se2.entry_status IN ('confirmed', 'deleted')
+             AND se2.entry_status = 'confirmed'
            WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
          ) = ?`,
       [storyId, turnNumber]
@@ -3483,13 +3495,7 @@ async function applyPauseActions(connection, interaction, state) {
     const thread = await interaction.guild.channels.fetch(threadId);
     if (!thread) return;
 
-    const [turnCountResult] = await connection.execute(
-      `SELECT COUNT(*) as turn_number FROM turn t
-       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ?`,
-      [state.storyId]
-    );
-    const turnNumber = turnCountResult[0].turn_number;
+    const turnNumber = await getTurnNumber(connection, state.storyId);
     const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
     const pausedTitle = threadTitleTemplate
       .replace('[story_id]', state.guildStoryId)
@@ -3596,13 +3602,7 @@ async function applyResumeActions(connection, interaction, state) {
     try {
       const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
       if (thread) {
-        const [turnCountResult] = await connection.execute(
-          `SELECT COUNT(*) as turn_number FROM turn t
-           JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-           WHERE sw.story_id = ?`,
-          [state.storyId]
-        );
-        const turnNumber = turnCountResult[0].turn_number;
+        const turnNumber = await getTurnNumber(connection, state.storyId);
         const formattedEndTime = newTurnEndsAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
         const newTitle = threadTitleTemplate
