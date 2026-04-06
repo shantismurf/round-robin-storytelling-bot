@@ -9,7 +9,7 @@
  */
 
 import fs from 'fs';
-import { DB, loadConfig, formattedDate } from './utilities.js';
+import { formattedDate } from './utilities.js';
 
 function parseConfigEntries(sql) {
   const entries = [];
@@ -27,41 +27,8 @@ function parseConfigEntries(sql) {
   }
   return entries;
 }
-
-async function syncConfig() {
-  const args = process.argv.slice(2);
-  const apply = args.includes('--apply');
-  const setIndex = args.indexOf('--set');
-
-  const config = loadConfig();
-  const db = new DB(config.db);
-  const connection = await db.connect();
-
+export async function syncConfig(connection) {
   try {
-    // --set key value: directly update a single key and exit
-    if (setIndex !== -1) {
-      const key = args[setIndex + 1];
-      const value = args[setIndex + 2];
-      if (!key || value === undefined) {
-        console.error('Usage: npm run sync-config -- --set <key> <value>');
-        process.exit(1);
-      }
-      const [result] = await connection.execute(
-        'UPDATE config SET config_value = ? WHERE config_key = ? AND guild_id = 1',
-        [value, key]
-      );
-      if (result.affectedRows === 0) {
-        console.log(`Key '${key}' not found in DB (guild 1). Did you mean to insert it?`);
-      } else {
-        console.log(`${formattedDate()}: Set ${key} = ${value}`);
-      }
-      return;
-    }
-
-    if (!apply) {
-      console.log(`${formattedDate()}: DRY RUN — no changes will be made. Use --apply to apply.\n`);
-    }
-
     const sql = fs.readFileSync('./db/sample_config.sql', 'utf8');
     const fileEntries = parseConfigEntries(sql);
 
@@ -71,8 +38,8 @@ async function syncConfig() {
     }
     console.log(`${formattedDate()}: Parsed ${fileEntries.length} entries from sample_config.sql`);
 
-    // Get all entries currently in the DB
-    const [dbRows] = await connection.execute('SELECT config_key, config_value, guild_id FROM config');
+    // Get all entries currently in the DB, exclude server setup config keys
+    const [dbRows] = await connection.execute('SELECT config_key, config_value, guild_id FROM config WHERE config_key NOT IN (\'cfgStoryFeedChannelId\',\'cfgMediaChannelId\', \'cfgAdminRoleName\')');
     const dbMap = new Map(dbRows.map(r => [`${r.guild_id}:${r.config_key}`, r.config_value]));
     console.log(`${formattedDate()}: Found ${dbRows.length} entries in the database\n`);
 
@@ -90,44 +57,32 @@ async function syncConfig() {
 
     // Report / insert missing entries
     if (missing.length === 0) {
-      console.log('No missing entries.');
+      console.log('No missing config entries.');
     } else {
-      console.log(`${missing.length} missing entries (would insert):`);
+      console.log(`\nInserting ${missing.length} missing config entries:`);
       for (const entry of missing) {
         console.log(`  + ${entry.config_key}`);
-        if (apply) {
-          await connection.execute(
-            'INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, ?, ?)',
-            [entry.config_key, entry.config_value, entry.language_code, entry.guild_id]
-          );
-        }
+        await connection.execute(
+          'INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, ?, ?)',
+          [entry.config_key, entry.config_value, entry.language_code, entry.guild_id]
+        );
       }
     }
 
     // Report / update changed entries
     if (changed.length === 0) {
-      console.log('No changed entries.');
+      console.log('No changed config entries.');
     } else {
-      console.log(`\n${changed.length} changed entries${apply ? ' (updating)' : ' (dry run)'}:`);
+      console.log(`\n${changed.length} changed config entries${apply ? ' (updating)' : ' (dry run)'}:`);
       for (const entry of changed) {
         console.log(`  ~ ${entry.config_key}`);
         console.log(`      was: ${entry.old_value}`);
         console.log(`      now: ${entry.config_value}`);
-        if (apply) {
-          await connection.execute(
-            'UPDATE config SET config_value = ? WHERE config_key = ? AND guild_id = ?',
-            [entry.config_value, entry.config_key, entry.guild_id]
-          );
-        }
+        await connection.execute(
+          'UPDATE config SET config_value = ? WHERE config_key = ? AND guild_id = ?',
+          [entry.config_value, entry.config_key, entry.guild_id]
+        );
       }
-    }
-
-    if (apply) {
-      console.log(`\n${formattedDate()}: Done.`);
-    } else if (missing.length > 0 || changed.length > 0) {
-      console.log(`\nRun with --apply to make these changes.`);
-    } else {
-      console.log(`\n${formattedDate()}: Config is up to date.`);
     }
 
     // Report anything in the DB not in the file
@@ -138,12 +93,8 @@ async function syncConfig() {
       extras.forEach(r => console.log(`  ? ${r.config_key} (guild ${r.guild_id})`));
     }
 
-  } finally {
-    await db.disconnect();
+  } catch (err) {
+    console.error(`${formattedDate()}: Sync failed:`, err);
+    process.exit(1);
   }
 }
-
-syncConfig().catch(err => {
-  console.error(`${formattedDate()}: Sync failed:`, err);
-  process.exit(1);
-});

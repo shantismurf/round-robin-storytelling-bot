@@ -399,9 +399,6 @@ Words: ~[word_count]', 'en', 1),
 -- System Configuration
 ('cfgLanguageCode', 'en', 'en', 1),
 ('cfgEntryTimeoutMinutes', '10', 'en', 1),
-('cfgStoryFeedChannelId', '1432779418631274566', 'en', 1),
-('cfgAdminRoleName', 'Round Robin Admin', 'en', 1), -- Admin role name for story management
-('cfgMediaChannelId', '1432779683497250867', 'en', 1), -- Channel for forwarded story images
 ('errProcessingRequest', 'An error occurred while processing your request.', 'en', 1),
 
 -- Entry edit system
@@ -411,4 +408,12 @@ Words: ~[word_count]', 'en', 1),
 ('txtEditSuccess', 'Entry updated.', 'en', 1),
 ('txtEditRestoreSuccess', 'Entry restored.', 'en', 1),
 ('btnRepostEntry', '📢 Repost to Story Thread', 'en', 1),
-('txtRepostSuccess', '✅ Entry reposted to the story thread.', 'en', 1);
+('txtRepostSuccess', '✅ Entry reposted to the story thread.', 'en', 1),
+
+-- Join UI labels
+('lblJoinNotifications', 'Notification Preference:', 'en', 1),
+('lblJoinPrivacy', 'Turn Thread Privacy:', 'en', 1),
+
+-- Admin help text
+('lblAdminHelpRemove', '/storyadmin remove <story_id> <user>', 'en', 1),
+('txtAdminHelpRemove', 'Removes a writer from a story. If it''s their turn, advances to the next writer. If they''re the last writer, the story is closed automatically.', 'en', 1);
