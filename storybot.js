@@ -385,10 +385,12 @@ export async function PickNextWriter(connection, storyId) {
     if (writerCounts.length === 0) return null;
     if (!currentWriterId) return writerCounts[0].story_writer_id;
 
-    const minCount = Math.min(...writerCounts.map(w => w.turn_count));
-    const eligible = writerCounts.filter(w => w.turn_count === minCount && w.story_writer_id !== currentWriterId);
+    // Normalize turn_count to number — MySQL COUNT() can return strings
+    const counts = writerCounts.map(w => ({ ...w, turn_count: Number(w.turn_count) }));
+    const minCount = Math.min(...counts.map(w => w.turn_count));
+    const eligible = counts.filter(w => w.turn_count === minCount && w.story_writer_id !== currentWriterId);
     // If excluding previous writer leaves nobody (solo story, or everyone tied and previous is the only option), allow repeat
-    const pool = eligible.length > 0 ? eligible : writerCounts.filter(w => w.turn_count === minCount);
+    const pool = eligible.length > 0 ? eligible : counts.filter(w => w.turn_count === minCount);
     return pool[Math.floor(Math.random() * pool.length)].story_writer_id;
   }
 
@@ -398,6 +400,7 @@ export async function PickNextWriter(connection, storyId) {
      WHERE story_id = ? AND sw_status = 1 ${orderClause}`,
     [storyId]
   );
+  if (writers.length === 0) return null;
   if (!currentWriterId) {
     return writers[0].story_writer_id;
   }
