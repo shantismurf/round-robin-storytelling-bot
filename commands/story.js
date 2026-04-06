@@ -2476,7 +2476,7 @@ function splitAtParagraphs(text, maxLen = 4000) {
 
 // Build the pages array for a read session from raw story entries.
 // editInfoMap: Map<story_entry_id, { editedByName, editedAt }> — populated by handleRead for footnotes
-// hasAnyEditSet: Set<story_entry_id> — all entries with any edit row, regardless of grace period
+// hasAnyEditSet: Set<story_entry_id> — entries with any edit history (before grace-period filter)
 function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAnyEditSet = new Set()) {
   const pages = [];
   // Group raw entry rows by turn number
@@ -2488,7 +2488,8 @@ function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAnyEditSet
         writerName: row.discord_display_name,
         parts: [],
         storyEntryId: row.story_entry_id,
-        originalAuthorId: String(row.original_author_id)
+        originalAuthorId: String(row.original_author_id),
+        createdAt: row.created_at
       });
     }
     turnMap.get(row.turn_number).parts.push(row.content.trim());
@@ -2505,8 +2506,9 @@ function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAnyEditSet
         partCount: chunks.length > 1 ? chunks.length : null,
         storyEntryId: turn.storyEntryId,
         originalAuthorId: turn.originalAuthorId,
+        createdAt: turn.createdAt,
         isFirstChunk: i === 0,
-        hasHistory: i === 0 ? hasAnyEditSet.has(turn.storyEntryId) : false,
+        hasHistory: hasAnyEditSet.has(turn.storyEntryId),
         editInfo: i === 0 ? (editInfoMap.get(turn.storyEntryId) ?? null) : null
       });
     });
@@ -2654,7 +2656,7 @@ async function handleRead(connection, interaction) {
 
     // Batched query for edit footnotes — one query for all entries, avoids per-entry lookups
     const editInfoMap = new Map();
-    const hasAnyEditSet = new Set();
+    let hasAnyEditSet = new Set();
     const entryIds = entries.map(e => e.story_entry_id);
     if (entryIds.length > 0) {
       const placeholders = entryIds.map(() => '?').join(',');
@@ -2669,6 +2671,8 @@ async function handleRead(connection, interaction) {
          ) latest ON see.entry_id = latest.entry_id AND see.edited_at = latest.max_edited_at`,
         entryIds
       );
+      // Build hasAnyEditSet from raw rows before grace-period filter so History button is accurate
+      hasAnyEditSet = new Set(editRows.map(r => r.entry_id));
       for (const row of editRows) {
         hasAnyEditSet.add(row.entry_id); // track before grace-period filter
         const entry = entries.find(e => e.story_entry_id === row.entry_id);
@@ -2721,6 +2725,7 @@ async function handleReadEditButton(connection, interaction, session, entryId) {
   }
 
   const chunks = chunkEntryContent(fullContent);
+  const storyTitle = session.title.length > 50 ? session.title.slice(0, 50) + '…' : session.title;
 
   pendingEditData.set(interaction.user.id, {
     entryId,
@@ -2735,7 +2740,7 @@ async function handleReadEditButton(connection, interaction, session, entryId) {
     hasHistory: page.hasHistory,
     historyPage: 0,
     turnNumber: page.turnNumber,
-    storyTitle: session.title,
+    storyTitle,
     guildStoryId: session.guildStoryId,
     originalInteraction: interaction
   });
