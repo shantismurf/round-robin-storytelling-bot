@@ -1,43 +1,19 @@
 # To-Do List
-
+---
+## 1. /storyadmin delete entry subcommand added [complete]
+## 2. User Pause and Resume per story added [complete]
+## 3. Warning on all commands if /storyadmin setup has not been run [complete]
+## 4. View Last Entry button added to normal mode turn thread welcome message [complete]
+## 5. "Repost to Story Thread" button added after confirming edit [complete]
+## 6. /story read Jump to Page select menu and remember last-viewed page
 ---
 
-## 1. storyadmin delete subcommand
-*(note: `turn_id = 45` is the turn pending deletion once this is implemented)*
-
-Accept an argument to delete one specific entry; show confirm message with content preview; add `deleted` status to entries so they are skipped in turn count, read, export, etc.; deleted entries should still appear in the edit interface; Restore should update entry status but not touch the edits table.
-
----
-
-## 2. User Pause
-Users should have the ability to pause themselves and remove themselves from turn selection. Admins should be able to pause and unpause users.
-
----
-
-## 3. View Last Entry button
-Add a button to a new turn thread welcome post that on click posts the previous entry as a permanent embed so the writer can read it as they are composing.
-
----
-
-## 4. Repost after edit
-Add an option to publicly repost the entry to the story thread when confirming an edit.
-
----
-
-## 5. Jump to Page + Persist read page
-
-**Jump to Page** — add a dropdown jump-to-page select list to the `/story read` interface. Also update the Previous button so it is colored the same as the Next button.
-
-**Persist last-viewed read page** — store `currentPage` in a lightweight persistent map so that when a user reopens `/story read` for the same story, they resume where they left off rather than starting from page 1.
-
----
-
-## 6. Refactor repeated logic into shared utilities
+## 7. Refactor repeated logic into shared utilities
 Audit the project for duplicated functionality that should be extracted into reusable helper functions. For example, pagination/chunking of long entries for display is repeated across read, edit, and export — that logic should live in one place so changes only need to be made once.
 
 ---
 
-## 7. DM support + story autocomplete UX overhaul
+## 8. DM support + story autocomplete UX overhaul
 
 **1. Discord app setup**
 - Enable User Install scope in Discord Developer Portal

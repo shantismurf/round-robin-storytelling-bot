@@ -32,6 +32,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtQuickModeTurnStart', '🎭 **[story_title]:** [current_writer]''s turn has started! Please use `/story write [story_id]` to submit your entry. Turn ends [turn_end_date].', 'en', 1),
 ('btnFinalizeEntry', '✅ Finalize Entry', 'en', 1),
 ('btnSkipTurn', '⏭️ Skip Turn', 'en', 1),
+('btnViewLastEntry', '📖 View Last Entry', 'en', 1),
 ('btnJoinStory', '✋ Join This Story', 'en', 1),
 ('txtAlreadyJoined', 'You have already joined this story!', 'en', 1),
 ('txtStoryJoinFail', 'You were not added to the story. Please contact an administrator.', 'en', 1),
@@ -408,4 +409,6 @@ Words: ~[word_count]', 'en', 1),
 ('txtEditNotAuthorized', 'You don''t have permission to edit this entry.', 'en', 1),
 ('txtEditSessionExpired', 'Your edit session has expired. Please run /story edit again.', 'en', 1),
 ('txtEditSuccess', 'Entry updated.', 'en', 1),
-('txtEditRestoreSuccess', 'Entry restored.', 'en', 1);
+('txtEditRestoreSuccess', 'Entry restored.', 'en', 1),
+('btnRepostEntry', '📢 Repost to Story Thread', 'en', 1),
+('txtRepostSuccess', '✅ Entry reposted to the story thread.', 'en', 1);

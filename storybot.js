@@ -429,7 +429,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     const [writerInfo] = await connection.execute(
       `SELECT sw.story_id, sw.discord_user_id, sw.discord_display_name, sw.turn_privacy, sw.notification_prefs,
               s.quick_mode, s.turn_length_hours, s.story_thread_id, s.story_turn_privacy, s.title,
-              s.timeout_reminder_percent, s.guild_id, s.guild_story_id
+              s.timeout_reminder_percent, s.guild_id, s.guild_story_id, s.show_authors
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_writer_id = ?`,
@@ -635,28 +635,50 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
   const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guild_id);
   const mediaConfigured = mediaChannelId && mediaChannelId !== 'cfgMediaChannelId';
   const welcomeKey = mediaConfigured ? 'txtNormalModeWelcome' : 'txtNormalModeWelcomeNoMedia';
-  const txtNormalModeWelcome = await getConfigValue(connection, welcomeKey, guild_id);
-  const btnFinalizeEntry = await getConfigValue(connection,'btnFinalizeEntry', guild_id);
-  const btnSkipTurn = await getConfigValue(connection,'btnSkipTurn', guild_id);
+
+  const cfgKeys = [welcomeKey, 'btnFinalizeEntry', 'btnSkipTurn', 'btnViewLastEntry'];
+  const cfg = await getConfigValue(connection, cfgKeys, guild_id);
 
   const unixTs = Math.floor(turnEndTime.getTime() / 1000);
-  const welcomeContent = txtNormalModeWelcome
+  const welcomeContent = cfg[welcomeKey]
     .replace('[story_title]', writer.title)
     .replace('[turn_end_full]', `<t:${unixTs}:F>`)
     .replace('[turn_end_relative]', `<t:${unixTs}:R>`)
     .replace('[story_id]', writer.guild_story_id);
 
-  const row = new ActionRowBuilder()
-    .addComponents(
+  // Check whether there is a previous confirmed entry to offer
+  const [lastEntryRows] = await connection.execute(
+    `SELECT se.content, sw.discord_display_name
+     FROM story_entry se
+     JOIN turn t ON se.turn_id = t.turn_id
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+     ORDER BY t.started_at DESC LIMIT 1`,
+    [writer.story_id]
+  );
+  const hasPreviousEntry = lastEntryRows.length > 0;
+
+  const buttons = [
+    new ButtonBuilder()
+      .setCustomId(`finalize_entry_${writer.story_id}`)
+      .setLabel(cfg.btnFinalizeEntry)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`skip_turn_${writer.story_id}`)
+      .setLabel(cfg.btnSkipTurn)
+      .setStyle(ButtonStyle.Secondary),
+  ];
+
+  if (hasPreviousEntry) {
+    buttons.push(
       new ButtonBuilder()
-        .setCustomId(`finalize_entry_${writer.story_id}`)
-        .setLabel(btnFinalizeEntry)
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`skip_turn_${writer.story_id}`)
-        .setLabel(btnSkipTurn)
+        .setCustomId(`view_last_entry_${writer.story_id}`)
+        .setLabel(cfg.btnViewLastEntry)
         .setStyle(ButtonStyle.Secondary)
     );
+  }
+
+  const row = new ActionRowBuilder().addComponents(buttons);
 
   await thread.send({
     content: welcomeContent,

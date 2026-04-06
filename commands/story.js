@@ -121,6 +121,7 @@ async function discordMarkdownToHtml(text, guild = null) {
 // Tracks pending DM reminder timeouts by entryId so they can be cancelled on confirm/discard
 const pendingReminderTimeouts = new Map();
 const pendingReadData = new Map(); // userId -> { pages, currentPage, storyId, title, wordCount, showAuthors, guildId }
+const lastReadPage = new Map();   // `${userId}_${storyId}` -> pageIndex (persists across /story read sessions)
 
 const data = new SlashCommandBuilder()
   .setName('story')
@@ -1475,6 +1476,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleListNavigation(connection, interaction);
   } else if (interaction.customId.startsWith('confirm_entry_') || interaction.customId.startsWith('discard_entry_')) {
     await handleEntryConfirmation(connection, interaction);
+  } else if (interaction.customId.startsWith('view_last_entry_')) {
+    await handleViewLastEntry(connection, interaction);
   } else if (interaction.customId.startsWith('finalize_entry_')) {
     await handleFinalizeEntry(connection, interaction);
   } else if (interaction.customId.startsWith('story_finalize_confirm_')) {
@@ -1860,6 +1863,9 @@ async function handleSelectMenuInteraction(connection, interaction) {
     const filter = interaction.values[0];
     await interaction.deferUpdate();
     await renderStoryListReply(connection, interaction, filter, 1);
+
+  } else if (interaction.customId === 'story_read_jump') {
+    await handleReadNav(connection, interaction);
   }
 }
 
@@ -1972,6 +1978,48 @@ function getStatusIcon(status) {
   return icons[status] || '❓';
 }
 
+
+/**
+ * Handle view last entry button — posts the previous confirmed entry as a permanent embed in the thread
+ */
+async function handleViewLastEntry(connection, interaction) {
+  await interaction.deferUpdate();
+  const storyId = parseInt(interaction.customId.split('_')[3]);
+  const guildId = interaction.guild.id;
+
+  try {
+    const [rows] = await connection.execute(
+      `SELECT se.content, sw.discord_display_name, s.show_authors,
+              (SELECT COUNT(DISTINCT t2.turn_id)
+               FROM turn t2
+               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+               WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+       ORDER BY t.started_at DESC LIMIT 1`,
+      [storyId]
+    );
+
+    if (rows.length === 0) {
+      return;
+    }
+
+    const { content, discord_display_name, show_authors, turn_number } = rows[0];
+    const embed = new EmbedBuilder().setDescription(content);
+    if (show_authors) {
+      embed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name}` });
+    }
+
+    await interaction.channel.send({ embeds: [embed] });
+
+  } catch (error) {
+    log(`Error in handleViewLastEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
+  }
+}
 
 /**
  * Handle finalize entry button click — show confirmation prompt
@@ -2489,39 +2537,79 @@ function buildReadEmbed(session, pageIndex) {
     session.isAdmin || page.originalAuthorId === session.userId
   );
 
-  const buttons = [
+  // Row 1: navigation — << -10 | ← Prev | [Edit] | Next → | +10 >>
+  const navButtons = [
+    new ButtonBuilder()
+      .setCustomId('story_read_back10')
+      .setLabel('«')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(pageIndex === 0),
     new ButtonBuilder()
       .setCustomId('story_read_prev')
-      .setLabel('← Previous')
-      .setStyle(ButtonStyle.Secondary)
+      .setLabel('← Prev')
+      .setStyle(ButtonStyle.Primary)
       .setDisabled(pageIndex === 0),
   ];
   if (canEdit) {
-    buttons.push(
+    navButtons.push(
       new ButtonBuilder()
         .setCustomId(`story_read_edit_${page.storyEntryId}`)
         .setLabel('Edit')
-        .setStyle(ButtonStyle.Primary)
+        .setStyle(ButtonStyle.Secondary)
     );
   }
-  buttons.push(
+  navButtons.push(
     new ButtonBuilder()
       .setCustomId('story_read_next')
       .setLabel('Next →')
       .setStyle(ButtonStyle.Primary)
       .setDisabled(pageIndex === totalPages - 1),
     new ButtonBuilder()
-      .setCustomId('story_read_download')
-      .setLabel('⬇ Download HTML')
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_read_close')
-      .setLabel('✕ Close')
-      .setStyle(ButtonStyle.Danger)
+      .setCustomId('story_read_fwd10')
+      .setLabel('»')
+      .setStyle(ButtonStyle.Primary)
+      .setDisabled(pageIndex >= totalPages - 1)
   );
 
-  const row = new ActionRowBuilder().addComponents(...buttons);
-  return { embeds: [embed], components: [row] };
+  const components = [new ActionRowBuilder().addComponents(...navButtons)];
+
+  // Row 2: Jump to Page select menu — up to 25 options centered around current page
+  if (totalPages > 1) {
+    const maxOptions = 25;
+    let rangeStart = Math.max(0, pageIndex - Math.floor(maxOptions / 2));
+    const rangeEnd = Math.min(totalPages, rangeStart + maxOptions);
+    rangeStart = Math.max(0, rangeEnd - maxOptions);
+
+    const options = [];
+    for (let i = rangeStart; i < rangeEnd; i++) {
+      const p = session.pages[i];
+      const label = `Page ${i + 1} — Turn ${p.turnNumber}${p.writerName ? ` (${p.writerName})` : ''}`.slice(0, 100);
+      options.push({ label, value: String(i), default: i === pageIndex });
+    }
+
+    const jumpMenu = new StringSelectMenuBuilder()
+      .setCustomId('story_read_jump')
+      .setPlaceholder(`Page ${pageIndex + 1} of ${totalPages}`)
+      .addOptions(options);
+
+    components.push(new ActionRowBuilder().addComponents(jumpMenu));
+  }
+
+  // Row 3: utility actions
+  components.push(
+    new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('story_read_download')
+        .setLabel('⬇ Download HTML')
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId('story_read_close')
+        .setLabel('✕ Close')
+        .setStyle(ButtonStyle.Danger)
+    )
+  );
+
+  return { embeds: [embed], components };
 }
 
 async function handleRead(connection, interaction) {
@@ -2599,10 +2687,13 @@ async function handleRead(connection, interaction) {
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
     const pages = buildPages(entries, story.show_authors, editInfoMap);
 
-    const session = { pages, currentPage: 0, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin };
+    const savedPage = lastReadPage.get(`${interaction.user.id}_${storyId}`) ?? 0;
+    const startPage = Math.min(savedPage, pages.length - 1);
+
+    const session = { pages, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin };
     pendingReadData.set(interaction.user.id, session);
 
-    await interaction.editReply(buildReadEmbed(session, 0));
+    await interaction.editReply(buildReadEmbed(session, startPage));
   } catch (error) {
     log(`Error in handleRead: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
@@ -2653,8 +2744,16 @@ async function handleReadNav(connection, interaction) {
     session.currentPage = Math.max(0, session.currentPage - 1);
   } else if (interaction.customId === 'story_read_next') {
     session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 1);
+  } else if (interaction.customId === 'story_read_back10') {
+    session.currentPage = Math.max(0, session.currentPage - 10);
+  } else if (interaction.customId === 'story_read_fwd10') {
+    session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 10);
+  } else if (interaction.customId === 'story_read_jump') {
+    const selected = parseInt(interaction.values[0]);
+    if (!isNaN(selected)) session.currentPage = Math.min(session.pages.length - 1, Math.max(0, selected));
   }
 
+  lastReadPage.set(`${userId}_${session.storyId}`, session.currentPage);
   await interaction.update(buildReadEmbed(session, session.currentPage));
 }
 
@@ -2901,6 +3000,9 @@ async function handleEditButton(connection, interaction) {
   } else if (customId === 'story_edit_close') {
     pendingEditData.delete(userId);
     await interaction.deleteReply();
+
+  } else if (customId.startsWith('story_repost_entry_')) {
+    await handleRepostEntry(connection, interaction);
   }
 }
 
@@ -3045,10 +3147,23 @@ async function handleRestoreExecute(connection, interaction, editId) {
   }
 
   pendingEditData.delete(interaction.user.id);
+
+  const [btnRepostEntry, txtEditRestoreSuccess] = await Promise.all([
+    getConfigValue(connection, 'btnRepostEntry', state.guildId),
+    getConfigValue(connection, 'txtEditRestoreSuccess', state.guildId),
+  ]);
+
+  const repostRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`story_repost_entry_${state.entryId}`)
+      .setLabel(btnRepostEntry)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
   await state.originalInteraction.editReply({
-    content: await getConfigValue(connection, 'txtEditRestoreSuccess', state.guildId),
+    content: txtEditRestoreSuccess,
     embeds: [],
-    components: []
+    components: [repostRow]
   });
 }
 
@@ -3105,12 +3220,89 @@ async function handleEditModalSubmit(connection, interaction) {
     txn.release();
   }
 
-  state.currentContent = newContent;
-  state.chunks = chunkEntryContent(newContent);
-  state.hasHistory = true;
-
   pendingEditData.delete(userId);
-  await interaction.editReply({ content: await getConfigValue(connection, 'txtEditSuccess', state.guildId) });
+
+  const [btnRepostEntry, txtEditSuccess] = await Promise.all([
+    getConfigValue(connection, 'btnRepostEntry', state.guildId),
+    getConfigValue(connection, 'txtEditSuccess', state.guildId),
+  ]);
+
+  const repostRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`story_repost_entry_${state.entryId}`)
+      .setLabel(btnRepostEntry)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await interaction.editReply({ content: txtEditSuccess, components: [repostRow] });
+}
+
+/**
+ * Handle repost entry button — posts the current confirmed content of an entry to the story thread
+ */
+async function handleRepostEntry(connection, interaction) {
+  await interaction.deferUpdate();
+
+  const entryId = parseInt(interaction.customId.split('_').at(-1));
+
+  try {
+    const [rows] = await connection.execute(
+      `SELECT se.content, sw.discord_display_name, s.story_thread_id, s.show_authors,
+              (SELECT COUNT(DISTINCT t2.turn_id)
+               FROM turn t2
+               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+               WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) AS turn_number
+       FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE se.story_entry_id = ? AND se.entry_status = 'confirmed'`,
+      [entryId]
+    );
+
+    if (rows.length === 0) {
+      return await interaction.editReply({
+        content: await getConfigValue(connection, 'txtEditEntryNotFound', interaction.guild.id),
+        components: []
+      });
+    }
+
+    const { content, discord_display_name, story_thread_id, show_authors, turn_number } = rows[0];
+
+    if (!story_thread_id) {
+      return await interaction.editReply({
+        content: 'Story thread not found — cannot repost.',
+        components: []
+      });
+    }
+
+    const storyThread = await interaction.guild.channels.fetch(story_thread_id).catch(() => null);
+    if (!storyThread) {
+      return await interaction.editReply({
+        content: 'Story thread not found — cannot repost.',
+        components: []
+      });
+    }
+
+    const embed = new EmbedBuilder().setDescription(content);
+    if (show_authors) {
+      embed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name} *(edited)*` });
+    }
+
+    await storyThread.send({ embeds: [embed] });
+    await interaction.editReply({
+      content: await getConfigValue(connection, 'txtRepostSuccess', interaction.guild.id),
+      components: []
+    });
+
+  } catch (error) {
+    log(`Error in handleRepostEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({
+      content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id),
+      components: []
+    });
+  }
 }
 
 // ---------------------------------------------------------------------------

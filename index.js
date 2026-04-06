@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
 import { StoryBot, updateStoryStatusMessage } from './storybot.js';
-import { loadConfig, DB, getConfigValue, setTestMode, log } from './utilities.js';
+import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log } from './utilities.js';
 import { setupDatabase } from './database-setup.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
@@ -130,6 +130,20 @@ async function main() {
         log(formatCommandLog(interaction), { show: true, guildName: interaction?.guild?.name });
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
+          // Block all commands (except /storyadmin setup) if the bot has not been configured for this server
+          const isSetupCommand = interaction.commandName === 'storyadmin'
+            && interaction.options.getSubcommand(false) === 'setup';
+          if (!isSetupCommand && interaction.guild) {
+            const configured = await isGuildConfigured(connection, interaction.guild.id);
+            if (!configured) {
+              const isAdmin = interaction.member?.permissions?.has('ManageGuild');
+              const msg = isAdmin
+                ? '⚠️ **Round Robin StoryBot has not been configured for this server.** Please run `/storyadmin setup` to set the story feed channel and admin role before using any other commands.'
+                : '⚠️ **Round Robin StoryBot has not been configured for this server yet.** Please ask a server admin to run `/storyadmin setup`.';
+              await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+              return;
+            }
+          }
           await command.execute(connection, interaction);
         }
       } else if (interaction.isModalSubmit()) {
