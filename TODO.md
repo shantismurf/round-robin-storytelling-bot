@@ -1,19 +1,20 @@
 # To-Do List
 ---
-## 1. /storyadmin delete entry subcommand added [complete]
-## 2. User Pause and Resume per story added [complete]
-## 3. Warning on all commands if /storyadmin setup has not been run [complete]
-## 4. View Last Entry button added to normal mode turn thread welcome message [complete]
-## 5. "Repost to Story Thread" button added after confirming edit [complete]
+[completed]
+## 1. Improved `/storyadmin` subcommands 
+## 2. Added `/mystory manage` User Pause and Resume per story added
+## 3. Warning on all commands if /storyadmin setup has not been run
+## 4. View Last Entry button added to normal mode turn thread welcome message 
+## 5. Fixed edit UX bugs, updated help text and button labels, added "Repost to Story Thread" button added after confirming edit
 ## 6. /story read Jump to Page select menu and remember last-viewed page
 ---
 
-## 7. Refactor repeated logic into shared utilities
+## 1. Refactor repeated logic into shared utilities
 Audit the project for duplicated functionality that should be extracted into reusable helper functions. For example, pagination/chunking of long entries for display is repeated across read, edit, and export — that logic should live in one place so changes only need to be made once.
 
 ---
 
-## 8. DM support + story autocomplete UX overhaul
+## 2. DM support + story autocomplete UX overhaul
 
 **1. Discord app setup**
 - Enable User Install scope in Discord Developer Portal

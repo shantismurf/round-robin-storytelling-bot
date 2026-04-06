@@ -14,6 +14,14 @@ async function deploy() {
     process.exit(1);
   }
 
+  const rest = new REST().setToken(config.token);
+
+  // Wipe guild-level command registrations (clears test-mode leftovers before global deploy)
+  if (config.guildId) {
+    await rest.put(Routes.applicationGuildCommands(config.clientId, config.guildId), { body: [] });
+    console.log('Cleared guild-scoped commands.');
+  }
+
   // Load all commands from the commands directory
   const commands = [];
   const files = fs.readdirSync('./commands').filter(f => f.endsWith('.js'));
@@ -26,8 +34,7 @@ async function deploy() {
     }
   }
 
-  const rest = new REST().setToken(config.token);
-
+  // Register commands  
   if (config.testMode) {
     console.log(`TEST MODE: Registering ${commands.length} command(s) to guild ${config.guildId} (instant)...`);
     const result = await rest.put(
