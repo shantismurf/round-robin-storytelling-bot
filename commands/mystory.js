@@ -46,6 +46,22 @@ const data = new SlashCommandBuilder()
           .setRequired(true))
   )
   .addSubcommand(s =>
+    s.setName('pause')
+      .setDescription('Pause your participation in a story (or all active stories)')
+      .addIntegerOption(o =>
+        o.setName('story_id')
+          .setDescription('Story ID to pause — leave blank to pause all active stories')
+          .setRequired(false))
+  )
+  .addSubcommand(s =>
+    s.setName('resume')
+      .setDescription('Resume your participation in a paused story (or all paused stories)')
+      .addIntegerOption(o =>
+        o.setName('story_id')
+          .setDescription('Story ID to resume — leave blank to resume all paused stories')
+          .setRequired(false))
+  )
+  .addSubcommand(s =>
     s.setName('help')
       .setDescription('Quick reference for all writer commands')
   );
@@ -62,6 +78,8 @@ async function execute(connection, interaction) {
   else if (subcommand === 'catchup') await handleCatchUp(connection, interaction);
   else if (subcommand === 'leave') await handleLeave(connection, interaction);
   else if (subcommand === 'pass') await handlePass(connection, interaction);
+  else if (subcommand === 'pause') await handlePause(connection, interaction);
+  else if (subcommand === 'resume') await handleResume(connection, interaction);
   else if (subcommand === 'help') await handleHelp(connection, interaction);
 }
 
@@ -88,6 +106,7 @@ async function handleHelp(connection, interaction) {
     'txtMyHelpTitle', 'txtMyHelpFooter',
     'lblMyHelpDashboard', 'txtMyHelpDashboard',
     'lblMyHelpTurn', 'txtMyHelpTurn',
+    'lblMyHelpPause', 'txtMyHelpPause',
   ], guildId);
 
   const embed = new EmbedBuilder()
@@ -96,6 +115,7 @@ async function handleHelp(connection, interaction) {
     .addFields(
       { name: cfg.lblMyHelpDashboard, value: cfg.txtMyHelpDashboard, inline: false },
       { name: cfg.lblMyHelpTurn,      value: cfg.txtMyHelpTurn,      inline: false },
+      { name: cfg.lblMyHelpPause,     value: cfg.txtMyHelpPause,     inline: false },
     )
     .setFooter({ text: cfg.txtMyHelpFooter });
 
@@ -115,14 +135,14 @@ async function handleStatus(connection, interaction) {
       'txtMyStoriesTitle', 'txtMyStoryNone',
       'txtMyTurnQuick', 'txtMyTurnNormal', 'txtOthersTurn',
       'txtTurnWaiting', 'txtMyTurnHistory', 'txtMyTurnNoHistory',
-      'txtModeQuick', 'txtModeNormal', 'errProcessingRequest'
+      'txtModeQuick', 'txtModeNormal', 'txtWriterStatusPaused', 'errProcessingRequest'
     ], guildId);
 
     const [stories] = await connection.execute(
-      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode
+      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode, sw.sw_status as writer_status
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
-       WHERE sw.discord_user_id = ? AND sw.sw_status = 1 AND s.guild_id = ? AND s.story_status != 3
+       WHERE sw.discord_user_id = ? AND sw.sw_status IN (1, 2) AND s.guild_id = ? AND s.story_status != 3
        ORDER BY s.story_status ASC, s.created_at DESC`,
       [userId, guildId]
     );
@@ -199,14 +219,17 @@ async function handleStatus(connection, interaction) {
           })
         : cfg.txtMyTurnNoHistory;
 
-      const lines = [turnLine, historyLine].filter(Boolean);
+      const isPaused = story.writer_status === 2;
+      const pausedLine = isPaused ? cfg.txtWriterStatusPaused : null;
+      const lines = [pausedLine, turnLine, historyLine].filter(Boolean);
       let fieldValue;
-      if (lines.length === 2) {
-        fieldValue = `├ ${lines[0]}\n└ ${lines[1]}`;
+      if (lines.length === 0) {
+        fieldValue = '└ —';
       } else if (lines.length === 1) {
         fieldValue = `└ ${lines[0]}`;
       } else {
-        fieldValue = '└ —';
+        const middleLines = lines.slice(0, -1).map(l => `├ ${l}`).join('\n');
+        fieldValue = `${middleLines}\n└ ${lines[lines.length - 1]}`;
       }
 
       embed.addFields({
@@ -733,6 +756,169 @@ async function handlePass(connection, interaction) {
 
   } catch (error) {
     log(`Error in handlePass: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+/**
+ * /mystory pause [story_id] — pause participation in one or all active stories.
+ * If it is currently the user's turn, the turn is auto-passed before pausing.
+ */
+async function handlePause(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const guildStoryId = interaction.options.getInteger('story_id');
+
+  try {
+    let storiesToPause;
+
+    if (guildStoryId !== null) {
+      const storyId = await resolveStoryId(connection, guildId, guildStoryId);
+      if (storyId === null) {
+        return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+      }
+      const [rows] = await connection.execute(
+        `SELECT sw.story_writer_id, s.story_id, s.title, s.guild_story_id
+         FROM story_writer sw
+         JOIN story s ON sw.story_id = s.story_id
+         WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
+        [storyId, guildId, userId]
+      );
+      storiesToPause = rows;
+    } else {
+      const [rows] = await connection.execute(
+        `SELECT sw.story_writer_id, s.story_id, s.title, s.guild_story_id
+         FROM story_writer sw
+         JOIN story s ON sw.story_id = s.story_id
+         WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
+        [guildId, userId]
+      );
+      storiesToPause = rows;
+    }
+
+    if (storiesToPause.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveStoriesToPause', guildId) });
+    }
+
+    const pausedTitles = [];
+
+    for (const story of storiesToPause) {
+      // Check if it's currently the user's turn
+      const [activeTurnRows] = await connection.execute(
+        `SELECT t.turn_id, t.thread_id FROM turn t
+         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+         WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
+        [story.story_id, userId]
+      );
+
+      // Pause the writer first so PickNextWriter excludes them
+      await connection.execute(
+        `UPDATE story_writer SET sw_status = 2 WHERE story_writer_id = ?`,
+        [story.story_writer_id]
+      );
+
+      if (activeTurnRows.length > 0) {
+        // Auto-pass: end the current turn and advance to the next writer
+        const activeTurn = activeTurnRows[0];
+        await connection.execute(
+          `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
+          [activeTurn.turn_id]
+        );
+        if (activeTurn.thread_id) {
+          try {
+            const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
+            if (thread) await thread.delete('Writer paused — turn passed');
+          } catch (err) {
+            log(`Failed to delete thread on pause for story ${story.story_id}: ${err}`, { show: true, guildName: interaction?.guild?.name });
+          }
+        }
+        try {
+          const nextWriterId = await PickNextWriter(connection, story.story_id);
+          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+        } catch (err) {
+          log(`Could not advance turn after pause for story ${story.story_id}: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        }
+      }
+
+      pausedTitles.push(`${story.title} (#${story.guild_story_id})`);
+    }
+
+    const cfg = await getConfigValue(connection, ['txtPauseDM', 'txtPauseSuccess'], guildId);
+    const storyList = pausedTitles.map(title => `• ${title}`).join('\n');
+    const dmText = replaceTemplateVariables(cfg.txtPauseDM, {
+      story_list: storyList,
+      resume_command: '/mystory resume'
+    });
+
+    try {
+      await interaction.user.send(dmText);
+    } catch (dmErr) {
+      log(`Could not send pause DM to ${interaction.user.username}: ${dmErr}`, { show: true, guildName: interaction?.guild?.name });
+    }
+
+    log(`${interaction.user.username} paused in ${pausedTitles.length} story(s): ${pausedTitles.join(', ')}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: cfg.txtPauseSuccess });
+
+  } catch (error) {
+    log(`Error in handlePause: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+/**
+ * /mystory resume [story_id] — resume participation in one or all paused stories.
+ */
+async function handleResume(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+  const guildStoryId = interaction.options.getInteger('story_id');
+
+  try {
+    let storiesToResume;
+
+    if (guildStoryId !== null) {
+      const storyId = await resolveStoryId(connection, guildId, guildStoryId);
+      if (storyId === null) {
+        return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+      }
+      const [rows] = await connection.execute(
+        `SELECT sw.story_writer_id, s.title, s.guild_story_id
+         FROM story_writer sw
+         JOIN story s ON sw.story_id = s.story_id
+         WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 2`,
+        [storyId, guildId, userId]
+      );
+      storiesToResume = rows;
+    } else {
+      const [rows] = await connection.execute(
+        `SELECT sw.story_writer_id, s.title, s.guild_story_id
+         FROM story_writer sw
+         JOIN story s ON sw.story_id = s.story_id
+         WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 2`,
+        [guildId, userId]
+      );
+      storiesToResume = rows;
+    }
+
+    if (storiesToResume.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNotPaused', guildId) });
+    }
+
+    for (const story of storiesToResume) {
+      await connection.execute(
+        `UPDATE story_writer SET sw_status = 1 WHERE story_writer_id = ?`,
+        [story.story_writer_id]
+      );
+    }
+
+    const resumedTitles = storiesToResume.map(s => `${s.title} (#${s.guild_story_id})`).join(', ');
+    log(`${interaction.user.username} resumed in: ${resumedTitles}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtResumeSuccess', guildId) });
+
+  } catch (error) {
+    log(`Error in handleResume: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }

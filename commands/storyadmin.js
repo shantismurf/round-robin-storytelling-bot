@@ -20,6 +20,9 @@ async function logAdminAction(connection, adminUserId, actionType, storyId, targ
   }
 }
 
+// Pending confirmation data keyed by admin user ID
+const pendingManageUserData = new Map();
+
 const data = new SlashCommandBuilder()
   .setName('storyadmin')
   .setDescription('Admin tools for story management')
@@ -37,13 +40,43 @@ const data = new SlashCommandBuilder()
       .addIntegerOption(o =>
         o.setName('hours').setDescription('Hours to add').setRequired(true).setMinValue(1))
   )
-  .addSubcommand(s =>
-    s.setName('remove')
-      .setDescription('Remove a writer from a story')
-      .addIntegerOption(o =>
-        o.setName('story_id').setDescription('Story ID').setRequired(true))
-      .addUserOption(o =>
-        o.setName('user').setDescription('Writer to remove').setRequired(true))
+  .addSubcommandGroup(group =>
+    group.setName('manageuser')
+      .setDescription('Manage writer membership in a story')
+      .addSubcommand(s =>
+        s.setName('pause')
+          .setDescription('Temporarily pause a writer — they skip turns until unpaused')
+          .addIntegerOption(o =>
+            o.setName('story_id').setDescription('Story ID').setRequired(true))
+          .addUserOption(o =>
+            o.setName('user').setDescription('Writer to pause').setRequired(true))
+      )
+      .addSubcommand(s =>
+        s.setName('unpause')
+          .setDescription('Restore a paused writer to active turn rotation')
+          .addIntegerOption(o =>
+            o.setName('story_id').setDescription('Story ID').setRequired(true))
+          .addUserOption(o =>
+            o.setName('user').setDescription('Writer to unpause').setRequired(true))
+      )
+      .addSubcommand(s =>
+        s.setName('remove')
+          .setDescription('Permanently remove a writer from a story')
+          .addIntegerOption(o =>
+            o.setName('story_id').setDescription('Story ID').setRequired(true))
+          .addUserOption(o =>
+            o.setName('user').setDescription('Writer to remove').setRequired(true))
+      )
+      .addSubcommand(s =>
+        s.setName('ao3name')
+          .setDescription('Update a writer\'s AO3 display name')
+          .addIntegerOption(o =>
+            o.setName('story_id').setDescription('Story ID').setRequired(true))
+          .addUserOption(o =>
+            o.setName('user').setDescription('Writer to update').setRequired(true))
+          .addStringOption(o =>
+            o.setName('name').setDescription('New AO3 name (leave blank to clear)').setRequired(false))
+      )
   )
   .addSubcommand(s =>
     s.setName('next')
@@ -100,13 +133,21 @@ async function execute(connection, interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
-  if (subcommand === 'skip')             await handleSkip(connection, interaction);
-  else if (subcommand === 'extend')      await handleExtend(connection, interaction);
-  else if (subcommand === 'remove')      await handleKick(connection, interaction);
-  else if (subcommand === 'next')        await handleNext(connection, interaction);
-  else if (subcommand === 'deleteentry')  await handleDeleteEntry(connection, interaction);
-  else if (subcommand === 'restoreentry') await handleRestoreEntry(connection, interaction);
-  else if (subcommand === 'delete')       await handleDelete(connection, interaction);
+  const subcommandGroup = interaction.options.getSubcommandGroup();
+
+  if (subcommandGroup === 'manageuser') {
+    if (subcommand === 'pause')        await handleAdminPauseUser(connection, interaction);
+    else if (subcommand === 'unpause') await handleAdminUnpauseUser(connection, interaction);
+    else if (subcommand === 'remove')  await handleKick(connection, interaction);
+    else if (subcommand === 'ao3name') await handleAdminAO3Name(connection, interaction);
+  } else {
+    if (subcommand === 'skip')              await handleSkip(connection, interaction);
+    else if (subcommand === 'extend')       await handleExtend(connection, interaction);
+    else if (subcommand === 'next')         await handleNext(connection, interaction);
+    else if (subcommand === 'deleteentry')  await handleDeleteEntry(connection, interaction);
+    else if (subcommand === 'restoreentry') await handleRestoreEntry(connection, interaction);
+    else if (subcommand === 'delete')       await handleDelete(connection, interaction);
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -117,7 +158,7 @@ async function handleHelp(connection, interaction, guildId) {
     'txtAdminHelpTitle', 'txtAdminHelpFooter',
     'lblAdminHelpSkip', 'txtAdminHelpSkip',
     'lblAdminHelpExtend', 'txtAdminHelpExtend',
-    'lblAdminHelpRemove', 'txtAdminHelpRemove',
+    'lblAdminHelpManageUser', 'txtAdminHelpManageUser',
     'lblAdminHelpNext', 'txtAdminHelpNext',
     'lblAdminHelpDelete', 'txtAdminHelpDelete',
     'lblAdminHelpSetup', 'txtAdminHelpSetup'
@@ -127,12 +168,12 @@ async function handleHelp(connection, interaction, guildId) {
     .setTitle(cfg.txtAdminHelpTitle)
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.lblAdminHelpSkip,   value: cfg.txtAdminHelpSkip,   inline: false },
-      { name: cfg.lblAdminHelpExtend, value: cfg.txtAdminHelpExtend, inline: false },
-      { name: cfg.lblAdminHelpRemove, value: cfg.txtAdminHelpRemove, inline: false },
-      { name: cfg.lblAdminHelpNext,   value: cfg.txtAdminHelpNext,   inline: false },
-      { name: cfg.lblAdminHelpDelete, value: cfg.txtAdminHelpDelete, inline: false },
-      { name: cfg.lblAdminHelpSetup,  value: cfg.txtAdminHelpSetup,  inline: false }
+      { name: cfg.lblAdminHelpSkip,        value: cfg.txtAdminHelpSkip,        inline: false },
+      { name: cfg.lblAdminHelpExtend,      value: cfg.txtAdminHelpExtend,      inline: false },
+      { name: cfg.lblAdminHelpManageUser,  value: cfg.txtAdminHelpManageUser,  inline: false },
+      { name: cfg.lblAdminHelpNext,        value: cfg.txtAdminHelpNext,        inline: false },
+      { name: cfg.lblAdminHelpDelete,      value: cfg.txtAdminHelpDelete,      inline: false },
+      { name: cfg.lblAdminHelpSetup,       value: cfg.txtAdminHelpSetup,       inline: false }
     )
     .setFooter({ text: cfg.txtAdminHelpFooter });
 
@@ -411,7 +452,7 @@ async function handleExtend(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /storyadmin remove
+// /storyadmin manageuser remove — confirmation step
 // ---------------------------------------------------------------------------
 async function handleKick(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -424,7 +465,7 @@ async function handleKick(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, title, story_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT story_id, title FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
@@ -445,7 +486,112 @@ async function handleKick(connection, interaction) {
       });
     }
 
-    // Check if it's their active turn
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
+      [storyId, targetUser.id]
+    );
+    const [remainingRows] = await connection.execute(
+      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
+      [storyId, targetUser.id]
+    );
+
+    const adminId = interaction.user.id;
+    const writerName = targetUser.displayName || targetUser.username;
+    const isActiveTurn = activeTurnRows.length > 0;
+    const isLastWriter = remainingRows[0].count === 0;
+
+    pendingManageUserData.set(adminId, {
+      action: 'remove',
+      storyId,
+      guildId,
+      targetUserId: targetUser.id,
+      writerId: writerRows[0].story_writer_id,
+      writerName,
+      storyTitle: story.title,
+      isActiveTurn,
+      activeTurnId: isActiveTurn ? activeTurnRows[0].turn_id : null,
+      activeTurnThreadId: isActiveTurn ? activeTurnRows[0].thread_id : null,
+      isLastWriter,
+    });
+
+    const cfg = await getConfigValue(connection, [
+      'txtAdminMURemoveConfirmDesc', 'txtAdminMUActiveTurnWarning',
+      'txtAdminMULastWriterWarning', 'btnAdminMURemove', 'btnCancel'
+    ], guildId);
+
+    const description = replaceTemplateVariables(cfg.txtAdminMURemoveConfirmDesc, {
+      user_name: writerName,
+      story_title: story.title
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle('⚠️ Remove Writer?')
+      .setDescription(description)
+      .setColor(0xed4245);
+
+    if (isActiveTurn) {
+      embed.addFields({ name: '\u200b', value: replaceTemplateVariables(cfg.txtAdminMUActiveTurnWarning, { user_name: writerName }) });
+    }
+    if (isLastWriter) {
+      embed.addFields({ name: '\u200b', value: replaceTemplateVariables(cfg.txtAdminMULastWriterWarning, { user_name: writerName }) });
+    }
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_confirm_${adminId}`)
+        .setLabel(cfg.btnAdminMURemove)
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_cancel_${adminId}`)
+        .setLabel(cfg.btnCancel)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
+
+  } catch (error) {
+    log(`Error in handleKick: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// /storyadmin manageuser pause — confirmation step
+// ---------------------------------------------------------------------------
+async function handleAdminPauseUser(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const targetUser = interaction.options.getUser('user');
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  try {
+    const [storyRows] = await connection.execute(
+      `SELECT story_id, title FROM story WHERE story_id = ? AND guild_id = ?`,
+      [storyId, guildId]
+    );
+    if (storyRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+    }
+    const story = storyRows[0];
+
+    const [writerRows] = await connection.execute(
+      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
+      [storyId, targetUser.id]
+    );
+    if (writerRows.length === 0) {
+      return await interaction.editReply({
+        content: replaceTemplateVariables(
+          await getConfigValue(connection, 'txtAdminKickNotWriter', guildId),
+          { user_name: targetUser.displayName || targetUser.username }
+        )
+      });
+    }
+
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
@@ -453,55 +599,223 @@ async function handleKick(connection, interaction) {
       [storyId, targetUser.id]
     );
 
-    // Check if they're the last writer
-    const [remainingRows] = await connection.execute(
-      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
-      [storyId, targetUser.id]
-    );
-    const isLastWriter = remainingRows[0].count === 0;
+    const adminId = interaction.user.id;
+    const writerName = targetUser.displayName || targetUser.username;
+    const isActiveTurn = activeTurnRows.length > 0;
 
-    if (activeTurnRows.length > 0) {
-      const activeTurn = activeTurnRows[0];
-      await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurn.turn_id]);
-      if (activeTurn.thread_id) {
-        try {
-          const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (thread) await deleteThreadAndAnnouncement(thread);
-        } catch (err) {
-          log(`Could not delete thread on kick: ${err}`, { show: true, guildName: interaction?.guild?.name });
-        }
-      }
+    pendingManageUserData.set(adminId, {
+      action: 'pause',
+      storyId,
+      guildId,
+      targetUserId: targetUser.id,
+      writerId: writerRows[0].story_writer_id,
+      writerName,
+      storyTitle: story.title,
+      isActiveTurn,
+      activeTurnId: isActiveTurn ? activeTurnRows[0].turn_id : null,
+      activeTurnThreadId: isActiveTurn ? activeTurnRows[0].thread_id : null,
+    });
+
+    const cfg = await getConfigValue(connection, [
+      'txtAdminMUPauseConfirmDesc', 'txtAdminMUActiveTurnWarning',
+      'btnAdminMUPause', 'btnCancel'
+    ], guildId);
+
+    const description = replaceTemplateVariables(cfg.txtAdminMUPauseConfirmDesc, {
+      user_name: writerName,
+      story_title: story.title
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle('⏸️ Pause Writer?')
+      .setDescription(description)
+      .setColor(0xfee75c);
+
+    if (isActiveTurn) {
+      embed.addFields({ name: '\u200b', value: replaceTemplateVariables(cfg.txtAdminMUActiveTurnWarning, { user_name: writerName }) });
     }
 
-    await connection.execute(
-      `UPDATE story_writer SET sw_status = 0, left_at = NOW() WHERE story_id = ? AND discord_user_id = ?`,
-      [storyId, targetUser.id]
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_confirm_${adminId}`)
+        .setLabel(cfg.btnAdminMUPause)
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_cancel_${adminId}`)
+        .setLabel(cfg.btnCancel)
+        .setStyle(ButtonStyle.Secondary)
     );
 
-    if (isLastWriter) {
-      await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
-      log(`Story ${storyId} auto-closed after admin kick of last writer`, { show: true, guildName: interaction?.guild?.name });
-    } else if (activeTurnRows.length > 0) {
-      const nextWriterId = await PickNextWriter(connection, storyId);
-      if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-    }
-
-    await logAdminAction(connection, interaction.user.id, 'remove', storyId, targetUser.id);
-    const removedName = targetUser.displayName || targetUser.username;
-    const successMsg = replaceTemplateVariables(
-      await getConfigValue(connection, 'txtAdminKickSuccess', guildId),
-      { user_name: removedName, story_title: story.title }
-    );
-    const closeNote = isLastWriter ? '\n⚠️ Story auto-closed — no writers remain.' : '';
-    await interaction.editReply({ content: successMsg + closeNote });
-
-    // Activity log (fire-and-forget)
-    getConfigValue(connection, 'txtStoryThreadWriterRemove', guildId).then(template =>
-      postStoryThreadActivity(connection, interaction.guild, storyId, template.replace('[writer_name]', removedName))
-    ).catch(() => {});
+    await interaction.editReply({ embeds: [embed], components: [row] });
 
   } catch (error) {
-    log(`Error in handleKick: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`Error in handleAdminPauseUser: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// /storyadmin manageuser unpause — confirmation step
+// ---------------------------------------------------------------------------
+async function handleAdminUnpauseUser(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const targetUser = interaction.options.getUser('user');
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  try {
+    const [storyRows] = await connection.execute(
+      `SELECT story_id, title FROM story WHERE story_id = ? AND guild_id = ?`,
+      [storyId, guildId]
+    );
+    if (storyRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+    }
+    const story = storyRows[0];
+
+    const [writerRows] = await connection.execute(
+      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 2`,
+      [storyId, targetUser.id]
+    );
+    if (writerRows.length === 0) {
+      return await interaction.editReply({
+        content: replaceTemplateVariables(
+          await getConfigValue(connection, 'txtAdminUnpauseNotPaused', guildId),
+          { user_name: targetUser.displayName || targetUser.username }
+        )
+      });
+    }
+
+    const adminId = interaction.user.id;
+    const writerName = targetUser.displayName || targetUser.username;
+
+    pendingManageUserData.set(adminId, {
+      action: 'unpause',
+      storyId,
+      guildId,
+      targetUserId: targetUser.id,
+      writerId: writerRows[0].story_writer_id,
+      writerName,
+      storyTitle: story.title,
+    });
+
+    const cfg = await getConfigValue(connection, [
+      'txtAdminMUUnpauseConfirmDesc', 'btnAdminMUUnpause', 'btnCancel'
+    ], guildId);
+
+    const description = replaceTemplateVariables(cfg.txtAdminMUUnpauseConfirmDesc, {
+      user_name: writerName,
+      story_title: story.title
+    });
+
+    const embed = new EmbedBuilder()
+      .setTitle('▶️ Restore to Rotation?')
+      .setDescription(description)
+      .setColor(0x57f287);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_confirm_${adminId}`)
+        .setLabel(cfg.btnAdminMUUnpause)
+        .setStyle(ButtonStyle.Success),
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_cancel_${adminId}`)
+        .setLabel(cfg.btnCancel)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
+
+  } catch (error) {
+    log(`Error in handleAdminUnpauseUser: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// /storyadmin manageuser ao3name — confirmation step
+// ---------------------------------------------------------------------------
+async function handleAdminAO3Name(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const targetUser = interaction.options.getUser('user');
+  const newName = interaction.options.getString('name') ?? null;
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  try {
+    const [storyRows] = await connection.execute(
+      `SELECT story_id, title FROM story WHERE story_id = ? AND guild_id = ?`,
+      [storyId, guildId]
+    );
+    if (storyRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+    }
+    const story = storyRows[0];
+
+    const [writerRows] = await connection.execute(
+      `SELECT story_writer_id, AO3_name FROM story_writer
+       WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (1, 2)`,
+      [storyId, targetUser.id]
+    );
+    if (writerRows.length === 0) {
+      return await interaction.editReply({
+        content: replaceTemplateVariables(
+          await getConfigValue(connection, 'txtAdminKickNotWriter', guildId),
+          { user_name: targetUser.displayName || targetUser.username }
+        )
+      });
+    }
+
+    const adminId = interaction.user.id;
+    const writerName = targetUser.displayName || targetUser.username;
+    const currentAO3Name = writerRows[0].AO3_name;
+
+    pendingManageUserData.set(adminId, {
+      action: 'ao3name',
+      storyId,
+      guildId,
+      targetUserId: targetUser.id,
+      writerId: writerRows[0].story_writer_id,
+      writerName,
+      storyTitle: story.title,
+      currentAO3Name,
+      newAO3Name: newName,
+    });
+
+    const cfg = await getConfigValue(connection, ['btnAdminMUAO3Name', 'btnCancel'], guildId);
+
+    const embed = new EmbedBuilder()
+      .setTitle('✏️ Update AO3 Name?')
+      .setColor(0x5865f2)
+      .addFields(
+        { name: 'Writer',        value: writerName,                             inline: true },
+        { name: 'Story',         value: story.title,                            inline: true },
+        { name: '\u200b',        value: '\u200b',                               inline: true },
+        { name: 'Current name',  value: currentAO3Name || '*none*',             inline: true },
+        { name: 'New name',      value: newName        || '*(will be cleared)*', inline: true }
+      );
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_confirm_${adminId}`)
+        .setLabel(cfg.btnAdminMUAO3Name)
+        .setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId(`storyadmin_mu_cancel_${adminId}`)
+        .setLabel(cfg.btnCancel)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
+    await interaction.editReply({ embeds: [embed], components: [row] });
+
+  } catch (error) {
+    log(`Error in handleAdminAO3Name: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -841,6 +1155,131 @@ async function handleDeleteCancel(connection, interaction) {
   });
 }
 
+// ---------------------------------------------------------------------------
+// manageuser confirm / cancel button handlers
+// ---------------------------------------------------------------------------
+async function handleManageUserConfirm(connection, interaction) {
+  await interaction.deferUpdate();
+  const adminId = interaction.user.id;
+  const pending = pendingManageUserData.get(adminId);
+
+  if (!pending) {
+    return await interaction.editReply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      embeds: [],
+      components: []
+    });
+  }
+
+  pendingManageUserData.delete(adminId);
+  const { action, storyId, guildId, targetUserId, writerId, writerName, storyTitle,
+          isActiveTurn, activeTurnId, activeTurnThreadId, isLastWriter,
+          newAO3Name } = pending;
+
+  try {
+    if (action === 'pause') {
+      await connection.execute(`UPDATE story_writer SET sw_status = 2 WHERE story_writer_id = ?`, [writerId]);
+      if (isActiveTurn) {
+        await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurnId]);
+        if (activeTurnThreadId) {
+          try {
+            const thread = await interaction.guild.channels.fetch(activeTurnThreadId);
+            if (thread) await deleteThreadAndAnnouncement(thread);
+          } catch (err) {
+            log(`Could not delete thread on admin pause: ${err}`, { show: true, guildName: interaction?.guild?.name });
+          }
+        }
+        try {
+          const nextWriterId = await PickNextWriter(connection, storyId);
+          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+        } catch (err) {
+          log(`Could not advance turn after admin pause for story ${storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        }
+      }
+      await logAdminAction(connection, adminId, 'pause_user', storyId, targetUserId);
+      const successMsg = replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminPauseUserSuccess', guildId),
+        { user_name: writerName, story_title: storyTitle }
+      );
+      await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+
+    } else if (action === 'unpause') {
+      await connection.execute(`UPDATE story_writer SET sw_status = 1 WHERE story_writer_id = ?`, [writerId]);
+      await logAdminAction(connection, adminId, 'unpause_user', storyId, targetUserId);
+      const successMsg = replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminUnpauseUserSuccess', guildId),
+        { user_name: writerName, story_title: storyTitle }
+      );
+      await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+
+    } else if (action === 'remove') {
+      if (isActiveTurn) {
+        await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurnId]);
+        if (activeTurnThreadId) {
+          try {
+            const thread = await interaction.guild.channels.fetch(activeTurnThreadId);
+            if (thread) await deleteThreadAndAnnouncement(thread);
+          } catch (err) {
+            log(`Could not delete thread on kick: ${err}`, { show: true, guildName: interaction?.guild?.name });
+          }
+        }
+      }
+      await connection.execute(
+        `UPDATE story_writer SET sw_status = 0, left_at = NOW() WHERE story_writer_id = ?`,
+        [writerId]
+      );
+      if (isLastWriter) {
+        await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
+        log(`Story ${storyId} auto-closed after admin kick of last writer`, { show: true, guildName: interaction?.guild?.name });
+      } else if (isActiveTurn) {
+        const nextWriterId = await PickNextWriter(connection, storyId);
+        if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+      }
+      await logAdminAction(connection, adminId, 'remove', storyId, targetUserId);
+      const successMsg = replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminKickSuccess', guildId),
+        { user_name: writerName, story_title: storyTitle }
+      );
+      const closeNote = isLastWriter ? '\n⚠️ Story auto-closed — no writers remain.' : '';
+      await interaction.editReply({ content: successMsg + closeNote, embeds: [], components: [] });
+
+      // Activity log (fire-and-forget)
+      getConfigValue(connection, 'txtStoryThreadWriterRemove', guildId).then(template =>
+        postStoryThreadActivity(connection, interaction.guild, storyId, template.replace('[writer_name]', writerName))
+      ).catch(() => {});
+
+    } else if (action === 'ao3name') {
+      await connection.execute(`UPDATE story_writer SET AO3_name = ? WHERE story_writer_id = ?`, [newAO3Name, writerId]);
+      await logAdminAction(connection, adminId, 'ao3name', storyId, targetUserId, newAO3Name);
+      const displayName = newAO3Name ?? '(cleared)';
+      const successMsg = replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminAO3NameSuccess', guildId),
+        { user_name: writerName, ao3_name: displayName }
+      );
+      await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+    }
+
+  } catch (error) {
+    log(`Error in handleManageUserConfirm (${action}): ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({
+      content: await getConfigValue(connection, 'errProcessingRequest', guildId),
+      embeds: [],
+      components: []
+    });
+  }
+}
+
+async function handleManageUserCancel(connection, interaction) {
+  await interaction.deferUpdate();
+  const adminId = interaction.user.id;
+  pendingManageUserData.delete(adminId);
+  await interaction.editReply({
+    content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
+    embeds: [],
+    components: []
+  });
+}
+
 async function handleButtonInteraction(connection, interaction) {
   if (interaction.customId.startsWith('storyadmin_deleteentry_confirm_')) {
     await handleDeleteEntryConfirm(connection, interaction);
@@ -851,6 +1290,10 @@ async function handleButtonInteraction(connection, interaction) {
     await handleDeleteConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('storyadmin_delete_cancel_')) {
     await handleDeleteCancel(connection, interaction);
+  } else if (interaction.customId.startsWith('storyadmin_mu_confirm_')) {
+    await handleManageUserConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('storyadmin_mu_cancel_')) {
+    await handleManageUserCancel(connection, interaction);
   }
 }
 

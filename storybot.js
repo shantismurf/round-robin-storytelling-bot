@@ -745,10 +745,14 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const colorMap = { 1: 0x57f287, 2: 0xfee75c, 3: 0xed4245 };
 
     const activeWriters = writers.filter(w => w.sw_status === 1);
-    const leftWriters = writers.filter(w => w.sw_status === 0);
+    const pausedWriters = writers.filter(w => w.sw_status === 2);
+    const leftWriters   = writers.filter(w => w.sw_status === 0);
 
     // Creator = first writer to join (first in joined_at ASC order among active writers)
     const creatorId = activeWriters[0]?.story_writer_id ?? null;
+
+    const legendParts = ['⭐ Creator', '✍️ Current turn', '📌 Next up'];
+    if (pausedWriters.length > 0) legendParts.push('⏸️ Paused');
 
     const writerLines = [
       ...activeWriters.map(w => {
@@ -760,9 +764,13 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         const prefix = emojis ? `${emojis} ` : '';
         return `${prefix}**${w.discord_display_name}**${ao3}`;
       }),
+      ...pausedWriters.map(w => {
+        const ao3 = w.AO3_name && w.AO3_name !== w.discord_display_name ? ` (${w.AO3_name})` : '';
+        return `⏸️ ${w.discord_display_name}${ao3}`;
+      }),
       ...leftWriters.map(w => `*${w.discord_display_name}*`),
       '',
-      '*⭐ Creator  ·  ✍️ Current turn  ·  📌 Next up*'
+      `*${legendParts.join('  ·  ')}*`
     ];
 
     let turnValue;
