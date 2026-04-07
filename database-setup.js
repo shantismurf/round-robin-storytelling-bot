@@ -118,7 +118,7 @@ export async function setupDatabase(config) {
     }
 
     // Run schema migrations for existing databases
-    await runMigrations(db.connection);
+    await dbSetup(db.connection);
 
     // Check if configuration data exists
     const [configRows] = await db.connection.execute('SELECT COUNT(*) as count FROM config');

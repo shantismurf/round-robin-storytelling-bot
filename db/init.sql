@@ -8,7 +8,7 @@ DROP TABLE IF EXISTS config;
 
 -- initial schema (story, story_writer, turn, job)
 CREATE TABLE IF NOT EXISTS story (
-  story_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  story_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   guild_story_id INT UNSIGNED NOT NULL DEFAULT 0,
   guild_id BIGINT DEFAULT NULL,
   title TEXT NOT NULL,
@@ -38,8 +38,8 @@ CREATE TABLE IF NOT EXISTS story (
 );
 
 CREATE TABLE IF NOT EXISTS story_writer (
-  story_writer_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  story_id BIGINT NOT NULL,
+  story_writer_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  story_id BIGINT UNSIGNED NOT NULL,
   FOREIGN KEY (story_id) REFERENCES story(story_id) ON DELETE CASCADE,
   discord_user_id BIGINT NOT NULL,
   discord_display_name VARCHAR(255),
@@ -53,28 +53,9 @@ CREATE TABLE IF NOT EXISTS story_writer (
   UNIQUE KEY (story_id, discord_user_id)
 );
 
-CREATE TABLE IF NOT EXISTS story_entry (
-  story_entry_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  turn_id BIGINT NOT NULL,
-  FOREIGN KEY (turn_id) REFERENCES turn(turn_id) ON DELETE CASCADE,
-  content TEXT NOT NULL,
-  entry_status ENUM('pending', 'confirmed', 'discarded', 'deleted') DEFAULT 'pending',
-  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS story_entry_edit (
-  edit_id BIGINT AUTO_INCREMENT PRIMARY KEY,
-  entry_id BIGINT NOT NULL,
-  content TEXT NOT NULL,
-  edited_by VARCHAR(30) NOT NULL,
-  edited_by_name VARCHAR(100) NOT NULL,
-  edited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (entry_id) REFERENCES story_entry(story_entry_id) ON DELETE CASCADE
-);
-
 CREATE TABLE IF NOT EXISTS turn (
-  turn_id BIGINT PRIMARY KEY AUTO_INCREMENT,
-  story_writer_id BIGINT NOT NULL,
+  turn_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  story_writer_id BIGINT UNSIGNED NOT NULL,
   FOREIGN KEY (story_writer_id) REFERENCES story_writer(story_writer_id) ON DELETE CASCADE,
   started_at TIMESTAMP NULL,
   turn_ends_at TIMESTAMP NULL,
@@ -83,8 +64,27 @@ CREATE TABLE IF NOT EXISTS turn (
   turn_status TINYINT(1) DEFAULT 0
 );
 
+CREATE TABLE IF NOT EXISTS story_entry (
+  story_entry_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
+  turn_id BIGINT UNSIGNED NOT NULL,
+  FOREIGN KEY (turn_id) REFERENCES turn(turn_id) ON DELETE CASCADE,
+  content TEXT NOT NULL,
+  entry_status ENUM('pending', 'confirmed', 'discarded', 'deleted') DEFAULT 'pending',
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE IF NOT EXISTS story_entry_edit (
+  edit_id BIGINT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
+  entry_id BIGINT UNSIGNED NOT NULL,
+  content TEXT NOT NULL,
+  edited_by VARCHAR(30) NOT NULL,
+  edited_by_name VARCHAR(100) NOT NULL,
+  edited_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (entry_id) REFERENCES story_entry(story_entry_id) ON DELETE CASCADE
+);
+
 CREATE TABLE IF NOT EXISTS job (
-  job_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  job_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   job_type VARCHAR(50) NOT NULL,
   payload JSON,
   run_at TIMESTAMP,
@@ -94,7 +94,7 @@ CREATE TABLE IF NOT EXISTS job (
 );
 
 CREATE TABLE IF NOT EXISTS config (
-  config_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  config_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   config_key VARCHAR(255) NOT NULL,
   config_value TEXT NOT NULL,
   language_code VARCHAR(10) DEFAULT 'en',
@@ -104,7 +104,7 @@ CREATE TABLE IF NOT EXISTS config (
 );
 
 CREATE TABLE admin_action_log (
-  log_id BIGINT PRIMARY KEY AUTO_INCREMENT,
+  log_id BIGINT UNSIGNED PRIMARY KEY AUTO_INCREMENT,
   admin_user_id BIGINT NOT NULL,
   action_type VARCHAR(50) NOT NULL, -- 'kick', 'extend', 'delete', etc.
   target_story_id BIGINT,
