@@ -1120,7 +1120,20 @@ async function handleDeleteConfirm(connection, interaction) {
     // Log before deleting so the story_id still exists in the log
     await logAdminAction(connection, interaction.user.id, 'delete', storyId);
 
-    // Try to delete the Discord story thread
+    // Hard delete — cascades to story_writer, turn, story_entry
+    await connection.execute(`DELETE FROM story WHERE story_id = ?`, [storyId]);
+
+    // Edit the reply before deleting the thread — if the command was run from inside
+    // the story thread, deleting it first would destroy the ephemeral interaction context.
+    await interaction.editReply({
+      content: replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminDeleteSuccess', guildId),
+        { story_title: story.title }
+      ),
+      components: []
+    });
+
+    // Delete the Discord story thread after replying
     if (story.story_thread_id) {
       try {
         const thread = await interaction.guild.channels.fetch(story.story_thread_id);
@@ -1129,17 +1142,6 @@ async function handleDeleteConfirm(connection, interaction) {
         log(`Story thread already gone for story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
       }
     }
-
-    // Hard delete — cascades to story_writer, turn, story_entry
-    await connection.execute(`DELETE FROM story WHERE story_id = ?`, [storyId]);
-
-    await interaction.editReply({
-      content: replaceTemplateVariables(
-        await getConfigValue(connection, 'txtAdminDeleteSuccess', guildId),
-        { story_title: story.title }
-      ),
-      components: []
-    });
 
   } catch (error) {
     log(`Error in handleDeleteConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
