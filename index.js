@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
 import { StoryBot, updateStoryStatusMessage } from './storybot.js';
 import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log } from './utilities.js';
-import { setupDatabase } from './database-setup.js';
+import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
 
@@ -33,12 +33,13 @@ async function main() {
   const config = loadConfig();
   setTestMode(config.testMode);
 
-  // Setup database before starting bot
   log(`Initializing Round Robin StoryBot... (${config.testMode ? 'TEST MODE' : 'production'})`, { show: true });
-  const dbSetupSuccess = await setupDatabase(config);
 
-  if (!dbSetupSuccess) {
-    log('Failed to setup database. Exiting...', { show: true });
+  // Run all pre-launch steps: schema, migrations, config sync, command registration
+  try {
+    await deploy();
+  } catch (err) {
+    log(`Deploy failed: ${err.message}`, { show: true });
     process.exit(1);
   }
 

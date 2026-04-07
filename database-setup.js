@@ -87,69 +87,33 @@ export async function dbSetup(connection) {
 
 export async function setupDatabase(config) {
   log('Starting database setup...', { show: true });
-  
+
   try {
-    // Initialize database connection
     const db = new DB(config.db);
     await db.connect();
     log('Database connection successful', { show: true });
 
-    // Check if tables exist
+    // Create schema if this is a fresh database
     const [tables] = await db.connection.execute("SHOW TABLES LIKE 'story'");
-    
     if (tables.length === 0) {
       log('Creating database schema...', { show: true });
-      
-      // Read and execute schema file
       const schemaSQL = fs.readFileSync('db/init.sql', 'utf8');
-      
-      // Split by semicolon and execute each statement
       const statements = schemaSQL.split(';').filter(stmt => stmt.trim().length > 0);
-      
       for (const statement of statements) {
-        if (statement.trim()) {
-          await db.connection.execute(statement);
-        }
+        await db.connection.execute(statement);
       }
-      
       log('Database schema created successfully', { show: true });
     } else {
       log('Database schema already exists', { show: true });
     }
 
-    // Run schema migrations for existing databases
+    // Run schema migrations
     await dbSetup(db.connection);
 
-    // Check if configuration data exists
-    const [configRows] = await db.connection.execute('SELECT COUNT(*) as count FROM config');
-    const configCount = configRows[0].count;
-
-    if (configCount === 0) {
-      log('Loading configuration data...', { show: true });
-      
-      // Read and execute config file
-      const configSQL = fs.readFileSync('db/sample_config.sql', 'utf8');
-      
-      // Split by semicolon and execute each statement
-      const statements = configSQL.split(';').filter(stmt => stmt.trim().length > 0);
-      
-      for (const statement of statements) {
-        if (statement.trim()) {
-          await db.connection.execute(statement);
-        }
-      }
-      
-      log('Configuration data loaded successfully', { show: true });
-    } else {
-      log(`Configuration data already exists (${configCount} entries)`, { show: true });
-    }
-
-    // Close connection
     await db.disconnect();
-    
     log('Database setup completed successfully', { show: true });
     return true;
-    
+
   } catch (error) {
     log(`Database setup failed: ${error}`, { show: true });
     return false;

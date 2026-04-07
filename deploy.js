@@ -10,6 +10,7 @@
  *   3. Command registration — deploy-commands.js — registers slash commands with Discord (guild or global)
  */
 
+import { fileURLToPath } from 'url';
 import { DB, loadConfig, formattedDate } from './utilities.js';
 import { dbSetup } from './database-setup.js';
 import { deployCommands } from './deploy-commands.js';
@@ -39,17 +40,11 @@ async function stepDeployCommands(config) {
   console.log(`\n${formattedDate()}: Command registration complete.`);
 }
 
-async function main() {
+export async function main() {
   const config = loadConfig();
 
-  if (!config.clientId) {
-    console.error('Missing clientId in config.json.');
-    process.exit(1);
-  }
-  if (config.testMode && !config.guildId) {
-    console.error('Missing guildId in config.json (required for test mode).');
-    process.exit(1);
-  }
+  if (!config.clientId) throw new Error('Missing clientId in config.json.');
+  if (config.testMode && !config.guildId) throw new Error('Missing guildId in config.json (required for test mode).');
 
   console.log(`\n${'═'.repeat(50)}`);
   console.log(`  Round Robin StoryBot — Deploy`);
@@ -72,7 +67,10 @@ async function main() {
   }
 }
 
-main().catch(err => {
-  console.error(`${formattedDate()}: Deploy failed:`, err);
-  process.exit(1);
-});
+// Only run automatically when executed directly (node deploy.js), not when imported by index.js
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  main().catch(err => {
+    console.error(`${formattedDate()}: Deploy failed:`, err);
+    process.exit(1);
+  });
+}

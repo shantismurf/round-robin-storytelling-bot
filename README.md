@@ -4,11 +4,34 @@ A Discord bot for running collaborative relay-style stories where writers take t
 
 ## Quick Start
 
-1. Copy `config.example.json` to `config.json` and fill in your bot token, client ID, and database credentials.
-2. Run `npm install`
-3. Run `node database-setup.js` to initialize the database schema.
-4. Run `node deploy-commands.js` to register slash commands with Discord.
-5. Run `npm start`
+1. In the Discord Developer Portal, create an application and bot. Enable the **Message Content** privileged intent (Bot → Privileged Gateway Intents).
+2. Invite the bot to your server using an OAuth2 URL with scopes **`bot`** and **`applications.commands`** and the permissions listed below.
+3. Copy `config.example.json` to `config.json` and fill in your bot token, client ID, guild ID, and database credentials. Set `testMode: true` for a single-server test deployment.
+4. Run `npm install`
+5. Run `node deploy.js` — sets up the database schema, syncs default config, and registers slash commands.
+6. Run `node index.js` (or `npm start`)
+7. In Discord, run `/storyadmin setup` in any server channel as a user with the Manage Server permission.
+
+## Required Bot Permissions
+
+These permissions must be granted to the bot's role when inviting it. `/storyadmin setup` will attempt to grant channel-level overrides for the feed and media channels, but the bot's role must already have **Manage Roles** for that to work.
+
+| Permission | Why it's needed |
+|---|---|
+| View Channels | Read any channel the bot posts to or manages threads in |
+| Send Messages | Post to the feed channel and fallback @mentions |
+| Send Messages in Threads | Post inside turn threads |
+| Embed Links | All status embeds, story cards, and announcements |
+| Attach Files | Forward media to the media channel; story exports |
+| Read Message History | Fetch messages to update status embeds and find announcements to delete |
+| Manage Messages | Delete announcement stub messages when threads are removed |
+| Pin Messages | Pin the status embed in story threads (separate from Manage Messages as of Jan 2026) |
+| Create Public Threads | Create public turn threads and story threads |
+| Create Private Threads | Create private turn threads for writers who prefer privacy |
+| Manage Threads | Delete and archive threads on story close or delete |
+| Manage Roles | Allows `/storyadmin setup` to set channel-level permission overrides for the bot and admin role |
+
+The bot uses slash commands, buttons, modals, and select menus — no message content reading is required beyond what the Message Content privileged intent covers for attachment forwarding.
 
 ## Project Layout
 

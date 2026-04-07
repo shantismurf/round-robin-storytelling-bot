@@ -73,7 +73,7 @@ export async function syncConfig(connection) {
     if (changed.length === 0) {
       console.log('No changed config entries.');
     } else {
-      console.log(`\n${changed.length} changed config entries${apply ? ' (updating)' : ' (dry run)'}:`);
+      console.log(`\nUpdating ${changed.length} changed config entries:`);
       for (const entry of changed) {
         console.log(`  ~ ${entry.config_key}`);
         console.log(`      was: ${entry.old_value}`);

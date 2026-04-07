@@ -261,8 +261,9 @@ async function handleSetupModalSubmit(connection, interaction) {
   }
 
   // Validate media channel if provided
+  let mediaChannel = null;
   if (mediaChannelId) {
-    const mediaChannel = await interaction.guild.channels.fetch(mediaChannelId).catch(() => null);
+    mediaChannel = await interaction.guild.channels.fetch(mediaChannelId).catch(() => null);
     if (!mediaChannel) {
       return await interaction.editReply({
         content: await getConfigValue(connection, 'txtSetupMediaChannelInvalid', guildId)
@@ -281,21 +282,40 @@ async function handleSetupModalSubmit(connection, interaction) {
   if (mediaChannelId) await upsert('cfgMediaChannelId', mediaChannelId);
   if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
 
-  // Grant the bot PinMessages on the feed channel so it can pin the status embed.
-  // Note: As of January 12, 2026, PinMessages is a separate permission from ManageMessages.
   const botMember = interaction.guild.members.me;
+
+  // Grant the bot required permissions on the feed channel.
+  // Note: As of January 12, 2026, PinMessages is a separate permission from ManageMessages.
   let botPermNote = '';
   if (botMember) {
     const ok = await feedChannel.permissionOverwrites.edit(botMember, {
       ViewChannel: true,
       SendMessages: true,
+      EmbedLinks: true,
+      AttachFiles: true,
+      ReadMessageHistory: true,
+      ManageMessages: true,
       PinMessages: true,
       CreatePublicThreads: true,
       CreatePrivateThreads: true,
       ManageThreads: true,
     }).then(() => true).catch(() => false);
     botPermNote = ok
-      ? ' *(bot permissions set — pinning enabled)*'
+      ? ' *(bot permissions set)*'
+      : ' *(⚠️ could not set bot permissions — check bot role)*';
+  }
+
+  // Grant the bot required permissions on the media channel.
+  let mediaPermNote = '';
+  if (mediaChannel && botMember) {
+    const ok = await mediaChannel.permissionOverwrites.edit(botMember, {
+      ViewChannel: true,
+      SendMessages: true,
+      EmbedLinks: true,
+      AttachFiles: true,
+    }).then(() => true).catch(() => false);
+    mediaPermNote = ok
+      ? ' *(bot permissions set)*'
       : ' *(⚠️ could not set bot permissions — check bot role)*';
   }
 
@@ -314,11 +334,54 @@ async function handleSetupModalSubmit(connection, interaction) {
     }
   }
 
+  // Check effective bot permissions on each channel and warn about any gaps.
+  // Re-fetch both channels so the permission overwrite changes above are reflected.
+  const feedChannelFresh = await interaction.guild.channels.fetch(feedChannelId).catch(() => feedChannel);
+  const mediaChannelFresh = mediaChannel
+    ? await interaction.guild.channels.fetch(mediaChannelId).catch(() => mediaChannel)
+    : null;
+
+  const permWarnings = [];
+  if (botMember) {
+    const feedPerms = feedChannelFresh.permissionsFor(botMember);
+    const feedRequired = [
+      ['ViewChannel', 'View Channel'],
+      ['SendMessages', 'Send Messages'],
+      ['EmbedLinks', 'Embed Links'],
+      ['AttachFiles', 'Attach Files'],
+      ['ReadMessageHistory', 'Read Message History'],
+      ['ManageMessages', 'Manage Messages'],
+      ['PinMessages', 'Pin Messages'],
+      ['CreatePublicThreads', 'Create Public Threads'],
+      ['CreatePrivateThreads', 'Create Private Threads'],
+      ['ManageThreads', 'Manage Threads'],
+    ];
+    const missingFeed = feedRequired.filter(([flag]) => !feedPerms.has(flag)).map(([, label]) => label);
+    if (missingFeed.length) {
+      permWarnings.push(`⚠️ Bot is missing permissions on <#${feedChannelId}>: **${missingFeed.join(', ')}**`);
+    }
+
+    if (mediaChannelFresh) {
+      const mediaPerms = mediaChannelFresh.permissionsFor(botMember);
+      const mediaRequired = [
+        ['ViewChannel', 'View Channel'],
+        ['SendMessages', 'Send Messages'],
+        ['EmbedLinks', 'Embed Links'],
+        ['AttachFiles', 'Attach Files'],
+      ];
+      const missingMedia = mediaRequired.filter(([flag]) => !mediaPerms.has(flag)).map(([, label]) => label);
+      if (missingMedia.length) {
+        permWarnings.push(`⚠️ Bot is missing permissions on <#${mediaChannelId}>: **${missingMedia.join(', ')}**`);
+      }
+    }
+  }
+
   const saved = [`✅ Story feed channel: <#${feedChannelId}>${botPermNote}`];
-  if (mediaChannelId) saved.push(`✅ Media channel: <#${mediaChannelId}>`);
+  if (mediaChannelId) saved.push(`✅ Media channel: <#${mediaChannelId}>${mediaPermNote}`);
   if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**${threadPermissionNote}`);
   if (!mediaChannelId) saved.push(`ℹ️ No media channel set — images will not be processed.`);
   if (!roleRaw)        saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
+  if (permWarnings.length) saved.push('', ...permWarnings, '', '_To fix: ensure the bot role has these permissions in your server settings, or grant them manually on the channel._');
 
   await interaction.editReply({ content: saved.join('\n') });
 }
