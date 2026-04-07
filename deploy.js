@@ -12,7 +12,7 @@
 
 import { fileURLToPath } from 'url';
 import { DB, loadConfig, formattedDate } from './utilities.js';
-import { dbSetup } from './database-setup.js';
+import { setupDatabase, dbSetup } from './database-setup.js';
 import { deployCommands } from './deploy-commands.js';
 import { syncConfig } from './sync-config.js';
 
@@ -22,9 +22,10 @@ function header(label) {
   console.log('─'.repeat(50));
 }
 
-async function stepMigrations(connection) {
-  header('Step 1 of 3 — Database migrations');
-  await dbSetup(connection);
+async function stepMigrations(config, connection) {
+  header('Step 1 of 3 — Database schema + migrations');
+  await setupDatabase(config);  // creates tables from init.sql if this is a fresh install
+  await dbSetup(connection);    // applies incremental migrations to existing tables
   console.log(`${formattedDate()}: Migrations complete.`);
 }
 
@@ -55,7 +56,7 @@ export async function main() {
   const connection = await db.connect();
 
   try {
-    await stepMigrations(connection);
+    await stepMigrations(config, connection);
     await stepSyncConfig(connection);
     await stepDeployCommands(config);
 
