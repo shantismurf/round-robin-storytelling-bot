@@ -1512,6 +1512,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
     await handleHelpNavigation(connection, interaction);
+  } else if (interaction.customId.startsWith('story_repost_entry_')) {
+    await handleRepostEntry(connection, interaction);
   } else if (interaction.customId.startsWith('story_edit_')) {
     await handleEditButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_read_')) {
