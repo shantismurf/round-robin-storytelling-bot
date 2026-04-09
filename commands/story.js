@@ -199,6 +199,15 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand(subcommand =>
     subcommand
+      .setName('timeleft')
+      .setDescription('Check the current turn status for a story')
+      .addIntegerOption(option =>
+        option.setName('story_id')
+          .setDescription('Story ID to check')
+          .setRequired(true))
+  )
+  .addSubcommand(subcommand =>
+    subcommand
       .setName('help')
       .setDescription('How to use Round Robin StoryBot')
   )
@@ -249,6 +258,8 @@ async function execute(connection, interaction) {
     await handleClose(connection, interaction);
   } else if (subcommand === 'manage') {
     await handleManage(connection, interaction);
+  } else if (subcommand === 'timeleft') {
+    await handleTimeleft(connection, interaction);
   } else if (subcommand === 'help') {
     await handleHelp(connection, interaction);
   } else if (subcommand === 'edit') {
@@ -1513,6 +1524,10 @@ async function handleButtonInteraction(connection, interaction) {
     await handleFilterButton(connection, interaction);
   } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
     await handleHelpNavigation(connection, interaction);
+  } else if (interaction.customId.startsWith('story_request_more_time_')) {
+    await handleRequestMoreTime(connection, interaction);
+  } else if (interaction.customId.startsWith('story_read_post_public_')) {
+    await handleExportPostPublic(connection, interaction);
   } else if (interaction.customId.startsWith('story_repost_entry_')) {
     await handleRepostEntry(connection, interaction);
   } else if (interaction.customId.startsWith('story_edit_')) {
@@ -2457,7 +2472,7 @@ async function generateStoryExport(connection, storyId, guildId, guild = null) {
 </html>`;
 
   const buffer = Buffer.from(html, 'utf8');
-  const filename = `${story.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_story${storyId}.html`;
+  const filename = `storybot${storyId}_${story.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
   return { hasEntries: true, title: story.title, turnCount, wordCount, writerCount, buffer, filename };
 }
 
@@ -2788,7 +2803,21 @@ async function handleReadNav(connection, interaction) {
     try {
       const result = await generateStoryExport(connection, session.storyId, session.guildId, interaction.guild);
       if (result?.hasEntries) {
-        await interaction.followUp({ files: [{ attachment: result.buffer, name: result.filename }], flags: MessageFlags.Ephemeral });
+        const [ao3Instructions, btnPostLabel] = await Promise.all([
+          getConfigValue(connection, 'txtExportAO3Instructions', session.guildId),
+          getConfigValue(connection, 'btnExportPostPublicly', session.guildId),
+        ]);
+        const postBtn = new ButtonBuilder()
+          .setCustomId(`story_read_post_public_${session.storyId}`)
+          .setLabel(btnPostLabel)
+          .setStyle(ButtonStyle.Secondary);
+        const btnRow = new ActionRowBuilder().addComponents(postBtn);
+        await interaction.followUp({
+          content: ao3Instructions,
+          files: [{ attachment: result.buffer, name: result.filename }],
+          components: [btnRow],
+          flags: MessageFlags.Ephemeral,
+        });
       }
     } catch (err) {
       log(`Error generating HTML export from read session: ${err}`, { show: true, guildName: interaction?.guild?.name });
@@ -2811,6 +2840,165 @@ async function handleReadNav(connection, interaction) {
 
   lastReadPage.set(`${userId}_${session.storyId}`, session.currentPage);
   await interaction.update(buildReadEmbed(session, session.currentPage));
+}
+
+// ---------------------------------------------------------------------------
+// /story timeleft — public turn status for a story
+// ---------------------------------------------------------------------------
+
+async function handleTimeleft(connection, interaction) {
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (!storyId) {
+    return interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
+  }
+
+  const [rows] = await connection.execute(
+    `SELECT s.title, s.guild_story_id, s.show_authors, s.story_thread_id, s.quick_mode,
+            sw.discord_display_name AS writer_name, sw.discord_user_id,
+            t.turn_id, t.turn_ends_at, t.more_time_requested
+     FROM story s
+     JOIN story_writer sw ON sw.story_id = s.story_id
+     JOIN turn t ON t.story_writer_id = sw.story_writer_id
+     WHERE s.story_id = ? AND s.guild_id = ? AND t.turn_status = 1
+     LIMIT 1`,
+    [storyId, guildId]
+  );
+
+  if (!rows.length) {
+    return interaction.reply({ content: 'No active turn found for that story.', flags: MessageFlags.Ephemeral });
+  }
+  const turn = rows[0];
+
+  // Check for admin-designated next writer
+  const [nextRows] = await connection.execute(
+    `SELECT sw.discord_display_name FROM story s
+     JOIN story_writer sw ON sw.story_writer_id = s.next_writer_id
+     WHERE s.story_id = ? AND s.next_writer_id IS NOT NULL`,
+    [storyId]
+  );
+  const nextWriter = nextRows[0]?.discord_display_name ?? null;
+
+  const unixTs = Math.floor(new Date(turn.turn_ends_at).getTime() / 1000);
+  const embed = new EmbedBuilder()
+    .setTitle(turn.title)
+    .addFields(
+      { name: 'Story', value: `#${turn.guild_story_id}`, inline: true },
+      { name: 'Current Writer', value: turn.show_authors ? turn.writer_name : '*(hidden)*', inline: true },
+      { name: 'Turn Ends', value: `<t:${unixTs}:F> (<t:${unixTs}:R>)`, inline: false }
+    );
+  if (nextWriter) embed.addFields({ name: 'Up Next', value: nextWriter, inline: true });
+
+  const isCurrentWriter = interaction.user.id === String(turn.discord_user_id);
+  const btnLabel = await getConfigValue(connection, 'btnRequestMoreTime', guildId);
+  const requestBtn = new ButtonBuilder()
+    .setCustomId(`story_request_more_time_${storyId}`)
+    .setLabel(btnLabel)
+    .setStyle(ButtonStyle.Secondary)
+    .setDisabled(!isCurrentWriter || !!turn.more_time_requested);
+  const row = new ActionRowBuilder().addComponents(requestBtn);
+
+  try {
+    await interaction.reply({ embeds: [embed], components: [row] });
+  } catch {
+    // No posting permission in this channel — fall back to ephemeral
+    await interaction.reply({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
+  }
+}
+
+async function handleRequestMoreTime(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const storyId = parseInt(interaction.customId.split('_').at(-1));
+  const guildId = interaction.guild.id;
+
+  const [rows] = await connection.execute(
+    `SELECT sw.discord_user_id, t.turn_id, t.more_time_requested, s.title, s.story_thread_id
+     FROM story s
+     JOIN story_writer sw ON sw.story_id = s.story_id
+     JOIN turn t ON t.story_writer_id = sw.story_writer_id
+     WHERE s.story_id = ? AND s.guild_id = ? AND t.turn_status = 1
+     LIMIT 1`,
+    [storyId, guildId]
+  );
+
+  if (!rows.length) {
+    return interaction.editReply({ content: 'No active turn found.' });
+  }
+  const turn = rows[0];
+
+  if (interaction.user.id !== String(turn.discord_user_id)) {
+    return interaction.editReply({ content: await getConfigValue(connection, 'txtRequestMoreTimeNotYourTurn', guildId) });
+  }
+  if (turn.more_time_requested) {
+    return interaction.editReply({ content: await getConfigValue(connection, 'txtRequestMoreTimeAlreadyUsed', guildId) });
+  }
+
+  // Look up admin role for the mention
+  const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
+  let adminMention = adminRoleName ? `@${adminRoleName}` : '';
+  if (adminRoleName) {
+    const role = interaction.guild.roles.cache.find(r => r.name === adminRoleName);
+    if (role) adminMention = `<@&${role.id}>`;
+  }
+
+  const txtPost = (await getConfigValue(connection, 'txtRequestMoreTimePost', guildId))
+    .replace('[writer_name]', interaction.member.displayName)
+    .replace('[story_title]', turn.title)
+    .replace('[admin_role]', adminMention);
+
+  try {
+    const thread = await interaction.guild.channels.fetch(String(turn.story_thread_id));
+    await thread.send(txtPost);
+  } catch (err) {
+    log(`handleRequestMoreTime: could not post to story thread: ${err}`, { show: true, guildName: interaction.guild.name });
+    return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+
+  await connection.execute(`UPDATE turn SET more_time_requested = 1 WHERE turn_id = ?`, [turn.turn_id]);
+
+  // Disable the button on the original timeleft message
+  try {
+    const usedLabel = await getConfigValue(connection, 'btnRequestMoreTime', guildId);
+    const disabledBtn = new ButtonBuilder()
+      .setCustomId(`story_request_more_time_${storyId}`)
+      .setLabel(usedLabel)
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(true);
+    await interaction.message.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] });
+  } catch { /* timeleft message may have expired or been deleted — non-fatal */ }
+
+  await interaction.editReply({ content: await getConfigValue(connection, 'txtRequestMoreTimeUsed', guildId) });
+}
+
+async function handleExportPostPublic(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const storyId = parseInt(interaction.customId.split('_').at(-1));
+  const guildId = interaction.guild.id;
+
+  const [storyRows] = await connection.execute(
+    `SELECT story_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
+    [storyId, guildId]
+  );
+  if (!storyRows.length || !storyRows[0].story_thread_id) {
+    return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+
+  const result = await generateStoryExport(connection, storyId, guildId, interaction.guild);
+  if (!result?.hasEntries) {
+    return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+
+  const ao3Instructions = await getConfigValue(connection, 'txtExportAO3Instructions', guildId);
+
+  try {
+    const thread = await interaction.guild.channels.fetch(String(storyRows[0].story_thread_id));
+    await thread.send({ content: ao3Instructions, files: [{ attachment: result.buffer, name: result.filename }] });
+  } catch (err) {
+    log(`handleExportPostPublic: could not post to story thread: ${err}`, { show: true, guildName: interaction.guild.name });
+    return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+
+  await interaction.editReply({ content: await getConfigValue(connection, 'txtExportPostedPublicly', guildId) });
 }
 
 // ---------------------------------------------------------------------------

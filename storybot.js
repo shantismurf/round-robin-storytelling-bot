@@ -600,30 +600,32 @@ async function handleQuickModeNotification(connection, interaction, writer, guil
  */
 async function handleWriterNotification(connection, interaction, writer, linkToThreadId, guild_id) {
   const linkToUse = linkToThreadId || writer.story_thread_id;
-  
-  // Check notification preference
+  const threadUrl = `https://discord.com/channels/${guild_id}/${linkToUse}`;
+  const modeKey = writer.quick_mode ? 'Quick' : 'Normal';
+
+  function applyTokens(text) {
+    return text.replace(/\[turn_thread_link\]/g, threadUrl);
+  }
+
   if (writer.notification_prefs === 'mention') {
-    // User prefers mentions - send mention in channel
-    const txtMentionTurnStart = await getConfigValue(connection,'txtMentionTurnStart', guild_id);
-    const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
+    const txtKey = `txtMentionTurnStart${modeKey}`;
+    const txt = applyTokens(await getConfigValue(connection, txtKey, guild_id));
+    const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guild_id);
     const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
-    
-    await channel.send(`<@${writer.discord_user_id}> ${txtMentionTurnStart}\nThread: <#${linkToUse}>`);
+    await channel.send(`<@${writer.discord_user_id}> ${txt}`);
   } else {
-    // Default to DM with fallback to mention
-    const txtDMTurnStart = await getConfigValue(connection,'txtDMTurnStart', guild_id);
-    
+    const dmKey = `txtDMTurnStart${modeKey}`;
+    const txt = applyTokens(await getConfigValue(connection, dmKey, guild_id));
     try {
-      // Try to send DM
       const user = await interaction.client.users.fetch(writer.discord_user_id);
-      await user.send(`${txtDMTurnStart}\nThread: <#${linkToUse}>`);
+      await user.send(txt);
     } catch (dmError) {
-      // DM failed, send mention in channel as fallback
-      const txtMentionTurnStart = await getConfigValue(connection,'txtMentionTurnStart', guild_id);
-      const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
+      // DM failed — fall back to mention in feed channel
+      const mentionKey = `txtMentionTurnStart${modeKey}`;
+      const mentionTxt = applyTokens(await getConfigValue(connection, mentionKey, guild_id));
+      const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guild_id);
       const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
-      
-      await channel.send(`<@${writer.discord_user_id}> ${txtMentionTurnStart}\nThread: <#${linkToUse}>`);
+      await channel.send(`<@${writer.discord_user_id}> ${mentionTxt}`);
     }
   }
 }

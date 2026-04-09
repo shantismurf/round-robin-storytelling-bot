@@ -61,7 +61,8 @@ CREATE TABLE IF NOT EXISTS turn (
   turn_ends_at TIMESTAMP NULL,
   ended_at TIMESTAMP NULL,
   thread_id VARCHAR(255),
-  turn_status TINYINT(1) DEFAULT 0
+  turn_status TINYINT(1) DEFAULT 0,
+  more_time_requested TINYINT(1) NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS story_entry (

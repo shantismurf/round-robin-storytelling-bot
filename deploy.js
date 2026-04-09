@@ -61,7 +61,7 @@ export async function main() {
     await stepDeployCommands(config);
 
     console.log(`\n${'═'.repeat(50)}`);
-    console.log('  Deploy complete. Restart the bot to apply changes.');
+    console.log('  Deploy complete.');
     console.log('═'.repeat(50));
   } finally {
     await db.disconnect();

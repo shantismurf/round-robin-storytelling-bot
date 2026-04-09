@@ -416,4 +416,29 @@ Words: ~[word_count]', 'en', 1),
 
 -- Admin help text
 ('lblAdminHelpRemove', '/storyadmin remove <story_id> <user>', 'en', 1),
-('txtAdminHelpRemove', 'Removes a writer from a story. If it''s their turn, advances to the next writer. If they''re the last writer, the story is closed automatically.', 'en', 1);
+('txtAdminHelpRemove', 'Removes a writer from a story. If it''s their turn, advances to the next writer. If they''re the last writer, the story is closed automatically.', 'en', 1),
+
+-- Request More Time button (on /story timeleft response; also reserved for future reminder notifications)
+('btnRequestMoreTime', '⏰ Request More Time', 'en', 1),
+('txtRequestMoreTimePost', '**[writer_name]** has requested more time on their turn in **[story_title]**. [admin_role]', 'en', 1),
+('txtRequestMoreTimeUsed', '⏰ More time has been requested. An admin will review.', 'en', 1),
+('txtRequestMoreTimeAlreadyUsed', 'More time has already been requested for this turn.', 'en', 1),
+('txtRequestMoreTimeNotYourTurn', 'This button is only available to the current turn holder.', 'en', 1),
+
+-- Story export AO3 instructions (shown with the exported HTML file)
+('txtExportAO3Instructions', 'If you don''t see a download icon, click the ··· menu on the file and choose **Download**.\n\n**To post to AO3:** Open the file in any text editor and copy everything between the `<body>` and `</body>` tags. In AO3''s Work Text field, click the **HTML** button to switch to HTML mode, then paste. If your story includes images, you''ll need to host them on an image host and update the links in the file before copying.', 'en', 1),
+('btnExportPostPublicly', '📢 Post to Story Thread', 'en', 1),
+('txtExportPostedPublicly', '✅ Story file posted to the story thread.', 'en', 1),
+
+-- Turn start notification text (mode-aware, replaces txtDMTurnStart / txtMentionTurnStart for new installs)
+-- Token [turn_thread_link] is replaced with a Discord deep link URL at send time
+('txtDMTurnStartQuick', '🎭 **Your turn has started!** [Click here to write your entry.]([turn_thread_link])\n-# Use /mystory help to see your writer commands.', 'en', 1),
+('txtMentionTurnStartQuick', '🎭 **Your turn has started!** [Click here to write your entry.]([turn_thread_link])\n-# Use /mystory help to see your writer commands.', 'en', 1),
+('txtDMTurnStartNormal', '🎭 **Your turn has started!** You can now write your part of the story in your turn thread: [turn_thread_link]\n-# [Return to the server]([turn_thread_link]) and use `/mystory help` to see the commands available to writers.', 'en', 1),
+('txtMentionTurnStartNormal', '🎭 **Your turn has started!** You can now write your part of the story in your turn thread: [turn_thread_link]\n-# Use /mystory help to see the commands available to writers.', 'en', 1),
+
+-- Turn reminder notification text (tokens replaced at send time; [turn_thread_link] requires scheduler implementation)
+('txtDMTurnReminderQuick', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). [Click here to write your entry.]([turn_thread_link])', 'en', 1),
+('txtMentionTurnReminderQuick', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). [Click here to write your entry.]([turn_thread_link])', 'en', 1),
+('txtDMTurnReminderNormal', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). [Return to your turn thread]([turn_thread_link]) to finalize your entry.', 'en', 1),
+('txtMentionTurnReminderNormal', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). Return to your turn thread: [turn_thread_link]', 'en', 1);

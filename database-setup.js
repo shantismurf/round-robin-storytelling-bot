@@ -66,6 +66,19 @@ export async function dbSetup(connection) {
     log('Migration: story_entry.entry_status updated.', { show: true });
   }
 
+  // Migration: add more_time_requested column to turn table
+  const [mtrCols] = await connection.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'turn' AND COLUMN_NAME = 'more_time_requested'`
+  );
+  if (mtrCols.length === 0) {
+    log('Migration: adding more_time_requested column to turn table...', { show: true });
+    await connection.execute(
+      `ALTER TABLE turn ADD COLUMN more_time_requested TINYINT(1) NOT NULL DEFAULT 0`
+    );
+    log('Migration: more_time_requested column added to turn table.', { show: true });
+  }
+
   // Migration: create story_entry_edit table
   const [editTable] = await connection.execute(`SHOW TABLES LIKE 'story_entry_edit'`);
   if (editTable.length === 0) {
