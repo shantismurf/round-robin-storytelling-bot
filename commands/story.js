@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, ActionRowBuilder, StringSelectMenuBuilder, ComponentType, EmbedBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, getTurnNumber, sanitizeModalInput, log, replaceTemplateVariables, isGuildConfigured, resolveStoryId, chunkEntryContent } from '../utilities.js';
+import { getConfigValue, getTurnNumber, sanitizeModalInput, log, replaceTemplateVariables, isGuildConfigured, resolveStoryId, chunkEntryContent, checkIsAdmin } from '../utilities.js';
 import { marked } from 'marked';
 import { CreateStory, PickNextWriter, NextTurn, updateStoryStatusMessage, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { postStoryFeedJoinAnnouncement, postStoryFeedClosedAnnouncement } from '../announcements.js';
@@ -214,7 +214,8 @@ const data = new SlashCommandBuilder()
         option.setName('turn')
           .setDescription('Turn number (as shown in /story read)')
           .setRequired(true)
-          .setMinValue(1))
+          .setMinValue(1)
+          .setAutocomplete(true))
   );
 
 async function execute(connection, interaction) {
@@ -2696,9 +2697,7 @@ async function handleRead(connection, interaction) {
     }
 
     // Check admin status for contextual Edit button in buildReadEmbed
-    const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
-    const isAdmin = interaction.member.permissions.has('Administrator') ||
-      (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+    const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
     const pages = buildPages(entries, story.show_authors, editInfoMap, hasAnyEditSet);
@@ -2887,9 +2886,7 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
   const entry = entryRows[0];
   const resolvedTurnNumber = turnNumber ?? entry.turn_number;
 
-  const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
-  const isAdmin = interaction.member.permissions.has('Administrator') ||
-    (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
   const isAuthor = String(entry.original_author_id) === interaction.user.id;
 
   if (!isAdmin && !isAuthor) {
@@ -2928,7 +2925,8 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
 function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle, guildStoryId) {
   const chunk = chunks[chunkPage];
   const isFirstPage = chunkPage === 0;
-  const pageLabel = chunks.length > 1 ? ` · Page ${chunkPage + 1} of ${chunks.length}` : '';
+  const isMultiPage = chunks.length > 1;
+  const pageLabel = isMultiPage ? ` · Page ${chunkPage + 1} of ${chunks.length}` : '';
 
   const embed = new EmbedBuilder()
     .setTitle(`#${guildStoryId} ${storyTitle} · Turn #${turnNumber}${pageLabel}`)
@@ -2936,32 +2934,52 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
     .setFooter({ text: `${chunk.text.length} / 3500 characters on this page` })
     .setColor(0xffd700);
 
-  // All 4 buttons always rendered in fixed positions: ← Prev | Next → | Edit | History
-  // Edit and History are disabled on pages 2+ since both operate on the full entry from page 1.
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_edit_prev')
-      .setLabel('← Prev')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(chunkPage === 0),
-    new ButtonBuilder()
-      .setCustomId('story_edit_next')
-      .setLabel('Next →')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(chunkPage === chunks.length - 1),
+  // Only show navigation buttons when there are multiple pages.
+  // Only show History button when edit history exists.
+  // Edit is always shown but disabled when not on page 1.
+  const buttons = [];
+
+  if (isMultiPage) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId('story_edit_prev')
+        .setLabel('← Prev')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(chunkPage === 0),
+      new ButtonBuilder()
+        .setCustomId('story_edit_next')
+        .setLabel('Next →')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(chunkPage === chunks.length - 1)
+    );
+  }
+
+  buttons.push(
     new ButtonBuilder()
       .setCustomId('story_edit_open_modal')
       .setLabel('Edit')
       .setStyle(ButtonStyle.Primary)
-      .setDisabled(!isFirstPage),
-    new ButtonBuilder()
-      .setCustomId('story_edit_browse_history')
-      .setLabel('History')
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(!isFirstPage || !hasHistory)
+      .setDisabled(!isFirstPage)
   );
 
-  return { embeds: [embed], components: [row] };
+  if (hasHistory) {
+    buttons.push(
+      new ButtonBuilder()
+        .setCustomId('story_edit_browse_history')
+        .setLabel('History')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(!isFirstPage)
+    );
+  }
+
+  buttons.push(
+    new ButtonBuilder()
+      .setCustomId('story_edit_close')
+      .setLabel('✕ Close')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(...buttons)] };
 }
 
 async function handleEditButton(connection, interaction) {
@@ -3005,32 +3023,34 @@ async function handleEditButton(connection, interaction) {
     await interaction.showModal(modal);
 
   } else if (customId === 'story_edit_browse_history') {
+    // Open history as a separate ephemeral followUp so the edit embed stays intact underneath.
     await interaction.deferUpdate();
-    await state.originalInteraction.editReply(
-      await renderHistoryPage(connection, interaction, state, 0, 0)
-    );
+    state.historyMessage = await state.originalInteraction.followUp({
+      ...(await renderHistoryPage(connection, interaction, state, 0, 0)),
+      flags: MessageFlags.Ephemeral
+    });
 
   } else if (customId === 'story_edit_history_prev') {
     await interaction.deferUpdate();
-    await state.originalInteraction.editReply(
+    await state.historyMessage.edit(
       await renderHistoryPage(connection, interaction, state, Math.max(0, state.historyPage - 1), 0)
     );
 
   } else if (customId === 'story_edit_history_next') {
     await interaction.deferUpdate();
-    await state.originalInteraction.editReply(
+    await state.historyMessage.edit(
       await renderHistoryPage(connection, interaction, state, state.historyPage + 1, 0)
     );
 
   } else if (customId === 'story_edit_hist_chunk_prev') {
     await interaction.deferUpdate();
-    await state.originalInteraction.editReply(
+    await state.historyMessage.edit(
       await renderHistoryPage(connection, interaction, state, state.historyPage, (state.histChunkPage ?? 0) - 1)
     );
 
   } else if (customId === 'story_edit_hist_chunk_next') {
     await interaction.deferUpdate();
-    await state.originalInteraction.editReply(
+    await state.historyMessage.edit(
       await renderHistoryPage(connection, interaction, state, state.historyPage, (state.histChunkPage ?? 0) + 1)
     );
 
@@ -3044,19 +3064,25 @@ async function handleEditButton(connection, interaction) {
 
   } else if (customId === 'story_edit_restore_cancel') {
     await interaction.deferUpdate();
-    await state.originalInteraction.editReply(
+    await state.historyMessage.edit(
       await renderHistoryPage(connection, interaction, state, state.historyPage, state.histChunkPage ?? 0)
     );
 
   } else if (customId === 'story_edit_back') {
+    // Close the history followUp and return focus to the edit embed.
     await interaction.deferUpdate();
-    await state.originalInteraction.editReply(
-      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId)
-    );
+    await state.historyMessage.delete().catch(() => {});
+    state.historyMessage = null;
 
   } else if (customId === 'story_edit_close') {
+    await state.historyMessage?.delete().catch(() => {});
     pendingEditData.delete(userId);
     await interaction.deleteReply();
+
+  } else if (customId.startsWith('story_edit_next_entry_')) {
+    const nextEntryId = parseInt(customId.split('_').at(-1));
+    await interaction.deferUpdate();
+    await openEditSession(connection, interaction, state.guildId, state.storyId, null, nextEntryId);
 
   } else if (customId.startsWith('story_repost_entry_')) {
     await handleRepostEntry(connection, interaction);
@@ -3156,7 +3182,7 @@ async function handleRestoreConfirm(connection, interaction, editId) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  await state.originalInteraction.editReply({ embeds: [embed], components: [row] });
+  await state.historyMessage.edit({ embeds: [embed], components: [row] });
 }
 
 async function handleRestoreExecute(connection, interaction, editId) {
@@ -3168,7 +3194,7 @@ async function handleRestoreExecute(connection, interaction, editId) {
     `SELECT content FROM story_entry_edit WHERE edit_id = ?`, [editId]
   );
   if (histRows.length === 0) {
-    return await state.originalInteraction.editReply({ content: 'History version not found.', embeds: [], components: [] });
+    return await state.historyMessage.edit({ content: 'History version not found.', embeds: [], components: [] });
   }
 
   const editorName = interaction.member?.displayName ?? interaction.user.username;
@@ -3203,7 +3229,13 @@ async function handleRestoreExecute(connection, interaction, editId) {
     txn.release();
   }
 
-  pendingEditData.delete(interaction.user.id);
+  // Close the history followUp and update the edit embed with restored content.
+  await state.historyMessage?.delete().catch(() => {});
+  state.historyMessage = null;
+  state.currentContent = histRows[0].content;
+  state.chunks = chunkEntryContent(state.currentContent);
+  state.chunkPage = 0;
+  state.hasHistory = true;
 
   const [btnRepostEntry, txtEditRestoreSuccess] = await Promise.all([
     getConfigValue(connection, 'btnRepostEntry', state.guildId),
@@ -3217,10 +3249,11 @@ async function handleRestoreExecute(connection, interaction, editId) {
       .setStyle(ButtonStyle.Secondary)
   );
 
+  const editMsg = buildEditMessage(state.chunks, 0, true, state.turnNumber, state.storyTitle, state.guildStoryId);
   await state.originalInteraction.editReply({
+    ...editMsg,
     content: txtEditRestoreSuccess,
-    embeds: [],
-    components: [repostRow]
+    components: [...editMsg.components, repostRow]
   });
 }
 
@@ -3285,21 +3318,51 @@ async function handleEditModalSubmit(connection, interaction) {
   state.hasHistory = true;
 
   // Rebuild the edit embed with updated content so the user can continue editing,
-  // and add a Repost button as a second row for optional public reposting.
+  // and add a Repost button for optional public reposting.
   const editMsg = buildEditMessage(
     state.chunks, state.chunkPage, state.hasHistory,
     state.turnNumber, state.storyTitle, state.guildStoryId
   );
 
+  const extraButtons = [];
+
   const btnRepostEntry = await getConfigValue(connection, 'btnRepostEntry', state.guildId);
-  const repostRow = new ActionRowBuilder().addComponents(
+  extraButtons.push(
     new ButtonBuilder()
       .setCustomId(`story_repost_entry_${state.entryId}`)
       .setLabel(btnRepostEntry)
       .setStyle(ButtonStyle.Secondary)
   );
 
-  await interaction.editReply({ ...editMsg, components: [...editMsg.components, repostRow] });
+  // For admins: check if a next confirmed entry exists and offer to jump straight to editing it.
+  const isAdmin = await checkIsAdmin(connection, interaction, state.guildId);
+  if (isAdmin) {
+    const [nextRows] = await connection.execute(
+      `SELECT se.story_entry_id FROM story_entry se
+       JOIN turn t ON se.turn_id = t.turn_id
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+         AND (
+           SELECT COUNT(DISTINCT t2.turn_id)
+           FROM turn t2
+           JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+           JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+           WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
+         ) = ?`,
+      [state.storyId, state.turnNumber + 1]
+    );
+    if (nextRows.length > 0) {
+      extraButtons.push(
+        new ButtonBuilder()
+          .setCustomId(`story_edit_next_entry_${nextRows[0].story_entry_id}`)
+          .setLabel('Edit Next Entry →')
+          .setStyle(ButtonStyle.Primary)
+      );
+    }
+  }
+
+  const extraRow = new ActionRowBuilder().addComponents(...extraButtons);
+  await interaction.editReply({ ...editMsg, components: [...editMsg.components, extraRow] });
 }
 
 /**
@@ -3490,9 +3553,7 @@ async function handleManage(connection, interaction) {
     }
 
     const isCreator = await checkIsCreator(connection, storyId, interaction.user.id);
-    const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
-    const isAdmin = interaction.member.permissions.has('Administrator') ||
-      (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+    const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
     if (!isCreator && !isAdmin) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtManageNotAuthorized', guildId) });
@@ -3981,9 +4042,7 @@ async function handleClose(connection, interaction) {
       [storyId]
     );
     const isCreator = creatorRows.length > 0 && String(creatorRows[0].discord_user_id) === interaction.user.id;
-    const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
-    const isAdmin = interaction.member.permissions.has('Administrator') ||
-      (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+    const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
     if (!isCreator && !isAdmin) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryCloseNotAuthorized', guildId) });
@@ -4120,10 +4179,81 @@ async function handleCloseCancel(connection, interaction) {
 }
 
 
+async function handleAutocomplete(connection, interaction) {
+  if (!interaction.guild) return interaction.respond([]);
+
+  const focusedOption = interaction.options.getFocused(true);
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (!storyId) return interaction.respond([]);
+
+  const typed = String(focusedOption.value);
+  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
+
+  let rows;
+  if (focusedOption.name === 'turn') {
+    if (isAdmin) {
+      [rows] = await connection.execute(
+        `SELECT turn_number, discord_display_name, content FROM (
+           SELECT
+             (SELECT COUNT(DISTINCT t2.turn_id)
+              FROM turn t2
+              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+              WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
+             ) AS turn_number,
+             sw.discord_display_name, se.content
+           FROM story_entry se
+           JOIN turn t ON se.turn_id = t.turn_id
+           JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+           WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+         ) sub
+         WHERE CAST(turn_number AS CHAR) LIKE ? OR discord_display_name LIKE ?
+         ORDER BY turn_number LIMIT 25`,
+        [storyId, `${typed}%`, `%${typed}%`]
+      );
+    } else {
+      [rows] = await connection.execute(
+        `SELECT turn_number, discord_display_name, content FROM (
+           SELECT
+             (SELECT COUNT(DISTINCT t2.turn_id)
+              FROM turn t2
+              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+              WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
+             ) AS turn_number,
+             sw.discord_display_name, sw.discord_user_id, se.content
+           FROM story_entry se
+           JOIN turn t ON se.turn_id = t.turn_id
+           JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+           WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+             AND sw.discord_user_id = ?
+         ) sub
+         WHERE CAST(turn_number AS CHAR) LIKE ? OR discord_display_name LIKE ?
+         ORDER BY turn_number LIMIT 25`,
+        [storyId, interaction.user.id, `${typed}%`, `%${typed}%`]
+      );
+    }
+
+    return interaction.respond(
+      rows.map(r => {
+        const preview = r.content ? r.content.trim().slice(0, 25).trimEnd() : '';
+        const label = preview
+          ? `Turn ${r.turn_number} — ${r.discord_display_name} — "${preview}…"`
+          : `Turn ${r.turn_number} — ${r.discord_display_name}`;
+        return { name: label.slice(0, 100), value: r.turn_number };
+      })
+    );
+  }
+
+  return interaction.respond([]);
+}
+
 export default {
   data,
   execute,
   handleModalSubmit,
   handleButtonInteraction,
-  handleSelectMenuInteraction
+  handleSelectMenuInteraction,
+  handleAutocomplete
 };

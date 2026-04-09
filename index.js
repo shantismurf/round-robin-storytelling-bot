@@ -187,6 +187,11 @@ async function main() {
             processingButtons.delete(dedupKey);
           }
         }
+      } else if (interaction.isAutocomplete()) {
+        const command = interaction.client.commands.get(interaction.commandName);
+        if (command?.handleAutocomplete) {
+          await command.handleAutocomplete(connection, interaction);
+        }
       } else if (interaction.isStringSelectMenu()) {
         log(`${interaction.user.username} used select menu ${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
 

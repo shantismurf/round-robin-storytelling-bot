@@ -1,12 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
-
-async function checkIsAdmin(connection, interaction, guildId) {
-  const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
-  return interaction.member.permissions.has('Administrator') ||
-    (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
-}
 
 async function logAdminAction(connection, adminUserId, actionType, storyId, targetUserId = null, reason = null) {
   try {

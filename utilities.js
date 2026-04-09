@@ -301,6 +301,16 @@ export function replaceTemplateVariables(template, keyValueMap) {
 }
 
 /**
+ * Returns true if the interaction user is a server Administrator or has the configured admin role.
+ * Requires interaction.member (guild context).
+ */
+export async function checkIsAdmin(connection, interaction, guildId) {
+  const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
+  return interaction.member.permissions.has('Administrator') ||
+    (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+}
+
+/**
  * Creates a Discord thread with appropriate permissions
  * @param {Object} interaction - Discord interaction object
  * @param {string} guildID - Guild ID
