@@ -43,9 +43,10 @@ The bot uses slash commands, buttons, modals, and select menus — no message co
 - `commands/story.js` — all `/story` slash commands and modal handling
 - `commands/storyadmin.js` — `/storyadmin` commands for server admins
 - `commands/mystory.js` — `/mystory` commands for writers
-- `db/migrations/` — SQL migration files (run in order)
-- `deploy-commands.js` — registers slash commands with the Discord API
-- `sync-config.js` — pushes default config values from `db/sample_config.sql` to the database
+- `deploy.js` - system starter script that runs:
+ - `database-setup.js` — SQL schema install or update
+ - `deploy-commands.js` — registers slash commands with the Discord API
+ - `sync-config.js` — pushes additions or updates to default config values from `db/sample_config.sql` to the database
 
 ## Configuration
 
