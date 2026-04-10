@@ -459,7 +459,7 @@ async function handleModalSubmit(connection, interaction) {
     await handleJoinAO3ModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageModalSubmit(connection, interaction);
-  } else if (interaction.customId === 'story_edit_content_modal') {
+  } else if (interaction.customId.startsWith('story_edit_modal_')) {
     await handleEditModalSubmit(connection, interaction);
   }
 }
@@ -2764,8 +2764,9 @@ if (!page || fullContent === null) {
   });
 
   // No defer — showModal must be the first response
+  // Use entryId in customId to prevent Discord from caching modal content across entries
   const modal = new ModalBuilder()
-    .setCustomId('story_edit_content_modal')
+    .setCustomId(`story_edit_modal_${entryId}`)
     .setTitle('Edit Entry');
   const input = new TextInputBuilder()
     .setCustomId('entry_content')
@@ -3198,8 +3199,9 @@ async function handleEditButton(connection, interaction) {
 
   } else if (customId === 'story_edit_open_modal') {
     // No defer — showModal must be the first response
+    // Use entryId in customId to prevent Discord from caching modal content across entries
     const modal = new ModalBuilder()
-      .setCustomId('story_edit_content_modal')
+      .setCustomId(`story_edit_modal_${state.entryId}`)
       .setTitle('Edit Entry');
     const input = new TextInputBuilder()
       .setCustomId('entry_content')
