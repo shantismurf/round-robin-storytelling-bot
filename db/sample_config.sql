@@ -403,6 +403,7 @@ Words: ~[word_count]', 'en', 1),
 
 -- Entry edit system
 ('txtEditEntryNotFound', 'Entry not found or not yet confirmed.', 'en', 1),
+('txtEditEntryEmpty', 'Entry content cannot be empty.', 'en', 1),
 ('txtEditNotAuthorized', 'You don''t have permission to edit this entry.', 'en', 1),
 ('txtEditSessionExpired', 'Your edit session has expired. Please run /story edit again.', 'en', 1),
 ('txtEditSuccess', 'Entry updated.', 'en', 1),

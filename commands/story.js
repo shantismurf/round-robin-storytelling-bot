@@ -2759,7 +2759,8 @@ if (!page || fullContent === null) {
     turnNumber: page.turnNumber,
     storyTitle,
     guildStoryId: session.guildStoryId,
-    originalInteraction: interaction
+    originalInteraction: interaction,
+    fromReadPath: true,
   });
 
   // No defer — showModal must be the first response
@@ -3258,12 +3259,16 @@ async function handleEditButton(connection, interaction) {
 
   } else if (customId === 'story_edit_back') {
     // Close the history followUp and return focus to the edit embed.
+    // Ephemeral followUps can't be deleted via message.delete() — must use the interaction webhook.
     await interaction.deferUpdate();
-    await state.historyMessage.delete().catch(() => {});
+    await state.originalInteraction.deleteReply(state.historyMessage).catch(() => {});
     state.historyMessage = null;
 
   } else if (customId === 'story_edit_close') {
-    await state.historyMessage?.delete().catch(() => {});
+    await interaction.deferUpdate();
+    if (state.historyMessage) {
+      await state.originalInteraction.deleteReply(state.historyMessage).catch(() => {});
+    }
     pendingEditData.delete(userId);
     await interaction.deleteReply();
 
@@ -3460,18 +3465,26 @@ async function handleEditModalSubmit(connection, interaction) {
     4000, true
   );
   if (!editedChunk) {
-    return await interaction.reply({ content: 'Entry content cannot be empty.', flags: MessageFlags.Ephemeral });
+    return await interaction.reply({ content: await getConfigValue(connection, 'txtEditEntryEmpty', state.guildId), flags: MessageFlags.Ephemeral });
   }
 
-  // deferUpdate so Discord resolves which message to update based on which button
-  // triggered the modal: edit embed (command path) or read embed (read-button path).
-  await interaction.deferUpdate();
+  // Read path: acknowledge without touching the read embed.
+  // Command path: deferUpdate so the edit embed stays in place.
+  if (state.fromReadPath) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  } else {
+    await interaction.deferUpdate();
+  }
 
   const [entryRows] = await connection.execute(
     `SELECT content FROM story_entry WHERE story_entry_id = ?`, [state.entryId]
   );
   if (entryRows.length === 0) {
-    await interaction.followUp({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId), flags: MessageFlags.Ephemeral });
+    if (state.fromReadPath) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId) });
+    } else {
+      await interaction.followUp({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId), flags: MessageFlags.Ephemeral });
+    }
     return;
   }
 
@@ -3501,12 +3514,25 @@ async function handleEditModalSubmit(connection, interaction) {
     txn.release();
   }
 
+  if (state.fromReadPath) {
+    // Refresh the read embed in place with updated content; no edit embed shown.
+    const session = pendingReadData.get(userId);
+    if (session) {
+      session.contentMap.set(state.entryId, newContent);
+      const readPage = session.pages[session.currentPage];
+      if (readPage) readPage.content = chunkEntryContent(newContent)[0].text;
+      await state.originalInteraction.editReply(buildReadEmbed(session, session.currentPage));
+    }
+    await interaction.deleteReply();
+    pendingEditData.delete(userId);
+    return;
+  }
+
+  // Command path: update state and rebuild the edit embed.
   state.currentContent = newContent;
   state.chunks = chunkEntryContent(newContent);
   state.hasHistory = true;
 
-  // Rebuild the edit embed with updated content so the user can continue editing,
-  // and add a Repost button for optional public reposting.
   const editMsg = buildEditMessage(
     state.chunks, state.chunkPage, state.hasHistory,
     state.turnNumber, state.storyTitle, state.guildStoryId
