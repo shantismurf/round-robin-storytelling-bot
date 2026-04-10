@@ -2736,9 +2736,7 @@ async function handleReadEditButton(connection, interaction, session, entryId) {
   const page = session.pages.find(p => p.storyEntryId === entryId && p.isFirstChunk);
   const fullContent = session.contentMap?.get(entryId) ?? null;
 
-  log(`handleReadEditButton: entryId=${JSON.stringify(entryId)} (${typeof entryId}), page=${page ? 'found' : 'null'}, fullContent=${fullContent === null ? 'null' : 'found'}, mapKeys=[${[...session.contentMap.keys()].map(k => JSON.stringify(k)).join(',')}], pageEntryIds=[${session.pages.filter(p=>p.isFirstChunk).map(p=>JSON.stringify(p.storyEntryId)).join(',')}]`, { show: true, guildName: interaction?.guild?.name });
-
-  if (!page || fullContent === null) {
+if (!page || fullContent === null) {
     await interaction.reply({ content: 'Entry not found in session. Please use `/story read` again.', flags: MessageFlags.Ephemeral });
     return;
   }
@@ -2796,7 +2794,7 @@ async function handleReadNav(connection, interaction) {
 
   // story_read_edit_<entryId> — opens edit session; full handler wired in Step 4
   if (interaction.customId.startsWith('story_read_edit_')) {
-    const entryId = parseInt(interaction.customId.split('_').at(-1));
+    const entryId = interaction.customId.split('_').at(-1); // keep as string — DB returns BIGINT as string (bigNumberStrings: true)
     await handleReadEditButton(connection, interaction, session, entryId);
     return;
   }
