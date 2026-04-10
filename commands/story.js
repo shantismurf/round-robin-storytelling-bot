@@ -2735,6 +2735,9 @@ async function handleReadEditButton(connection, interaction, session, entryId) {
   // the first (and only) response to this interaction within the 3-second window.
   const page = session.pages.find(p => p.storyEntryId === entryId && p.isFirstChunk);
   const fullContent = session.contentMap?.get(entryId) ?? null;
+
+  log(`handleReadEditButton: entryId=${JSON.stringify(entryId)} (${typeof entryId}), page=${page ? 'found' : 'null'}, fullContent=${fullContent === null ? 'null' : 'found'}, mapKeys=[${[...session.contentMap.keys()].map(k => JSON.stringify(k)).join(',')}], pageEntryIds=[${session.pages.filter(p=>p.isFirstChunk).map(p=>JSON.stringify(p.storyEntryId)).join(',')}]`, { show: true, guildName: interaction?.guild?.name });
+
   if (!page || fullContent === null) {
     await interaction.reply({ content: 'Entry not found in session. Please use `/story read` again.', flags: MessageFlags.Ephemeral });
     return;
@@ -2958,10 +2961,9 @@ async function handleRequestMoreTime(connection, interaction) {
 
   // Disable the button on the original timeleft message
   try {
-    const usedLabel = await getConfigValue(connection, 'btnRequestMoreTime', guildId);
     const disabledBtn = new ButtonBuilder()
       .setCustomId(`story_request_more_time_${storyId}`)
-      .setLabel(usedLabel)
+      .setLabel(btnLabel)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true);
     await interaction.message.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] });
