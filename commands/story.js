@@ -887,7 +887,7 @@ async function handleJoin(connection, interaction, buttonStoryId = null) {
 
     const existingAO3Name = await getPreviousAO3Name(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-    const state = { storyId, guildId, storyTitle: storyInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
+    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
