@@ -879,12 +879,6 @@ async function handleJoin(connection, interaction, buttonStoryId = null) {
       }
     }
 
-    const storyInfo = await validateStoryAccess(connection, storyId, guildId);
-    if (!storyInfo.success) {
-      await interaction.reply({ content: storyInfo.error, flags: MessageFlags.Ephemeral });
-      return;
-    }
-
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
     if (!joinInfo.success) {
       await interaction.reply({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
@@ -1588,7 +1582,7 @@ async function renderStoryListReply(connection, interaction, filter, page) {
       'txtStoriesPageTitle', 'txtStoriesPageDesc',
       'lblStoryStatus', 'lblStoryTurn', 'lblStoryWriters', 'lblStoryMode', 'lblStoryCreator',
       'txtModeQuick', 'txtModeNormal',
-      'txtActive', 'txtPaused', 'txtClosed',
+      'txtActive', 'txtPaused', 'txtClosed', 'txtDelayed',
       'txtMemberStatusJoined', 'txtMemberStatusCanJoin', 'txtMemberStatusCanNotJoin',
       'txtTurnWaiting', 'txtTurnOverdue', 'txtTurnTimeLeft',
       'btnPrev', 'btnNext', 'btnFilter',
@@ -1597,7 +1591,7 @@ async function renderStoryListReply(connection, interaction, filter, page) {
   ]);
 
   const filterTitle = await getFilterTitle(connection, filter, guildId);
-  const statusTextMap = { 1: cfg.txtActive, 2: cfg.txtPaused, 3: cfg.txtClosed };
+  const statusTextMap = { 1: cfg.txtActive, 2: cfg.txtPaused, 3: cfg.txtClosed, 4: cfg.txtDelayed };
 
   // Batch fetch active turns for all stories on this page in one query
   const storyIds = stories.data.map(s => s.story_id);
@@ -1637,6 +1631,8 @@ async function renderStoryListReply(connection, interaction, filter, page) {
       currentTurn = cfg.txtPaused;
     } else if (story.story_status === 3) {
       currentTurn = cfg.txtClosed;
+    } else if (story.story_status === 4) {
+      currentTurn = cfg.txtDelayed;
     } else {
       const turn = activeTurnMap.get(story.story_id);
       if (!turn) {
@@ -1900,7 +1896,7 @@ async function getStoriesPaginated(connection, guildId, filter, page, itemsPerPa
     // Apply filters
     switch (filter) {
       case 'joinable':
-        whereClause += ` AND s.story_status IN (1, 2) AND s.allow_joins = 1
+        whereClause += ` AND s.story_status IN (1, 2, 4) AND s.allow_joins = 1
           AND (s.max_writers IS NULL OR (SELECT COUNT(*) FROM story_writer WHERE story_id = s.story_id AND sw_status = 1) < s.max_writers)
           AND s.story_id NOT IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)`;
         params.push(userId);
@@ -1991,7 +1987,8 @@ function getStatusIcon(status) {
   const icons = {
     1: '🟢', // Active
     2: '⏸️', // Paused
-    3: '🏁'  // Closed
+    3: '🏁', // Closed
+    4: '⏳'  // Waiting (delayed)
   };
   return icons[status] || '❓';
 }
@@ -2623,11 +2620,7 @@ function buildReadEmbed(session, pageIndex) {
       new ButtonBuilder()
         .setCustomId('story_read_download')
         .setLabel('⬇ Export Story')
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId('story_read_close')
-        .setLabel('✕ Close')
-        .setStyle(ButtonStyle.Danger)
+        .setStyle(ButtonStyle.Secondary)
     )
   );
 
@@ -2785,12 +2778,6 @@ async function handleReadNav(connection, interaction) {
 
   if (!session) {
     await interaction.update({ content: 'This reading session has expired. Use `/story read` again.', embeds: [], components: [] });
-    return;
-  }
-
-  if (interaction.customId === 'story_read_close') {
-    pendingReadData.delete(userId);
-    await interaction.deleteReply();
     return;
   }
 
@@ -3162,13 +3149,6 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
     );
   }
 
-  buttons.push(
-    new ButtonBuilder()
-      .setCustomId('story_edit_close')
-      .setLabel('✕ Close')
-      .setStyle(ButtonStyle.Danger)
-  );
-
   return { embeds: [embed], components: [new ActionRowBuilder().addComponents(...buttons)] };
 }
 
@@ -3266,14 +3246,6 @@ async function handleEditButton(connection, interaction) {
     await state.originalInteraction.deleteReply(state.historyMessage).catch(() => {});
     state.historyMessage = null;
 
-  } else if (customId === 'story_edit_close') {
-    await interaction.deferUpdate();
-    if (state.historyMessage) {
-      await state.originalInteraction.deleteReply(state.historyMessage).catch(() => {});
-    }
-    pendingEditData.delete(userId);
-    await interaction.deleteReply();
-
   } else if (customId.startsWith('story_edit_next_entry_')) {
     const nextEntryId = parseInt(customId.split('_').at(-1));
     await interaction.deferUpdate();
@@ -3342,7 +3314,6 @@ async function renderHistoryPage(connection, interaction, state, histPage, histC
     buttons.push(new ButtonBuilder().setCustomId('story_edit_history_next').setLabel('Older →').setStyle(ButtonStyle.Secondary));
   }
   buttons.push(new ButtonBuilder().setCustomId('story_edit_back').setLabel('← Back to Entry').setStyle(ButtonStyle.Secondary));
-  buttons.push(new ButtonBuilder().setCustomId('story_edit_close').setLabel('✕ Close').setStyle(ButtonStyle.Danger));
 
   const components = [];
   for (let i = 0; i < buttons.length; i += 5) {
@@ -3521,6 +3492,8 @@ async function handleEditModalSubmit(connection, interaction) {
     const session = pendingReadData.get(userId);
     if (session) {
       session.contentMap.set(state.entryId, newContent);
+      session.wordCount = Array.from(session.contentMap.values())
+        .reduce((total, c) => total + c.trim().split(/\s+/).filter(w => w.length > 0).length, 0);
       const readPage = session.pages[session.currentPage];
       if (readPage) readPage.content = chunkEntryContent(newContent)[0].text;
       await state.originalInteraction.editReply(buildReadEmbed(session, session.currentPage));

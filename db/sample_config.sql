@@ -42,8 +42,9 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 
 -- Story Status Text
 ('txtClosed', 'Closed', 'en', 1),
-('txtActive', 'Active', 'en', 1), 
+('txtActive', 'Active', 'en', 1),
 ('txtPaused', 'Paused', 'en', 1),
+('txtDelayed', 'Waiting to Start', 'en', 1),
 
 -- Error Messages
 ('txtThreadCreationFailed', 'Failed to create story thread. Please contact the administrator.', 'en', 1),

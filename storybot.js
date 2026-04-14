@@ -45,7 +45,7 @@ export async function CreateStory(connection, interaction, storyInput) {
   try {
 
     // Step 1: Insert story record
-    const storyStatus = (storyInput.delayHours > 0 || storyInput.delayWriters > 0) ? 2 : 1; // 2 = paused, 1 = active
+    const storyStatus = (storyInput.delayHours > 0 || storyInput.delayWriters > 0) ? 4 : 1; // 4 = waiting (delayed), 1 = active
 
     // Calculate next guild-local story number
     const [[{ nextGuildStoryId }]] = await txn.execute(
@@ -97,8 +97,10 @@ export async function CreateStory(connection, interaction, storyInput) {
     // Get thread title template and replace variables
     const threadTitleTemplate = await getConfigValue(connection,'txtStoryThreadTitle', guild_id);
     const statusText = storyStatus === 1
-      ? await getConfigValue(connection,'txtActive', guild_id)
-      : await getConfigValue(connection,'txtPaused', guild_id);
+      ? await getConfigValue(connection, 'txtActive', guild_id)
+      : storyStatus === 4
+        ? await getConfigValue(connection, 'txtDelayed', guild_id)
+        : await getConfigValue(connection, 'txtPaused', guild_id);
 
     const threadTitle = threadTitleTemplate
       .replace('[story_id]', guildStoryId)
@@ -278,7 +280,7 @@ export async function checkStoryDelay(connection, storyId) {
     let hourDelayMessage = '';
     
     // Check writer count delay
-    if (story.story_delay_users && story.story_status === 2) {
+    if (story.story_delay_users && story.story_status !== 1) {
       const [writerCount] = await connection.execute(
         `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`,
         [storyId]
@@ -296,7 +298,7 @@ export async function checkStoryDelay(connection, storyId) {
     }
     
     // Check hour delay
-    if (story.story_delay_hours && story.story_status === 2) {
+    if (story.story_delay_hours && story.story_status !== 1) {
       const delayEndTime = new Date(story.created_at.getTime() + (story.story_delay_hours * 60 * 60 * 1000));
       
       if (Date.now() >= delayEndTime.getTime()) {
@@ -353,14 +355,16 @@ export async function PickNextWriter(connection, storyId) {
 
   // Get the most recent turn to determine who just went
   // (turn is already ended by the time PickNextWriter is called, so don't filter by status)
+  // Order by turn_id (auto-increment) rather than started_at for reliable sequencing
   const [lastTurn] = await connection.execute(
-    `SELECT sw.story_writer_id FROM turn t
+    `SELECT t.turn_id, sw.story_writer_id FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      WHERE sw.story_id = ?
-     ORDER BY t.started_at DESC LIMIT 1`,
+     ORDER BY t.turn_id DESC LIMIT 1`,
     [storyId]
   );
   const currentWriterId = lastTurn.length > 0 ? lastTurn[0].story_writer_id : null;
+  const currentTurnId = lastTurn.length > 0 ? lastTurn[0].turn_id : null;
   
   // Get story order type
   const [storyData] = await connection.execute(
@@ -370,27 +374,48 @@ export async function PickNextWriter(connection, storyId) {
   const story_order_type = storyData[0]?.story_order_type;
   
   if (story_order_type === 2) {
-    // Round-robin: pick randomly from whoever has the fewest confirmed entries.
-    // Skipped/timed-out turns don't count — a writer who skipped hasn't contributed
-    // to the story yet, so they should remain eligible for the current cycle.
-    const [writerCounts] = await connection.execute(
-      `SELECT sw.story_writer_id, COUNT(se.story_entry_id) AS turn_count
-       FROM story_writer sw
-       LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id
-       LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
-       WHERE sw.story_id = ? AND sw.sw_status = 1
-       GROUP BY sw.story_writer_id`,
+    // Round-robin: cycle-based selection.
+    // Find who has already had a turn since the current writer's previous turn.
+    // Writers in that window have already "gone this cycle" and are excluded.
+    // If everyone has gone (pool empty), reset — pick from all active writers except current.
+    const [allWriters] = await connection.execute(
+      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = 1`,
       [storyId]
     );
-    if (writerCounts.length === 0) return null;
-    if (!currentWriterId) return writerCounts[0].story_writer_id;
+    if (allWriters.length === 0) return null;
+    if (!currentWriterId) return allWriters[0].story_writer_id;
 
-    // Normalize turn_count to number — MySQL COUNT() can return strings
-    const counts = writerCounts.map(w => ({ ...w, turn_count: Number(w.turn_count) }));
-    const minCount = Math.min(...counts.map(w => w.turn_count));
-    const eligible = counts.filter(w => w.turn_count === minCount && w.story_writer_id !== currentWriterId);
-    // If excluding previous writer leaves nobody (solo story, or everyone tied and previous is the only option), allow repeat
-    const pool = eligible.length > 0 ? eligible : counts.filter(w => w.turn_count === minCount);
+    // Find the current writer's previous turn (the one before the turn that just ended)
+    const [prevTurnRows] = await connection.execute(
+      `SELECT turn_id FROM turn
+       WHERE story_writer_id = ? AND turn_id < ?
+       ORDER BY turn_id DESC LIMIT 1`,
+      [currentWriterId, currentTurnId]
+    );
+    const prevTurnId = prevTurnRows[0]?.turn_id ?? 0;
+
+    // Find writers who have already gone this cycle (turns between prevTurnId and currentTurnId)
+    const [alreadyGoneRows] = await connection.execute(
+      `SELECT DISTINCT t.story_writer_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_id > ? AND t.turn_id < ?`,
+      [storyId, prevTurnId, currentTurnId]
+    );
+    const alreadyGone = new Set(alreadyGoneRows.map(r => r.story_writer_id));
+
+    // Pool: active writers not yet gone this cycle, excluding the current writer
+    let pool = allWriters.filter(w => !alreadyGone.has(w.story_writer_id) && w.story_writer_id !== currentWriterId);
+
+    // Full cycle complete — reset, everyone except current writer is eligible
+    if (pool.length === 0) {
+      pool = allWriters.filter(w => w.story_writer_id !== currentWriterId);
+    }
+
+    // Solo story — allow current writer to repeat
+    if (pool.length === 0) {
+      pool = allWriters;
+    }
+
     return pool[Math.floor(Math.random() * pool.length)].story_writer_id;
   }
 
