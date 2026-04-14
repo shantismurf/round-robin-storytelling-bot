@@ -25,25 +25,26 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
         ORDER BY t.started_at DESC LIMIT 1
       `, [storyId]);
       
-      let currentWriter = 'Unknown';
-      let turnEndDate = 'Unknown';
-      
+      const joinerName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
+      let announcement;
+
       if (turnInfo.length > 0) {
         const turn = turnInfo[0];
-        currentWriter = turn.discord_display_name;
         const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
-        turnEndDate = `<t:${Math.floor(endTime.getTime() / 1000)}:f>`;
+        const txtStoryFeedJoinAnnouncement = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncement', guildId);
+        announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncement, {
+          joiner_name: joinerName,
+          story_title: storyTitle,
+          current_writer: turn.discord_display_name,
+          turn_end_date: `<t:${Math.floor(endTime.getTime() / 1000)}:f>`
+        });
+      } else {
+        const txtStoryFeedJoinAnnouncementNoTurn = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncementNoTurn', guildId);
+        announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncementNoTurn, {
+          joiner_name: joinerName,
+          story_title: storyTitle
+        });
       }
-      
-      const txtStoryFeedJoinAnnouncement = await getConfigValue(connection,'txtStoryFeedJoinAnnouncement', guildId);
-      const joinerName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
-      
-      const announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncement, {
-        joiner_name: joinerName,
-        story_title: storyTitle,
-        current_writer: currentWriter,
-        turn_end_date: turnEndDate
-      });
       
       const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
       if (feedChannel) {
