@@ -206,10 +206,10 @@ export async function sendUserMessage(connection, interaction, storyWriterId, cf
  * Split entry content into chunks with character positions.
  * Used by the edit flow to paginate long entries without losing position info.
  * @param {string} content
- * @param {number} maxChunkSize - max chars per chunk (default 3500, leaves modal headroom)
+ * @param {number} maxChunkSize - max chars per chunk (default 3800, leaves modal headroom)
  * @returns {{ text: string, start: number, end: number }[]}
  */
-export function chunkEntryContent(content, maxChunkSize = 3500) {
+export function chunkEntryContent(content, maxChunkSize = 3800) {
   if (content.length <= maxChunkSize) {
     return [{ text: content, start: 0, end: content.length }];
   }
@@ -388,4 +388,94 @@ export async function createThread(interaction, guildID, keyValueMap) {
   }
   
   return thread;
+}
+
+/**
+ * Validate if story exists, belongs to guild, and is active (status = 1).
+ * Used by write, manage, close, timeleft handlers.
+ */
+export async function validateStoryAccess(connection, storyId, guildId) {
+  try {
+    const [storyInfo] = await connection.execute(`
+      SELECT * FROM story WHERE story_id = ?
+    `, [storyId]);
+
+    if (storyInfo.length === 0) {
+      return { success: false, error: await getConfigValue(connection,'txtStoryNotFound', guildId) };
+    }
+
+    const story = storyInfo[0];
+
+    if (story.guild_id !== guildId) {
+      return { success: false, error: await getConfigValue(connection,'txtStoryWrongGuild', guildId) };
+    }
+
+    if (story.story_status !== 1) {
+      return { success: false, error: await getConfigValue(connection,'txtStoryNotActive', guildId) };
+    }
+
+    return { success: true, story };
+  } catch (error) {
+    log(`Error in validateStoryAccess: ${error}`, { show: true });
+  }
+}
+
+/**
+ * Validate if user is the active writer for a story.
+ * Used by write and edit handlers.
+ */
+export async function validateActiveWriter(connection, userId, storyId) {
+  try {
+    const [writerInfo] = await connection.execute(`
+      SELECT sw.discord_user_id as current_writer
+      FROM turn t
+      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+      WHERE sw.story_id = ? AND t.turn_status = 1
+      ORDER BY t.turn_id DESC LIMIT 1
+    `, [storyId]);
+
+    if (writerInfo.length === 0 || writerInfo[0].current_writer !== userId) {
+      const [storyInfo] = await connection.execute(`
+        SELECT guild_id FROM story WHERE story_id = ?
+      `, [storyId]);
+
+      const guildId = storyInfo[0]?.guild_id;
+      return { success: false, error: await getConfigValue(connection,'txtNotYourTurn', guildId) };
+    }
+
+    return { success: true };
+  } catch (error) {
+    log(`Error in validateActiveWriter: ${error}`, { show: true });
+  }
+}
+
+/**
+ * Returns true if userId is the creator (oldest active writer) of the story.
+ * Used by manage, close, and ping handlers.
+ */
+export async function checkIsCreator(connection, storyId, userId) {
+  const [rows] = await connection.execute(
+    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC LIMIT 1`,
+    [storyId]
+  );
+  return rows.length > 0 && String(rows[0].discord_user_id) === userId;
+}
+
+/**
+ * Split text into chunks at paragraph boundaries, staying under maxLen characters.
+ * Used by entry preview embeds and the read display system.
+ */
+export function splitAtParagraphs(text, maxLen = 4000) {
+  if (text.length <= maxLen) return [text];
+  const chunks = [];
+  let remaining = text;
+  while (remaining.length > maxLen) {
+    let splitAt = remaining.lastIndexOf('\n\n', maxLen);
+    if (splitAt < maxLen * 0.4) splitAt = remaining.lastIndexOf('\n', maxLen);
+    if (splitAt < 50) splitAt = maxLen;
+    chunks.push(remaining.slice(0, splitAt).trim());
+    remaining = remaining.slice(splitAt).trim();
+  }
+  if (remaining.length > 0) chunks.push(remaining);
+  return chunks;
 }

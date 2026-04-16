@@ -329,6 +329,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtSetupNoPermission', '❌ You need the Manage Server permission to configure Round Robin StoryBot.', 'en', 1),
 ('txtSetupFeedChannelInvalid', '❌ Could not find a channel with that ID. Please check and try again.', 'en', 1),
 ('txtSetupMediaChannelInvalid', '❌ Could not find a media channel with that ID. Please check and try again.', 'en', 1),
+('txtSetupBotPermsFix', '_## To fix: Edit Channel Permissions to enable the permissions listed above for the [bot_role_name] member profile, not just the role._', 'en', 1),
 ('txtNotConfigured', '❌ Round Robin StoryBot has not been configured for this server yet. A server admin must run `/storyadmin setup` first.', 'en', 1),
 
 -- Admin Commands

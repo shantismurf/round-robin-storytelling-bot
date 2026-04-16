@@ -43,6 +43,7 @@ In the **OAuth2 → URL Generator** tab:
 | Create Public Threads | Create public turn threads and story threads |
 | Create Private Threads | Create private turn threads for writers who prefer privacy *(requires server boost level 2+)* |
 | Manage Threads | Delete and archive threads on story close or delete |
+| Send Messages in Threads | Post status updates, activity logs, and turn notifications inside story and turn threads |
 | Manage Roles | Required for `/storyadmin setup` to write channel-level permission overrides for the bot and admin role |
 
 Copy the generated URL, open it in a browser, and add the bot to your server. Confirm it appears in the server member list — if it doesn't, the invite did not include the `bot` scope.
@@ -130,7 +131,7 @@ This is safe to run at any time — all steps are idempotent (they only add what
 The bot was invited without the `bot` scope — only `applications.commands` was used. Re-invite using a URL that includes both scopes. Confirm the bot appears in the server member list after inviting.
 
 **`/storyadmin setup` reports it could not set bot permissions.**
-The bot's role is missing **Manage Roles**. Grant it in Server Settings → Roles → your bot's role → Permissions.
+This can happen when the feed channel is private — Discord does not allow bots to grant themselves access to channels they can't already see. Fix it manually: go to the feed channel → Edit Channel → Permissions → Add Role → select the bot's role → enable all the permissions listed in the setup warning. Then run `/storyadmin setup` again to confirm.
 
 **Private threads aren't being created.**
 Private threads require server boost level 2. If your server isn't boosted, use public threads or have users set their privacy preference to public when joining a story.

@@ -277,12 +277,17 @@ async function handleSetupModalSubmit(connection, interaction) {
   if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
 
   const botMember = interaction.guild.members.me;
+  // Use the bot's managed integration role for permission overwrites — role-level overrides
+  // work on private channels where user/member-level overrides fail due to Discord's restriction
+  // that member overrides can only grant permissions already in the caller's effective channel perms.
+  const botRole = interaction.guild.members.me?.roles.cache.find(r => r.managed) ?? null;
 
-  // Grant the bot required permissions on the feed channel.
+  // Attempt to set bot permissions on the feed channel automatically.
   // Note: As of January 12, 2026, PinMessages is a separate permission from ManageMessages.
-  let botPermNote = '';
-  if (botMember) {
-    const ok = await feedChannel.permissionOverwrites.edit(botMember, {
+  // This may silently fail on private channels — the effective permission check below is the
+  // authoritative source of truth, so we don't surface whether this attempt succeeded.
+  if (botRole) {
+    await feedChannel.permissionOverwrites.edit(botRole, {
       ViewChannel: true,
       SendMessages: true,
       EmbedLinks: true,
@@ -293,24 +298,17 @@ async function handleSetupModalSubmit(connection, interaction) {
       CreatePublicThreads: true,
       CreatePrivateThreads: true,
       ManageThreads: true,
-    }).then(() => true).catch(() => false);
-    botPermNote = ok
-      ? ' *(bot permissions set)*'
-      : ' *(⚠️ could not set bot permissions — check bot role)*';
+    }).catch(() => {});
   }
 
-  // Grant the bot required permissions on the media channel.
-  let mediaPermNote = '';
-  if (mediaChannel && botMember) {
-    const ok = await mediaChannel.permissionOverwrites.edit(botMember, {
+  // Attempt to set bot permissions on the media channel automatically.
+  if (mediaChannel && botRole) {
+    await mediaChannel.permissionOverwrites.edit(botRole, {
       ViewChannel: true,
       SendMessages: true,
       EmbedLinks: true,
       AttachFiles: true,
-    }).then(() => true).catch(() => false);
-    mediaPermNote = ok
-      ? ' *(bot permissions set)*'
-      : ' *(⚠️ could not set bot permissions — check bot role)*';
+    }).catch(() => {});
   }
 
   // Grant admin role Manage Threads on the story feed channel so they can
@@ -370,12 +368,22 @@ async function handleSetupModalSubmit(connection, interaction) {
     }
   }
 
-  const saved = [`✅ Story feed channel: <#${feedChannelId}>${botPermNote}`];
-  if (mediaChannelId) saved.push(`✅ Media channel: <#${mediaChannelId}>${mediaPermNote}`);
+  const feedPermsOk = !permWarnings.some(w => w.includes(`<#${feedChannelId}>`));
+  const mediaPermsOk = !mediaChannelId || !permWarnings.some(w => w.includes(`<#${mediaChannelId}>`));
+
+  const saved = [`${feedPermsOk ? '✅' : '⚠️'} Story feed channel: <#${feedChannelId}>`];
+  if (mediaChannelId) saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${mediaChannelId}>`);
   if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**${threadPermissionNote}`);
   if (!mediaChannelId) saved.push(`ℹ️ No media channel set — images will not be processed.`);
   if (!roleRaw)        saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
-  if (permWarnings.length) saved.push('', ...permWarnings, '', '_To fix: ensure the bot role has these permissions in your server settings, or grant them manually on the channel._');
+  if (permWarnings.length) {
+    const botRoleName = botRole?.name ?? botMember?.displayName ?? 'the bot role';
+    const fixMsg = replaceTemplateVariables(
+      await getConfigValue(connection, 'txtSetupBotPermsFix', guildId),
+      { feed_channel: `<#${feedChannelId}>`, bot_role_name: botRoleName }
+    );
+    saved.push('', ...permWarnings, '', fixMsg);
+  }
 
   await interaction.editReply({ content: saved.join('\n') });
 }
