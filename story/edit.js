@@ -381,7 +381,7 @@ async function handleRestoreExecute(connection, interaction, editId) {
     `SELECT content FROM story_entry_edit WHERE edit_id = ?`, [editId]
   );
   if (histRows.length === 0) {
-    return await state.historyMessage.edit({ content: 'History version not found.', embeds: [], components: [] });
+    return await state.historyMessage.edit({ content: await getConfigValue(connection, 'txtEditHistoryNotFound', interaction.guild.id), embeds: [], components: [] });
   }
 
   const editorName = interaction.member?.displayName ?? interaction.user.username;
@@ -626,7 +626,7 @@ async function handleRepostEntry(connection, interaction) {
 
     if (!story_thread_id) {
       return await interaction.editReply({
-        content: 'Story thread not found — cannot repost.',
+        content: await getConfigValue(connection, 'txtRepostThreadNotFound', interaction.guild.id),
         components: []
       });
     }
@@ -634,7 +634,7 @@ async function handleRepostEntry(connection, interaction) {
     const storyThread = await interaction.guild.channels.fetch(story_thread_id).catch(() => null);
     if (!storyThread) {
       return await interaction.editReply({
-        content: 'Story thread not found — cannot repost.',
+        content: await getConfigValue(connection, 'txtRepostThreadNotFound', interaction.guild.id),
         components: []
       });
     }

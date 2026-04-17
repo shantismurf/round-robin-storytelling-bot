@@ -246,7 +246,7 @@ export async function handleReadEditButton(connection, interaction, session, ent
   const fullContent = session.contentMap?.get(entryId) ?? null;
 
 if (!page || fullContent === null) {
-    await interaction.reply({ content: 'Entry not found in session. Please use `/story read` again.', flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: await getConfigValue(connection, 'txtReadEntryNotFound', session?.guildId ?? interaction.guild.id), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -293,7 +293,7 @@ export async function handleReadNav(connection, interaction) {
   const session = pendingReadData.get(userId);
 
   if (!session) {
-    await interaction.update({ content: 'This reading session has expired. Use `/story read` again.', embeds: [], components: [] });
+    await interaction.update({ content: await getConfigValue(connection, 'txtReadSessionExpired', interaction.guild.id), embeds: [], components: [] });
     return;
   }
 

@@ -50,7 +50,7 @@ async function handleWrite(connection, interaction) {
           .setStyle(TextInputStyle.Paragraph)
           .setPlaceholder(`⚠️ ${txtWriteWarning}\n\n${txtWritePlaceholder}`)
           .setMaxLength(4000)
-          .setMinLength(10)
+          .setMinLength(1)
           .setRequired(true)
       )
     );
@@ -278,7 +278,7 @@ async function confirmEntry(connection, entryId, interaction) {
     if (turnCheck.length === 0 || turnCheck[0].turn_status !== 1) {
       await txn.rollback();
       await interaction.editReply({
-        content: 'Your turn has already ended — the story has moved on.',
+        content: await getConfigValue(connection, 'txtWriteTurnEnded', interaction.guild.id),
         embeds: [],
         components: []
       });
@@ -358,6 +358,19 @@ async function handleViewLastEntry(connection, interaction) {
   const guildId = interaction.guild.id;
 
   try {
+    const [writerCheck] = await connection.execute(
+      `SELECT sw.discord_user_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 1`,
+      [storyId]
+    );
+    if (!writerCheck.length || String(writerCheck[0].discord_user_id) !== interaction.user.id) {
+      return await interaction.followUp({
+        content: await getConfigValue(connection, 'txtRequestMoreTimeNotYourTurn', guildId),
+        flags: MessageFlags.Ephemeral
+      });
+    }
+
     const [rows] = await connection.execute(
       `SELECT se.content, sw.discord_display_name, s.show_authors,
               (SELECT COUNT(DISTINCT t2.turn_id)
@@ -505,7 +518,10 @@ async function handleFinalizeConfirm(connection, interaction) {
     }
 
     // Forward images to media channel and build entry content with images inline
-    const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', interaction.guild.id);
+    const [mediaChannelId, mediaPostLabelTemplate] = await Promise.all([
+      getConfigValue(connection, 'cfgMediaChannelId', interaction.guild.id),
+      getConfigValue(connection, 'txtMediaPostLabel', interaction.guild.id),
+    ]);
     const mediaChannel = (mediaChannelId && mediaChannelId !== 'cfgMediaChannelId')
       ? await interaction.guild.channels.fetch(mediaChannelId).catch(() => null)
       : null;
@@ -519,7 +535,7 @@ async function handleFinalizeConfirm(connection, interaction) {
           if (attachment.contentType?.startsWith('image/')) {
             try {
               const forwarded = await mediaChannel.send({
-                content: `📎 Story #${storyId} — Turn ${turn.turn_id}`,
+                content: replaceTemplateVariables(mediaPostLabelTemplate, { story_id: storyId, turn_id: turn.turn_id }),
                 files: [attachment.url]
               });
               parts.push(forwarded.attachments.first().url);
@@ -560,7 +576,7 @@ async function handleFinalizeConfirm(connection, interaction) {
     } catch (txnError) {
       await txn.rollback();
       if (txnError.code === 'ER_DUP_ENTRY') {
-        await interaction.editReply({ content: '✅ Your entry has already been submitted.', components: [] });
+        await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteAlreadySubmitted', interaction.guild.id), components: [] });
         return;
       }
       throw txnError;

@@ -361,6 +361,10 @@ Words: ~[word_count]', 'en', 1),
 ('txtAdminDeleteConfirm', '⚠️ Are you sure you want to **permanently delete** "[story_title]"? All turns, entries, and writer data will be gone. This cannot be undone.', 'en', 1),
 ('btnConfirmDelete', '🗑️ Permanently Delete', 'en', 1),
 ('txtAdminDeleteSuccess', '✅ **[story_title]** has been permanently deleted.', 'en', 1),
+('txtAdminDeleteEntryAlreadyDeleted', 'This entry has already been deleted.', 'en', 1),
+('txtAdminDeleteEntrySuccess', 'Entry by **[author_name]** has been deleted. Entry ID: `[entry_id]` — to restore, use `/storyadmin restoreentry entry_id:[entry_id]`.', 'en', 1),
+('txtAdminRestoreEntryNotDeleted', 'That entry is not deleted — nothing to restore.', 'en', 1),
+('txtAdminRestoreEntrySuccess', 'Entry by **[author_name]** has been restored and will appear in `/story read` and exports again.', 'en', 1),
 ('txtAdminConfigTitle', '⚙️ Story Settings — [story_title]', 'en', 1),
 ('txtAdminConfigSaved', '✅ Story settings saved.', 'en', 1),
 ('btnAdminConfigSave', '✅ Save Changes', 'en', 1),
@@ -373,6 +377,9 @@ Words: ~[word_count]', 'en', 1),
 ('lblTags', 'Tags', 'en', 1),
 ('btnSetTags', 'Set Tags', 'en', 1),
 ('txtManageNotAuthorized', '❌ Only the story creator or an admin can manage this story.', 'en', 1),
+('txtManageValidationTurnLength', 'Turn length must be at least 1 hour.', 'en', 1),
+('txtManageValidationTimeout', 'Timeout reminder must be a number between 0 and 100.', 'en', 1),
+('txtManageValidationMaxWriters', 'Max writers must be at least 1, or leave blank for no limit.', 'en', 1),
 ('txtTurnThreadResumed', '▶️ **Story resumed.** Your turn deadline has been reset to [turn_end_time]. Use the buttons above to finalize or skip your turn when ready.', 'en', 1),
 
 -- Admin Next
@@ -411,8 +418,10 @@ Words: ~[word_count]', 'en', 1),
 ('txtEditSessionExpired', 'Your edit session has expired. Please run /story edit again.', 'en', 1),
 ('txtEditSuccess', 'Entry updated.', 'en', 1),
 ('txtEditRestoreSuccess', 'Entry restored.', 'en', 1),
+('txtEditHistoryNotFound', 'History version not found.', 'en', 1),
 ('btnRepostEntry', '📢 Repost to Story Thread', 'en', 1),
 ('txtRepostSuccess', '✅ Entry reposted to the story thread.', 'en', 1),
+('txtRepostThreadNotFound', 'Story thread not found — cannot repost.', 'en', 1),
 
 -- Join UI labels
 ('lblJoinNotifications', 'Notification Preference:', 'en', 1),
@@ -428,6 +437,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtRequestMoreTimeUsed', '⏰ More time has been requested. An admin will review.', 'en', 1),
 ('txtRequestMoreTimeAlreadyUsed', 'More time has already been requested for this turn.', 'en', 1),
 ('txtRequestMoreTimeNotYourTurn', 'This button is only available to the current turn holder.', 'en', 1),
+('txtTimeleftNoActiveTurn', 'No active turn found for that story.', 'en', 1),
 
 -- Story export AO3 instructions (shown with the exported HTML file)
 ('txtExportAO3Instructions', 'If you don''t see a download icon, click the ··· menu on the file and choose **Download**.\n\n**To post to AO3:** Open the file in any text editor and copy everything between the `<body>` and `</body>` tags. In AO3''s Work Text field, click the **HTML** button to switch to HTML mode, then paste. If your story includes images, you''ll need to host them on an image host and update the links in the file before copying.', 'en', 1),
@@ -445,4 +455,26 @@ Words: ~[word_count]', 'en', 1),
 ('txtDMTurnReminderQuick', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). [Click here to write your entry.]([turn_thread_link])', 'en', 1),
 ('txtMentionTurnReminderQuick', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). [Click here to write your entry.]([turn_thread_link])', 'en', 1),
 ('txtDMTurnReminderNormal', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). [Return to your turn thread]([turn_thread_link]) to finalize your entry.', 'en', 1),
-('txtMentionTurnReminderNormal', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). Return to your turn thread: [turn_thread_link]', 'en', 1);
+('txtMentionTurnReminderNormal', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). Return to your turn thread: [turn_thread_link]', 'en', 1),
+
+-- Story add validation
+('txtAddValidationTitleEmpty', 'Story title cannot be empty.', 'en', 1),
+('txtAddValidationTitleRequired', 'Please set a story title before creating the story.', 'en', 1),
+
+-- Story list
+('txtListFilterPrompt', '🔍 **Filter stories:**', 'en', 1),
+
+-- Story read
+('txtReadEntryNotFound', 'Entry not found in session. Please use `/story read` again.', 'en', 1),
+('txtReadSessionExpired', 'This reading session has expired. Use `/story read` again.', 'en', 1),
+
+-- Story write
+('txtWriteTurnEnded', 'Your turn has already ended — the story has moved on.', 'en', 1),
+('txtWriteAlreadySubmitted', 'Your entry has already been submitted.', 'en', 1),
+
+-- Media channel post label (used when forwarding images from turn threads)
+('txtMediaPostLabel', '📎 Story #[story_id] — Turn [turn_id]', 'en', 1),
+
+-- /story ping
+('txtPingWriters', '📢 [mentions]\n> [message]', 'en', 1),
+('txtPingWritersSent', '✅ All active writers have been pinged in the story thread.', 'en', 1);

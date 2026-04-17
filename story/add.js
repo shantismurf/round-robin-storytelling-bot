@@ -203,7 +203,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
     if (customId === 'story_add_title_modal') {
       const value = sanitizeModalInput(interaction.fields.getTextInputValue('story_title'), 500);
       if (!value) {
-        await interaction.reply({ content: 'Story title cannot be empty.', flags: MessageFlags.Ephemeral });
+        await interaction.reply({ content: await getConfigValue(connection, 'txtAddValidationTitleEmpty', interaction.guild.id), flags: MessageFlags.Ephemeral });
         return;
       }
       state.storyTitle = value;
@@ -301,7 +301,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
   } catch (error) {
     log(`Error in handleAddStoryModalSubmit: ${error}`, { show: true, guildName: interaction?.guild?.name });
     if (!interaction.replied && !interaction.deferred) {
-      await interaction.reply({ content: 'Failed to update. Please try again.', flags: MessageFlags.Ephemeral });
+      await interaction.reply({ content: await getConfigValue(connection, 'txtActionFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
     }
   }
 }
@@ -481,7 +481,7 @@ export async function handleAddStoryButton(connection, interaction) {
 export async function handleCreateStorySubmit(connection, interaction, state) {
   if (!state.storyTitle) {
     await interaction.reply({
-      content: 'Please set a story title before creating the story.',
+      content: await getConfigValue(connection, 'txtAddValidationTitleRequired', interaction.guild.id),
       flags: MessageFlags.Ephemeral
     });
     return;

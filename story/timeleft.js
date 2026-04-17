@@ -21,7 +21,7 @@ export async function handleTimeleft(connection, interaction) {
   );
 
   if (!rows.length) {
-    return interaction.reply({ content: 'No active turn found for that story.', flags: MessageFlags.Ephemeral });
+    return interaction.reply({ content: await getConfigValue(connection, 'txtTimeleftNoActiveTurn', guildId), flags: MessageFlags.Ephemeral });
   }
   const turn = rows[0];
 
@@ -77,7 +77,7 @@ export async function handleRequestMoreTime(connection, interaction) {
   );
 
   if (!rows.length) {
-    return interaction.editReply({ content: 'No active turn found.' });
+    return interaction.editReply({ content: await getConfigValue(connection, 'txtTimeleftNoActiveTurn', guildId) });
   }
   const turn = rows[0];
 

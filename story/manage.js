@@ -533,14 +533,14 @@ async function handleManageModalSubmit(connection, interaction) {
     if (interaction.customId === 'story_manage_turnlength_modal') {
       const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('turn_length'), 10));
       if (isNaN(val) || val < 1) {
-        return await interaction.reply({ content: 'Turn length must be at least 1 hour.', flags: MessageFlags.Ephemeral });
+        return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id), flags: MessageFlags.Ephemeral });
       }
       state.turnLength = val;
 
     } else if (interaction.customId === 'story_manage_reminder_modal') {
       const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('timeout_reminder'), 10));
       if (isNaN(val) || val < 0 || val > 100) {
-        return await interaction.reply({ content: 'Timeout reminder must be a number between 0 and 100.', flags: MessageFlags.Ephemeral });
+        return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id), flags: MessageFlags.Ephemeral });
       }
       state.timeoutReminder = val;
 
@@ -549,7 +549,7 @@ async function handleManageModalSubmit(connection, interaction) {
       if (raw) {
         const val = parseInt(raw);
         if (isNaN(val) || val < 0) {
-          return await interaction.reply({ content: 'Max writers must be at least 1, or leave blank for no limit.', flags: MessageFlags.Ephemeral });
+          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationMaxWriters', interaction.guild.id), flags: MessageFlags.Ephemeral });
         }
         state.maxWriters = val > 0 ? val : null; // 0 = no limit
       } else {

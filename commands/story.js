@@ -13,6 +13,7 @@ import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/clo
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
 import { handleHelp, handleHelpNavigation } from '../story/help.js';
+import { handlePing } from '../story/ping.js';
 
 const data = new SlashCommandBuilder()
   .setName('story')
@@ -104,6 +105,15 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand(subcommand =>
     subcommand
+      .setName('ping')
+      .setDescription('Ping all active writers in the story thread (creator or admin only)')
+      .addIntegerOption(option =>
+        option.setName('story_id').setDescription('Story ID').setRequired(true))
+      .addStringOption(option =>
+        option.setName('message').setDescription('Optional message to include').setRequired(false))
+  )
+  .addSubcommand(subcommand =>
+    subcommand
       .setName('edit')
       .setDescription('Edit a confirmed story entry')
       .addIntegerOption(option =>
@@ -153,6 +163,8 @@ async function execute(connection, interaction) {
     await handleTimeleft(connection, interaction);
   } else if (subcommand === 'help') {
     await handleHelp(connection, interaction);
+  } else if (subcommand === 'ping') {
+    await handlePing(connection, interaction);
   } else if (subcommand === 'edit') {
     await handleEdit(connection, interaction);
   } else {
@@ -189,14 +201,14 @@ async function handleButtonInteraction(connection, interaction) {
     await handleFinalizeConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_finalize_cancel_')) {
     await interaction.deferUpdate();
-    await interaction.editReply({ content: '❌ Finalize cancelled.', components: [] });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), components: [] });
   } else if (interaction.customId.startsWith('skip_turn_')) {
     await handleSkipTurn(connection, interaction);
   } else if (interaction.customId.startsWith('story_skip_confirm_')) {
     await handleSkipConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_skip_cancel_')) {
     await interaction.deferUpdate();
-    await interaction.editReply({ content: '❌ Skip cancelled.', components: [] });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), components: [] });
   } else if (interaction.customId.startsWith('story_close_confirm_')) {
     await handleCloseConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_close_cancel_')) {

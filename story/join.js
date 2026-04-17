@@ -231,7 +231,7 @@ export async function handleJoinConfirm(connection, interaction) {
 
       const [[writerCount], [storyInfo]] = await Promise.all([
         connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`, [storyId]),
-        connection.execute(`SELECT title FROM story WHERE story_id = ?`, [storyId])
+        connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId])
       ]);
 
       const txtJoinSuccess = await getConfigValue(connection, 'txtJoinSuccess', guildId);
@@ -244,6 +244,12 @@ export async function handleJoinConfirm(connection, interaction) {
 
       await postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyInfo[0].title);
       updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
+
+      if (storyInfo[0].story_thread_id) {
+        interaction.guild.channels.fetch(storyInfo[0].story_thread_id.toString())
+          .then(thread => thread?.members.add(interaction.user.id))
+          .catch(() => {});
+      }
 
       const writerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
       getConfigValue(connection, 'txtStoryThreadWriterJoin', guildId).then(template =>

@@ -50,7 +50,7 @@ export async function handleFilterButton(connection, interaction) {
         { label: txtPaused, value: 'paused' },
       ])
   );
-  await interaction.editReply({ content: '🔍 **Filter stories:**', embeds: [], components: [row] });
+  await interaction.editReply({ content: await getConfigValue(connection, 'txtListFilterPrompt', interaction.guild.id), embeds: [], components: [row] });
 }
 
 /**

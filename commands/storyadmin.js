@@ -1056,10 +1056,10 @@ async function handleDeleteEntryConfirm(connection, interaction) {
     );
 
     if (rows.length === 0) {
-      return await interaction.editReply({ content: 'Entry not found.', embeds: [], components: [] });
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', guildId), embeds: [], components: [] });
     }
     if (rows[0].entry_status === 'deleted') {
-      return await interaction.editReply({ content: 'This entry has already been deleted.', embeds: [], components: [] });
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminDeleteEntryAlreadyDeleted', guildId), embeds: [], components: [] });
     }
 
     await connection.execute(
@@ -1070,7 +1070,10 @@ async function handleDeleteEntryConfirm(connection, interaction) {
     await logAdminAction(connection, interaction.user.id, 'deleteentry', rows[0].story_id);
 
     await interaction.editReply({
-      content: `Entry by **${rows[0].discord_display_name}** has been deleted. Entry ID: \`${entryId}\` — to restore, use \`/storyadmin restoreentry entry_id:${entryId}\`.`,
+      content: replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminDeleteEntrySuccess', guildId),
+        { author_name: rows[0].discord_display_name, entry_id: String(entryId) }
+      ),
       embeds: [],
       components: []
     });
@@ -1098,10 +1101,10 @@ async function handleRestoreEntry(connection, interaction) {
     );
 
     if (rows.length === 0) {
-      return await interaction.editReply({ content: 'Entry not found.' });
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', guildId) });
     }
     if (rows[0].entry_status !== 'deleted') {
-      return await interaction.editReply({ content: 'That entry is not deleted — nothing to restore.' });
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminRestoreEntryNotDeleted', guildId) });
     }
 
     await connection.execute(
@@ -1112,7 +1115,10 @@ async function handleRestoreEntry(connection, interaction) {
     await logAdminAction(connection, interaction.user.id, 'restoreentry', rows[0].story_id);
 
     await interaction.editReply({
-      content: `Entry by **${rows[0].discord_display_name}** has been restored and will appear in \`/story read\` and exports again.`
+      content: replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminRestoreEntrySuccess', guildId),
+        { author_name: rows[0].discord_display_name }
+      )
     });
 
   } catch (error) {
