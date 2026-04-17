@@ -94,7 +94,7 @@ async function handleWriteModalSubmit(connection, interaction) {
           UPDATE story_entry SET content = ?, entry_status = 'pending', created_at = NOW()
           WHERE story_entry_id = ?
         `, [content, pendingEntry[0].story_entry_id]);
-        entryId = pendingEntry[0].story_entry_id;
+        entryId = String(pendingEntry[0].story_entry_id);
       } else {
         // Create new pending entry
         const [turnInfo] = await connection.execute(`
@@ -112,7 +112,7 @@ async function handleWriteModalSubmit(connection, interaction) {
           VALUES (?, ?, 'pending')
         `, [turnInfo[0].turn_id, content]);
 
-        entryId = result.insertId;
+        entryId = String(result.insertId);
       }
 
     // Get timeout and create embed
@@ -209,7 +209,7 @@ async function createPreviewEmbed(connection, content, guildId, discordTimestamp
  */
 async function handleEntryConfirmation(connection, interaction) {
   const [action, , entryIdStr] = interaction.customId.split('_');
-  const entryId = parseInt(entryIdStr);
+  const entryId = entryIdStr;
 
   try {
     await interaction.deferUpdate();
