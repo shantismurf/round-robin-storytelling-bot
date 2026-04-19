@@ -386,6 +386,11 @@ Words: ~[word_count]', 'en', 1),
 ('txtAdminNextSuccess', '✅ **[user_name]** will receive the next turn.', 'en', 1),
 ('txtAdminNextAlreadyCurrent', '❌ **[user_name]** is already the current writer.', 'en', 1),
 
+-- Admin Reassign
+('txtAdminReassignSuccess', '✅ Turn reassigned to **[prev_writer]**. **[current_writer]** will go next.', 'en', 1),
+('txtAdminReassignNoPreviousWriter', '❌ There is no previous turn to reassign from — this is the first turn in the story.', 'en', 1),
+('txtAdminHelpReassign', 'Gives the previous writer another turn immediately, then queues the current writer to go next. Useful when a turn timed out and the writer before them deserves another shot.', 'en', 1),
+
 -- Story Thread Activity Log
 ('txtStoryThreadTurnStart', '✍️ **Turn [turn_number]:** It''s **[writer_name]**''s turn! Deadline: [turn_end_full] ([turn_end_relative]).', 'en', 1),
 ('txtStoryThreadTurnSkip', '⏭️ **[writer_name]** skipped their turn.', 'en', 1),

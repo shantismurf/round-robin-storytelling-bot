@@ -520,6 +520,8 @@ async function handleEditModalSubmit(connection, interaction) {
         const freshChunks = chunkEntryContent(newContent);
         readPage.content = (freshChunks[state.chunkPage] ?? freshChunks[0]).text;
       }
+      session.pendingRepostEntryId = state.entryId;
+      session.btnRepostEntry = await getConfigValue(connection, 'btnRepostEntry', session.guildId);
       await state.originalInteraction.editReply(buildReadEmbed(session, session.currentPage));
     }
     await interaction.deleteReply();
@@ -601,12 +603,15 @@ async function handleRepostEntry(connection, interaction) {
 
   try {
     const [rows] = await connection.execute(
-      `SELECT se.content, sw.discord_display_name, s.story_thread_id, s.show_authors,
+      `SELECT se.content, se.created_at, sw.discord_display_name, sw.discord_user_id AS original_author_id,
+              s.story_thread_id, s.show_authors,
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
                JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
-               WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) AS turn_number
+               WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) AS turn_number,
+              (SELECT see.edited_at FROM story_entry_edit see WHERE see.entry_id = se.story_entry_id ORDER BY see.edited_at DESC LIMIT 1) AS last_edited_at,
+              (SELECT see.edited_by FROM story_entry_edit see WHERE see.entry_id = se.story_entry_id ORDER BY see.edited_at DESC LIMIT 1) AS last_editor_id
        FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
@@ -622,7 +627,7 @@ async function handleRepostEntry(connection, interaction) {
       });
     }
 
-    const { content, discord_display_name, story_thread_id, show_authors, turn_number } = rows[0];
+    const { content, created_at, discord_display_name, original_author_id, story_thread_id, show_authors, turn_number, last_edited_at, last_editor_id } = rows[0];
 
     if (!story_thread_id) {
       return await interaction.editReply({
@@ -639,16 +644,39 @@ async function handleRepostEntry(connection, interaction) {
       });
     }
 
+    let showEdited = false;
+    if (last_edited_at) {
+      const isGrace = String(last_editor_id) === String(original_author_id) &&
+                      (new Date(last_edited_at) - new Date(created_at)) <= 60 * 60 * 1000;
+      showEdited = !isGrace;
+    }
+
     const embed = new EmbedBuilder().setDescription(content);
     if (show_authors) {
-      embed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name} *(edited)*` });
+      const authorLine = showEdited
+        ? `Turn ${turn_number} — ${discord_display_name} (edited)`
+        : `Turn ${turn_number} — ${discord_display_name}`;
+      embed.setAuthor({ name: authorLine });
     }
 
     await storyThread.send({ embeds: [embed] });
-    await interaction.editReply({
-      content: await getConfigValue(connection, 'txtRepostSuccess', interaction.guild.id),
-      components: []
-    });
+
+    const userId = interaction.user.id;
+    const readSession = pendingReadData.get(userId);
+    if (readSession?.pendingRepostEntryId === entryId) {
+      readSession.pendingRepostEntryId = null;
+      readSession.btnRepostEntry = null;
+      await interaction.editReply(buildReadEmbed(readSession, readSession.currentPage));
+      await interaction.followUp({
+        content: await getConfigValue(connection, 'txtRepostSuccess', interaction.guild.id),
+        flags: MessageFlags.Ephemeral
+      });
+    } else {
+      await interaction.editReply({
+        content: await getConfigValue(connection, 'txtRepostSuccess', interaction.guild.id),
+        components: []
+      });
+    }
 
   } catch (error) {
     log(`Error in handleRepostEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });

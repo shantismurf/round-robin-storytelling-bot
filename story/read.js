@@ -131,14 +131,21 @@ export function buildReadEmbed(session, pageIndex) {
   }
 
   // Row 3: utility actions
-  components.push(
-    new ActionRowBuilder().addComponents(
+  const utilityButtons = [
+    new ButtonBuilder()
+      .setCustomId('story_read_download')
+      .setLabel('⬇ Export Story')
+      .setStyle(ButtonStyle.Secondary)
+  ];
+  if (session.pendingRepostEntryId && session.pendingRepostEntryId === page.storyEntryId && page.isFirstChunk) {
+    utilityButtons.push(
       new ButtonBuilder()
-        .setCustomId('story_read_download')
-        .setLabel('⬇ Export Story')
+        .setCustomId(`story_repost_entry_${session.pendingRepostEntryId}`)
+        .setLabel(session.btnRepostEntry)
         .setStyle(ButtonStyle.Secondary)
-    )
-  );
+    );
+  }
+  components.push(new ActionRowBuilder().addComponents(...utilityButtons));
 
   return { embeds: [embed], components };
 }

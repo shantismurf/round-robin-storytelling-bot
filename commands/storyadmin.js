@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
-import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
+import { PickNextWriter, NextTurn, skipActiveTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 
 async function logAdminAction(connection, adminUserId, actionType, storyId, targetUserId = null, reason = null) {
   try {
@@ -101,6 +101,12 @@ const data = new SlashCommandBuilder()
         o.setName('story_id').setDescription('Story ID').setRequired(true))
   )
   .addSubcommand(s =>
+    s.setName('reassign')
+      .setDescription('Give the previous writer another turn, then resume with the current writer')
+      .addIntegerOption(o =>
+        o.setName('story_id').setDescription('Story ID').setRequired(true))
+  )
+  .addSubcommand(s =>
     s.setName('help')
       .setDescription('Show all admin commands and what they do')
   )
@@ -136,6 +142,7 @@ async function execute(connection, interaction) {
     else if (subcommand === 'ao3name') await handleAdminAO3Name(connection, interaction);
   } else {
     if (subcommand === 'skip')              await handleSkip(connection, interaction);
+    else if (subcommand === 'reassign')     await handleReassign(connection, interaction);
     else if (subcommand === 'extend')       await handleExtend(connection, interaction);
     else if (subcommand === 'next')         await handleNext(connection, interaction);
     else if (subcommand === 'deleteentry')  await handleDeleteEntry(connection, interaction);
@@ -419,23 +426,7 @@ async function handleSkip(connection, interaction) {
     }
 
     const activeTurn = activeTurnRows[0];
-    await connection.execute(
-      `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-      [activeTurn.turn_id]
-    );
-    await connection.execute(
-      `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-      [activeTurn.turn_id]
-    );
-
-    if (activeTurn.thread_id) {
-      try {
-        const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-        if (thread) await deleteThreadAndAnnouncement(thread);
-      } catch (err) {
-        log(`Could not delete turn thread on admin skip: ${err}`, { show: true, guildName: interaction?.guild?.name });
-      }
-    }
+    await skipActiveTurn(connection, interaction.guild, activeTurn.turn_id, activeTurn.thread_id);
 
     const nextWriterId = await PickNextWriter(connection, storyId);
     if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
@@ -445,6 +436,67 @@ async function handleSkip(connection, interaction) {
 
   } catch (error) {
     log(`Error in handleSkip: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+// ---------------------------------------------------------------------------
+// /storyadmin reassign
+// ---------------------------------------------------------------------------
+async function handleReassign(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  try {
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id, sw.story_writer_id, sw.discord_display_name
+       FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 1`,
+      [storyId]
+    );
+    if (activeTurnRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminNoActiveTurn', guildId) });
+    }
+
+    const currentTurn = activeTurnRows[0];
+
+    const [prevTurnRows] = await connection.execute(
+      `SELECT sw.story_writer_id, sw.discord_display_name
+       FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 0
+       ORDER BY t.ended_at DESC LIMIT 1`,
+      [storyId]
+    );
+    if (prevTurnRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminReassignNoPreviousWriter', guildId) });
+    }
+
+    const prevWriter = prevTurnRows[0];
+
+    await skipActiveTurn(connection, interaction.guild, currentTurn.turn_id, currentTurn.thread_id);
+    await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [prevWriter.story_writer_id, storyId]);
+
+    const nextWriterId = await PickNextWriter(connection, storyId);
+    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+
+    await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [currentTurn.story_writer_id, storyId]);
+
+    await logAdminAction(connection, interaction.user.id, 'reassign', storyId);
+    await interaction.editReply({
+      content: replaceTemplateVariables(
+        await getConfigValue(connection, 'txtAdminReassignSuccess', guildId),
+        { prev_writer: prevWriter.discord_display_name, current_writer: currentTurn.discord_display_name }
+      )
+    });
+
+  } catch (error) {
+    log(`Error in handleReassign: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }

@@ -966,6 +966,29 @@ export async function deleteThreadAndAnnouncement(thread) {
 }
 
 /**
+ * skipActiveTurn — ends a turn as a skip, cancels its pending jobs, and deletes its thread.
+ * Shared by handleSkip and handleReassign so the skip logic lives in one place.
+ */
+export async function skipActiveTurn(connection, guild, turnId, threadId) {
+  await connection.execute(
+    `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
+    [turnId]
+  );
+  await connection.execute(
+    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
+    [turnId]
+  );
+  if (threadId) {
+    try {
+      const thread = await guild.channels.fetch(threadId);
+      if (thread) await deleteThreadAndAnnouncement(thread);
+    } catch (err) {
+      log(`Could not delete turn thread on skip: ${err}`, { show: true, guildName: guild?.name });
+    }
+  }
+}
+
+/**
  * turnEndTime function - calculates when a turn ends
  */
 export function turnEndTimeFunction(turnLengthHours) {
