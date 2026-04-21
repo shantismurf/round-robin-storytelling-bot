@@ -4,7 +4,7 @@
 
 The bot runs on multiple Discord guilds. The owner wants a central "hub" Discord server for bot support and development announcements that also mirrors story activity from participating guilds — giving the hub a vibrant, community-facing feed showcasing stories across all installations. 
 
-This requires an opt-in toggle at the guild level during the /storyadmin setup workflow, per-story opt-out (if guild ensbled) at story creation and manage, explicit writer consent at join (with reassurance regarding no AI scraping), and an option to follow the hub announcement channel in their story feed, or the channel of their choice.
+This requires an opt-in toggle at the guild level during the /storyadmin setup workflow, per-story opt-out (if guild enabled) at story creation and manage, explicit writer consent at join (with reassurance regarding no AI scraping), and an option to follow the hub announcement channel in their story feed, or the channel of their choice.
 
 A broadcast mechanism to inform current users of the hub launch, or critical info and new versions, to be used only for critical bot updates may be needed for those who don't follow.
 
@@ -28,9 +28,6 @@ We could add a mandatory Rating on stories, following the AO3 convention. Storie
 
 ---edit bookmark---
 
-
-
-
 ## Architecture Overview
 
 ### Config Keys
@@ -38,11 +35,10 @@ We could add a mandatory Rating on stories, following the AO3 convention. Storie
 | Key | Stored at | Set by | Notes |
 |---|---|---|---|
 | `cfgHubGuildId` | `guild_id = 1` (sample_config.sql) | Bot owner (DB/script) | Hub Discord server ID; empty = hub disabled |
-| `cfgHubEnabled` | `guild_id = 1` | Bot owner | Master on/off switch |
-| `cfgHubFeedChannelId` | Per-guild | Bot owner via `/storyadmin hubsetup` | That guild's channel on the hub server |
-| `cfgShareToHub` | Per-guild | Guild admin via `/storyadmin hubenable` | `'true'`/`'false'` opt-in flag |
+| `cfgHubFeedChannelId` | Per-guild | Automatically created on first guild setup | That guild's channel on the hub server |
+| `cfgShareToHub` | Per-guild | Guild admin via `/storyadmin setup` | `'true'`/`'false'` opt-in flag |
 
-Add `cfgHubFeedChannelId` and `cfgShareToHub` to the **protected keys** list in `sync-config.js` (alongside existing `cfgStoryFeedChannelId`, `cfgMediaChannelId`, `cfgAdminRoleName`).
+Add all three to the **protected keys** list in `sync-config.js` (alongside existing `cfgStoryFeedChannelId`, `cfgMediaChannelId`, `cfgAdminRoleName`).
 
 Add `hubOwnerId` to `config.example.json` — the Discord user ID allowed to run hub management commands.
 
@@ -155,9 +151,9 @@ Add two subcommands:
 - Verifies channel exists via `client.guilds.fetch(hubGuildId).channels.fetch(hubChannelId)`
 - Logs to `admin_action_log` as `'hub_setup'`
 
-**`/storyadmin hubenable`** — Guild admin (`checkIsAdmin`)
+**`/storyadmin setup`** — Guild admin (`checkIsAdmin`)
 - Toggles `cfgShareToHub` between `'true'` / `'false'` for the guild
-- Shows current status + explicit summary: *"Story activity (joins, turn announcements, completions) will be mirrored to the hub server, a public Discord server. Writers' Discord display names appear in those posts. Story content is not mirrored."*
+- Shows current status + explicit summary: *"Story activity (story start, entries, and close) will be mirrored to the hub server, a public Discord server. Writers' Discord display names or AO3 usernames appear in those posts if they are enabled to be shown in the story. Hub sharing can also be disabled at the story level."*
 - Requires confirmation button
 - Logs to `admin_action_log` as `'hub_optin'` or `'hub_optout'`
 
