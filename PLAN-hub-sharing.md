@@ -2,7 +2,11 @@
 
 ## Context
 
-The bot runs on multiple Discord guilds. The owner wants a central "hub" Discord server that mirrors story activity from participating guilds — giving the hub a vibrant, community-facing feed showcasing stories across all installations. This requires an opt-in system at the guild level, per-story opt-out, explicit writer consent (with reassurance regarding no AI scraping), and a broadcast mechanism to inform current users of bot developments, like the hub launch and new versions.
+The bot runs on multiple Discord guilds. The owner wants a central "hub" Discord server for bot support and development announcements that also mirrors story activity from participating guilds — giving the hub a vibrant, community-facing feed showcasing stories across all installations. 
+
+This requires an opt-in toggle at the guild level during the /storyadmin setup workflow, per-story opt-out (if guild ensbled) at story creation and manage, explicit writer consent at join (with reassurance regarding no AI scraping), and an option to follow the hub announcement channel in their story feed, or the channel of their choice.
+
+A broadcast mechanism to inform current users of the hub launch, or critical info and new versions, to be used only for critical bot updates may be needed for those who don't follow.
 
 Writers' creative work is involved, so consent and transparency are the top concerns. The hub is a **public Discord server** — semantically equivalent to posting an unrestricted work on AO3 (public but lower-profile, unlikely for scrapers to access compared to the Archive). This framing should appear in consent language.
 
@@ -14,7 +18,18 @@ Writers' creative work is involved, so consent and transparency are the top conc
 - **Story default**: Opt-in by default (new stories on opted-in guilds are shared unless story creator opts out).
 - **Broadcast timing**: At launch — send the broadcast and enable hub sharing simultaneously, asking for user feedback and participation. Include thank you to the first few users of the bot and encourage collaboration on its development.
 
----edit stopped here---
+---
+
+## Content Concerns - Decision Needed
+
+User stories may contain explicit content. Should the Hub server be restricted to 18+, or should there be a rating system (trusting users to self-police)?  Is there another approach that would minimize user burden and handle mature content in an responsible manner.
+
+We could add a mandatory Rating on stories, following the AO3 convention. Stories Not Rated, Mature or Explicit would be posted to the hub in an age restricted channel for the guild. General and Teen stories would post to a SFW channel for the guild.
+
+---edit bookmark---
+
+
+
 
 ## Architecture Overview
 
