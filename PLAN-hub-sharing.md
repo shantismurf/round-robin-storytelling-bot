@@ -24,7 +24,9 @@ Writers' creative work is involved, so consent and transparency are the top conc
 
 User stories may contain explicit content. Should the Hub server be restricted to 18+, or should there be a rating system (trusting users to self-police)?  Is there another approach that would minimize user burden and handle mature content in an responsible manner.
 
-We could add a mandatory Rating on stories, following the AO3 convention. Stories Not Rated, Mature or Explicit would be posted to the hub in an age restricted channel for the guild. General and Teen stories would post to a SFW channel for the guild.
+We could add a mandatory Rating on stories, following the AO3 convention. Stories Not Rated, Mature or Explicit would be posted to the hub in an age restricted channel for the guild. General and Teen stories would post to a SFW channel for the guild. This would require two channels for every guild, relying on users to categorize correctly, and how would you handle stories that change rating, up or down? It's too complicated.
+
+I think the only reasonable solution is for all shared guild story channels sit in an age-restricted category on the hub, but discussion, help, and announcement channels can be accessible by all.
 
 ---edit bookmark---
 
