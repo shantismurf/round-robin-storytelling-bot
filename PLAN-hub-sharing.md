@@ -2,11 +2,11 @@
 
 ## Context
 
-The bot runs on multiple Discord guilds. The owner wants a central "hub" Discord server for bot support and development announcements that also mirrors story activity from participating guilds — giving the hub a vibrant, community-facing feed showcasing stories across all installations. 
+The bot runs on multiple Discord guilds. The owner wants to create a new central "hub" Discord server for bot support and development announcements that also mirrors story activity from participating guilds — giving the hub a vibrant, community-facing feed showcasing stories across all installations. 
 
-This requires an opt-in toggle at the guild level during the /storyadmin setup workflow, per-story opt-out (if guild enabled) at story creation and manage, explicit writer consent at join (with reassurance regarding no AI scraping), and an option to follow the hub announcement channel in their story feed, or the channel of their choice.
+This requires an opt-in toggle at the guild level during the /storyadmin setup workflow. When enabled, also requires a per-story opt-out at story creation and manage, explicit writer consent at join, and an option to follow the hub announcement channel in their story feed, or the channel of their choice.
 
-A broadcast mechanism to inform current users of the hub launch, or critical info and new versions, to be used only for critical bot updates may be needed for those who don't follow.
+A broadcast mechanism, not a registered command but likely something the user will run locally in a terminal as needed, to post an announcement to all installed story feed channels, informing current users of the hub launch. May also be used for critical bot updates as needed. may be needed for those who don't follow.
 
 Writers' creative work is involved, so consent and transparency are the top concerns. The hub is a **public Discord server** — semantically equivalent to posting an unrestricted work on AO3 (public but lower-profile, unlikely for scrapers to access compared to the Archive). This framing should appear in consent language.
 
@@ -14,7 +14,7 @@ Writers' creative work is involved, so consent and transparency are the top conc
 
 ## Decisions Made
 
-- **Writer consent**: Blocking acknowledgement — writer clicks "I understand this work will be shared on the Round Robin Storybot Hub" before the Join button appears (when story is hub-shared). Covers consent without stifling participation.
+- **Writer consent**: Blocking acknowledgement — writer clicks "I understand this work will be shared on the Round Robin Storybot Hub." before the Join button appears (when story is hub-shared). Covers consent without stifling participation. 
 - **Story default**: Opt-in by default (new stories on opted-in guilds are shared unless story creator opts out).
 - **Broadcast timing**: At launch — send the broadcast and enable hub sharing simultaneously, asking for user feedback and participation. Include thank you to the first few users of the bot and encourage collaboration on its development.
 
