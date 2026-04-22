@@ -127,7 +127,7 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     if (buttonStoryId !== null) {
       storyId = buttonStoryId;
     } else {
-      storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+      storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
       if (storyId === null) {
         await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
         return;

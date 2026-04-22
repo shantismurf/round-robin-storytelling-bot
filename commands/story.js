@@ -48,55 +48,61 @@ const data = new SlashCommandBuilder()
     subcommand
       .setName('write')
       .setDescription('Submit your entry for a story (quick mode only)')
-      .addIntegerOption(option =>
+      .addStringOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID where you want to submit')
-          .setRequired(true))
+          .setDescription('Story to submit to')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(subcommand =>
     subcommand
       .setName('join')
       .setDescription('Join an existing story as a writer')
-      .addIntegerOption(option =>
+      .addStringOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID you want to join')
-          .setRequired(true))
+          .setDescription('Story to join')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(subcommand =>
     subcommand
       .setName('read')
       .setDescription('Read the story in Discord, page by page, with an option to export as HTML')
-      .addIntegerOption(option =>
+      .addStringOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID to read')
-          .setRequired(true))
+          .setDescription('Story to read')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(subcommand =>
     subcommand
       .setName('close')
       .setDescription('Close a story (creator or admin only)')
-      .addIntegerOption(option =>
+      .addStringOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID to close')
-          .setRequired(true))
+          .setDescription('Story to close')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(subcommand =>
     subcommand
       .setName('manage')
       .setDescription('Edit story settings, pause, or resume (creator or admin only)')
-      .addIntegerOption(option =>
+      .addStringOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID to manage')
-          .setRequired(true))
+          .setDescription('Story to manage')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(subcommand =>
     subcommand
       .setName('timeleft')
       .setDescription('Check the current turn status for a story')
-      .addIntegerOption(option =>
+      .addStringOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID to check')
-          .setRequired(true))
+          .setDescription('Story to check')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(subcommand =>
     subcommand
@@ -107,8 +113,8 @@ const data = new SlashCommandBuilder()
     subcommand
       .setName('ping')
       .setDescription('Ping all active writers in the story thread (creator or admin only)')
-      .addIntegerOption(option =>
-        option.setName('story_id').setDescription('Story ID').setRequired(true))
+      .addStringOption(option =>
+        option.setName('story_id').setDescription('Story to ping').setRequired(true).setAutocomplete(true))
       .addStringOption(option =>
         option.setName('message').setDescription('Optional message to include').setRequired(false))
   )
@@ -116,10 +122,11 @@ const data = new SlashCommandBuilder()
     subcommand
       .setName('edit')
       .setDescription('Edit a confirmed story entry')
-      .addIntegerOption(option =>
+      .addStringOption(option =>
         option.setName('story_id')
-          .setDescription('Story ID (your guild-scoped story number)')
-          .setRequired(true))
+          .setDescription('Story to edit in')
+          .setRequired(true)
+          .setAutocomplete(true))
       .addIntegerOption(option =>
         option.setName('turn')
           .setDescription('Turn number (as shown in /story read)')
@@ -278,14 +285,132 @@ async function handleAutocomplete(connection, interaction) {
 
   const focusedOption = interaction.options.getFocused(true);
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
-  if (!storyId) return interaction.respond([]);
-
-  const typed = String(focusedOption.value);
   const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
-  let rows;
+  if (focusedOption.name === 'story_id') {
+    const subcommand = interaction.options.getSubcommand();
+    const typed = `%${focusedOption.value}%`;
+    const typedPrefix = `${focusedOption.value}%`;
+    let rows;
+
+    if (subcommand === 'write') {
+      [rows] = await connection.execute(
+        `SELECT s.guild_story_id, s.title FROM story s
+         JOIN story_writer sw ON sw.story_id = s.story_id
+         JOIN turn t ON t.story_writer_id = sw.story_writer_id
+         WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1 AND t.turn_status = 1
+           AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+         ORDER BY s.guild_story_id LIMIT 25`,
+        [guildId, interaction.user.id, typed, typedPrefix]
+      );
+
+    } else if (subcommand === 'join') {
+      [rows] = await connection.execute(
+        `SELECT s.guild_story_id, s.title FROM story s
+         WHERE s.guild_id = ? AND s.story_status = 1 AND s.allow_joins = 1
+           AND NOT EXISTS (SELECT 1 FROM story_writer sw
+             WHERE sw.story_id = s.story_id AND sw.discord_user_id = ? AND sw.sw_status IN (1,2))
+           AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+         ORDER BY s.guild_story_id LIMIT 25`,
+        [guildId, interaction.user.id, typed, typedPrefix]
+      );
+
+    } else if (subcommand === 'read') {
+      [rows] = await connection.execute(
+        `SELECT s.guild_story_id, s.title,
+           COALESCE(
+             (SELECT MAX(se.created_at)
+              FROM story_entry se
+              JOIN turn t ON se.turn_id = t.turn_id
+              JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+              WHERE sw.story_id = s.story_id AND se.entry_status = 'confirmed'),
+             s.created_at
+           ) AS last_activity
+         FROM story s
+         WHERE s.guild_id = ? AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+         ORDER BY last_activity DESC LIMIT 25`,
+        [guildId, typed, typedPrefix]
+      );
+
+    } else if (subcommand === 'timeleft') {
+      [rows] = await connection.execute(
+        `SELECT s.guild_story_id, s.title,
+           EXISTS (SELECT 1 FROM story_writer sw
+             WHERE sw.story_id = s.story_id AND sw.discord_user_id = ? AND sw.sw_status IN (1,2)
+           ) AS is_member
+         FROM story s
+         WHERE s.guild_id = ? AND s.story_status = 1
+           AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+         ORDER BY is_member DESC, s.guild_story_id LIMIT 25`,
+        [interaction.user.id, guildId, typed, typedPrefix]
+      );
+
+    } else if (subcommand === 'close' || subcommand === 'manage') {
+      if (isAdmin) {
+        [rows] = await connection.execute(
+          `SELECT s.guild_story_id, s.title,
+             EXISTS (SELECT 1 FROM story_writer sw
+               WHERE sw.story_id = s.story_id AND sw.discord_user_id = ?
+                 AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
+             ) AS is_creator
+           FROM story s
+           WHERE s.guild_id = ? AND s.story_status != 3
+             AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+           ORDER BY is_creator DESC, s.guild_story_id LIMIT 25`,
+          [interaction.user.id, guildId, typed, typedPrefix]
+        );
+      } else {
+        [rows] = await connection.execute(
+          `SELECT s.guild_story_id, s.title FROM story s
+           JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
+           WHERE s.guild_id = ? AND s.story_status != 3
+             AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
+             AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+           ORDER BY s.guild_story_id LIMIT 25`,
+          [interaction.user.id, guildId, typed, typedPrefix]
+        );
+      }
+
+    } else if (subcommand === 'ping') {
+      [rows] = await connection.execute(
+        `SELECT s.guild_story_id, s.title FROM story s
+         JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
+         WHERE s.guild_id = ? AND sw.sw_status IN (1,2)
+           AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+         ORDER BY s.guild_story_id LIMIT 25`,
+        [interaction.user.id, guildId, typed, typedPrefix]
+      );
+
+    } else if (subcommand === 'edit') {
+      [rows] = await connection.execute(
+        `SELECT DISTINCT s.guild_story_id, s.title FROM story s
+         JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
+         JOIN turn t ON t.story_writer_id = sw.story_writer_id
+         JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+         WHERE s.guild_id = ? AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+         ORDER BY s.guild_story_id LIMIT 25`,
+        [interaction.user.id, guildId, typed, typedPrefix]
+      );
+
+    } else {
+      return interaction.respond([]);
+    }
+
+    return interaction.respond(
+      (rows ?? []).map(r => ({
+        name: `${r.title} (#${r.guild_story_id})`.slice(0, 100),
+        value: String(r.guild_story_id)
+      }))
+    );
+  }
+
   if (focusedOption.name === 'turn') {
+    const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+    if (!storyId) return interaction.respond([]);
+
+    const typed = String(focusedOption.value);
+    let rows;
+
     if (isAdmin) {
       [rows] = await connection.execute(
         `SELECT turn_number, discord_display_name, content FROM (

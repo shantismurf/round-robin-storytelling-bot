@@ -4,7 +4,7 @@ import { getConfigValue, log, resolveStoryId, checkIsAdmin, checkIsCreator, repl
 export async function handlePing(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
 
   if (!storyId) {
     return interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });

@@ -8,7 +8,7 @@ export const pendingReminderTimeouts = new Map();
 async function handleWrite(connection, interaction) {
   try {
     const guildId = interaction.guild.id;
-    const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+    const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
     if (storyId === null) {
       await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
       return;

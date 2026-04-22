@@ -24,42 +24,47 @@ const data = new SlashCommandBuilder()
   .addSubcommand(s =>
     s.setName('catchup')
       .setDescription('Read entries written since your last turn')
-      .addIntegerOption(o =>
+      .addStringOption(o =>
         o.setName('story_id')
-          .setDescription('Story ID to catch up on')
-          .setRequired(true))
+          .setDescription('Story to catch up on')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(s =>
     s.setName('leave')
       .setDescription('Leave a story you\'re currently in')
-      .addIntegerOption(o =>
+      .addStringOption(o =>
         o.setName('story_id')
-          .setDescription('Story ID to leave')
-          .setRequired(true))
+          .setDescription('Story to leave')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(s =>
     s.setName('pass')
       .setDescription('Skip (pass) your current turn in a story')
-      .addIntegerOption(o =>
+      .addStringOption(o =>
         o.setName('story_id')
-          .setDescription('Story ID where you want to pass your turn')
-          .setRequired(true))
+          .setDescription('Story where you want to pass your turn')
+          .setRequired(true)
+          .setAutocomplete(true))
   )
   .addSubcommand(s =>
     s.setName('pause')
       .setDescription('Pause your participation in a story (or all active stories)')
-      .addIntegerOption(o =>
+      .addStringOption(o =>
         o.setName('story_id')
-          .setDescription('Story ID to pause — leave blank to pause all active stories')
-          .setRequired(false))
+          .setDescription('Story to pause — leave blank to pause all active stories')
+          .setRequired(false)
+          .setAutocomplete(true))
   )
   .addSubcommand(s =>
     s.setName('resume')
       .setDescription('Resume your participation in a paused story (or all paused stories)')
-      .addIntegerOption(o =>
+      .addStringOption(o =>
         o.setName('story_id')
-          .setDescription('Story ID to resume — leave blank to resume all paused stories')
-          .setRequired(false))
+          .setDescription('Story to resume — leave blank to resume all paused stories')
+          .setRequired(false)
+          .setAutocomplete(true))
   )
   .addSubcommand(s =>
     s.setName('help')
@@ -422,7 +427,7 @@ async function handleHistoryNavigation(connection, interaction) {
 async function handleCatchUp(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }
@@ -558,7 +563,7 @@ function buildCatchUpNavRow(currentPage, totalPages) {
 async function handleLeave(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }
@@ -718,7 +723,7 @@ async function handleLeaveCancel(connection, interaction) {
 async function handlePass(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }
@@ -771,7 +776,8 @@ async function handlePause(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
-  const guildStoryId = interaction.options.getInteger('story_id');
+  const _rawStoryId = interaction.options.getString('story_id');
+  const guildStoryId = _rawStoryId != null ? parseInt(_rawStoryId, 10) : null;
 
   try {
     let storiesToPause;
@@ -876,7 +882,8 @@ async function handleResume(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
-  const guildStoryId = interaction.options.getInteger('story_id');
+  const _rawStoryId = interaction.options.getString('story_id');
+  const guildStoryId = _rawStoryId != null ? parseInt(_rawStoryId, 10) : null;
 
   try {
     let storiesToResume;
@@ -926,4 +933,36 @@ async function handleResume(connection, interaction) {
   }
 }
 
-export default { data, execute, handleButtonInteraction };
+async function handleAutocomplete(connection, interaction) {
+  if (!interaction.guild) return interaction.respond([]);
+
+  const focusedOption = interaction.options.getFocused(true);
+  if (focusedOption.name !== 'story_id') return interaction.respond([]);
+
+  const guildId = interaction.guild.id;
+  const subcommand = interaction.options.getSubcommand();
+  const typed = `%${focusedOption.value}%`;
+  const typedPrefix = `${focusedOption.value}%`;
+
+  const statusFilter =
+    subcommand === 'pause'  ? '= 1' :
+    subcommand === 'resume' ? '= 2' : 'IN (1, 2)';
+
+  const [rows] = await connection.execute(
+    `SELECT s.guild_story_id, s.title FROM story s
+     JOIN story_writer sw ON sw.story_id = s.story_id
+     WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status ${statusFilter}
+       AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+     ORDER BY s.guild_story_id LIMIT 25`,
+    [guildId, interaction.user.id, typed, typedPrefix]
+  );
+
+  return interaction.respond(
+    rows.map(r => ({
+      name: `${r.title} (#${r.guild_story_id})`.slice(0, 100),
+      value: String(r.guild_story_id)
+    }))
+  );
+}
+
+export default { data, execute, handleButtonInteraction, handleAutocomplete };

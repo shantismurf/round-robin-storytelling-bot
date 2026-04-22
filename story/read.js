@@ -153,7 +153,7 @@ export function buildReadEmbed(session, pageIndex) {
 export async function handleRead(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }

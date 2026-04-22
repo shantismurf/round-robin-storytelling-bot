@@ -6,15 +6,14 @@ This Discord bot manages collaborative round-robin story writing events with the
 
 - **Multi-story support**: Run multiple stories simultaneously on a server
 - **User participation**: Users can join multiple stories, defining unique pen name and status for each
-- **Turn management**: Writers are chosen in random order, admin can manually define next writer chosen 
+- **Turn management**: Writers are chosen in random, fixed, or Round Robin (random but no repeats until everyone has a turn) order, admin can manually define next writer chosen
 - **Flexible timing**: Stories can have custom turn lengths and reminder settings
-- **Story modes**: Support for both quick mode and normal mode storytelling
-- **Story states**: Stories can be active, paused, or closed
-- **Admin controls**: Admins can manage user and story settings
-- **Timeout tracking**: System tracks user timeouts and manual passing
-- **Entry system**: Writers can submit multiple entries per turn from the private thread that is opened when their turn starts. Media entries are forwarded to a media channel and the post id of the forwarded message is stored. Entries within a turn are kept in order posted.
-- **Publishing integration**: Closed stories can be exported to PDF and posted to AO3
-- **Job scheduling**: Background job system for reminders and turn timeouts
+- **Story modes**: Support for both quick mode storytelling, using a simple modal input, and normal mode, with threads created for each new turn that support multiple posts and image upload. Media entries are forwarded to a media channel and the post id of the forwarded message is stored in the entry in the order posted.
+- **Story states**: Stories can be active, paused, delayed, or closed. Delayed stories wait until a specified number of users or amount of time has passed.
+- **Admin controls**: Admin role (or server admin) defines who can manage server, user, and story settings
+- **Editing entries** - Users and admins can edit story entries and restore older versions.
+- **Publishing integration**: Closed stories can be exported as HTML for posting to archives like AO3
+- **Job scheduling**: Background job system for turn reminders and timeouts
 
 ## Development Guidelines
 
@@ -22,8 +21,9 @@ This Discord bot manages collaborative round-robin story writing events with the
 - Keep Discord client logic in `index.js`
 - Keep story engine logic in `storybot.js` with event emission to index.js
 - Shared utilities go in `utilities.js`
-- Command handlers in separate files under `commands/` directory
+- Command handlers in separate files under `story/` and `commands/` directories
 - Database schema changes use numbered migration files
+- Centralize logic and break out common handlers whenever possible.
 
 ### Naming Conventions
 - Function names and parameters use camelCase + ID: guildID, storyID, userID, etc.
@@ -31,13 +31,13 @@ This Discord bot manages collaborative round-robin story writing events with the
 - Local variables from Discord objects use camelCase + Id: guildId, userId, channelId
 
 ### Configuration Management
-- Use `getConfigValue(key, guildID)` for all user-facing text and configuration variables
-- getConfigValue supports multi-language configuration by retrieving a guild-specific language_code
-- User-facing text is stored as `txtFieldName`, form labels are `lblFieldName`, and configuration variables are `cfgFieldName`. 
-- Variables in template text that must be replaced with contextual values use bracket notation: `[story_id]`and use `replaceTemplateVariables()` for processing, passing a valueKeyMap with contextual data.
+- Use `getConfigValue(key, guildID)` for all user-facing text and configuration variables. No hard-coded user-facing text.
+- getConfigValue supports multi-language with language code and  guild-specific customization. Default guild_id = 1
+- User-facing text is stored as `txtFieldName`, form labels are `lblFieldName`, button labels `btnFieldName`, and configuration variables are `cfgFieldName`. 
+- Variables within template text that must be replaced with contextual values use bracket notation: `[story_id]`and use `replaceTemplateVariables()` for processing, passing a valueKeyMap with contextual data.
 
 ### Error Handling Standards
-- Error messages should be sent to the console beginning with: `${formattedDate()}: ` + Error description
+- Error messages should be sent to the console using the log() function. Parameters are: `message, { show = true/false, guildName = null } = {}` where show is true on detailed test environment logging.
 - Include function name in error message: `FunctionName failed:` or `Error in FunctionName:`
 - Include key parameters for debugging context where helpful (e.g., IDs, user input)
 - Return structured objects with `success` boolean and `error`/`message` fields
@@ -53,4 +53,19 @@ This Discord bot manages collaborative round-robin story writing events with the
 - Use `interaction.deferReply()` for operations that may take longer than 3 seconds
 - Handle modal submissions with two-stage validation (client-side + server-side)
 - Include reason parameters where applicable for audit log clarity
+
+### Testing & Deployment
+
+The test bot and production bot both run on two instance with the same host. To pick up code changes:
+
+1. Push commits to the repository
+2. Restart the test bot on the host — `index.js` automatically runs `deploy.js` on startup, which pushes any schema, config table, and slash command definition changes to Discord
+3. Test the changes in the Discord server connected to the test bot
+4. When testing is complete, restart the production bot
+
+No manual `node deploy.js` is needed — the deploy step is wired into bot startup.
+
+### Help Command Documentation
+
+Whenever a user-facing command is added, changed, or removed, evaluate whether the `/story help` or `/mystory help` text needs updating before closing the task. Help text is stored in the config table under keys prefixed with `txtHelp` and `txtMyHelp`.
 
