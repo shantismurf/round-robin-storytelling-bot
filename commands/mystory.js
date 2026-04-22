@@ -1,9 +1,12 @@
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from '../storybot.js';
 
 // Cached catchup pages keyed by "catchup_<userId>_<storyId>"
 const pendingCatchUpData = new Map();
+
+// Pending /mystory manage sessions keyed by user ID
+const pendingMyStoryManageData = new Map();
 
 const data = new SlashCommandBuilder()
   .setName('mystory')
@@ -67,6 +70,15 @@ const data = new SlashCommandBuilder()
           .setAutocomplete(true))
   )
   .addSubcommand(s =>
+    s.setName('manage')
+      .setDescription('Update your AO3 name, notification preference, and turn privacy for a story')
+      .addStringOption(o =>
+        o.setName('story_id')
+          .setDescription('Story to manage your settings for')
+          .setRequired(true)
+          .setAutocomplete(true))
+  )
+  .addSubcommand(s =>
     s.setName('help')
       .setDescription('Quick reference for all writer commands')
   );
@@ -85,6 +97,7 @@ async function execute(connection, interaction) {
   else if (subcommand === 'pass') await handlePass(connection, interaction);
   else if (subcommand === 'pause') await handlePause(connection, interaction);
   else if (subcommand === 'resume') await handleResume(connection, interaction);
+  else if (subcommand === 'manage') await handleMyStoryManage(connection, interaction);
   else if (subcommand === 'help') await handleHelp(connection, interaction);
 }
 
@@ -97,6 +110,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleLeaveConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('mystory_leave_cancel_')) {
     await handleLeaveCancel(connection, interaction);
+  } else if (interaction.customId.startsWith('mystory_manage_')) {
+    await handleMyStoryManageButton(connection, interaction);
   }
 }
 
@@ -933,6 +948,184 @@ async function handleResume(connection, interaction) {
   }
 }
 
+// ---------------------------------------------------------------------------
+// /mystory manage — self-service writer settings panel
+// ---------------------------------------------------------------------------
+
+function buildMyStoryManagePanel(state, cfg) {
+  const embed = new EmbedBuilder()
+    .setTitle(replaceTemplateVariables(cfg.txtMyStoryManageTitle, { story_title: state.storyTitle }))
+    .setColor(0x5865f2)
+    .addFields(
+      { name: cfg.lblMyStoryManageAO3,     value: state.ao3Name || '*Not set*',                                   inline: true },
+      { name: cfg.lblMyStoryManageNotif,   value: state.notificationPrefs === 'dm' ? 'DM' : 'Mention in channel', inline: true },
+      { name: cfg.lblMyStoryManagePrivacy, value: state.turnPrivacy ? 'Private' : 'Public',                       inline: true }
+    );
+
+  const notifToggleLabel   = state.notificationPrefs === 'dm' ? 'Switch to: Mention' : 'Switch to: DM';
+  const privacyToggleLabel = state.turnPrivacy ? 'Make Public' : 'Make Private';
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('mystory_manage_ao3').setLabel(cfg.btnAdminMUAO3Name).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('mystory_manage_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('mystory_manage_privacy').setLabel(privacyToggleLabel).setStyle(ButtonStyle.Secondary)
+  );
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
+  );
+
+  return { embeds: [embed], components: [row1, row2] };
+}
+
+async function handleMyStoryManage(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  try {
+    const [storyRows] = await connection.execute(
+      `SELECT story_id, title FROM story WHERE story_id = ? AND guild_id = ?`,
+      [storyId, guildId]
+    );
+    if (storyRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+    }
+
+    const [writerRows] = await connection.execute(
+      `SELECT story_writer_id, AO3_name, notification_prefs, turn_privacy
+       FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (1, 2)`,
+      [storyId, interaction.user.id]
+    );
+    if (writerRows.length === 0) {
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId) });
+    }
+    const writer = writerRows[0];
+
+    const cfg = await getConfigValue(connection, [
+      'txtMyStoryManageTitle', 'lblMyStoryManageAO3', 'lblMyStoryManageNotif',
+      'lblMyStoryManagePrivacy', 'btnMyStoryManageSave', 'btnCancel', 'btnAdminMUAO3Name'
+    ], guildId);
+
+    const state = {
+      storyId,
+      guildId,
+      storyTitle: storyRows[0].title,
+      storyWriterId: writer.story_writer_id,
+      ao3Name: writer.AO3_name,
+      notificationPrefs: writer.notification_prefs,
+      turnPrivacy: writer.turn_privacy,
+      originalInteraction: interaction,
+      cfg
+    };
+
+    pendingMyStoryManageData.set(interaction.user.id, state);
+    await interaction.editReply(buildMyStoryManagePanel(state, cfg));
+
+  } catch (error) {
+    log(`Error in handleMyStoryManage: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+  }
+}
+
+async function handleMyStoryManageButton(connection, interaction) {
+  const userId = interaction.user.id;
+  const state = pendingMyStoryManageData.get(userId);
+  const customId = interaction.customId;
+
+  if (!state) {
+    await interaction.deferUpdate();
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), embeds: [], components: [] });
+  }
+
+  if (customId === 'mystory_manage_notif') {
+    await interaction.deferUpdate();
+    state.notificationPrefs = state.notificationPrefs === 'dm' ? 'mention' : 'dm';
+    await interaction.editReply(buildMyStoryManagePanel(state, state.cfg));
+
+  } else if (customId === 'mystory_manage_privacy') {
+    await interaction.deferUpdate();
+    state.turnPrivacy = state.turnPrivacy ? 0 : 1;
+    await interaction.editReply(buildMyStoryManagePanel(state, state.cfg));
+
+  } else if (customId === 'mystory_manage_ao3') {
+    const modal = new ModalBuilder()
+      .setCustomId('mystory_manage_ao3_modal')
+      .setTitle('Set AO3 Name')
+      .addComponents(
+        new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('ao3_name_input')
+            .setLabel('AO3 Name')
+            .setStyle(TextInputStyle.Short)
+            .setRequired(false)
+            .setPlaceholder('Leave blank to clear')
+            .setValue(state.ao3Name ?? '')
+        )
+      );
+    await interaction.showModal(modal);
+
+  } else if (customId === 'mystory_manage_save') {
+    await interaction.deferUpdate();
+    try {
+      await connection.execute(
+        `UPDATE story_writer SET AO3_name = ?, notification_prefs = ?, turn_privacy = ? WHERE story_writer_id = ?`,
+        [state.ao3Name, state.notificationPrefs, state.turnPrivacy, state.storyWriterId]
+      );
+      pendingMyStoryManageData.delete(userId);
+      await interaction.editReply({
+        content: await getConfigValue(connection, 'txtMyStoryManageSaved', state.guildId),
+        embeds: [],
+        components: []
+      });
+    } catch (error) {
+      log(`Error saving mystory manage: ${error}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', state.guildId), embeds: [], components: [] });
+    }
+
+  } else if (customId === 'mystory_manage_cancel') {
+    await interaction.deferUpdate();
+    pendingMyStoryManageData.delete(userId);
+    await interaction.editReply({
+      content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
+      embeds: [],
+      components: []
+    });
+  }
+}
+
+async function handleMyStoryManageModal(connection, interaction) {
+  const userId = interaction.user.id;
+  const state = pendingMyStoryManageData.get(userId);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  try {
+    const rawName = interaction.fields.getTextInputValue('ao3_name_input');
+    const newName = sanitizeModalInput(rawName, 100) || null;
+    state.ao3Name = newName;
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await state.originalInteraction.editReply(buildMyStoryManagePanel(state, state.cfg));
+    await interaction.deleteReply();
+  } catch (error) {
+    log(`Error in handleMyStoryManageModal: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+  }
+}
+
+async function handleModalSubmit(connection, interaction) {
+  if (interaction.customId === 'mystory_manage_ao3_modal') {
+    await handleMyStoryManageModal(connection, interaction);
+  }
+}
+
 async function handleAutocomplete(connection, interaction) {
   if (!interaction.guild) return interaction.respond([]);
 
@@ -944,25 +1137,59 @@ async function handleAutocomplete(connection, interaction) {
   const typed = `%${focusedOption.value}%`;
   const typedPrefix = `${focusedOption.value}%`;
 
-  const statusFilter =
-    subcommand === 'pause'  ? '= 1' :
-    subcommand === 'resume' ? '= 2' : 'IN (1, 2)';
+  let rows;
 
-  const [rows] = await connection.execute(
-    `SELECT s.guild_story_id, s.title FROM story s
-     JOIN story_writer sw ON sw.story_id = s.story_id
-     WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status ${statusFilter}
-       AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-     ORDER BY s.guild_story_id LIMIT 25`,
-    [guildId, interaction.user.id, typed, typedPrefix]
-  );
+  if (subcommand === 'pass') {
+    // Only stories where it is currently the user's active turn
+    [rows] = await connection.execute(
+      `SELECT s.guild_story_id, s.title FROM story s
+       JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
+       JOIN turn t ON t.story_writer_id = sw.story_writer_id AND t.turn_status = 1
+       WHERE s.guild_id = ? AND s.story_status = 1
+         AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+       ORDER BY s.guild_story_id LIMIT 25`,
+      [interaction.user.id, guildId, typed, typedPrefix]
+    );
+
+  } else if (subcommand === 'catchup') {
+    // Non-closed stories the user is in that have at least one confirmed entry
+    [rows] = await connection.execute(
+      `SELECT s.guild_story_id, s.title FROM story s
+       JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
+       WHERE s.guild_id = ? AND s.story_status != 3 AND sw.sw_status IN (1, 2)
+         AND EXISTS (
+           SELECT 1 FROM story_entry se
+           JOIN turn t ON se.turn_id = t.turn_id
+           JOIN story_writer sw2 ON t.story_writer_id = sw2.story_writer_id
+           WHERE sw2.story_id = s.story_id AND se.entry_status = 'confirmed'
+         )
+         AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+       ORDER BY s.guild_story_id LIMIT 25`,
+      [interaction.user.id, guildId, typed, typedPrefix]
+    );
+
+  } else {
+    const swStatusFilter =
+      subcommand === 'pause'  ? '= 1' :
+      subcommand === 'resume' ? '= 2' : 'IN (1, 2)';
+
+    [rows] = await connection.execute(
+      `SELECT s.guild_story_id, s.title FROM story s
+       JOIN story_writer sw ON sw.story_id = s.story_id
+       WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status ${swStatusFilter}
+         AND s.story_status != 3
+         AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+       ORDER BY s.guild_story_id LIMIT 25`,
+      [guildId, interaction.user.id, typed, typedPrefix]
+    );
+  }
 
   return interaction.respond(
-    rows.map(r => ({
+    (rows ?? []).map(r => ({
       name: `${r.title} (#${r.guild_story_id})`.slice(0, 100),
       value: String(r.guild_story_id)
     }))
   );
 }
 
-export default { data, execute, handleButtonInteraction, handleAutocomplete };
+export default { data, execute, handleButtonInteraction, handleModalSubmit, handleAutocomplete };

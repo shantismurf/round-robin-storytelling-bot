@@ -166,6 +166,11 @@ async function main() {
           if (adminCommand && adminCommand.handleModalSubmit) {
             await adminCommand.handleModalSubmit(connection, interaction);
           }
+        } else if (interaction.customId.startsWith('mystory_')) {
+          const mystoryCommand = interaction.client.commands.get('mystory');
+          if (mystoryCommand && mystoryCommand.handleModalSubmit) {
+            await mystoryCommand.handleModalSubmit(connection, interaction);
+          }
         }
       } else if (interaction.isButton()) {
         log(`${interaction.user.username} clicked button ${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
