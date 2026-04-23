@@ -30,35 +30,38 @@ function buildManageMessage(cfg, state) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_set_turnlength')
-      .setLabel(cfg.btnSetTurnLength)
+      .setLabel(replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} hrs` }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_reminder')
-      .setLabel(cfg.btnSetTimeout)
+      .setLabel(replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled' }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
+      .setCustomId('story_manage_toggle_privacy')
+      .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? 'Private' : 'Public'}`)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
       .setCustomId('story_manage_set_maxwriters')
-      .setLabel(`${cfg.btnSetMaxWriters}: ${state.maxWriters ?? '∞'}`)
+      .setLabel(replaceTemplateVariables(cfg.btnSetMaxWriters, { max_writers: state.maxWriters ?? '∞' }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_latejoins')
       .setLabel(`${cfg.lblOpenToWriters}: ${state.allowJoins ? 'Yes' : 'No'}`)
-      .setStyle(state.allowJoins ? ButtonStyle.Success : ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_authors')
       .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? 'Yes' : 'No'}`)
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const row2 = new ActionRowBuilder().addComponents(
+  const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_cycle_order')
-      .setLabel(`${orderEmoji} ${orderLabel}`)
+      .setLabel(`Order: ${orderLabel}`)
       .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_toggle_privacy')
-      .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? 'Private' : 'Public'}`)
-      .setStyle(state.turnPrivacy ? ButtonStyle.Danger : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_summary')
       .setLabel(cfg.btnSetSummary)
@@ -69,11 +72,11 @@ function buildManageMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_status')
-      .setLabel(isPaused ? '▶️ Resume Story' : '⏸️ Pause Story')
-      .setStyle(isPaused ? ButtonStyle.Success : ButtonStyle.Secondary)
+      .setLabel(isPaused ? 'Resume Story' : 'Pause Story')
+      .setStyle(ButtonStyle.Secondary)
   );
 
-  const row3 = new ActionRowBuilder().addComponents(
+  const row4 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_save')
       .setLabel(cfg.btnAdminConfigSave)
@@ -81,13 +84,14 @@ function buildManageMessage(cfg, state) {
     new ButtonBuilder()
       .setCustomId('story_manage_cancel')
       .setLabel(cfg.btnCancel)
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Danger)
   );
 
-  return { embeds: [embed], components: [row1, row2, row3] };
+  return { embeds: [embed], components: [row1, row2, row3, row4] };
 }
 
 async function handleManage(connection, interaction) {
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {

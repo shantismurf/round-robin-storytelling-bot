@@ -130,11 +130,11 @@ export function buildStoryAddMessage(cfg, state) {
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_set_turnlength')
-      .setLabel(cfg.btnSetTurnLength)
+      .setLabel(replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} hrs` }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_set_timeout')
-      .setLabel(cfg.btnSetTimeout)
+      .setLabel(replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled' }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_hide')
@@ -170,7 +170,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_set_maxwriters')
-      .setLabel(`${cfg.btnSetMaxWriters}: ${maxWritersDisplay}`)
+      .setLabel(replaceTemplateVariables(cfg.btnSetMaxWriters, { max_writers: maxWritersDisplay }))
       .setStyle(ButtonStyle.Secondary)
   );
 
