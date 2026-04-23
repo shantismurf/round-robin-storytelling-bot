@@ -322,7 +322,7 @@ Words: ~[word_count]', 'en', 1),
 ('lblAdminHelpNext', '/storyadmin next [story_id] [user]', 'en', 1),
 ('txtAdminHelpNext', 'Designates who will receive the next turn. If no turn is currently active, starts their turn immediately. Otherwise, the override takes effect when the current turn ends.', 'en', 1),
 ('lblAdminHelpReassign', '/storyadmin reassign [story_id]', 'en', 1),
-('txtAdminHelpReassign', 'Reassigns the active turn back to the user who had the previous turn (for example, they missed their turn and still want to write), then sets the next writer to the person who was skipped so that when they submit their entry, the order proceeds as normal.', 'en', 1),
+('txtAdminHelpReassign', 'Reassigns the active turn to the previous writer (for example, they missed their turn and still want to write), then queues the current writer who was skipped so that they get the next turn and the order proceeds as normal.', 'en', 1),
 ('lblAdminHelpDelete', '/storyadmin delete [story_id]', 'en', 1),
 ('txtAdminHelpDelete', 'Permanently deletes a story and all its turns, entries, and writer data. Requires confirmation.', 'en', 1),
 ('lblAdminHelpSetup', '/storyadmin setup', 'en', 1),
@@ -406,7 +406,6 @@ Words: ~[word_count]', 'en', 1),
 -- Admin Reassign
 ('txtAdminReassignSuccess', '✅ Turn reassigned to **[prev_writer]**. **[current_writer]** will go next.', 'en', 1),
 ('txtAdminReassignNoPreviousWriter', '❌ There is no previous turn to reassign from — this is the first turn in the story.', 'en', 1),
-('txtAdminHelpReassign', 'Gives the previous writer another turn immediately, then queues the current writer to go next. Useful when a turn timed out and the writer before them deserves another shot.', 'en', 1),
 
 -- Story Thread Activity Log
 ('txtStoryThreadTurnStart', '✍️ **Turn [turn_number]:** It''s **[writer_name]**''s turn! Deadline: [turn_end_full] ([turn_end_relative]).', 'en', 1),
