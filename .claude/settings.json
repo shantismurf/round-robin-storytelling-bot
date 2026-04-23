@@ -2,7 +2,9 @@
   "permissions": {
     "allow": [
       "WebSearch",
-      "Bash(where gh:*)"
+      "Bash(where gh:*)",
+      "Bash(git add *)",
+      "Bash(git commit -m ' *)"
     ]
   }
 }
