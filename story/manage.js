@@ -88,7 +88,6 @@ function buildManageMessage(cfg, state) {
 }
 
 async function handleManage(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {

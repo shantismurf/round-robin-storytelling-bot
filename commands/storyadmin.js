@@ -98,10 +98,11 @@ async function execute(connection, interaction) {
   if (subcommand === 'help')  return await handleHelp(connection, interaction, guildId);
   if (subcommand === 'setup') return await handleSetup(connection, interaction);
 
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
   if (!await checkIsAdmin(connection, interaction, guildId)) {
-    return await interaction.reply({
+    return await interaction.editReply({
       content: await getConfigValue(connection, 'txtAdminOnly', guildId),
-      flags: MessageFlags.Ephemeral
     });
   }
   if (subcommand === 'manage')          await handleAdminManage(connection, interaction);
@@ -364,7 +365,6 @@ async function handleSetupModalSubmit(connection, interaction) {
 // /storyadmin skip
 // ---------------------------------------------------------------------------
 async function handleSkip(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
   if (storyId === null) {
@@ -409,7 +409,6 @@ async function handleSkip(connection, interaction) {
 // /storyadmin reassign
 // ---------------------------------------------------------------------------
 async function handleReassign(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
   if (storyId === null) {
@@ -470,7 +469,6 @@ async function handleReassign(connection, interaction) {
 // /storyadmin extend
 // ---------------------------------------------------------------------------
 async function handleExtend(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
   const hours = interaction.options.getInteger('hours');
@@ -575,7 +573,6 @@ function buildManageUserPanel(state, cfg) {
 }
 
 async function handleManageUser(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   const targetUser = interaction.options.getUser('user');
@@ -744,7 +741,6 @@ async function handleManageUserButton(connection, interaction) {
 // /storyadmin next
 // ---------------------------------------------------------------------------
 async function handleNext(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
   const targetUser = interaction.options.getUser('user');
@@ -835,7 +831,6 @@ async function handleNext(connection, interaction) {
 // ---------------------------------------------------------------------------
 
 async function handleDeleteEntry(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
   if (storyId === null) {
@@ -940,7 +935,6 @@ async function handleDeleteEntryConfirm(connection, interaction) {
 }
 
 async function handleRestoreEntry(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const entryId = interaction.options.getInteger('entry_id');
 
@@ -983,7 +977,6 @@ async function handleRestoreEntry(connection, interaction) {
 }
 
 async function handleDelete(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
   if (storyId === null) {
