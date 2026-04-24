@@ -417,12 +417,7 @@ async function handleAutocomplete(connection, interaction) {
       [rows] = await connection.execute(
         `SELECT turn_number, discord_display_name, content FROM (
            SELECT
-             (SELECT COUNT(DISTINCT t2.turn_id)
-              FROM turn t2
-              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
-              WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
-             ) AS turn_number,
+             DENSE_RANK() OVER (ORDER BY t.started_at) AS turn_number,
              sw.discord_display_name, se.content
            FROM story_entry se
            JOIN turn t ON se.turn_id = t.turn_id
@@ -437,20 +432,15 @@ async function handleAutocomplete(connection, interaction) {
       [rows] = await connection.execute(
         `SELECT turn_number, discord_display_name, content FROM (
            SELECT
-             (SELECT COUNT(DISTINCT t2.turn_id)
-              FROM turn t2
-              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
-              WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
-             ) AS turn_number,
+             DENSE_RANK() OVER (ORDER BY t.started_at) AS turn_number,
              sw.discord_display_name, sw.discord_user_id, se.content
            FROM story_entry se
            JOIN turn t ON se.turn_id = t.turn_id
            JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
            WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
-             AND sw.discord_user_id = ?
          ) sub
-         WHERE CAST(turn_number AS CHAR) LIKE ? OR discord_display_name LIKE ?
+         WHERE discord_user_id = ?
+           AND (CAST(turn_number AS CHAR) LIKE ? OR discord_display_name LIKE ?)
          ORDER BY turn_number LIMIT 25`,
         [storyId, interaction.user.id, `${typed}%`, `%${typed}%`]
       );

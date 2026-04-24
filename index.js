@@ -214,7 +214,9 @@ async function main() {
       const guildId = interaction?.guild?.id || 'unknown';
       log(`Error handling interaction: ${error}`, { show: true, guildName: interaction?.guild?.name });
 
-      if (!interaction.replied && !interaction.deferred) {
+      if (interaction.isAutocomplete()) {
+        await interaction.respond([]).catch(console.error);
+      } else if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: await getConfigValue(connection,'errProcessingRequest', guildId),
           flags: MessageFlags.Ephemeral
