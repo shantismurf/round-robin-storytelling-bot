@@ -466,7 +466,7 @@ async function handleCatchUp(connection, interaction) {
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
        WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 0
-       ORDER BY t.ended_at DESC LIMIT 1`,
+       ORDER BY t.started_at DESC LIMIT 1`,
       [storyId, userId]
     );
 
