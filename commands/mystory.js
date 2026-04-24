@@ -461,7 +461,8 @@ async function handleCatchUp(connection, interaction) {
     // Skipped/timed-out turns (turn_status=0, no confirmed entry) are excluded so
     // the anchor lands on the last turn the user actually wrote.
     const [lastTurnRows] = await connection.execute(
-      `SELECT t.ended_at FROM turn t
+//      `SELECT t.ended_at FROM turn t // changed to include author's last turn
+      `SELECT t.started_at FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
        WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 0
