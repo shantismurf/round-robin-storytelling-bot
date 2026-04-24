@@ -162,6 +162,26 @@ async function handleWriteModalSubmit(connection, interaction) {
 }
 
 /**
+ * Collect per-message content parts from a sorted message collection.
+ * Each message becomes one element (text + attachment lines joined with \n).
+ * Callers join the returned array with \n\n to get the final entry string.
+ */
+function collectMessageParts(userMessages, resolveAttachment) {
+  const parts = [];
+  for (const msg of userMessages.values()) {
+    const msgParts = [];
+    if (msg.content) msgParts.push(msg.content);
+    for (const attachment of msg.attachments.values()) {
+      if (attachment.contentType?.startsWith('image/')) {
+        msgParts.push(resolveAttachment(attachment));
+      }
+    }
+    if (msgParts.length > 0) parts.push(msgParts.join('\n'));
+  }
+  return parts;
+}
+
+/**
  * Build an entry preview embed.
  * Content goes in the description (4096 limit), footer holds the instruction text,
  * and any extra fields (e.g. expiry, stats) are appended after overflow chunks.
@@ -439,18 +459,9 @@ async function handleFinalizeEntry(connection, interaction) {
     }
 
     // Build preview content — images shown as filename placeholders (not forwarded yet)
-    const previewParts = [];
-    for (const msg of userMessages.values()) {
-      if (msg.content) previewParts.push(msg.content);
-      for (const attachment of msg.attachments.values()) {
-        if (attachment.contentType?.startsWith('image/')) {
-          previewParts.push(`📎 ${attachment.name}`);
-        }
-      }
-    }
-
     // Convert elements that Discord embeds don't render (headers → bold, -# → italic)
-    const previewContent = previewParts.join('\n')
+    const previewContent = collectMessageParts(userMessages, att => `📎 ${att.name}`)
+      .join('\n\n')
       .replace(/^#{1,3} (.+)$/gm, '**$1**')
       .replace(/^-# (.+)$/gm, '*$1*');
 
@@ -517,7 +528,9 @@ async function handleFinalizeConfirm(connection, interaction) {
       return;
     }
 
-    // Forward images to media channel and build entry content with images inline
+    // Forward images to media channel and build entry content with images inline.
+    // Uses the same per-message grouping as collectMessageParts — text + image URLs
+    // joined with \n within a message, \n\n between messages.
     const [mediaChannelId, mediaPostLabelTemplate] = await Promise.all([
       getConfigValue(connection, 'cfgMediaChannelId', interaction.guild.id),
       getConfigValue(connection, 'txtMediaPostLabel', interaction.guild.id),
@@ -528,8 +541,8 @@ async function handleFinalizeConfirm(connection, interaction) {
     const entryParts = [];
 
     for (const msg of userMessages.values()) {
-      const parts = [];
-      if (msg.content) parts.push(msg.content);
+      const msgParts = [];
+      if (msg.content) msgParts.push(msg.content);
       if (mediaChannel) {
         for (const attachment of msg.attachments.values()) {
           if (attachment.contentType?.startsWith('image/')) {
@@ -538,14 +551,14 @@ async function handleFinalizeConfirm(connection, interaction) {
                 content: replaceTemplateVariables(mediaPostLabelTemplate, { story_id: storyId, turn_id: turn.turn_id }),
                 files: [attachment.url]
               });
-              parts.push(forwarded.attachments.first().url);
+              msgParts.push(forwarded.attachments.first().url);
             } catch (err) {
               log(`Failed to forward image to media channel: ${err}`, { show: true, guildName: interaction?.guild?.name });
             }
           }
         }
       }
-      if (parts.length > 0) entryParts.push(parts.join('\n'));
+      if (msgParts.length > 0) entryParts.push(msgParts.join('\n'));
     }
 
     const entryContent = entryParts.join('\n\n');
