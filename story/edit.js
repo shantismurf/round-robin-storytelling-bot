@@ -670,6 +670,8 @@ async function handleRepostEntry(connection, interaction) {
       embed.setAuthor({ name: authorLine });
     }
 
+    if (storyThread.locked) await storyThread.setLocked(false);
+    if (storyThread.archived) await storyThread.setArchived(false);
     await storyThread.send({ embeds: [embed] });
 
     const userId = interaction.user.id;
