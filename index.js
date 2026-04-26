@@ -211,20 +211,29 @@ async function main() {
         log(`Unhandled interaction type ${interaction.type} from ${interaction.user.username} (customId: ${interaction.customId ?? 'n/a'})`, { show: true, guildName: interaction?.guild?.name });
       }
     } catch (error) {
+      if (error.code === 10062) {
+        // Token expired before the bot could respond — harmless, usually autocomplete during DB slowness
+        const ctx = interaction.isAutocomplete()
+          ? `autocomplete for /${interaction.commandName}`
+          : (interaction.customId ?? interaction.commandName ?? 'unknown');
+        log(`Interaction token expired (10062) — ${ctx}`, { show: true, guildName: interaction?.guild?.name });
+        return;
+      }
+
       const guildId = interaction?.guild?.id || 'unknown';
       log(`Error handling interaction: ${error}`, { show: true, guildName: interaction?.guild?.name });
 
       if (interaction.isAutocomplete()) {
-        await interaction.respond([]).catch(console.error);
+        await interaction.respond([]).catch(() => {});
       } else if (!interaction.replied && !interaction.deferred) {
         await interaction.reply({
           content: await getConfigValue(connection,'errProcessingRequest', guildId),
           flags: MessageFlags.Ephemeral
-        }).catch(console.error);
+        }).catch(() => {});
       } else if (interaction.deferred) {
         await interaction.editReply({
           content: await getConfigValue(connection,'errProcessingRequest', guildId),
-        }).catch(console.error);
+        }).catch(() => {});
       }
     }
   });
