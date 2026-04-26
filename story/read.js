@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilde
 import { getConfigValue, log, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin } from '../utilities.js';
 import { generateStoryExport } from './export.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './state.js';
+import { buildEditMessage } from './edit.js';
 
 export { pendingReadData, lastReadPage };
 
@@ -260,6 +261,8 @@ if (!page || fullContent === null) {
   const chunks = chunkEntryContent(fullContent);
   const storyTitle = session.title.length > 50 ? session.title.slice(0, 50) + '…' : session.title;
 
+  const isMultiChunk = chunks.length > 1;
+
   pendingEditData.set(interaction.user.id, {
     entryId,
     entryStatus: 'confirmed',
@@ -276,23 +279,32 @@ if (!page || fullContent === null) {
     storyTitle,
     guildStoryId: session.guildStoryId,
     originalInteraction: interaction,
-    fromReadPath: true,
+    fromReadPath: !isMultiChunk,
   });
 
-  // No defer — showModal must be the first response
-  // Use entryId in customId to prevent Discord from caching modal content across entries
-  const modal = new ModalBuilder()
-    .setCustomId(`story_edit_modal_${entryId}`)
-    .setTitle('Edit Entry');
-  const input = new TextInputBuilder()
-    .setCustomId('entry_content')
-    .setLabel('Entry content')
-    .setStyle(TextInputStyle.Paragraph)
-    .setMaxLength(4000)
-    .setValue(chunks[0].text.slice(0, 4000))
-    .setPlaceholder('Edit this section. If you hit the character limit, save and return to continue on the next page.');
-  modal.addComponents(new ActionRowBuilder().addComponents(input));
-  await interaction.showModal(modal);
+  if (isMultiChunk) {
+    // Multi-chunk: show the paginated edit embed so all pages are reachable
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.editReply(
+      buildEditMessage(chunks, 0, page.hasHistory, page.turnNumber, storyTitle, session.guildStoryId)
+    );
+  } else {
+    // Single chunk: open modal directly — no embed needed
+    // No defer — showModal must be the first response
+    // Use entryId in customId to prevent Discord from caching modal content across entries
+    const modal = new ModalBuilder()
+      .setCustomId(`story_edit_modal_${entryId}`)
+      .setTitle('Edit Entry');
+    const input = new TextInputBuilder()
+      .setCustomId('entry_content')
+      .setLabel('Entry content')
+      .setStyle(TextInputStyle.Paragraph)
+      .setMaxLength(4000)
+      .setValue(chunks[0].text.slice(0, 4000))
+      .setPlaceholder('Edit this section. If you hit the character limit, save and return to continue on the next page.');
+    modal.addComponents(new ActionRowBuilder().addComponents(input));
+    await interaction.showModal(modal);
+  }
 }
 
 export async function handleReadNav(connection, interaction) {

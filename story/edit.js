@@ -119,13 +119,13 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
   const embed = new EmbedBuilder()
     .setTitle(`#${guildStoryId} ${storyTitle} · Turn #${turnNumber}${pageLabel}`)
     .setDescription(chunk.text)
-    .setFooter({ text: `${chunk.text.length} / 3800 characters on this page` })
+    .setFooter({ text: `${chunk.text.length} / 3800 on this page of ${chunks[chunks.length - 1].end} in the full entry.` })
     .setColor(0xffd700);
 
   if (isMultiPage) {
     embed.addFields({
       name: '📄 Entry split across pages',
-      value: `This entry is too long to show at once and has been split into **${chunks.length} pages**. Use ← Prev / Next → to navigate between pages. Click **Edit** on any page to edit that section independently.`
+      value: `Edits on this page do not affect other pages in the entry.\nUse ← Prev / Next → to navigate the full entry.`
     });
   }
 
@@ -210,7 +210,7 @@ async function handleEditButton(connection, interaction) {
       .setStyle(TextInputStyle.Paragraph)
       .setMaxLength(4000)
       .setValue(state.chunks[state.chunkPage].text.slice(0, 4000))
-      .setPlaceholder('Edit this section. If you hit the character limit, save and return to continue on the next page.');
+      .setPlaceholder(`${state.chunks[state.chunkPage].text.length} / 3800 on this page of ${state.chunks[state.chunks.length - 1].end} total. Save and reopen this page to add more.`);
     modal.addComponents(new ActionRowBuilder().addComponents(input));
     await interaction.showModal(modal);
 
@@ -546,6 +546,14 @@ async function handleEditModalSubmit(connection, interaction) {
   }
   state.currentContent = newContent;
   state.hasHistory = true;
+
+  // Keep the read session content map current so navigation stays fresh (multi-chunk read-path edits)
+  const readSession = pendingReadData.get(userId);
+  if (readSession) {
+    readSession.contentMap.set(state.entryId, newContent);
+    readSession.wordCount = Array.from(readSession.contentMap.values())
+      .reduce((total, c) => total + c.trim().split(/\s+/).filter(w => w.length > 0).length, 0);
+  }
 
   const editMsg = buildEditMessage(
     state.chunks, state.chunkPage, state.hasHistory,
