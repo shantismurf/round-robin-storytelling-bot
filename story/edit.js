@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, checkIsAdmin } from '../utilities.js';
+import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin } from '../utilities.js';
 import { pendingReadData, pendingEditData } from './state.js';
 import { buildReadEmbed } from './read.js';
 
@@ -202,7 +202,7 @@ async function handleEditButton(connection, interaction) {
       ? `Edit Entry — Page ${state.chunkPage + 1} of ${state.chunks.length}`
       : 'Edit Entry';
     const modal = new ModalBuilder()
-      .setCustomId(`story_edit_modal_${state.entryId}`)
+      .setCustomId(`story_edit_modal_${state.entryId}_p${state.chunkPage}`)
       .setTitle(modalTitle);
     const input = new TextInputBuilder()
       .setCustomId('entry_content')
@@ -547,12 +547,15 @@ async function handleEditModalSubmit(connection, interaction) {
   state.currentContent = newContent;
   state.hasHistory = true;
 
-  // Keep the read session content map current so navigation stays fresh (multi-chunk read-path edits)
+  // Keep the read session current so navigation shows fresh content (multi-chunk read-path edits)
   const readSession = pendingReadData.get(userId);
   if (readSession) {
     readSession.contentMap.set(state.entryId, newContent);
     readSession.wordCount = Array.from(readSession.contentMap.values())
       .reduce((total, c) => total + c.trim().split(/\s+/).filter(w => w.length > 0).length, 0);
+    const freshReadChunks = splitAtParagraphs(newContent);
+    const entryPages = readSession.pages.filter(p => p.storyEntryId == state.entryId);
+    entryPages.forEach((p, i) => { if (freshReadChunks[i] !== undefined) p.content = freshReadChunks[i]; });
   }
 
   const editMsg = buildEditMessage(
