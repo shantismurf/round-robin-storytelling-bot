@@ -212,12 +212,13 @@ export async function handleRead(connection, interaction) {
         hasAnyEditSet.add(row.entry_id); // track before grace-period filter
         const entry = entries.find(e => e.story_entry_id === row.entry_id);
         if (!entry) continue;
-        const createdMs = discordTimestamp(new Date(entry.created_at).getTime(),'F');
-        const editedMs  = discordTimestamp(new Date(row.edited_at).getTime(),'F');
+        const createdMs = new Date(entry.created_at).getTime();
+        const editedMs  = new Date(row.edited_at).getTime();
         const isGrace = String(row.edited_by) === String(entry.original_author_id) &&
                         (editedMs - createdMs) <= 60 * 60 * 1000;
+        const dsEditedAt = discordTimestamp(editedMs,'F');
         if (!isGrace) {
-          editInfoMap.set(row.entry_id, { editedByName: row.edited_by_name, editedAt: row.edited_at });
+          editInfoMap.set(row.entry_id, { editedByName: row.edited_by_name, editedAt: dsEditedAt });
         }
       }
     }
