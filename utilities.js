@@ -16,6 +16,21 @@ export function formattedDate() {
     now = now.replace('T', ' ');
     return now;
 }
+export function discordTimestamp (input, form) {
+    const unixSeconds = Math.floor(input / 1000);
+    const result = `<t:${unixSeconds}:${form}>`; 
+    return result;
+    /*
+    Style	Description	Example Output
+    t	Short Time	8:24 PM
+    T	Long Time	8:24:15 PM
+    d	Short Date	04/26/2026
+    D	Long Date	April 26, 2026
+    f	Short Date/Time	April 26, 2026 8:24 PM
+    F	Long Date/Time	Sunday, April 26, 2026 8:24 PM
+    R	Relative Time	2 minutes ago or in 5 years
+     */
+}
 export class DB {
   constructor(dbConfig) {
     this.dbConfig = dbConfig;
