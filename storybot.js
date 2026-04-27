@@ -711,6 +711,11 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
     content: welcomeContent,
     components: [row]
   });
+
+  if (mediaConfigured) {
+    const imageHelpText = await getConfigValue(connection, 'txtNormalModeImageHelp', guild_id);
+    await thread.send(imageHelpText);
+  }
 }
 
 

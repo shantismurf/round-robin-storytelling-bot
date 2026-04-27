@@ -6,6 +6,23 @@ import { buildEditMessage } from './edit.js';
 
 export { pendingReadData, lastReadPage };
 
+const IMAGES_PER_PAGE = 4;
+
+// Extracts Discord CDN image URLs from entry content.
+// Handles both the legacy bare-URL format and the [display text](url) markdown-link
+// format used by entries written after image display-text support was added.
+function extractImageUrls(content) {
+  const urls = [];
+  // Markdown links first: [text](cdn_url)
+  const mdRe = /\[[^\]]*\]\((https:\/\/cdn\.discordapp\.com\/attachments\/[^\s)]+)\)/g;
+  let m;
+  while ((m = mdRe.exec(content)) !== null) urls.push(m[1]);
+  // Bare CDN URLs not already captured via a markdown link (legacy entries)
+  const bareRe = /(?<!\()(https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+)/g;
+  while ((m = bareRe.exec(content)) !== null) urls.push(m[1]);
+  return urls;
+}
+
 // Build the pages array for a read session from raw story entries.
 // editInfoMap: Map<story_entry_id, { editedByName, editedAt }> — populated by handleRead for footnotes
 // hasAnyEditSet: Set<story_entry_id> — entries with any edit history (before grace-period filter)
@@ -28,6 +45,7 @@ export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAny
   }
   for (const turn of turnMap.values()) {
     const fullContent = turn.parts.join('\n\n');
+    const imageUrls = extractImageUrls(fullContent);
     const chunks = splitAtParagraphs(fullContent);
     chunks.forEach((chunk, i) => {
       pages.push({
@@ -41,7 +59,8 @@ export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAny
         createdAt: turn.createdAt,
         isFirstChunk: i === 0,
         hasHistory: hasAnyEditSet.has(turn.storyEntryId),
-        editInfo: i === 0 ? (editInfoMap.get(turn.storyEntryId) ?? null) : null
+        editInfo: i === 0 ? (editInfoMap.get(turn.storyEntryId) ?? null) : null,
+        imageUrls: i === 0 ? imageUrls : [],
       });
     });
   }
@@ -62,11 +81,28 @@ export function buildReadEmbed(session, pageIndex) {
     description += `\n\n*edited by ${page.editInfo.editedByName} · ${page.editInfo.editedAt}*`;
   }
 
+  // Image grid: share a URL across embeds so Discord groups them visually.
+  // Link to the story thread when available, so the title becomes a useful jump link.
+  const imageUrls = page.imageUrls ?? [];
+  const imagePageIndex = session.imagePageIndex ?? 0;
+  const totalImagePages = imageUrls.length > 0 ? Math.ceil(imageUrls.length / IMAGES_PER_PAGE) : 0;
+  const imageSlice = imageUrls.slice(imagePageIndex * IMAGES_PER_PAGE, (imagePageIndex + 1) * IMAGES_PER_PAGE);
+  const groupUrl = session.storyThreadId
+    ? `https://discord.com/channels/${session.guildId}/${session.storyThreadId}`
+    : 'https://discord.com';
+
   const embed = new EmbedBuilder()
     .setTitle(`📖 ${session.title}`)
     .setDescription(description)
     .setColor(0x5865f2)
     .setFooter({ text: `${turnLabel} · Page ${pageIndex + 1} of ${totalPages} · ~${session.wordCount.toLocaleString()} words total` });
+
+  if (imageSlice.length > 0) embed.setURL(groupUrl);
+
+  const embeds = [embed];
+  for (const url of imageSlice) {
+    embeds.push(new EmbedBuilder().setURL(groupUrl).setImage(url));
+  }
 
   // Edit button appears between ← Previous and Next → when the user can edit this entry
   const canEdit = page.isFirstChunk && (
@@ -131,7 +167,23 @@ export function buildReadEmbed(session, pageIndex) {
     components.push(new ActionRowBuilder().addComponents(jumpMenu));
   }
 
-  // Row 3: utility actions
+  // Row 3: Image navigation — only shown when a turn has more than IMAGES_PER_PAGE images
+  if (totalImagePages > 1) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('story_read_img_prev')
+        .setLabel('◀ Images')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(imagePageIndex === 0),
+      new ButtonBuilder()
+        .setCustomId('story_read_img_next')
+        .setLabel('Images ▶')
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(imagePageIndex >= totalImagePages - 1)
+    ));
+  }
+
+  // Row 4: utility actions
   const utilityButtons = [
     new ButtonBuilder()
       .setCustomId('story_read_download')
@@ -148,7 +200,7 @@ export function buildReadEmbed(session, pageIndex) {
   }
   components.push(new ActionRowBuilder().addComponents(...utilityButtons));
 
-  return { embeds: [embed], components };
+  return { embeds, components };
 }
 
 export async function handleRead(connection, interaction) {
@@ -161,7 +213,7 @@ export async function handleRead(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT title, show_authors, guild_story_id FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT title, show_authors, guild_story_id, story_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
@@ -238,7 +290,7 @@ export async function handleRead(connection, interaction) {
     const savedPage = lastReadPage.get(`${interaction.user.id}_${storyId}`) ?? 0;
     const startPage = Math.min(savedPage, pages.length - 1);
 
-    const session = { pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin };
+    const session = { pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin, storyThreadId: story.story_thread_id, imagePageIndex: 0 };
     pendingReadData.set(interaction.user.id, session);
 
     await interaction.editReply(buildReadEmbed(session, startPage));
@@ -351,17 +403,27 @@ export async function handleReadNav(connection, interaction) {
     return;
   }
 
-  if (interaction.customId === 'story_read_prev') {
-    session.currentPage = Math.max(0, session.currentPage - 1);
-  } else if (interaction.customId === 'story_read_next') {
-    session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 1);
-  } else if (interaction.customId === 'story_read_back10') {
-    session.currentPage = Math.max(0, session.currentPage - 10);
-  } else if (interaction.customId === 'story_read_fwd10') {
-    session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 10);
-  } else if (interaction.customId === 'story_read_jump') {
-    const selected = parseInt(interaction.values[0]);
-    if (!isNaN(selected)) session.currentPage = Math.min(session.pages.length - 1, Math.max(0, selected));
+  if (interaction.customId === 'story_read_img_prev') {
+    session.imagePageIndex = Math.max(0, (session.imagePageIndex ?? 0) - 1);
+  } else if (interaction.customId === 'story_read_img_next') {
+    const imgPage = session.pages[session.currentPage];
+    const totalImagePages = Math.ceil((imgPage.imageUrls?.length ?? 0) / IMAGES_PER_PAGE);
+    session.imagePageIndex = Math.min(totalImagePages - 1, (session.imagePageIndex ?? 0) + 1);
+  } else {
+    // Story page navigation — reset image page to 0 whenever the turn changes
+    if (interaction.customId === 'story_read_prev') {
+      session.currentPage = Math.max(0, session.currentPage - 1);
+    } else if (interaction.customId === 'story_read_next') {
+      session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 1);
+    } else if (interaction.customId === 'story_read_back10') {
+      session.currentPage = Math.max(0, session.currentPage - 10);
+    } else if (interaction.customId === 'story_read_fwd10') {
+      session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 10);
+    } else if (interaction.customId === 'story_read_jump') {
+      const selected = parseInt(interaction.values[0]);
+      if (!isNaN(selected)) session.currentPage = Math.min(session.pages.length - 1, Math.max(0, selected));
+    }
+    session.imagePageIndex = 0;
   }
 
   lastReadPage.set(`${userId}_${session.storyId}`, session.currentPage);
