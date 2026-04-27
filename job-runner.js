@@ -1,6 +1,7 @@
 import { getConfigValue, log } from './utilities.js';
 import { checkStoryDelay, PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from './storybot.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
+import { handleWeeklyRoundup } from './story/roundup.js';
 
 const JOB_POLL_INTERVAL_MS = 60 * 1000;
 const JOB_MAX_ATTEMPTS = 3;
@@ -45,6 +46,9 @@ async function processJob(connection, client, job) {
         break;
       case 'turnReminder':
         await handleTurnReminder(connection, client, payload);
+        break;
+      case 'weeklyRoundup':
+        await handleWeeklyRoundup(connection, client, payload);
         break;
       default:
         log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
