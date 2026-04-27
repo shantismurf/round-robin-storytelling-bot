@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin } from '../utilities.js';
+import { getConfigValue, log, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin, discordTimestamp } from '../utilities.js';
 import { generateStoryExport } from './export.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './state.js';
 import { buildEditMessage } from './edit.js';
@@ -212,8 +212,8 @@ export async function handleRead(connection, interaction) {
         hasAnyEditSet.add(row.entry_id); // track before grace-period filter
         const entry = entries.find(e => e.story_entry_id === row.entry_id);
         if (!entry) continue;
-        const createdMs = new Date(entry.created_at).getTime();
-        const editedMs  = new Date(row.edited_at).getTime();
+        const createdMs = discordTimestamp(new Date(entry.created_at).getTime(),'F');
+        const editedMs  = discordTimestamp(new(new Date(row.edited_at).getTime(),'F');
         const isGrace = String(row.edited_by) === String(entry.original_author_id) &&
                         (editedMs - createdMs) <= 60 * 60 * 1000;
         if (!isGrace) {
