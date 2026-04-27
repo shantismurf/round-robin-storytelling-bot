@@ -142,7 +142,11 @@ export async function resolveStoryId(connection, guildId, guildStoryId) {
       `SELECT story_id FROM story WHERE guild_id = ? AND guild_story_id = ?`,
       [guildId, guildStoryId]
     );
-    return rows[0]?.story_id ?? null;
+    if (rows.length === 0) {
+      log(`resolveStoryId: no story found for guild_story_id=${guildStoryId} in guild ${guildId}`, { show: true });
+      return null;
+    }
+    return rows[0].story_id;
   } catch (err) {
     log(`resolveStoryId failed: ${err}`, { show: true });
     return null;
