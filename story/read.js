@@ -6,8 +6,22 @@ import { buildEditMessage } from './edit.js';
 
 export { pendingReadData, lastReadPage };
 
-const IMAGE_URL_RE = /https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+/g;
 const IMAGES_PER_PAGE = 4;
+
+// Extracts Discord CDN image URLs from entry content.
+// Handles both the legacy bare-URL format and the [display text](url) markdown-link
+// format used by entries written after image display-text support was added.
+function extractImageUrls(content) {
+  const urls = [];
+  // Markdown links first: [text](cdn_url)
+  const mdRe = /\[[^\]]*\]\((https:\/\/cdn\.discordapp\.com\/attachments\/[^\s)]+)\)/g;
+  let m;
+  while ((m = mdRe.exec(content)) !== null) urls.push(m[1]);
+  // Bare CDN URLs not already captured via a markdown link (legacy entries)
+  const bareRe = /(?<!\()(https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+)/g;
+  while ((m = bareRe.exec(content)) !== null) urls.push(m[1]);
+  return urls;
+}
 
 // Build the pages array for a read session from raw story entries.
 // editInfoMap: Map<story_entry_id, { editedByName, editedAt }> — populated by handleRead for footnotes
@@ -31,12 +45,8 @@ export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAny
   }
   for (const turn of turnMap.values()) {
     const fullContent = turn.parts.join('\n\n');
-    const imageUrls = [...(fullContent.match(IMAGE_URL_RE) ?? [])];
-    const cleanContent = fullContent
-      .replace(IMAGE_URL_RE, '')
-      .replace(/\n{3,}/g, '\n\n')
-      .trim();
-    const chunks = splitAtParagraphs(cleanContent);
+    const imageUrls = extractImageUrls(fullContent);
+    const chunks = splitAtParagraphs(fullContent);
     chunks.forEach((chunk, i) => {
       pages.push({
         turnNumber: turn.turnNumber,

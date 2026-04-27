@@ -458,10 +458,21 @@ async function handleFinalizeEntry(connection, interaction) {
       return;
     }
 
-    // Build preview content — images shown as filename placeholders (not forwarded yet)
-    // Convert elements that Discord embeds don't render (headers → bold, -# → italic)
-    const previewContent = collectMessageParts(userMessages, att => `📎 ${att.name}`)
-      .join('\n\n')
+    // Build preview content. Images use the message text as display label (matching finalization).
+    // Convert elements that Discord embeds don't render (headers → bold, -# → italic).
+    const previewParts = [];
+    for (const msg of userMessages.values()) {
+      const msgText = msg.content?.trim();
+      const imageAtts = [...msg.attachments.values()].filter(a => a.contentType?.startsWith('image/'));
+      if (imageAtts.length === 0) {
+        if (msgText) previewParts.push(msgText);
+      } else {
+        for (const att of imageAtts) {
+          previewParts.push(`📎 ${msgText || att.name}`);
+        }
+      }
+    }
+    const previewContent = previewParts.join('\n\n')
       .replace(/^#{1,3} (.+)$/gm, '**$1**')
       .replace(/^-# (.+)$/gm, '*$1*');
 
@@ -494,13 +505,10 @@ async function handleFinalizeEntry(connection, interaction) {
 }
 
 /**
- * Handle finalize confirm button — execute the actual finalize
+ * Core finalization logic — forwards images, inserts confirmed entry, advances turn.
+ * Called by handleFinalizeConfirm (no images) and handleFinalizeImageConfirm (after image review).
  */
-async function handleFinalizeConfirm(connection, interaction) {
-  const storyId = interaction.customId.split('_')[3];
-
-  await interaction.deferUpdate();
-
+async function doFinalizeEntry(connection, interaction, storyId) {
   try {
     const [turnInfo] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id
@@ -509,28 +517,21 @@ async function handleFinalizeConfirm(connection, interaction) {
        WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
       [storyId, interaction.user.id]
     );
-
     if (turnInfo.length === 0) {
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id), components: [] });
       return;
     }
-
     const turn = turnInfo[0];
     const thread = await interaction.guild.channels.fetch(turn.thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
-
     const userMessages = messages
       .filter(msg => msg.author.id === interaction.user.id)
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-
     if (userMessages.size === 0) {
       await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', interaction.guild.id), components: [] });
       return;
     }
 
-    // Forward images to media channel and build entry content with images inline.
-    // Uses the same per-message grouping as collectMessageParts — text + image URLs
-    // joined with \n within a message, \n\n between messages.
     const [mediaChannelId, mediaPostLabelTemplate] = await Promise.all([
       getConfigValue(connection, 'cfgMediaChannelId', interaction.guild.id),
       getConfigValue(connection, 'txtMediaPostLabel', interaction.guild.id),
@@ -538,27 +539,30 @@ async function handleFinalizeConfirm(connection, interaction) {
     const mediaChannel = (mediaChannelId && mediaChannelId !== 'cfgMediaChannelId')
       ? await interaction.guild.channels.fetch(mediaChannelId).catch(() => null)
       : null;
-    const entryParts = [];
 
+    // Build entry content. Messages with images use the message text as the image's display
+    // label, stored as [display text](cdn_url). Text-only messages are stored as-is.
+    const entryParts = [];
     for (const msg of userMessages.values()) {
-      const msgParts = [];
-      if (msg.content) msgParts.push(msg.content);
-      if (mediaChannel) {
-        for (const attachment of msg.attachments.values()) {
-          if (attachment.contentType?.startsWith('image/')) {
-            try {
-              const forwarded = await mediaChannel.send({
-                content: replaceTemplateVariables(mediaPostLabelTemplate, { story_id: storyId, turn_id: turn.turn_id }),
-                files: [attachment.url]
-              });
-              msgParts.push(forwarded.attachments.first().url);
-            } catch (err) {
-              log(`Failed to forward image to media channel: ${err}`, { show: true, guildName: interaction?.guild?.name });
-            }
+      const msgText = msg.content?.trim() || null;
+      const imageAtts = [...msg.attachments.values()].filter(a => a.contentType?.startsWith('image/'));
+      if (imageAtts.length === 0) {
+        if (msgText) entryParts.push(msgText);
+      } else if (mediaChannel) {
+        const imgLinks = [];
+        for (const att of imageAtts) {
+          try {
+            const forwarded = await mediaChannel.send({
+              content: replaceTemplateVariables(mediaPostLabelTemplate, { story_id: storyId, turn_id: turn.turn_id }),
+              files: [att.url]
+            });
+            imgLinks.push(`[${msgText || att.name}](${forwarded.attachments.first().url})`);
+          } catch (err) {
+            log(`Failed to forward image to media channel: ${err}`, { show: true, guildName: interaction?.guild?.name });
           }
         }
+        if (imgLinks.length > 0) entryParts.push(imgLinks.join('\n'));
       }
-      if (msgParts.length > 0) entryParts.push(msgParts.join('\n'));
     }
 
     const entryContent = entryParts.join('\n\n');
@@ -597,7 +601,6 @@ async function handleFinalizeConfirm(connection, interaction) {
       txn.release();
     }
 
-    // Fetch turn number after commit so the confirmed entry is included in the count
     const [turnNumResult] = await connection.execute(
       `SELECT COUNT(DISTINCT t2.turn_id) AS turn_number
        FROM turn t2
@@ -619,8 +622,88 @@ async function handleFinalizeConfirm(connection, interaction) {
 
     // Reply before deleting thread — interaction context is tied to the thread
     await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', interaction.guild.id), components: [] });
-
     await deleteThreadAndAnnouncement(thread);
+
+  } catch (error) {
+    log(`doFinalizeEntry failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    try {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', interaction.guild.id), components: [] });
+    } catch {}
+  }
+}
+
+/**
+ * Handle finalize confirm button.
+ * When images are present and a media channel is configured, shows an image
+ * display-text review step before committing. Otherwise finalizes immediately.
+ */
+async function handleFinalizeConfirm(connection, interaction) {
+  const storyId = interaction.customId.split('_')[3];
+  await interaction.deferUpdate();
+
+  try {
+    const [turnInfo] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
+      [storyId, interaction.user.id]
+    );
+    if (turnInfo.length === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id), components: [] });
+      return;
+    }
+    const thread = await interaction.guild.channels.fetch(turnInfo[0].thread_id);
+    const messages = await thread.messages.fetch({ limit: 100 });
+    const userMessages = messages
+      .filter(msg => msg.author.id === interaction.user.id)
+      .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
+    if (userMessages.size === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', interaction.guild.id), components: [] });
+      return;
+    }
+
+    const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', interaction.guild.id);
+    const mediaChannel = (mediaChannelId && mediaChannelId !== 'cfgMediaChannelId')
+      ? await interaction.guild.channels.fetch(mediaChannelId).catch(() => null)
+      : null;
+
+    // Collect image display texts for the review popup
+    const imageInfos = [];
+    for (const msg of userMessages.values()) {
+      const displayText = msg.content?.trim() || null;
+      for (const att of msg.attachments.values()) {
+        if (att.contentType?.startsWith('image/')) {
+          imageInfos.push({ filename: att.name, displayText: displayText || att.name });
+        }
+      }
+    }
+
+    if (imageInfos.length > 0 && mediaChannel) {
+      const listLines = imageInfos.map(i => `- ${i.filename} : ${i.displayText}`).join('\n');
+      const [btnConfirm, btnCancel] = await Promise.all([
+        getConfigValue(connection, 'btnFinalizeConfirm', interaction.guild.id),
+        getConfigValue(connection, 'btnCancel', interaction.guild.id),
+      ]);
+      const embed = new EmbedBuilder()
+        .setDescription(
+          `Images in the entry will display with this text:\n*filename : display text*\n${listLines}\n\n` +
+          `To change the link text, cancel the finalization and edit the post with the desired text.`
+        );
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_finalize_image_confirm_${storyId}`)
+          .setLabel(btnConfirm)
+          .setStyle(ButtonStyle.Success),
+        new ButtonBuilder()
+          .setCustomId(`story_finalize_cancel_${storyId}`)
+          .setLabel(btnCancel)
+          .setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.editReply({ content: '', embeds: [embed], components: [row] });
+      return;
+    }
+
+    await doFinalizeEntry(connection, interaction, storyId);
 
   } catch (error) {
     log(`handleFinalizeConfirm failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
@@ -628,6 +711,15 @@ async function handleFinalizeConfirm(connection, interaction) {
       await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', interaction.guild.id), components: [] });
     } catch {}
   }
+}
+
+/**
+ * Handle image display-text review confirm — runs the actual finalization.
+ */
+async function handleFinalizeImageConfirm(connection, interaction) {
+  const storyId = interaction.customId.split('_').at(-1);
+  await interaction.deferUpdate();
+  await doFinalizeEntry(connection, interaction, storyId);
 }
 
 /**
@@ -755,6 +847,7 @@ export {
   handleViewLastEntry,
   handleFinalizeEntry,
   handleFinalizeConfirm,
+  handleFinalizeImageConfirm,
   handleSkipTurn,
   handleSkipConfirm,
   buildEntryPreviewEmbed,

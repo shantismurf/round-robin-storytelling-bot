@@ -94,11 +94,16 @@ export async function discordMarkdownToHtml(text, guild = null) {
   // Run through marked with breaks:true so single newlines render as line breaks (matching Discord behaviour)
   let html = marked.parse(text, { breaks: true });
 
-  // Convert Discord CDN attachment image URLs to clickable <img> tags after marked has run
-  // so marked can't escape the HTML we inject
+  // Convert Discord CDN attachment links to inline images after marked has run.
+  // New format [display text](cdn_url): marked renders as <a href="url">text</a> — use text as alt.
+  // Legacy format bare url: marked auto-links as <a href="url">url</a> — omit alt when text === url.
   html = html.replace(
-    /(?<!href=")(https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+)/g,
-    '<a href="$1"><img src="$1" style="max-width:100%;display:block;margin:8px 0"></a>'
+    /<a href="(https:\/\/cdn\.discordapp\.com\/attachments\/[^\s"]+)"[^>]*>([^<]*)<\/a>/g,
+    (_, url, linkText) => {
+      const text = linkText.trim();
+      const alt = (text && text !== url) ? ` alt="${text}"` : '';
+      return `<a href="${url}"><img src="${url}"${alt} style="max-width:100%;display:block;margin:8px 0"></a>`;
+    }
   );
 
   return html;
