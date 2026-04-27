@@ -14,7 +14,7 @@ async function refreshAllStatusMessages(connection, client) {
     const [stories] = await connection.execute(
       `SELECT story_id, guild_id FROM story WHERE story_status IN (1, 2) AND story_thread_id IS NOT NULL`
     );
-    log(`Refreshing status messages for ${stories.length} active/paused story/stories...`, { show: true });
+    log(`Refreshing status messages for ${stories.length} active/paused story/stories...`, { show: false });
     for (const story of stories) {
       try {
         const guild = await client.guilds.fetch(story.guild_id);
@@ -23,7 +23,7 @@ async function refreshAllStatusMessages(connection, client) {
         log(`Failed to refresh status for story ${story.story_id}: ${err}`, { show: true });
       }
     }
-    log('Status message refresh complete.', { show: true });
+    log('Status message refresh complete.', { show: false });
   } catch (err) {
     log(`refreshAllStatusMessages failed: ${err}`, { show: true });
   }
@@ -84,7 +84,7 @@ async function main() {
         } else if (file.endsWith('.js')) {
           const command = await import(filePath);
           if (command.default && command.default.data) {
-            log(`Loaded command: ${command.default.data.name}`, { show: true });
+            log(`Loaded command: ${command.default.data.name}`, { show: false });
             client.commands.set(command.default.data.name, command.default);
           } else {
             log(`Skipping file ${filePath} as it doesn't export a command`, { show: false });
@@ -128,7 +128,7 @@ async function main() {
   client.on(Events.InteractionCreate, async interaction => {
     try {
       if (interaction.isChatInputCommand()) {
-        log(formatCommandLog(interaction), { show: true, guildName: interaction?.guild?.name });
+        log(formatCommandLog(interaction), { show: false, guildName: interaction?.guild?.name });
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
           // Block all commands (except /storyadmin setup) if the bot has not been configured for this server
@@ -148,7 +148,7 @@ async function main() {
           await command.execute(connection, interaction);
         }
       } else if (interaction.isModalSubmit()) {
-        const significantModal = interaction.customId === 'storyadmin_setup_modal' || interaction.customId === 'story_add_title_modal';
+        const significantModal = interaction.customId === 'storyadmin_setup_modal';
         if (significantModal) {
           log(`${interaction.user.username} submitted modal ${interaction.customId}`, { show: true, guildName: interaction?.guild?.name });
         } else {
@@ -216,7 +216,7 @@ async function main() {
         const ctx = interaction.isAutocomplete()
           ? `autocomplete for /${interaction.commandName}`
           : (interaction.customId ?? interaction.commandName ?? 'unknown');
-        log(`Interaction token expired (10062) — ${ctx}`, { show: true, guildName: interaction?.guild?.name });
+        log(`Interaction token expired (10062) — ${ctx}`, { show: false, guildName: interaction?.guild?.name });
         return;
       }
 

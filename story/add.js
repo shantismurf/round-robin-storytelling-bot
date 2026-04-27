@@ -27,7 +27,7 @@ export async function handleAddStory(connection, interaction) {
       'txtHideThreadsOffDesc', 'txtHideThreadsOnDesc',
       'btnSetTitle', 'btnSetTurnLength', 'btnSetTimeout',
       'btnSetAO3Name', 'btnSetDelayHours', 'btnSetDelayWriters', 'btnCreateStory',
-      'lblModeToggle', 'lblHideToggle', 'lblPrivateToggle', 'txtPrivateOffDesc', 'txtPrivateOnDesc',
+      'lblModeToggle', 'lblHideToggle', 'btnAddHideToggle', 'lblPrivateToggle', 'txtPrivateOffDesc', 'txtPrivateOnDesc',
       'lblStoryTitle', 'lblTurnLength', 'lblTimeoutReminder',
       'lblDelayStart', 'txtDelayHint', 'lblYourAO3Name',
       'lblNoHours', 'lblNoWriters',
@@ -138,7 +138,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_hide')
-      .setLabel(`${cfg.lblHideToggle}: ${state.hideThreads ? 'On' : 'Off'}`)
+      .setLabel(`${cfg.btnAddHideToggle}: ${state.hideThreads ? 'On' : 'Off'}`)
       .setStyle(state.hideThreads ? ButtonStyle.Danger : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_cycle_order')

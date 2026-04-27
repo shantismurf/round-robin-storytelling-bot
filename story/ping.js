@@ -28,8 +28,10 @@ export async function handlePing(connection, interaction) {
 
   const { title, story_thread_id } = storyRows[0];
 
+  const includePaused = interaction.options.getBoolean('include_paused') ?? false;
   const [writerRows] = await connection.execute(
-    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status = 1`, [storyId]
+    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status ${includePaused ? 'IN (1, 2)' : '= 1'}`,
+    [storyId]
   );
 
   const mentions = writerRows.map(w => `<@${w.discord_user_id}>`).join(' ');

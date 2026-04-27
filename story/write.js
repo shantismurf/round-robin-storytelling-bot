@@ -430,7 +430,7 @@ async function handleViewLastEntry(connection, interaction) {
 async function handleFinalizeEntry(connection, interaction) {
   const storyId = interaction.customId.split('_')[2];
   const guildId = interaction.guild.id;
-  log(`handleFinalizeEntry: user ${interaction.user.id} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleFinalizeEntry: user ${interaction.user.id} story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -454,7 +454,7 @@ async function handleFinalizeEntry(connection, interaction) {
     const userMessages = messages
       .filter(msg => msg.author.id === interaction.user.id)
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`handleFinalizeEntry: fetched ${userMessages.size} user messages from thread ${turnInfo[0].thread_id}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: fetched ${userMessages.size} user messages from thread ${turnInfo[0].thread_id}`, { show: false, guildName: interaction?.guild?.name });
 
     if (userMessages.size === 0) {
       log(`handleFinalizeEntry: no messages found, rejecting`, { show: true, guildName: interaction?.guild?.name });
@@ -478,7 +478,7 @@ async function handleFinalizeEntry(connection, interaction) {
         }
       }
     }
-    log(`handleFinalizeEntry: preview built — ${previewParts.length} parts, ${previewImageCount} image(s)`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: preview built — ${previewParts.length} parts, ${previewImageCount} image(s)`, { show: false, guildName: interaction?.guild?.name });
     const previewContent = previewParts.join('\n\n')
       .replace(/^#{1,3} (.+)$/gm, '**$1**')
       .replace(/^-# (.+)$/gm, '*$1*');
@@ -503,7 +503,7 @@ async function handleFinalizeEntry(connection, interaction) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    log(`handleFinalizeEntry: showing preview to user ${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: showing preview to user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
     await interaction.editReply({ embeds: [embed], components: [row] });
 
   } catch (error) {
@@ -532,14 +532,14 @@ async function doFinalizeEntry(connection, interaction, storyId) {
       return;
     }
     const turn = turnInfo[0];
-    log(`doFinalizeEntry: turn ${turn.turn_id}, thread ${turn.thread_id}`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: turn ${turn.turn_id}, thread ${turn.thread_id}`, { show: false, guildName: interaction?.guild?.name });
 
     const thread = await interaction.guild.channels.fetch(turn.thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
       .filter(msg => msg.author.id === interaction.user.id)
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`doFinalizeEntry: ${userMessages.size} user messages fetched`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: ${userMessages.size} user messages fetched`, { show: false, guildName: interaction?.guild?.name });
 
     if (userMessages.size === 0) {
       log(`doFinalizeEntry: no messages found, aborting`, { show: true, guildName: interaction?.guild?.name });
@@ -554,7 +554,7 @@ async function doFinalizeEntry(connection, interaction, storyId) {
     const mediaChannel = (mediaChannelId && mediaChannelId !== 'cfgMediaChannelId')
       ? await interaction.guild.channels.fetch(mediaChannelId).catch(() => null)
       : null;
-    log(`doFinalizeEntry: media channel ${mediaChannel ? mediaChannel.id : 'not configured'}`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: media channel ${mediaChannel ? mediaChannel.id : 'not configured'}`, { show: false, guildName: interaction?.guild?.name });
 
     // Build entry content. Messages with images use the message text as the image's display
     // label, stored as [display text](cdn_url). Text-only messages are stored as-is.
@@ -576,7 +576,7 @@ async function doFinalizeEntry(connection, interaction, storyId) {
             });
             imgLinks.push(`[${msgText || att.name}](${forwarded.attachments.first().url})`);
             imagesForwarded++;
-            log(`doFinalizeEntry: image "${att.name}" forwarded successfully`, { show: true, guildName: interaction?.guild?.name });
+            log(`doFinalizeEntry: image "${att.name}" forwarded successfully`, { show: false, guildName: interaction?.guild?.name });
           } catch (err) {
             log(`doFinalizeEntry: failed to forward image "${att.name}" to media channel: ${err}`, { show: true, guildName: interaction?.guild?.name });
           }
@@ -586,7 +586,7 @@ async function doFinalizeEntry(connection, interaction, storyId) {
     }
 
     const entryContent = entryParts.join('\n\n');
-    log(`doFinalizeEntry: entry built — ${entryContent.length} chars, ${imagesForwarded} image(s) forwarded`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: entry built — ${entryContent.length} chars, ${imagesForwarded} image(s) forwarded`, { show: false, guildName: interaction?.guild?.name });
 
     const [storyInfo] = await connection.execute(
       `SELECT s.show_authors, s.story_thread_id, sw.discord_display_name
@@ -597,7 +597,7 @@ async function doFinalizeEntry(connection, interaction, storyId) {
     );
     const { show_authors, story_thread_id, discord_display_name } = storyInfo[0];
 
-    log(`doFinalizeEntry: beginning DB transaction — turn ${turn.turn_id}`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: beginning DB transaction — turn ${turn.turn_id}`, { show: false, guildName: interaction?.guild?.name });
     const txn = await connection.getConnection();
     await txn.beginTransaction();
     try {
@@ -665,7 +665,7 @@ async function doFinalizeEntry(connection, interaction, storyId) {
  */
 async function handleFinalizeConfirm(connection, interaction) {
   const storyId = interaction.customId.split('_')[3];
-  log(`handleFinalizeConfirm: user ${interaction.user.id} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleFinalizeConfirm: user ${interaction.user.id} story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
 
   try {
@@ -685,7 +685,7 @@ async function handleFinalizeConfirm(connection, interaction) {
     const userMessages = messages
       .filter(msg => msg.author.id === interaction.user.id)
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`handleFinalizeConfirm: ${userMessages.size} user messages fetched`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeConfirm: ${userMessages.size} user messages fetched`, { show: false, guildName: interaction?.guild?.name });
     if (userMessages.size === 0) {
       log(`handleFinalizeConfirm: no messages found, aborting`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', interaction.guild.id), components: [] });
@@ -707,10 +707,10 @@ async function handleFinalizeConfirm(connection, interaction) {
         }
       }
     }
-    log(`handleFinalizeConfirm: ${imageInfos.length} image(s) found, media channel: ${mediaChannel ? mediaChannel.id : 'not configured'}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeConfirm: ${imageInfos.length} image(s) found, media channel: ${mediaChannel ? mediaChannel.id : 'not configured'}`, { show: false, guildName: interaction?.guild?.name });
 
     if (imageInfos.length > 0 && mediaChannel) {
-      log(`handleFinalizeConfirm: showing image review popup`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleFinalizeConfirm: showing image review popup`, { show: false, guildName: interaction?.guild?.name });
       const listLines = imageInfos.map(i => `- ${i.filename} : ${i.displayText}`).join('\n');
       const [reviewTemplate, btnConfirm, btnCancel] = await Promise.all([
         getConfigValue(connection, 'txtFinalizeImageReview', interaction.guild.id),
@@ -733,7 +733,7 @@ async function handleFinalizeConfirm(connection, interaction) {
       return;
     }
 
-    log(`handleFinalizeConfirm: no images or no media channel — proceeding directly to finalize`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeConfirm: no images or no media channel — proceeding directly to finalize`, { show: false, guildName: interaction?.guild?.name });
     await doFinalizeEntry(connection, interaction, storyId);
 
   } catch (error) {

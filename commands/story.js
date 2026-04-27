@@ -112,11 +112,13 @@ const data = new SlashCommandBuilder()
   .addSubcommand(subcommand =>
     subcommand
       .setName('ping')
-      .setDescription('Ping all active writers in the story thread (creator or admin only)')
+      .setDescription('Ping writers in the story thread (creator or admin only)')
       .addStringOption(option =>
         option.setName('story_id').setDescription('Story to ping').setRequired(true).setAutocomplete(true))
       .addStringOption(option =>
         option.setName('message').setDescription('Optional message to include').setRequired(false))
+      .addBooleanOption(option =>
+        option.setName('include_paused').setDescription('Also ping paused writers (default: active only)').setRequired(false))
   )
   .addSubcommand(subcommand =>
     subcommand

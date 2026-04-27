@@ -629,7 +629,9 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
   const modeKey = writer.quick_mode ? 'Quick' : 'Normal';
 
   function applyTokens(text) {
-    return text.replace(/\[turn_thread_link\]/g, threadUrl);
+    return text
+      .replace(/\[turn_thread_link\]/g, threadUrl)
+      .replace(/\[story_title\]/g, writer.title);
   }
 
   if (writer.notification_prefs === 'mention') {

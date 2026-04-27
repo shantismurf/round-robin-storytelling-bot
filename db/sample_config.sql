@@ -227,6 +227,7 @@ Words: ~[word_count]', 'en', 1),
 ('btnCreateStory', '✅ Create Story', 'en', 1),
 ('lblModeToggle', 'Story Mode', 'en', 1),
 ('lblHideToggle', 'Hide Threads', 'en', 1),
+('btnAddHideToggle', 'Hide My Threads', 'en', 1),
 ('lblPrivateToggle', 'Turns', 'en', 1),
 ('txtPrivateOffDesc', 'Your turn threads will be visible to other writers.', 'en', 1),
 ('txtPrivateOnDesc', 'Your turn threads will only be visible to you and admins.', 'en', 1),
@@ -312,7 +313,7 @@ Words: ~[word_count]', 'en', 1),
 
 -- Storyadmin Help
 ('txtAdminHelpTitle', '⚙️ StoryAdmin Commands', 'en', 1),
-('txtAdminHelpFooter', 'Story settings (pause, resume, turn length, writer order) are managed via /story manage. All actions are logged and all commands require the round robin admin role specified at server setup or the Discord Administrator role.', 'en', 1),
+('txtAdminHelpFooter', 'Story settings (pause, resume, turn length, writer order) are managed via /story manage. All commands require the round robin admin role specified at server setup or the Discord Administrator role.', 'en', 1),
 ('lblAdminHelpSkip', '/storyadmin skip [story_id]', 'en', 1),
 ('txtAdminHelpSkip', 'Force-ends the active turn and advances to the next writer. If it is a normal mode story it will delete the active thread.', 'en', 1),
 ('lblAdminHelpExtend', '/storyadmin extend [story_id] [hours]', 'en', 1),
@@ -468,11 +469,11 @@ Words: ~[word_count]', 'en', 1),
 ('txtExportPostedPublicly', '✅ Story file posted to the story thread.', 'en', 1),
 
 -- Turn start notification text (mode-aware, replaces txtDMTurnStart / txtMentionTurnStart for new installs)
--- Token [turn_thread_link] is replaced with a Discord deep link URL at send time
-('txtDMTurnStartQuick', '🎭 **Your turn has started!** [Click here to write your entry.]([turn_thread_link])\n-# Use /mystory help to see your writer commands.', 'en', 1),
-('txtMentionTurnStartQuick', '🎭 **Your turn has started!** [Click here to write your entry.]([turn_thread_link])\n-# Use /mystory help to see your writer commands.', 'en', 1),
-('txtDMTurnStartNormal', '🎭 **Your turn has started!** You can now write your part of the story in your turn thread: [turn_thread_link]\n-# [Return to the server]([turn_thread_link]) and use `/mystory help` to see the commands available to writers.', 'en', 1),
-('txtMentionTurnStartNormal', '🎭 **Your turn has started!** You can now write your part of the story in your turn thread: [turn_thread_link]\n-# Use /mystory help to see the commands available to writers.', 'en', 1),
+-- Tokens: [turn_thread_link] = Discord deep link URL, [story_title] = story title
+('txtDMTurnStartQuick', '🎭 **Your turn has started in [story_title]!** [Click here to write your entry.]([turn_thread_link])\n-# Use /mystory help to see your writer commands.', 'en', 1),
+('txtMentionTurnStartQuick', '🎭 **Your turn has started in [story_title]!** [Click here to write your entry.]([turn_thread_link])\n-# Use /mystory help to see your writer commands.', 'en', 1),
+('txtDMTurnStartNormal', '🎭 **Your turn has started in [story_title]!** You can now write your part of the story in your turn thread: [turn_thread_link]\n-# [Return to the server]([turn_thread_link]) and use `/mystory help` to see the commands available to writers.', 'en', 1),
+('txtMentionTurnStartNormal', '🎭 **Your turn has started in [story_title]!** You can now write your part of the story in your turn thread: [turn_thread_link]\n-# Use /mystory help to see the commands available to writers.', 'en', 1),
 
 -- Turn reminder notification text (tokens replaced at send time; [turn_thread_link] requires scheduler implementation)
 ('txtDMTurnReminderQuick', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Deadline: [turn_end_full] ([turn_end_relative]). [Click here to write your entry.]([turn_thread_link])', 'en', 1),
