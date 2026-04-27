@@ -213,7 +213,7 @@ export async function handleRead(connection, interaction) {
         const entry = entries.find(e => e.story_entry_id === row.entry_id);
         if (!entry) continue;
         const createdMs = discordTimestamp(new Date(entry.created_at).getTime(),'F');
-        const editedMs  = discordTimestamp(new(new Date(row.edited_at).getTime(),'F');
+        const editedMs  = discordTimestamp(new Date(row.edited_at).getTime(),'F');
         const isGrace = String(row.edited_by) === String(entry.original_author_id) &&
                         (editedMs - createdMs) <= 60 * 60 * 1000;
         if (!isGrace) {
