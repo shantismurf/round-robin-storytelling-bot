@@ -713,10 +713,7 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
   });
 
   if (mediaConfigured) {
-    const txtImageHelp = await getConfigValue(connection, 'txtNormalModeImageHelp', guild_id);
-    const imageHelpText = (txtImageHelp && txtImageHelp !== 'txtNormalModeImageHelp')
-      ? txtImageHelp
-      : '📸 **Attaching images:** Upload each image in its own separate post in this thread. The text of that post — and only that text — will become the image\'s display label when the story is read. If a post has no text, the filename will be used as the label.';
+    const imageHelpText = await getConfigValue(connection, 'txtNormalModeImageHelp', guild_id);
     await thread.send(imageHelpText);
   }
 }

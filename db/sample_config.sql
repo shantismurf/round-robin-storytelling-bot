@@ -27,7 +27,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtMentionTurnStart', '🎭 **Your turn has started!** You can now write your part of the story.\n-# Use `/mystory help` to see your writer commands.', 'en', 1),
 ('txtDMTurnReminder', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Your deadline is [turn_end_full] ([turn_end_relative]). Don''t forget to write your entry.', 'en', 1),
 ('txtMentionTurnReminder', '⏰ **Reminder:** Your turn in **[story_title]** is ending soon! Your deadline is [turn_end_full] ([turn_end_relative]). Don''t forget to write your entry.', 'en', 1),
-('txtNormalModeWelcome', '## Welcome to your turn thread for *[story_title]*\nWrite your story entry here in as many posts as you''d like. Edit as needed, use Discord markdown for formatting, and upload images as separate posts in between your text so they''ll appear in that order in the story. Use the buttons below to Finalize your turn, or Skip to pass to the next writer without submitting.\n\nYour turn ends on [turn_end_full], in [turn_end_relative].\n-# If you need to catch up with the story since your last turn, use the command `/mystory catchup story_id:[story_id]`.', 'en', 1),
+('txtNormalModeWelcome', '## Welcome to your turn thread for *[story_title]*\nWrite your story entry here in as many posts as you''d like. Edit as needed, and use Discord markdown for formatting. Use the buttons below to Finalize your turn, or Skip to pass to the next writer without submitting.\n\nYour turn ends on [turn_end_full], in [turn_end_relative].\n-# If you need to catch up with the story since your last turn, use the command `/mystory catchup story_id:[story_id]`.', 'en', 1),
 ('txtNormalModeWelcomeNoMedia', '## Welcome to your turn thread for *[story_title]*\nWrite your story entry here in as many posts as you''d like. Edit as needed, using Discord markdown for formatting. Use the buttons below to Finalize your turn, or Skip to pass to the next writer without submitting.\n\nYour turn ends on [turn_end_full], in [turn_end_relative].\n-# If you need to catch up with the story since your last turn, use the command `/mystory catchup story_id:[story_id]`.', 'en', 1),
 ('txtQuickModeTurnStart', '🎭 **[story_title]:** [current_writer]''s turn has started! Please use `/story write [story_id]` to submit your entry. Turn ends [turn_end_date].', 'en', 1),
 ('btnFinalizeEntry', '✅ Finalize Entry', 'en', 1),
@@ -420,6 +420,8 @@ Words: ~[word_count]', 'en', 1),
 ('txtFinalizeConfirmDesc', 'This will submit everything shown below and advance to the next writer. This cannot be undone.', 'en', 1),
 ('lblFinalizePreviewEntry', 'Your Entry', 'en', 1),
 ('btnFinalizeConfirm', 'Yes, Finalize Entry', 'en', 1),
+('txtFinalizeImageReview', 'Images in the entry will display with this text:\n*filename : display text*\n[image_list]\n\nTo change the link text, cancel the finalization and edit the post with the desired text.', 'en', 1),
+('txtNormalModeImageHelp', '📸 **Attaching images:** Upload each image in its own **separate post** in this thread. The text of that post — and only that text — will become the image''s display label when the story is read. If a post has no text, the filename will be used as the label.', 'en', 1),
 
 -- Skip turn confirmation
 ('txtSkipConfirmNoContent', '⏭️ **Skip your turn?** This will pass to the next writer without submitting an entry. This cannot be undone.', 'en', 1),

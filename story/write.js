@@ -680,15 +680,13 @@ async function handleFinalizeConfirm(connection, interaction) {
 
     if (imageInfos.length > 0 && mediaChannel) {
       const listLines = imageInfos.map(i => `- ${i.filename} : ${i.displayText}`).join('\n');
-      const [btnConfirm, btnCancel] = await Promise.all([
+      const [reviewTemplate, btnConfirm, btnCancel] = await Promise.all([
+        getConfigValue(connection, 'txtFinalizeImageReview', interaction.guild.id),
         getConfigValue(connection, 'btnFinalizeConfirm', interaction.guild.id),
         getConfigValue(connection, 'btnCancel', interaction.guild.id),
       ]);
       const embed = new EmbedBuilder()
-        .setDescription(
-          `Images in the entry will display with this text:\n*filename : display text*\n${listLines}\n\n` +
-          `To change the link text, cancel the finalization and edit the post with the desired text.`
-        );
+        .setDescription(replaceTemplateVariables(reviewTemplate, { image_list: listLines }));
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`story_finalize_image_confirm_${storyId}`)
