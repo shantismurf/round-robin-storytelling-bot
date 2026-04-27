@@ -420,8 +420,8 @@ Words: ~[word_count]', 'en', 1),
 ('txtFinalizeConfirmDesc', 'This will submit everything shown below and advance to the next writer. This cannot be undone.', 'en', 1),
 ('lblFinalizePreviewEntry', 'Your Entry', 'en', 1),
 ('btnFinalizeConfirm', 'Yes, Finalize Entry', 'en', 1),
-('txtFinalizeImageReview', 'Images in the entry will display with this text:\n*filename : display text*\n[image_list]\n\nTo change the link text, cancel the finalization and edit the post with the desired text.', 'en', 1),
-('txtNormalModeImageHelp', '📸 **Attaching images:** Upload each image in its own **separate post** in this thread. The text of that post — and only that text — will become the image''s display label when the story is read. If a post has no text, the filename will be used as the label.', 'en', 1),
+('txtFinalizeImageReview', 'Images in the entry will display with this text:\n*filename : display text*\n[image_list]\n\nTo change the link text, cancel the finalization and edit the image post.', 'en', 1),
+('txtNormalModeImageHelp', '📸 **Attaching images:** Upload each image in its own **separate post** in this thread in the order you would like it to appear in the story. The text of that post will become the image''s display label when the story is read. If a post has no text, the filename will be used as the label.', 'en', 1),
 
 -- Skip turn confirmation
 ('txtSkipConfirmNoContent', '⏭️ **Skip your turn?** This will pass to the next writer without submitting an entry. This cannot be undone.', 'en', 1),
