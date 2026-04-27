@@ -501,4 +501,20 @@ Words: ~[word_count]', 'en', 1),
 
 -- /story ping
 ('txtPingWriters', '📢 [mentions]\n] [message]', 'en', 1),
-('txtPingWritersSent', '✅ All active writers have been pinged in the story thread.', 'en', 1);
+('txtPingWritersSent', '✅ All active writers have been pinged in the story thread.', 'en', 1),
+
+-- Weekly Roundup
+('cfgWeeklyRoundupEnabled', '0', 'en', 1),
+('cfgWeeklyRoundupDay', '1', 'en', 1),
+('cfgWeeklyRoundupHour', '9', 'en', 1),
+('cfgWeeklyRoundupChannelId', '', 'en', 1),
+('cfgWeeklyRoundupColor', '57F287', 'en', 1),
+('cfgWeeklyRoundupThumbnail', '', 'en', 1),
+('txtWeeklyRoundupTitle', '📖 Weekly Story Roundup', 'en', 1),
+('txtRoundupNoActiveStories', '*No active stories this week.*', 'en', 1),
+('txtRoundupStoryLine', '• **[story_title]** (#[story_id])', 'en', 1),
+('txtRoundupActivity', 'Stories created: **[created]** · Stories completed: **[completed]**\nTurns submitted: **[submitted]** · Turns missed: **[missed]**\nWords written: **~[word_count]**', 'en', 1),
+('txtRoundupOverflow', '*...and [count] more*', 'en', 1),
+('lblRoundupActiveStories', '📚 Active Stories', 'en', 1),
+('lblRoundupActivity', '📊 This Week''s Activity', 'en', 1),
+('lblRoundupWriters', '👥 Active Writers', 'en', 1);

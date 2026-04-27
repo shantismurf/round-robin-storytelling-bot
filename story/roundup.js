@@ -1,11 +1,30 @@
 import { EmbedBuilder } from 'discord.js';
-import { getConfigValue, log } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 
-function writerBadge(entryCount) {
-  if (entryCount <= 1) return '✨';
+const EMBED_FIELD_LIMIT = 1024;
+
+function writerBadge(entryCount, isNew) {
+  if (isNew) return '✨';
   if (entryCount >= 50) return '💫';
   if (entryCount >= 25) return '🌟';
   return '⭐';
+}
+
+function buildFieldWithOverflow(lines, overflowTemplate) {
+  let value = '';
+  let included = 0;
+  for (const line of lines) {
+    const next = value ? `${value}\n${line}` : line;
+    if (next.length > EMBED_FIELD_LIMIT) break;
+    value = next;
+    included++;
+  }
+  const remaining = lines.length - included;
+  if (remaining > 0) {
+    const overflow = '\n' + replaceTemplateVariables(overflowTemplate, { count: String(remaining) });
+    if ((value + overflow).length <= EMBED_FIELD_LIMIT) value += overflow;
+  }
+  return value;
 }
 
 export async function generateRoundupStats(connection, guildId) {
@@ -79,8 +98,9 @@ export async function generateRoundupStats(connection, guildId) {
     }
   }
 
-  // All-time entry counts for active writers in this guild (for badge tiers)
+  // All-time entry counts and pre-week counts for active writers (for badge tiers and first-timer detection)
   const entryCountMap = new Map();
+  const priorCountMap = new Map();
   if (activeWriterRows.length > 0) {
     const userIds = activeWriterRows.map(r => r.discord_user_id);
     const placeholders = userIds.map(() => '?').join(',');
@@ -94,14 +114,28 @@ export async function generateRoundupStats(connection, guildId) {
        GROUP BY sw.discord_user_id`,
       [guildId, ...userIds]
     );
+    const [priorRows] = await connection.execute(
+      `SELECT sw.discord_user_id, COUNT(se.story_entry_id) AS entry_count
+       FROM story_writer sw
+       JOIN story s ON sw.story_id = s.story_id
+       LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id
+       LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed' AND se.created_at < ?
+       WHERE s.guild_id = ? AND sw.discord_user_id IN (${placeholders})
+       GROUP BY sw.discord_user_id`,
+      [weekAgo, guildId, ...userIds]
+    );
     for (const row of countRows) {
       entryCountMap.set(String(row.discord_user_id), Number(row.entry_count));
+    }
+    for (const row of priorRows) {
+      priorCountMap.set(String(row.discord_user_id), Number(row.entry_count));
     }
   }
 
   const writers = activeWriterRows.map(r => ({
     displayName: r.discord_display_name,
-    entryCount: entryCountMap.get(String(r.discord_user_id)) ?? 1
+    entryCount: entryCountMap.get(String(r.discord_user_id)) ?? 1,
+    isNew: (priorCountMap.get(String(r.discord_user_id)) ?? 0) === 0
   }));
   writers.sort((a, b) => b.entryCount - a.entryCount);
 
@@ -118,19 +152,15 @@ export async function generateRoundupStats(connection, guildId) {
 
 export async function buildRoundupEmbed(connection, client, guildId, stats) {
   const cfg = await getConfigValue(connection, [
-    'cfgWeeklyRoundupColor', 'cfgWeeklyRoundupThumbnail', 'txtWeeklyRoundupTitle'
+    'cfgWeeklyRoundupColor', 'cfgWeeklyRoundupThumbnail',
+    'txtWeeklyRoundupTitle', 'txtRoundupNoActiveStories',
+    'txtRoundupStoryLine', 'txtRoundupActivity', 'txtRoundupOverflow',
+    'lblRoundupActiveStories', 'lblRoundupActivity', 'lblRoundupWriters'
   ], guildId);
 
-  const colorHex = (cfg.cfgWeeklyRoundupColor && cfg.cfgWeeklyRoundupColor !== 'cfgWeeklyRoundupColor')
-    ? cfg.cfgWeeklyRoundupColor : '#57F287';
-  const color = parseInt(colorHex.replace('#', ''), 16);
+  const color = parseInt((cfg.cfgWeeklyRoundupColor || '57F287').replace('#', ''), 16);
 
-  const thumbnailUrl = (cfg.cfgWeeklyRoundupThumbnail && cfg.cfgWeeklyRoundupThumbnail !== 'cfgWeeklyRoundupThumbnail')
-    ? cfg.cfgWeeklyRoundupThumbnail
-    : client.user.displayAvatarURL();
-
-  const title = (cfg.txtWeeklyRoundupTitle && cfg.txtWeeklyRoundupTitle !== 'txtWeeklyRoundupTitle')
-    ? cfg.txtWeeklyRoundupTitle : '📖 Weekly Story Roundup';
+  const thumbnailUrl = cfg.cfgWeeklyRoundupThumbnail || client.user.displayAvatarURL();
 
   const now = new Date();
   const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
@@ -138,33 +168,32 @@ export async function buildRoundupEmbed(connection, client, guildId, stats) {
   const dateRange = `${fmt(weekAgo)}–${fmt(now)}`;
 
   const embed = new EmbedBuilder()
-    .setTitle(`${title} — ${dateRange}`)
+    .setTitle(`${cfg.txtWeeklyRoundupTitle} — ${dateRange}`)
     .setColor(color)
     .setThumbnail(thumbnailUrl)
     .setTimestamp();
 
   if (stats.activeStories.length > 0) {
-    const lines = stats.activeStories.slice(0, 10)
-      .map(s => `• **${s.title}** (#${s.guild_story_id})`).join('\n');
-    const extra = stats.activeStories.length > 10 ? `\n*...and ${stats.activeStories.length - 10} more*` : '';
-    embed.addFields({ name: '📚 Active Stories', value: lines + extra, inline: false });
+    const lines = stats.activeStories.map(s =>
+      replaceTemplateVariables(cfg.txtRoundupStoryLine, { story_title: s.title, story_id: String(s.guild_story_id) })
+    );
+    embed.addFields({ name: cfg.lblRoundupActiveStories, value: buildFieldWithOverflow(lines, cfg.txtRoundupOverflow), inline: false });
   } else {
-    embed.addFields({ name: '📚 Active Stories', value: '*No active stories*', inline: false });
+    embed.addFields({ name: cfg.lblRoundupActiveStories, value: cfg.txtRoundupNoActiveStories, inline: false });
   }
 
-  const activityLines = [
-    `Stories created: **${stats.created}** · Stories completed: **${stats.completed}**`,
-    `Turns submitted: **${stats.submitted}** · Turns missed: **${stats.missed}**`,
-    `Words written: **~${stats.wordSum.toLocaleString()}**`
-  ].join('\n');
-  embed.addFields({ name: '📊 This Week\'s Activity', value: activityLines, inline: false });
+  const activityValue = replaceTemplateVariables(cfg.txtRoundupActivity, {
+    created:    String(stats.created),
+    completed:  String(stats.completed),
+    submitted:  String(stats.submitted),
+    missed:     String(stats.missed),
+    word_count: stats.wordSum.toLocaleString()
+  });
+  embed.addFields({ name: cfg.lblRoundupActivity, value: activityValue, inline: false });
 
   if (stats.writers.length > 0) {
-    const writerLines = stats.writers.slice(0, 20)
-      .map(w => `${writerBadge(w.entryCount)} ${w.displayName}`)
-      .join('\n');
-    const extra = stats.writers.length > 20 ? `\n*...and ${stats.writers.length - 20} more*` : '';
-    embed.addFields({ name: '👥 Active Writers', value: writerLines + extra, inline: false });
+    const lines = stats.writers.map(w => `${writerBadge(w.entryCount, w.isNew)} ${w.displayName}`);
+    embed.addFields({ name: cfg.lblRoundupWriters, value: buildFieldWithOverflow(lines, cfg.txtRoundupOverflow), inline: false });
   }
 
   return embed;
