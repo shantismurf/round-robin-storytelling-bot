@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
+import { RATING_BADGE } from './metadata.js';
 
 export async function handleListStories(connection, interaction) {
   const guildId = interaction.guild.id;
@@ -48,6 +49,11 @@ export async function handleFilterButton(connection, interaction) {
         { label: txtMine, value: 'mine' },
         { label: txtActive, value: 'active' },
         { label: txtPaused, value: 'paused' },
+        { label: '[G] General', value: 'rating_G' },
+        { label: '[T] Teen', value: 'rating_T' },
+        { label: '[M] Mature', value: 'rating_M' },
+        { label: '[E] Explicit', value: 'rating_E' },
+        { label: '[NR] Not Rated', value: 'rating_NR' },
       ])
   );
   await interaction.editReply({ content: await getConfigValue(connection, 'txtListFilterPrompt', interaction.guild.id), embeds: [], components: [row] });
@@ -133,8 +139,9 @@ export async function renderStoryListReply(connection, interaction, filter, page
       }
     }
 
+    const ratingBadge = RATING_BADGE[story.rating] ?? '[NR]';
     embed.addFields({
-      name: `${statusIcon} "${story.title}" (#${story.guild_story_id})`,
+      name: `${statusIcon} "${story.title}" (#${story.guild_story_id}) ${ratingBadge}`,
       value: `├ ${cfg.lblStoryStatus} ${statusText} • ${cfg.lblStoryTurn} ${currentTurn}
 ├ ${cfg.lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${cfg.lblStoryMode} ${modeText}
 └ ${cfg.lblStoryCreator} ${story.creator_name} • ${joinStatus}`,
@@ -217,8 +224,13 @@ export async function getStoriesPaginated(connection, guildId, filter, page, ite
       case 'paused':
         whereClause += ' AND s.story_status = 2';
         break;
-      case 'all':
       default:
+        // Rating filters: rating_G, rating_T, rating_M, rating_E, rating_NR
+        if (filter.startsWith('rating_')) {
+          const ratingValue = filter.slice(7); // e.g. 'G', 'T', 'M', 'E', 'NR'
+          whereClause += ' AND s.rating = ?';
+          params.push(ratingValue);
+        }
         break; // no status filter — return all stories including closed
     }
 
@@ -277,6 +289,12 @@ export async function getStoriesPaginated(connection, guildId, filter, page, ite
  * Helper functions for story display
  */
 export async function getFilterTitle(connection, filter, guildId) {
+  if (filter.startsWith('rating_')) {
+    const ratingValue = filter.slice(7);
+    const ratingLabels = { G: '[G] General', T: '[T] Teen', M: '[M] Mature', E: '[E] Explicit', NR: '[NR] Not Rated' };
+    return ratingLabels[ratingValue] ?? 'Stories';
+  }
+
   const configKeys = {
     all: 'txtAllStories',
     joinable: 'txtJoinableStories',

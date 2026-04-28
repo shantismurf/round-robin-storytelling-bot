@@ -2,13 +2,14 @@ import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin } from '../utilities.js';
 
 // Sub-command handlers
-import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton } from '../story/add.js';
+import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton, handleAddStorySelectMenu } from '../story/add.js';
 import { handleJoin, handleJoinSetAO3Button, handleJoinAO3ModalSubmit, handleJoinConfirm, buildJoinEmbed, pendingJoinData } from '../story/join.js';
 import { handleWrite, handleWriteModalSubmit, handleEntryConfirmation, handleViewLastEntry, handleFinalizeEntry, handleFinalizeConfirm, handleFinalizeImageConfirm, handleSkipTurn, handleSkipConfirm } from '../story/write.js';
 import { handleRead, handleReadNav } from '../story/read.js';
 import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry } from '../story/edit.js';
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
-import { handleManage, handleManageButton, handleManageModalSubmit } from '../story/manage.js';
+import { handleManage, handleManageButton, handleManageSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
+import { handleTagSubmit, handleTagSubmitModalSubmit } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
@@ -192,6 +193,8 @@ async function handleModalSubmit(connection, interaction) {
     await handleManageModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_edit_modal_')) {
     await handleEditModalSubmit(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_submit_modal_')) {
+    await handleTagSubmitModalSubmit(connection, interaction);
   }
 }
 
@@ -250,6 +253,10 @@ async function handleButtonInteraction(connection, interaction) {
     await handleEditButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_read_')) {
     await handleReadNav(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_approve_') || interaction.customId.startsWith('story_tag_reject_')) {
+    await handleTagReviewButton(connection, interaction);
+  } else if (interaction.customId.startsWith('story_submit_tag_')) {
+    await handleTagSubmit(connection, interaction);
   }
 }
 
@@ -281,6 +288,12 @@ async function handleSelectMenuInteraction(connection, interaction) {
 
   } else if (interaction.customId === 'story_read_jump') {
     await handleReadNav(connection, interaction);
+
+  } else if (interaction.customId.startsWith('story_add_') && interaction.customId.endsWith('_select')) {
+    await handleAddStorySelectMenu(connection, interaction);
+
+  } else if (interaction.customId.startsWith('story_manage_') && interaction.customId.endsWith('_select')) {
+    await handleManageSelectMenu(connection, interaction);
   }
 }
 

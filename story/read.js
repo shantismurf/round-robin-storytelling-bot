@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin, discordTimestamp } from '../utilities.js';
 import { generateStoryExport } from './export.js';
+import { isRestricted, RATING_BADGE } from './metadata.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './state.js';
 import { buildEditMessage } from './edit.js';
 
@@ -213,13 +214,24 @@ export async function handleRead(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT title, show_authors, guild_story_id, story_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT title, show_authors, guild_story_id, story_thread_id, rating FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
     }
     const story = storyRows[0];
+
+    // Restricted story check — M/E rated stories can only be read in channels where the story thread lives
+    if (isRestricted(story.rating ?? 'NR')) {
+      const restrictedChannelId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
+      const channelIsRestricted = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';
+      if (channelIsRestricted && interaction.channelId !== restrictedChannelId) {
+        const txt = (await getConfigValue(connection, 'txtRestrictedStoryNotHere', guildId))
+          .replace('[rating]', story.rating ?? 'M');
+        return await interaction.editReply({ content: txt });
+      }
+    }
 
     const [entries] = await connection.execute(
       `SELECT se.content, se.story_entry_id, se.created_at, sw.discord_user_id AS original_author_id,
@@ -290,7 +302,9 @@ export async function handleRead(connection, interaction) {
     const savedPage = lastReadPage.get(`${interaction.user.id}_${storyId}`) ?? 0;
     const startPage = Math.min(savedPage, pages.length - 1);
 
-    const session = { pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: story.title, wordCount, guildId, userId: interaction.user.id, isAdmin, storyThreadId: story.story_thread_id, imagePageIndex: 0 };
+    const ratingBadge = RATING_BADGE[story.rating] ?? '[NR]';
+    const titleWithRating = `${story.title} ${ratingBadge}`;
+    const session = { pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: titleWithRating, wordCount, guildId, userId: interaction.user.id, isAdmin, storyThreadId: story.story_thread_id, imagePageIndex: 0 };
     pendingReadData.set(interaction.user.id, session);
 
     await interaction.editReply(buildReadEmbed(session, startPage));

@@ -2,6 +2,7 @@ import { EventEmitter } from 'events';
 import { getConfigValue, getTurnNumber, log } from './utilities.js';
 import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
+import { resolveFeedChannelId, isRestricted } from './story/metadata.js';
 
 /**
  * StoryBot.js contains story engine logic and emits 'publish' events when it
@@ -55,8 +56,9 @@ export async function CreateStory(connection, interaction, storyInput) {
 
     const [storyResult] = await txn.execute(
       `INSERT INTO story (guild_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
-       timeout_reminder_percent, story_turn_privacy, show_authors, story_delay_hours, story_delay_users, story_order_type, max_writers)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       timeout_reminder_percent, story_turn_privacy, show_authors, story_delay_hours, story_delay_users, story_order_type, max_writers,
+       rating, warnings, fandom, main_pairing, other_relationships, characters, category, additional_tags)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         guild_id,
         nextGuildStoryId,
@@ -70,7 +72,15 @@ export async function CreateStory(connection, interaction, storyInput) {
         storyInput.delayHours,
         storyInput.delayWriters,
         storyInput.orderType,
-        storyInput.maxWriters ?? null
+        storyInput.maxWriters ?? null,
+        storyInput.rating ?? 'NR',
+        storyInput.warnings ?? null,
+        storyInput.fandom ?? null,
+        storyInput.mainPairing ?? null,
+        storyInput.otherRelationships ?? null,
+        storyInput.characters ?? null,
+        storyInput.category ?? null,
+        storyInput.additionalTags ?? null
       ]
     );
 
@@ -86,8 +96,8 @@ export async function CreateStory(connection, interaction, storyInput) {
       );
     }
 
-    // Step 3: Get story feed channel and create story thread
-    const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
+    // Step 3: Get story feed channel (restricted if M/E rated) and create story thread
+    const storyFeedChannelId = await resolveFeedChannelId(connection, guild_id, storyInput.rating ?? 'NR');
     const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
 
     if (!channel) {
@@ -454,7 +464,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     const [writerInfo] = await connection.execute(
       `SELECT sw.story_id, sw.discord_user_id, sw.discord_display_name, sw.turn_privacy, sw.notification_prefs,
               s.quick_mode, s.turn_length_hours, s.story_thread_id, s.story_turn_privacy, s.title,
-              s.timeout_reminder_percent, s.guild_id, s.guild_story_id, s.show_authors
+              s.timeout_reminder_percent, s.guild_id, s.guild_story_id, s.show_authors, s.rating
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_writer_id = ?`,
@@ -519,8 +529,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       await handleQuickModeNotification(connection, interaction, writer, guild_id);
       dmMessage = 'Quick mode notification sent';
     } else {
-      // Normal mode - create private thread
-      const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
+      // Normal mode - create private thread on the correct feed channel (restricted if M/E)
+      const storyFeedChannelId = await resolveFeedChannelId(connection, guild_id, writer.rating ?? 'NR');
       const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
 
       const formattedEndTime = turnEndTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
@@ -607,15 +617,15 @@ async function handleQuickModeNotification(connection, interaction, writer, guil
   // Send notification to writer
   await handleWriterNotification(connection, interaction, writer, writer.story_thread_id, guild_id);
   
-  // Post feed announcement
+  // Post feed announcement to the appropriate channel (restricted if M/E rated)
   const txtQuickModeTurnStart = await getConfigValue(connection,'txtQuickModeTurnStart', guild_id);
   const feedMessage = txtQuickModeTurnStart
     .replace('[story_id]', writer.guild_story_id)
     .replace('[story_title]', writer.title)
     .replace('[current_writer]', writer.discord_display_name)
     .replace('[turn_end_date]', discordTimestamp);
-  
-  const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
+
+  const storyFeedChannelId = await resolveFeedChannelId(connection, guild_id, writer.rating ?? 'NR');
   const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
   await channel.send(feedMessage);
 }
@@ -637,8 +647,8 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
   if (writer.notification_prefs === 'mention') {
     const txtKey = `txtMentionTurnStart${modeKey}`;
     const txt = applyTokens(await getConfigValue(connection, txtKey, guild_id));
-    const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guild_id);
-    const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
+    const feedChannelId = await resolveFeedChannelId(connection, guild_id, writer.rating ?? 'NR');
+    const channel = await interaction.guild.channels.fetch(feedChannelId);
     await channel.send(`<@${writer.discord_user_id}> ${txt}`);
   } else {
     const dmKey = `txtDMTurnStart${modeKey}`;
@@ -650,8 +660,8 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
       // DM failed — fall back to mention in feed channel
       const mentionKey = `txtMentionTurnStart${modeKey}`;
       const mentionTxt = applyTokens(await getConfigValue(connection, mentionKey, guild_id));
-      const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guild_id);
-      const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
+      const feedChannelId = await resolveFeedChannelId(connection, guild_id, writer.rating ?? 'NR');
+      const channel = await interaction.guild.channels.fetch(feedChannelId);
       await channel.send(`<@${writer.discord_user_id}> ${mentionTxt}`);
     }
   }
@@ -748,7 +758,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       `SELECT story_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
               timeout_reminder_percent, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, status_message_id, guild_id,
-              next_writer_id, closed_at
+              next_writer_id, closed_at, rating, warnings, fandom, main_pairing,
+              other_relationships, characters, category, additional_tags
        FROM story WHERE story_id = ?`,
       [storyId]
     );
@@ -870,8 +881,22 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       ? `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} · ~${wordCount.toLocaleString()} words${imagePart}`
       : 'No entries yet';
 
+    const { RATING_BADGE: ratingBadge, formatWarnings } = await import('./story/metadata.js');
+    const ratingBadgeStr = ratingBadge[story.rating] ?? '[NR]';
+    const warningsDisplay = story.warnings ? formatWarnings(story.warnings) : null;
+
+    const metadataFields = [];
+    if (story.rating && story.rating !== 'NR') {
+      metadataFields.push({ name: 'Rating', value: `${ratingBadgeStr} ${story.rating}`, inline: true });
+    }
+    if (story.fandom)        metadataFields.push({ name: 'Fandom', value: story.fandom, inline: true });
+    if (story.main_pairing)  metadataFields.push({ name: 'Main Pairing', value: story.main_pairing, inline: true });
+    if (warningsDisplay)     metadataFields.push({ name: 'Warnings', value: warningsDisplay, inline: false });
+    if (story.characters)    metadataFields.push({ name: 'Characters', value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
+    if (story.additional_tags) metadataFields.push({ name: 'Additional Tags', value: story.additional_tags.length > 500 ? story.additional_tags.slice(0, 497) + '...' : story.additional_tags, inline: false });
+
     const embed = new EmbedBuilder()
-      .setTitle(`📚 ${story.title} (#${story.guild_story_id})`)
+      .setTitle(`📚 ${story.title} (#${story.guild_story_id}) ${ratingBadgeStr}`)
       .setColor(colorMap[story.story_status] ?? 0x5865f2)
       .addFields(
         ...(story.tags ? [{ name: 'Tags', value: story.tags, inline: false }] : []),
@@ -884,6 +909,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         { name: 'Current Turn', value: turnValue, inline: true },
         { name: 'Next Writer', value: nextWriterValue, inline: true },
         { name: 'Entries', value: statsValue, inline: true },
+        ...metadataFields,
         { name: 'Writer List', value: writerLines.join('\n') || 'None', inline: false }
       )
       .setTimestamp();
@@ -916,15 +942,33 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       && (!story.max_writers || activeWriters.length < story.max_writers);
 
     const components = [];
+    const actionRow = new ActionRowBuilder();
+    let hasActionButtons = false;
+
     if (isJoinable) {
       const btnJoinStory = await getConfigValue(connection, 'btnJoinStory', story.guild_id);
-      components.push(new ActionRowBuilder().addComponents(
+      actionRow.addComponents(
         new ButtonBuilder()
           .setCustomId(`story_join_${storyId}`)
           .setLabel(btnJoinStory)
           .setStyle(ButtonStyle.Primary)
-      ));
+      );
+      hasActionButtons = true;
     }
+
+    // Add "Suggest a Tag" button for active stories
+    if (story.story_status === 1) {
+      const btnSubmitTag = await getConfigValue(connection, 'btnSubmitTag', story.guild_id);
+      actionRow.addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_submit_tag_${storyId}`)
+          .setLabel(btnSubmitTag)
+          .setStyle(ButtonStyle.Secondary)
+      );
+      hasActionButtons = true;
+    }
+
+    if (hasActionButtons) components.push(actionRow);
 
     let message = null;
     if (story.status_message_id) {
@@ -1000,4 +1044,69 @@ export async function skipActiveTurn(connection, guild, turnId, threadId) {
  */
 export function turnEndTimeFunction(turnLengthHours) {
   return new Date(Date.now() + (turnLengthHours * 60 * 60 * 1000));
+}
+
+/**
+ * Migrate a story's main thread to a different feed channel when its rating crosses
+ * the M/E barrier. Archives/closes the old thread and creates a new one on the
+ * target channel. Updates story.story_thread_id and clears status_message_id so
+ * updateStoryStatusMessage will post a fresh embed in the new thread.
+ *
+ * Returns { success, newThreadId } or { success: false, error }.
+ */
+export async function migrateStoryThread(connection, guild, storyId, newRating) {
+  try {
+    const [rows] = await connection.execute(
+      `SELECT guild_story_id, title, story_status, story_thread_id, guild_id FROM story WHERE story_id = ?`,
+      [storyId]
+    );
+    if (rows.length === 0) return { success: false, error: 'Story not found' };
+    const story = rows[0];
+
+    const newFeedChannelId = await resolveFeedChannelId(connection, story.guild_id, newRating);
+    const newFeedChannel = await guild.channels.fetch(newFeedChannelId).catch(() => null);
+    if (!newFeedChannel) return { success: false, error: 'Target feed channel not found' };
+
+    // Archive the old thread
+    if (story.story_thread_id) {
+      const oldThread = await guild.channels.fetch(story.story_thread_id).catch(() => null);
+      if (oldThread) {
+        try {
+          await oldThread.setArchived(true);
+          await oldThread.setLocked(true);
+        } catch {}
+      }
+    }
+
+    // Build thread title for the new thread
+    const [txtActive, txtPaused, txtClosed, titleTemplate] = await Promise.all([
+      getConfigValue(connection, 'txtActive', story.guild_id),
+      getConfigValue(connection, 'txtPaused', story.guild_id),
+      getConfigValue(connection, 'txtClosed', story.guild_id),
+      getConfigValue(connection, 'txtStoryThreadTitle', story.guild_id),
+    ]);
+    const statusLabel = { 1: txtActive, 2: txtPaused, 3: txtClosed }[story.story_status] ?? txtActive;
+    const threadTitle = titleTemplate
+      .replace('[story_id]', story.guild_story_id)
+      .replace('[inputStoryTitle]', story.title)
+      .replace('[story_status]', statusLabel);
+
+    const newThread = await newFeedChannel.threads.create({
+      name: threadTitle,
+      type: ChannelType.PublicThread,
+      reason: `Story thread migrated to new rating channel (rating changed to ${newRating})`
+    });
+
+    // Update DB — clear status_message_id so updateStoryStatusMessage posts a fresh embed
+    await connection.execute(
+      `UPDATE story SET story_thread_id = ?, status_message_id = NULL WHERE story_id = ?`,
+      [newThread.id, storyId]
+    );
+
+    log(`Migrated story ${storyId} thread to channel ${newFeedChannelId} (new thread ${newThread.id})`, { show: true, guildName: guild?.name });
+    return { success: true, newThreadId: newThread.id };
+  } catch (err) {
+    log(`migrateStoryThread failed for story ${storyId}: ${err}`, { show: true, guildName: guild?.name });
+    return { success: false, error: String(err) };
+  }
 }

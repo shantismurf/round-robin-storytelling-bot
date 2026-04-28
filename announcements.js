@@ -1,4 +1,5 @@
 import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
+import { resolveFeedChannelId, RATING_BADGE } from './story/metadata.js';
 /**
  * All announcements sent to story feed channel are handled here
  * Join is called from commands/story.js
@@ -8,9 +9,11 @@ import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
  * Post announcement to story feed channel when someone joins
  */
 export async function postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyTitle) {
-    const guildId = interaction.guild.id;  
+    const guildId = interaction.guild.id;
     try {
-      const feedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guildId);
+      const [ratingRows] = await connection.execute(`SELECT rating FROM story WHERE story_id = ?`, [storyId]);
+      const storyRating = ratingRows[0]?.rating ?? 'NR';
+      const feedChannelId = await resolveFeedChannelId(connection, guildId, storyRating);
       if (!feedChannelId) {
         log('Story feed channel not configured - skipping join announcement', { show: true, guildName: interaction?.guild?.name });
         return;
@@ -72,7 +75,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
     const [storyRows] = await connection.execute(
       `SELECT s.title, s.quick_mode, s.story_order_type, s.turn_length_hours,
               s.max_writers, s.allow_joins, s.story_delay_hours, s.story_delay_users,
-              s.created_at, COUNT(sw.story_writer_id) as writer_count
+              s.created_at, s.rating, COUNT(sw.story_writer_id) as writer_count
        FROM story s
        LEFT JOIN story_writer sw ON sw.story_id = s.story_id AND sw.sw_status = 1
        WHERE s.story_id = ?
@@ -109,9 +112,11 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
       ...delayParts
     ];
 
-    const message = `# 📚 New Story Created by ${creatorName}: "${story.title}"\n-# ${metaParts.join(' · ')}`;
+    const ratingBadge = RATING_BADGE[story.rating] ?? '[NR]';
+    const message = `# 📚 New Story Created by ${creatorName}: "${story.title}" ${ratingBadge}\n-# ${metaParts.join(' · ')}`;
 
-    const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
+    const targetChannelId = await resolveFeedChannelId(connection, guildId, story.rating ?? 'NR');
+    const feedChannel = await interaction.guild.channels.fetch(targetChannelId);
     if (feedChannel) await feedChannel.send(message);
 
     log(`Story feed creation announcement sent for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
@@ -158,7 +163,9 @@ export async function postStoryFeedClosedAnnouncement(connection, interaction, s
 export async function postStoryFeedActivationAnnouncement(connection, storyId, interaction, storyTitle) {
     const guildId = interaction.guild.id;
     try {
-      const feedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guildId);
+      const [ratingRows] = await connection.execute(`SELECT rating FROM story WHERE story_id = ?`, [storyId]);
+      const storyRating = ratingRows[0]?.rating ?? 'NR';
+      const feedChannelId = await resolveFeedChannelId(connection, guildId, storyRating);
       if (!feedChannelId) {
         log('Story feed channel not configured - skipping activation announcement', { show: true, guildName: interaction?.guild?.name });
         return;

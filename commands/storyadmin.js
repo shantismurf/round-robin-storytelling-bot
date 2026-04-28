@@ -164,7 +164,10 @@ async function handleSetup(connection, interaction) {
     'lblSetupFeedChannel', 'txtSetupFeedChannelPlaceholder',
     'lblSetupMediaChannel', 'txtSetupMediaChannelPlaceholder',
     'lblSetupAdminRole', 'txtSetupAdminRolePlaceholder',
-    'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName'
+    'lblSetupRestrictedFeedChannel', 'txtSetupRestrictedFeedPlaceholder',
+    'lblSetupRestrictedMediaChannel', 'txtSetupRestrictedMediaPlaceholder',
+    'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
+    'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId'
   ], guildId);
 
   const modal = new ModalBuilder()
@@ -192,6 +195,24 @@ async function handleSetup(connection, interaction) {
     ),
     new ActionRowBuilder().addComponents(
       new TextInputBuilder()
+        .setCustomId('restricted_feed_channel')
+        .setLabel(cfg.lblSetupRestrictedFeedChannel ?? 'Mature/Explicit Feed Channel (optional)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(cfg.txtSetupRestrictedFeedPlaceholder ?? 'Channel ID for M/E stories. Age-restrict if server is not 18+.')
+        .setValue(cfg.cfgRestrictedFeedChannelId && cfg.cfgRestrictedFeedChannelId !== 'cfgRestrictedFeedChannelId' ? cfg.cfgRestrictedFeedChannelId : '')
+        .setRequired(false)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('restricted_media_channel')
+        .setLabel(cfg.lblSetupRestrictedMediaChannel ?? 'Mature/Explicit Media Channel (optional)')
+        .setStyle(TextInputStyle.Short)
+        .setPlaceholder(cfg.txtSetupRestrictedMediaPlaceholder ?? 'Media channel for M/E stories. Age-restrict if server is not 18+.')
+        .setValue(cfg.cfgRestrictedMediaChannelId && cfg.cfgRestrictedMediaChannelId !== 'cfgRestrictedMediaChannelId' ? cfg.cfgRestrictedMediaChannelId : '')
+        .setRequired(false)
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
         .setCustomId('admin_role')
         .setLabel(cfg.lblSetupAdminRole)
         .setStyle(TextInputStyle.Short)
@@ -208,13 +229,17 @@ async function handleSetupModalSubmit(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
 
-  const feedRaw  = sanitizeModalInput(interaction.fields.getTextInputValue('feed_channel'), 30);
-  const mediaRaw = sanitizeModalInput(interaction.fields.getTextInputValue('media_channel'), 30);
-  const roleRaw  = sanitizeModalInput(interaction.fields.getTextInputValue('admin_role'), 100);
+  const feedRaw             = sanitizeModalInput(interaction.fields.getTextInputValue('feed_channel'), 30);
+  const mediaRaw            = sanitizeModalInput(interaction.fields.getTextInputValue('media_channel'), 30);
+  const restrictedFeedRaw   = sanitizeModalInput(interaction.fields.getTextInputValue('restricted_feed_channel'), 30);
+  const restrictedMediaRaw  = sanitizeModalInput(interaction.fields.getTextInputValue('restricted_media_channel'), 30);
+  const roleRaw             = sanitizeModalInput(interaction.fields.getTextInputValue('admin_role'), 100);
 
-  // Extract channel ID from mention (<#ID>) or raw ID
-  const feedChannelId  = feedRaw.match(/\d+/)?.[0];
-  const mediaChannelId = mediaRaw.match(/\d+/)?.[0];
+  // Extract channel IDs from mention (<#ID>) or raw ID
+  const feedChannelId            = feedRaw.match(/\d+/)?.[0];
+  const mediaChannelId           = mediaRaw.match(/\d+/)?.[0];
+  const restrictedFeedChannelId  = restrictedFeedRaw.match(/\d+/)?.[0];
+  const restrictedMediaChannelId = restrictedMediaRaw.match(/\d+/)?.[0];
 
   // Validate feed channel exists
   const feedChannel = feedChannelId
@@ -238,6 +263,28 @@ async function handleSetupModalSubmit(connection, interaction) {
     }
   }
 
+  // Validate restricted feed channel if provided
+  let restrictedFeedChannel = null;
+  if (restrictedFeedChannelId) {
+    restrictedFeedChannel = await interaction.guild.channels.fetch(restrictedFeedChannelId).catch(() => null);
+    if (!restrictedFeedChannel) {
+      return await interaction.editReply({
+        content: await getConfigValue(connection, 'txtSetupRestrictedChannelInvalid', guildId)
+      });
+    }
+  }
+
+  // Validate restricted media channel if provided
+  let restrictedMediaChannel = null;
+  if (restrictedMediaChannelId) {
+    restrictedMediaChannel = await interaction.guild.channels.fetch(restrictedMediaChannelId).catch(() => null);
+    if (!restrictedMediaChannel) {
+      return await interaction.editReply({
+        content: await getConfigValue(connection, 'txtSetupRestrictedMediaInvalid', guildId)
+      });
+    }
+  }
+
   // Write config values — INSERT or UPDATE if already set
   const upsert = (key, value) => connection.execute(
     `INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, 'en', ?)
@@ -246,7 +293,9 @@ async function handleSetupModalSubmit(connection, interaction) {
   );
 
   await upsert('cfgStoryFeedChannelId', feedChannelId);
-  if (mediaChannelId) await upsert('cfgMediaChannelId', mediaChannelId);
+  if (mediaChannelId)           await upsert('cfgMediaChannelId', mediaChannelId);
+  if (restrictedFeedChannelId)  await upsert('cfgRestrictedFeedChannelId', restrictedFeedChannelId);
+  if (restrictedMediaChannelId) await upsert('cfgRestrictedMediaChannelId', restrictedMediaChannelId);
   if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
 
   const botMember = interaction.guild.members.me;
@@ -345,7 +394,9 @@ async function handleSetupModalSubmit(connection, interaction) {
   const mediaPermsOk = !mediaChannelId || !permWarnings.some(w => w.includes(`<#${mediaChannelId}>`));
 
   const saved = [`${feedPermsOk ? '✅' : '⚠️'} Story feed channel: <#${feedChannelId}>`];
-  if (mediaChannelId) saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${mediaChannelId}>`);
+  if (mediaChannelId)           saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${mediaChannelId}>`);
+  if (restrictedFeedChannelId)  saved.push(`✅ Mature/Explicit feed channel: <#${restrictedFeedChannelId}> *(Age-restrict this channel if the server is not already 18+)*`);
+  if (restrictedMediaChannelId) saved.push(`✅ Mature/Explicit media channel: <#${restrictedMediaChannelId}>`);
   if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**${threadPermissionNote}`);
   if (!mediaChannelId) saved.push(`ℹ️ No media channel set — images will not be processed.`);
   if (!roleRaw)        saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);

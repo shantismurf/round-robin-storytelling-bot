@@ -517,4 +517,59 @@ Words: ~[word_count]', 'en', 1),
 ('txtRoundupOverflow', '*...and [count] more*', 'en', 1),
 ('lblRoundupActiveStories', '📚 Active Stories', 'en', 1),
 ('lblRoundupActivity', '📊 This Week''s Activity', 'en', 1),
-('lblRoundupWriters', '👥 Active Writers', 'en', 1);
+('lblRoundupWriters', '👥 Active Writers', 'en', 1),
+
+-- Mature/Restricted feed channel config
+-- cfgRestrictedFeedChannelId: set to a channel ID that is age-restricted (or the whole server is 18+).
+-- cfgRestrictedMediaChannelId: age-restricted equivalent of cfgMediaChannelId.
+-- Leave blank to disable the mature feed feature (M/E stories post to the main feed instead).
+('cfgRestrictedFeedChannelId', '', 'en', 1),
+('cfgRestrictedMediaChannelId', '', 'en', 1),
+('lblSetupRestrictedFeedChannel', 'Mature/Explicit Feed Channel (optional)', 'en', 1),
+('txtSetupRestrictedFeedPlaceholder', 'Channel ID for M/E-rated stories. Must be age-restricted if server is not 18+. Leave blank to post all stories to the main feed.', 'en', 1),
+('lblSetupRestrictedMediaChannel', 'Mature/Explicit Media Channel (optional)', 'en', 1),
+('txtSetupRestrictedMediaPlaceholder', 'Media/image channel for M/E-rated stories. Must be age-restricted if server is not 18+.', 'en', 1),
+('txtSetupRestrictedChannelInvalid', '❌ Could not find the restricted feed channel with that ID. Please check and try again.', 'en', 1),
+('txtSetupRestrictedMediaInvalid', '❌ Could not find the restricted media channel with that ID. Please check and try again.', 'en', 1),
+
+-- AO3 Metadata labels
+('lblRating', 'Rating', 'en', 1),
+('lblWarnings', 'Content Warnings', 'en', 1),
+('lblFandom', 'Fandom', 'en', 1),
+('lblMainPairing', 'Main Pairing', 'en', 1),
+('lblOtherRelationships', 'Other Relationships', 'en', 1),
+('lblCharacters', 'Characters', 'en', 1),
+('lblCategory', 'Category', 'en', 1),
+('lblAdditionalTags', 'Additional Tags', 'en', 1),
+('btnSetMetadata', 'Story Metadata', 'en', 1),
+
+-- Rating labels
+('txtRatingNR', '[NR] Not Rated', 'en', 1),
+('txtRatingG', '[G] General', 'en', 1),
+('txtRatingT', '[T] Teen', 'en', 1),
+('txtRatingM', '[M] Mature', 'en', 1),
+('txtRatingE', '[E] Explicit', 'en', 1),
+
+-- Rating change warning (shown in manage panel when rating crosses the M/E barrier)
+('txtRatingChangeThreadWarning', '⚠️ **Rating change alert:** Changing the rating across the Mature/Explicit barrier (between G/T/NR and M/E) will start a **new story thread** on the appropriate feed channel when you save. The old thread will be archived and closed. This cannot be undone.', 'en', 1),
+
+-- Read view restricted story error
+('txtRestrictedStoryNotHere', '🔞 This story is rated **[rating]** and can only be read in the age-restricted story channel.', 'en', 1),
+
+-- Tag submission system
+('btnSubmitTag', '🏷️ Suggest a Tag', 'en', 1),
+('txtTagSubmitModalTitle', 'Suggest a Tag', 'en', 1),
+('lblTagSubmitText', 'Tag to suggest', 'en', 1),
+('txtTagSubmitPlaceholder', 'Enter a single tag (e.g. slow burn, hurt/comfort, AU)', 'en', 1),
+('txtTagSubmitSuccess', '✅ Your tag suggestion has been submitted to the story creator for review.', 'en', 1),
+('txtTagSubmitNotWriter', '❌ Only active writers in this story can submit tag suggestions.', 'en', 1),
+('txtTagSubmitDuplicate', '❌ That tag has already been suggested and is pending review.', 'en', 1),
+('txtTagPendingTitle', '🏷️ Pending Tag Suggestions — [story_title]', 'en', 1),
+('txtTagNoPending', 'There are no pending tag suggestions for this story.', 'en', 1),
+('btnTagApprove', '✅ Approve', 'en', 1),
+('btnTagReject', '❌ Reject', 'en', 1),
+('txtTagApproved', '✅ Tag **[tag_text]** approved and added to the story.', 'en', 1),
+('txtTagRejected', '❌ Tag **[tag_text]** rejected.', 'en', 1),
+('txtTagNotCreator', '❌ Only the story creator can review tag suggestions.', 'en', 1),
+('txtTagReviewSessionExpired', 'This tag review session has expired. Use /story manage to open tag review again.', 'en', 1),
+('btnReviewTags', '🏷️ Review Tags ([count])', 'en', 1);
