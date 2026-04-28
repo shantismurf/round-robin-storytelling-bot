@@ -610,9 +610,10 @@ async function handleEditModalSubmit(connection, interaction) {
  * Handle repost entry button — posts the current confirmed content of an entry to the story thread
  */
 async function handleRepostEntry(connection, interaction) {
-  await interaction.deferUpdate();
+  await interaction.deferUpdate().catch(() => {});
 
   const entryId = parseInt(interaction.customId.split('_').at(-1));
+  log(`handleRepostEntry: start entryId=${entryId}`, { show: true, guildName: interaction?.guild?.name });
 
   try {
     const [rows] = await connection.execute(
