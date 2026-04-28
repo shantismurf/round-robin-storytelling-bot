@@ -4,7 +4,8 @@ import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin } 
 // Sub-command handlers
 import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton, handleAddStorySelectMenu } from '../story/add.js';
 import { handleJoin, handleJoinSetAO3Button, handleJoinAO3ModalSubmit, handleJoinConfirm, buildJoinEmbed, pendingJoinData } from '../story/join.js';
-import { handleWrite, handleWriteModalSubmit, handleEntryConfirmation, handleViewLastEntry, handleFinalizeEntry, handleFinalizeConfirm, handleFinalizeImageConfirm, handleSkipTurn, handleSkipConfirm } from '../story/write.js';
+import { handleWrite, handleWriteModalSubmit, handleEntryConfirmation, handleViewLastEntry, handleFinalizeEntry, handleFinalizeConfirm, handleFinalizeImageConfirm, handlePreviewNav, handleSkipTurn, handleSkipConfirm } from '../story/write.js';
+import { pendingPreviewData } from '../story/state.js';
 import { handleRead, handleReadNav } from '../story/read.js';
 import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry } from '../story/edit.js';
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
@@ -214,8 +215,11 @@ async function handleButtonInteraction(connection, interaction) {
   } else if (interaction.customId.startsWith('story_finalize_image_confirm_')) {
     await handleFinalizeImageConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_finalize_cancel_')) {
+    pendingPreviewData.delete(interaction.user.id);
     await interaction.deferUpdate();
     await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), components: [] });
+  } else if (interaction.customId.startsWith('story_preview_')) {
+    await handlePreviewNav(connection, interaction);
   } else if (interaction.customId.startsWith('skip_turn_')) {
     await handleSkipTurn(connection, interaction);
   } else if (interaction.customId.startsWith('story_skip_confirm_')) {

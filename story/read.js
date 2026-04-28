@@ -1,35 +1,18 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin, discordTimestamp } from '../utilities.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
+import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, discordTimestamp } from '../utilities.js';
 import { generateStoryExport } from './export.js';
 import { isRestricted, RATING_BADGE } from './metadata.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './state.js';
 import { buildEditMessage } from './edit.js';
+import { buildEntryEmbed, buildEntryPages } from './entryRenderer.js';
 
 export { pendingReadData, lastReadPage };
-
-const IMAGES_PER_PAGE = 4;
-
-// Extracts Discord CDN image URLs from entry content.
-// Handles both the legacy bare-URL format and the [display text](url) markdown-link
-// format used by entries written after image display-text support was added.
-function extractImageUrls(content) {
-  const urls = [];
-  // Markdown links first: [text](cdn_url)
-  const mdRe = /\[[^\]]*\]\((https:\/\/cdn\.discordapp\.com\/attachments\/[^\s)]+)\)/g;
-  let m;
-  while ((m = mdRe.exec(content)) !== null) urls.push(m[1]);
-  // Bare CDN URLs not already captured via a markdown link (legacy entries)
-  const bareRe = /(?<!\()(https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+)/g;
-  while ((m = bareRe.exec(content)) !== null) urls.push(m[1]);
-  return urls;
-}
 
 // Build the pages array for a read session from raw story entries.
 // editInfoMap: Map<story_entry_id, { editedByName, editedAt }> — populated by handleRead for footnotes
 // hasAnyEditSet: Set<story_entry_id> — entries with any edit history (before grace-period filter)
 export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAnyEditSet = new Set()) {
   const pages = [];
-  // Group raw entry rows by turn number
   const turnMap = new Map();
   for (const row of entries) {
     if (!turnMap.has(row.turn_number)) {
@@ -46,151 +29,76 @@ export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAny
   }
   for (const turn of turnMap.values()) {
     const fullContent = turn.parts.join('\n\n');
-    const imageUrls = extractImageUrls(fullContent);
-    const chunks = splitAtParagraphs(fullContent);
-    chunks.forEach((chunk, i) => {
+    const entryPages = buildEntryPages(fullContent, {
+      turnNumber: turn.turnNumber,
+      writerName: turn.writerName,
+      showAuthors,
+      storyEntryId: turn.storyEntryId,
+      editInfo: editInfoMap.get(turn.storyEntryId) ?? null,
+    });
+    for (const p of entryPages) {
       pages.push({
-        turnNumber: turn.turnNumber,
-        writerName: showAuthors ? turn.writerName : null,
-        content: chunk,
-        partIndex: chunks.length > 1 ? i + 1 : null,
-        partCount: chunks.length > 1 ? chunks.length : null,
-        storyEntryId: turn.storyEntryId,
+        ...p,
         originalAuthorId: turn.originalAuthorId,
         createdAt: turn.createdAt,
-        isFirstChunk: i === 0,
         hasHistory: hasAnyEditSet.has(turn.storyEntryId),
-        editInfo: i === 0 ? (editInfoMap.get(turn.storyEntryId) ?? null) : null,
-        imageUrls: i === 0 ? imageUrls : [],
       });
-    });
+    }
   }
   return pages;
 }
 
-// Build the embed + navigation buttons for a given page index.
+// Build the embed + nav buttons for a given page in a read session.
+// Delegates layout to entryRenderer; adds read-specific extras (Jump menu, Edit, Export).
 export function buildReadEmbed(session, pageIndex) {
   const page = session.pages[pageIndex];
   const totalPages = session.pages.length;
 
-  let turnLabel = `Turn ${page.turnNumber}`;
-  if (page.writerName) turnLabel += ` — ${page.writerName}`;
-  if (page.partIndex) turnLabel += ` (part ${page.partIndex}/${page.partCount})`;
-
-  let description = page.content;
-  if (page.editInfo) {
-    description += `\n\n*edited by ${page.editInfo.editedByName} · ${page.editInfo.editedAt}*`;
-  }
-
-  // Image grid: share a URL across embeds so Discord groups them visually.
-  // Link to the story thread when available, so the title becomes a useful jump link.
-  const imageUrls = page.imageUrls ?? [];
-  const imagePageIndex = session.imagePageIndex ?? 0;
-  const totalImagePages = imageUrls.length > 0 ? Math.ceil(imageUrls.length / IMAGES_PER_PAGE) : 0;
-  const imageSlice = imageUrls.slice(imagePageIndex * IMAGES_PER_PAGE, (imagePageIndex + 1) * IMAGES_PER_PAGE);
-  const groupUrl = session.storyThreadId
-    ? `https://discord.com/channels/${session.guildId}/${session.storyThreadId}`
-    : 'https://discord.com';
-
-  const embed = new EmbedBuilder()
-    .setTitle(`📖 ${session.title}`)
-    .setDescription(description)
-    .setColor(0x5865f2)
-    .setFooter({ text: `${turnLabel} · Page ${pageIndex + 1} of ${totalPages} · ~${session.wordCount.toLocaleString()} words total` });
-
-  if (imageSlice.length > 0) embed.setURL(groupUrl);
-
-  const embeds = [embed];
-  for (const url of imageSlice) {
-    embeds.push(new EmbedBuilder().setURL(groupUrl).setImage(url));
-  }
-
-  // Edit button appears between ← Previous and Next → when the user can edit this entry
   const canEdit = page.isFirstChunk && (
     session.isAdmin || page.originalAuthorId === session.userId
   );
 
-  // Row 1: navigation — << -10 | ← Prev | [Edit] | Next → | +10 >>
-  const navButtons = [
-    new ButtonBuilder()
-      .setCustomId('story_read_back10')
-      .setLabel('«')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(pageIndex === 0),
-    new ButtonBuilder()
-      .setCustomId('story_read_prev')
-      .setLabel('← Prev')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(pageIndex === 0),
-  ];
-  if (canEdit) {
-    navButtons.push(
-      new ButtonBuilder()
-        .setCustomId(`story_read_edit_${page.storyEntryId}`)
-        .setLabel('Edit')
-        .setStyle(ButtonStyle.Secondary)
-    );
-  }
-  navButtons.push(
-    new ButtonBuilder()
-      .setCustomId('story_read_next')
-      .setLabel('Next →')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(pageIndex === totalPages - 1),
-    new ButtonBuilder()
-      .setCustomId('story_read_fwd10')
-      .setLabel('»')
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(pageIndex >= totalPages - 1)
-  );
+  // Extra rows injected after the standard nav row
+  const extraButtons = [];
 
-  const components = [new ActionRowBuilder().addComponents(...navButtons)];
-
-  // Row 2: Jump to Page select menu — up to 25 options centered around current page
+  // Jump-to-page select menu
   if (totalPages > 1) {
     const maxOptions = 25;
     let rangeStart = Math.max(0, pageIndex - Math.floor(maxOptions / 2));
     const rangeEnd = Math.min(totalPages, rangeStart + maxOptions);
     rangeStart = Math.max(0, rangeEnd - maxOptions);
-
     const options = [];
     for (let i = rangeStart; i < rangeEnd; i++) {
       const p = session.pages[i];
       const label = `Page ${i + 1} — Turn ${p.turnNumber}${p.writerName ? ` (${p.writerName})` : ''}`.slice(0, 100);
       options.push({ label, value: String(i), default: i === pageIndex });
     }
-
-    const jumpMenu = new StringSelectMenuBuilder()
-      .setCustomId('story_read_jump')
-      .setPlaceholder(`Page ${pageIndex + 1} of ${totalPages}`)
-      .addOptions(options);
-
-    components.push(new ActionRowBuilder().addComponents(jumpMenu));
+    extraButtons.push(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('story_read_jump')
+          .setPlaceholder(`Page ${pageIndex + 1} of ${totalPages}`)
+          .addOptions(options)
+      )
+    );
   }
 
-  // Row 3: Image navigation — only shown when a turn has more than IMAGES_PER_PAGE images
-  if (totalImagePages > 1) {
-    components.push(new ActionRowBuilder().addComponents(
+  // Utility row: Edit (contextual) + Export + optional Repost
+  const utilityButtons = [];
+  if (canEdit) {
+    utilityButtons.push(
       new ButtonBuilder()
-        .setCustomId('story_read_img_prev')
-        .setLabel('◀ Images')
+        .setCustomId(`story_read_edit_${page.storyEntryId}`)
+        .setLabel('Edit')
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(imagePageIndex === 0),
-      new ButtonBuilder()
-        .setCustomId('story_read_img_next')
-        .setLabel('Images ▶')
-        .setStyle(ButtonStyle.Secondary)
-        .setDisabled(imagePageIndex >= totalImagePages - 1)
-    ));
+    );
   }
-
-  // Row 4: utility actions
-  const utilityButtons = [
+  utilityButtons.push(
     new ButtonBuilder()
       .setCustomId('story_read_download')
       .setLabel('⬇ Export Story')
       .setStyle(ButtonStyle.Secondary)
-  ];
+  );
   if (session.pendingRepostEntryId && session.pendingRepostEntryId === page.storyEntryId && page.isFirstChunk) {
     utilityButtons.push(
       new ButtonBuilder()
@@ -199,9 +107,26 @@ export function buildReadEmbed(session, pageIndex) {
         .setStyle(ButtonStyle.Secondary)
     );
   }
-  components.push(new ActionRowBuilder().addComponents(...utilityButtons));
+  extraButtons.push(new ActionRowBuilder().addComponents(...utilityButtons));
 
-  return { embeds, components };
+  const result = buildEntryEmbed(page, {
+    title: `📖 ${session.title}`,
+    pageIndex,
+    totalPages,
+    context: 'read',
+    extraButtons,
+    storyThreadId: session.storyThreadId,
+    guildId: session.guildId,
+    imagePageIndex: session.imagePageIndex ?? 0,
+  });
+
+  // Append word count to footer
+  if (result.embeds[0]) {
+    const existing = result.embeds[0].data.footer?.text ?? '';
+    result.embeds[0].setFooter({ text: `${existing} · ~${session.wordCount.toLocaleString()} words total` });
+  }
+
+  return result;
 }
 
 export async function handleRead(connection, interaction) {
@@ -421,7 +346,7 @@ export async function handleReadNav(connection, interaction) {
     session.imagePageIndex = Math.max(0, (session.imagePageIndex ?? 0) - 1);
   } else if (interaction.customId === 'story_read_img_next') {
     const imgPage = session.pages[session.currentPage];
-    const totalImagePages = Math.ceil((imgPage.imageUrls?.length ?? 0) / IMAGES_PER_PAGE);
+    const totalImagePages = Math.ceil((imgPage.imageUrls?.length ?? 0) / 4);
     session.imagePageIndex = Math.min(totalImagePages - 1, (session.imagePageIndex ?? 0) + 1);
   } else {
     // Story page navigation — reset image page to 0 whenever the turn changes
