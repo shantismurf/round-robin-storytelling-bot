@@ -175,7 +175,7 @@ async function main() {
           }
         }
       } else if (interaction.isButton()) {
-        log(`${interaction.user.username} clicked button ${interaction.customId}`, { show: true, guildName: interaction?.guild?.name });
+        log(`${interaction.user.username} clicked button ${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
 
         const dedupKey = `${interaction.user.id}:${interaction.customId}`;
         if (processingButtons.has(dedupKey)) {
@@ -213,12 +213,11 @@ async function main() {
         log(`Unhandled interaction type ${interaction.type} from ${interaction.user.username} (customId: ${interaction.customId ?? 'n/a'})`, { show: true, guildName: interaction?.guild?.name });
       }
     } catch (error) {
-      if (error.code === 10062) {
-        // Token expired before the bot could respond — harmless, usually autocomplete during DB slowness
+      if (error.code === 10062 || error.code === 40060) {
         const ctx = interaction.isAutocomplete()
           ? `autocomplete for /${interaction.commandName}`
           : (interaction.customId ?? interaction.commandName ?? 'unknown');
-        log(`Interaction token expired (10062) — ${ctx}`, { show: false, guildName: interaction?.guild?.name });
+        log(`Interaction already acknowledged or token expired (${error.code}) — ${ctx}`, { show: true, guildName: interaction?.guild?.name });
         return;
       }
 

@@ -173,6 +173,7 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
 async function handleEditButton(connection, interaction) {
   const userId = interaction.user.id;
   const state = pendingEditData.get(userId);
+  log(`handleEditButton: customId=${interaction.customId} userId=${userId} hasState=${!!state}`, { show: true, guildName: interaction?.guild?.name });
 
   if (!state) {
     await interaction.deferUpdate();
@@ -669,7 +670,9 @@ async function handleRepostEntry(connection, interaction) {
 
     if (storyThread.locked) await storyThread.setLocked(false);
     if (storyThread.archived) await storyThread.setArchived(false);
-    await storyThread.send({ embeds: buildThreadEmbeds(content, authorLine) });
+    const threadEmbeds = buildThreadEmbeds(content, authorLine);
+    log(`handleRepostEntry: posting ${threadEmbeds.length} embed(s) to thread ${story_thread_id}, total chars=${threadEmbeds.reduce((n, e) => n + (e.data?.description?.length ?? 0), 0)}`, { show: true, guildName: interaction?.guild?.name });
+    await storyThread.send({ embeds: threadEmbeds });
 
     const userId = interaction.user.id;
     const readSession = pendingReadData.get(userId);
