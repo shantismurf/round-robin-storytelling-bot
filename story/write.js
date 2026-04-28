@@ -1,7 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validateStoryAccess, validateActiveWriter, checkIsAdmin } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
-import { buildEntryPages, buildEntryEmbed, buildThreadEmbeds } from './entryRenderer.js';
+import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './entryRenderer.js';
 import { pendingPreviewData, pendingViewData } from './state.js';
 
 // Pending reminder timeouts keyed by entryId
@@ -312,7 +312,7 @@ async function confirmEntry(connection, entryId, interaction) {
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
-      await storyThread.send({ embeds: buildThreadEmbeds(content, authorLine) });
+      await postThreadEntry(storyThread, content, authorLine);
     } catch (threadError) {
       log(`Failed to post entry to story thread: ${threadError}`, { show: true, guildName: interaction?.guild?.name });
     }
@@ -404,7 +404,7 @@ async function handleViewLastEntry(connection, interaction) {
 
     const { content, discord_display_name, show_authors, turn_number } = rows[0];
     const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
-    await interaction.channel.send({ embeds: buildThreadEmbeds(content, authorLine) });
+    await postThreadEntry(interaction.channel, content, authorLine);
 
   } catch (error) {
     log(`Error in handleViewLastEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
@@ -714,7 +714,7 @@ async function doFinalizeEntry(connection, interaction, storyId, writerId) {
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
-      await storyThread.send({ embeds: buildThreadEmbeds(entryContent, authorLine) });
+      await postThreadEntry(storyThread, entryContent, authorLine);
       log(`doFinalizeEntry: entry posted to story thread ${story_thread_id} as turn ${turn_number}`, { show: true, guildName: interaction?.guild?.name });
     } catch (embedError) {
       log(`doFinalizeEntry: failed to post entry to story thread: ${embedError}`, { show: true, guildName: interaction?.guild?.name });

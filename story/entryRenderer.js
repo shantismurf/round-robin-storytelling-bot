@@ -6,7 +6,7 @@
  *   buildEntryEmbed()  — renders one page into { embeds, components }
  *
  * Non-interactive display (permanent thread/channel posts):
- *   buildThreadEmbeds() — returns an array of EmbedBuilders to stack in one channel.send()
+ *   postThreadEntry()  — sends one message per chunk to a channel, safe for any entry length
  */
 
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
@@ -153,18 +153,19 @@ export const NAV_PREFIX = {
 // ---------------------------------------------------------------------------
 
 /**
- * Build an array of EmbedBuilders for a permanent thread post.
- * Caller does: await channel.send({ embeds: buildThreadEmbeds(content, authorLine) })
+ * Post a story entry to a channel, splitting at paragraph boundaries so no
+ * single message exceeds Discord's 6000-char total embed limit.
+ * Each chunk becomes one message with one embed.
  *
+ * @param {TextChannel} channel    — Discord channel or thread to post to
  * @param {string}      content    — full entry content
  * @param {string|null} authorLine — e.g. "Turn 3 — Dragonborn"; null if show_authors is false
- * @returns {EmbedBuilder[]}
  */
-export function buildThreadEmbeds(content, authorLine = null) {
-  const chunks = splitAtParagraphs(content, 3800);
-  return chunks.map((chunk, i) => {
-    const embed = new EmbedBuilder().setDescription(chunk);
+export async function postThreadEntry(channel, content, authorLine = null) {
+  const chunks = splitAtParagraphs(content, 5500);
+  for (let i = 0; i < chunks.length; i++) {
+    const embed = new EmbedBuilder().setDescription(chunks[i]);
     if (i === 0 && authorLine) embed.setAuthor({ name: authorLine });
-    return embed;
-  });
+    await channel.send({ embeds: [embed] });
+  }
 }

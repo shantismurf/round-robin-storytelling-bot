@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin } from '../utilities.js';
-import { buildThreadEmbeds } from './entryRenderer.js';
+import { postThreadEntry } from './entryRenderer.js';
 import { pendingReadData, pendingEditData } from './state.js';
 import { buildReadEmbed } from './read.js';
 
@@ -670,9 +670,8 @@ async function handleRepostEntry(connection, interaction) {
 
     if (storyThread.locked) await storyThread.setLocked(false);
     if (storyThread.archived) await storyThread.setArchived(false);
-    const threadEmbeds = buildThreadEmbeds(content, authorLine);
-    log(`handleRepostEntry: posting ${threadEmbeds.length} embed(s) to thread ${story_thread_id}, total chars=${threadEmbeds.reduce((n, e) => n + (e.data?.description?.length ?? 0), 0)}`, { show: true, guildName: interaction?.guild?.name });
-    await storyThread.send({ embeds: threadEmbeds });
+    log(`handleRepostEntry: posting entry to thread ${story_thread_id}, content length=${content.length}`, { show: true, guildName: interaction?.guild?.name });
+    await postThreadEntry(storyThread, content, authorLine);
 
     const userId = interaction.user.id;
     const readSession = pendingReadData.get(userId);
