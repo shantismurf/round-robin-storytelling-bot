@@ -245,8 +245,9 @@ export async function handleReadEditButton(connection, interaction, session, ent
   const page = session.pages.find(p => p.storyEntryId === entryId && p.isFirstChunk);
   const fullContent = session.contentMap?.get(entryId) ?? null;
 
-if (!page || fullContent === null) {
-    await interaction.reply({ content: await getConfigValue(connection, 'txtReadEntryNotFound', session?.guildId ?? interaction.guild.id), flags: MessageFlags.Ephemeral });
+  if (!page || fullContent === null) {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtReadEntryNotFound', session?.guildId ?? interaction.guild.id) });
     return;
   }
 
@@ -304,7 +305,8 @@ export async function handleReadNav(connection, interaction) {
   const session = pendingReadData.get(userId);
 
   if (!session) {
-    await interaction.update({ content: await getConfigValue(connection, 'txtReadSessionExpired', interaction.guild.id), embeds: [], components: [] });
+    await interaction.deferUpdate();
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtReadSessionExpired', interaction.guild.id), embeds: [], components: [] });
     return;
   }
 

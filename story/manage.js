@@ -807,7 +807,8 @@ async function handleManageSelectMenu(connection, interaction) {
   const state = pendingManageData.get(userId);
 
   if (!state) {
-    await interaction.update({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), components: [] });
+    await interaction.deferUpdate();
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), components: [] });
     return;
   }
 
