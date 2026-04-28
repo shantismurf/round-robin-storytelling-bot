@@ -223,7 +223,7 @@ async function main() {
       }
 
       const guildId = interaction?.guild?.id || 'unknown';
-      log(`Error handling interaction: ${error}`, { show: true, guildName: interaction?.guild?.name });
+      log(`Error handling interaction: ${error}\n${error?.stack ?? ''}`, { show: true, guildName: interaction?.guild?.name });
 
       if (interaction.isAutocomplete()) {
         await interaction.respond([]).catch(() => {});
