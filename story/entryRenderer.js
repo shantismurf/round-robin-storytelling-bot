@@ -161,7 +161,7 @@ export const NAV_PREFIX = {
  * @returns {EmbedBuilder[]}
  */
 export function buildThreadEmbeds(content, authorLine = null) {
-  const chunks = splitAtParagraphs(content, 4096);
+  const chunks = splitAtParagraphs(content, 3800);
   return chunks.map((chunk, i) => {
     const embed = new EmbedBuilder().setDescription(chunk);
     if (i === 0 && authorLine) embed.setAuthor({ name: authorLine });
