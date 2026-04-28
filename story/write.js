@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validateStoryAccess, validateActiveWriter } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validateStoryAccess, validateActiveWriter, checkIsAdmin } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
 import { buildEntryPages, buildEntryEmbed, buildThreadEmbeds } from './entryRenderer.js';
 import { pendingPreviewData, pendingViewData } from './state.js';
@@ -417,30 +417,50 @@ async function handleViewLastEntry(connection, interaction) {
 async function handleFinalizeEntry(connection, interaction) {
   const storyId = interaction.customId.split('_')[2];
   const guildId = interaction.guild.id;
-  log(`handleFinalizeEntry: user ${interaction.user.id} story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
+  log(`handleFinalizeEntry: user ${interaction.user.id} story ${storyId}${isAdmin ? ' (admin)' : ''}`, { show: true, guildName: interaction?.guild?.name });
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   try {
-    const [turnInfo] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id FROM turn t
-       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-      [storyId, interaction.user.id]
-    );
+    // Admins can finalize from inside the turn thread on behalf of the current writer.
+    // Regular writers can only finalize their own active turn.
+    let turnInfo, writerId;
+    if (isAdmin) {
+      const [rows] = await connection.execute(
+        `SELECT t.turn_id, t.thread_id, sw.discord_user_id
+         FROM turn t
+         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+         WHERE sw.story_id = ? AND t.turn_status = 1 AND t.thread_id = ?`,
+        [storyId, interaction.channel.id]
+      );
+      turnInfo = rows;
+      writerId = rows[0]?.discord_user_id;
+    } else {
+      const [rows] = await connection.execute(
+        `SELECT t.turn_id, t.thread_id, sw.discord_user_id
+         FROM turn t
+         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+         WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
+        [storyId, interaction.user.id]
+      );
+      turnInfo = rows;
+      writerId = interaction.user.id;
+    }
 
     if (turnInfo.length === 0) {
-      log(`handleFinalizeEntry: no active turn for user ${interaction.user.id} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleFinalizeEntry: no active turn found — story ${storyId} channel ${interaction.channel.id} user ${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId) });
       return;
     }
+    log(`handleFinalizeEntry: found turn ${turnInfo[0].turn_id} for writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
 
     const thread = await interaction.guild.channels.fetch(turnInfo[0].thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
-      .filter(msg => msg.author.id === interaction.user.id)
+      .filter(msg => msg.author.id === String(writerId))
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`handleFinalizeEntry: fetched ${userMessages.size} user messages from thread ${turnInfo[0].thread_id}`, { show: false, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: fetched ${userMessages.size} messages from writer ${writerId} in thread ${turnInfo[0].thread_id}`, { show: true, guildName: interaction?.guild?.name });
 
     if (userMessages.size === 0) {
       log(`handleFinalizeEntry: no messages found, rejecting`, { show: true, guildName: interaction?.guild?.name });
@@ -492,10 +512,11 @@ async function handleFinalizeEntry(connection, interaction) {
       imagePageIndex: 0,
       storyId,
       guildId,
+      writerId: String(writerId),
       title: txtFinalizeConfirm,
     });
 
-    log(`handleFinalizeEntry: showing preview page 1/${pages.length} to user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: showing preview page 1/${pages.length} to user ${interaction.user.id} for writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply(buildPreviewEmbed(interaction.user.id, 0, confirmRow));
 
   } catch (error) {
@@ -569,30 +590,30 @@ async function handlePreviewNav(connection, interaction) {
  * Core finalization logic — forwards images, inserts confirmed entry, advances turn.
  * Called by handleFinalizeConfirm (no images) and handleFinalizeImageConfirm (after image review).
  */
-async function doFinalizeEntry(connection, interaction, storyId) {
-  log(`doFinalizeEntry: start — story ${storyId}, user ${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
+async function doFinalizeEntry(connection, interaction, storyId, writerId) {
+  log(`doFinalizeEntry: start — story ${storyId}, writer ${writerId}, triggered by ${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
   try {
     const [turnInfo] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-      [storyId, interaction.user.id]
+      [storyId, writerId]
     );
     if (turnInfo.length === 0) {
-      log(`doFinalizeEntry: no active turn for user ${interaction.user.id} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      log(`doFinalizeEntry: no active turn for writer ${writerId} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id), components: [] });
       return;
     }
     const turn = turnInfo[0];
-    log(`doFinalizeEntry: turn ${turn.turn_id}, thread ${turn.thread_id}`, { show: false, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: turn ${turn.turn_id}, thread ${turn.thread_id}`, { show: true, guildName: interaction?.guild?.name });
 
     const thread = await interaction.guild.channels.fetch(turn.thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
-      .filter(msg => msg.author.id === interaction.user.id)
+      .filter(msg => msg.author.id === String(writerId))
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`doFinalizeEntry: ${userMessages.size} user messages fetched`, { show: false, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: ${userMessages.size} messages from writer ${writerId} fetched`, { show: true, guildName: interaction?.guild?.name });
 
     if (userMessages.size === 0) {
       log(`doFinalizeEntry: no messages found, aborting`, { show: true, guildName: interaction?.guild?.name });
@@ -646,8 +667,9 @@ async function doFinalizeEntry(connection, interaction, storyId) {
        FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
        WHERE s.story_id = ?`,
-      [interaction.user.id, storyId]
+      [writerId, storyId]
     );
+    log(`doFinalizeEntry: story info fetched — show_authors=${storyInfo[0]?.show_authors}, story_thread=${storyInfo[0]?.story_thread_id}`, { show: true, guildName: interaction?.guild?.name });
     const { show_authors, story_thread_id, discord_display_name } = storyInfo[0];
 
     log(`doFinalizeEntry: beginning DB transaction — turn ${turn.turn_id}`, { show: false, guildName: interaction?.guild?.name });
@@ -668,7 +690,7 @@ async function doFinalizeEntry(connection, interaction, storyId) {
       log(`doFinalizeEntry: DB transaction committed — entry inserted, turn ${turn.turn_id} ended, next writer ${nextWriterId}`, { show: true, guildName: interaction?.guild?.name });
     } catch (txnError) {
       await txn.rollback();
-      log(`doFinalizeEntry: DB transaction rolled back — ${txnError}`, { show: true, guildName: interaction?.guild?.name });
+      log(`doFinalizeEntry: DB transaction rolled back — ${txnError}\n${txnError?.stack ?? ''}`, { show: true, guildName: interaction?.guild?.name });
       if (txnError.code === 'ER_DUP_ENTRY') {
         await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteAlreadySubmitted', interaction.guild.id), components: [] });
         return;
@@ -718,7 +740,9 @@ async function doFinalizeEntry(connection, interaction, storyId) {
  */
 async function handleFinalizeConfirm(connection, interaction) {
   const storyId = interaction.customId.split('_')[3];
-  log(`handleFinalizeConfirm: user ${interaction.user.id} story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  const session = pendingPreviewData.get(interaction.user.id);
+  const writerId = session?.writerId ?? interaction.user.id;
+  log(`handleFinalizeConfirm: user ${interaction.user.id} confirming finalize for writer ${writerId} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
 
   try {
@@ -726,19 +750,20 @@ async function handleFinalizeConfirm(connection, interaction) {
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-      [storyId, interaction.user.id]
+      [storyId, writerId]
     );
     if (turnInfo.length === 0) {
-      log(`handleFinalizeConfirm: no active turn for user ${interaction.user.id} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleFinalizeConfirm: no active turn for writer ${writerId} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id), components: [] });
       return;
     }
+    log(`handleFinalizeConfirm: turn ${turnInfo[0].turn_id} found, fetching thread messages`, { show: true, guildName: interaction?.guild?.name });
     const thread = await interaction.guild.channels.fetch(turnInfo[0].thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
-      .filter(msg => msg.author.id === interaction.user.id)
+      .filter(msg => msg.author.id === String(writerId))
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`handleFinalizeConfirm: ${userMessages.size} user messages fetched`, { show: false, guildName: interaction?.guild?.name });
+    log(`handleFinalizeConfirm: ${userMessages.size} messages from writer ${writerId} fetched`, { show: true, guildName: interaction?.guild?.name });
     if (userMessages.size === 0) {
       log(`handleFinalizeConfirm: no messages found, aborting`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', interaction.guild.id), components: [] });
@@ -786,8 +811,8 @@ async function handleFinalizeConfirm(connection, interaction) {
       return;
     }
 
-    log(`handleFinalizeConfirm: no images or no media channel — proceeding directly to finalize`, { show: false, guildName: interaction?.guild?.name });
-    await doFinalizeEntry(connection, interaction, storyId);
+    log(`handleFinalizeConfirm: no images or no media channel — proceeding directly to finalize`, { show: true, guildName: interaction?.guild?.name });
+    await doFinalizeEntry(connection, interaction, storyId, writerId);
 
   } catch (error) {
     log(`handleFinalizeConfirm failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
@@ -802,9 +827,11 @@ async function handleFinalizeConfirm(connection, interaction) {
  */
 async function handleFinalizeImageConfirm(connection, interaction) {
   const storyId = interaction.customId.split('_').at(-1);
-  log(`handleFinalizeImageConfirm: user ${interaction.user.id} confirmed image review for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+  const session = pendingPreviewData.get(interaction.user.id);
+  const writerId = session?.writerId ?? interaction.user.id;
+  log(`handleFinalizeImageConfirm: user ${interaction.user.id} confirmed image review for story ${storyId}, writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
-  await doFinalizeEntry(connection, interaction, storyId);
+  await doFinalizeEntry(connection, interaction, storyId, writerId);
 }
 
 /**
