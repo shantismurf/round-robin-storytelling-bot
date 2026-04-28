@@ -417,10 +417,11 @@ async function handleViewLastEntry(connection, interaction) {
 async function handleFinalizeEntry(connection, interaction) {
   const storyId = interaction.customId.split('_')[2];
   const guildId = interaction.guild.id;
-  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
-  log(`handleFinalizeEntry: user ${interaction.user.id} story ${storyId}${isAdmin ? ' (admin)' : ''}`, { show: true, guildName: interaction?.guild?.name });
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
+  log(`handleFinalizeEntry: user ${interaction.user.id} story ${storyId}${isAdmin ? ' (admin)' : ''}`, { show: true, guildName: interaction?.guild?.name });
 
   try {
     // Admins can finalize from inside the turn thread on behalf of the current writer.
