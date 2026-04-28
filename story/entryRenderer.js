@@ -162,7 +162,7 @@ export const NAV_PREFIX = {
  * @param {string|null} authorLine — e.g. "Turn 3 — Dragonborn"; null if show_authors is false
  */
 export async function postThreadEntry(channel, content, authorLine = null) {
-  const chunks = splitAtParagraphs(content, 5500);
+  const chunks = splitAtParagraphs(content, 3800);
   for (let i = 0; i < chunks.length; i++) {
     const embed = new EmbedBuilder().setDescription(chunks[i]);
     if (i === 0 && authorLine) embed.setAuthor({ name: authorLine });
