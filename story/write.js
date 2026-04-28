@@ -1,6 +1,8 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validateStoryAccess, validateActiveWriter, splitAtParagraphs } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validateStoryAccess, validateActiveWriter } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
+import { buildEntryPages, buildEntryEmbed, buildThreadEmbeds } from './entryRenderer.js';
+import { pendingPreviewData, pendingViewData } from './state.js';
 
 // Pending reminder timeouts keyed by entryId
 export const pendingReminderTimeouts = new Map();
@@ -118,28 +120,11 @@ async function handleWriteModalSubmit(connection, interaction) {
     // Get timeout and create embed
     const timeoutMinutes = parseInt(await getConfigValue(connection,'cfgEntryTimeoutMinutes', guildId)) || 10;
     const expiresAt = new Date(Date.now() + (timeoutMinutes * 60 * 1000));
-    const discordTimestamp = `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`;
+    const expiryTimestamp = `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`;
 
-    // Create preview embed
-    const embed = await createPreviewEmbed(connection, content, guildId, discordTimestamp);
-
-    // Create confirmation buttons
-    const confirmRow = new ActionRowBuilder()
-      .addComponents(
-        new ButtonBuilder()
-          .setCustomId(`confirm_entry_${entryId}`)
-          .setLabel(await getConfigValue(connection,'btnSubmit', guildId))
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`discard_entry_${entryId}`)
-          .setLabel(await getConfigValue(connection,'btnDiscard', guildId))
-          .setStyle(ButtonStyle.Danger)
-      );
-
-    await interaction.editReply({
-      embeds: [embed],
-      components: [confirmRow]
-    });
+    // Create paginated preview
+    const previewPayload = await createPreviewEmbed(connection, content, guildId, expiryTimestamp, entryId);
+    await interaction.editReply(previewPayload);
 
     // Send DM reminder after 5 minutes, cancelled if user confirms or discards before then
     const reminderTimeout = setTimeout(async () => {
@@ -182,46 +167,54 @@ function collectMessageParts(userMessages, resolveAttachment) {
 }
 
 /**
- * Build an entry preview embed.
- * Content goes in the description (4096 limit), footer holds the instruction text,
- * and any extra fields (e.g. expiry, stats) are appended after overflow chunks.
+ * Build the quick mode (/story write) preview embed.
+ * Uses buildEntryPages for consistent pagination, adds expiry/stats as an extra row.
  */
-function buildEntryPreviewEmbed(content, title, footerText, extraFields = []) {
-  const chunks = splitAtParagraphs(content, 4096);
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setDescription(chunks[0])
-    .setColor(0xffd700)
-    .setFooter({ text: footerText });
-
-  for (let i = 1; i < chunks.length; i++) {
-    embed.addFields({ name: '​', value: chunks[i], inline: false });
-  }
-
-  if (extraFields.length > 0) embed.addFields(...extraFields);
-
-  return embed;
-}
-
-/**
- * Create entry preview embed for quick mode (/story write)
- */
-async function createPreviewEmbed(connection, content, guildId, discordTimestamp) {
-  const [title, footer, expiresLabel, statsLabel, statsTemplate] = await Promise.all([
+async function createPreviewEmbed(connection, content, guildId, discordTimestamp, entryId) {
+  const [title, expiresLabel, statsLabel, statsTemplate, btnSubmit, btnDiscard] = await Promise.all([
     getConfigValue(connection, 'txtPreviewTitle', guildId),
-    getConfigValue(connection, 'txtPreviewDescription', guildId),
     getConfigValue(connection, 'txtPreviewExpires', guildId),
     getConfigValue(connection, 'lblEntryStats', guildId),
     getConfigValue(connection, 'txtEntryStatsTemplate', guildId),
+    getConfigValue(connection, 'btnSubmit', guildId),
+    getConfigValue(connection, 'btnDiscard', guildId),
   ]);
 
   const wordCount = content.split(/\s+/).filter(w => w.length > 0).length;
   const statsText = replaceTemplateVariables(statsTemplate, { char_count: content.length, word_count: wordCount });
 
-  return buildEntryPreviewEmbed(content, title, footer, [
-    { name: expiresLabel, value: discordTimestamp, inline: true },
-    { name: statsLabel, value: statsText, inline: true },
-  ]);
+  const statsRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`confirm_entry_${entryId}`)
+      .setLabel(btnSubmit)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`discard_entry_${entryId}`)
+      .setLabel(btnDiscard)
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  const pages = buildEntryPages(content, { turnNumber: '—', writerName: null, showAuthors: false, storyEntryId: entryId });
+  const page = pages[0];
+
+  // For quick mode we always show only page 1 — the entry fits in 4000 chars (modal limit).
+  // buildEntryEmbed handles paging if content ever exceeds that.
+  const result = buildEntryEmbed(page, {
+    title,
+    pageIndex: 0,
+    totalPages: pages.length,
+    context: 'preview',
+    extraButtons: [statsRow],
+    guildId,
+    imagePageIndex: 0,
+  });
+
+  // Replace footer with expiry + stats
+  if (result.embeds[0]) {
+    result.embeds[0].setFooter({ text: `${expiresLabel}: ${discordTimestamp} · ${statsText}` });
+  }
+
+  return result;
 }
 
 /**
@@ -318,10 +311,8 @@ async function confirmEntry(connection, entryId, interaction) {
     // Post entry to story thread
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
-      const entryEmbed = new EmbedBuilder()
-        .setDescription(content);
-      if (show_authors) entryEmbed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name}` });
-      await storyThread.send({ embeds: [entryEmbed] });
+      const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
+      await storyThread.send({ embeds: buildThreadEmbeds(content, authorLine) });
     } catch (threadError) {
       log(`Failed to post entry to story thread: ${threadError}`, { show: true, guildName: interaction?.guild?.name });
     }
@@ -412,12 +403,8 @@ async function handleViewLastEntry(connection, interaction) {
     }
 
     const { content, discord_display_name, show_authors, turn_number } = rows[0];
-    const embed = new EmbedBuilder().setDescription(content);
-    if (show_authors) {
-      embed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name}` });
-    }
-
-    await interaction.channel.send({ embeds: [embed] });
+    const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
+    await interaction.channel.send({ embeds: buildThreadEmbeds(content, authorLine) });
 
   } catch (error) {
     log(`Error in handleViewLastEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
@@ -425,7 +412,7 @@ async function handleViewLastEntry(connection, interaction) {
 }
 
 /**
- * Handle finalize entry button click — show confirmation prompt
+ * Handle finalize entry button click — show paginated preview with Confirm/Cancel on every page.
  */
 async function handleFinalizeEntry(connection, interaction) {
   const storyId = interaction.customId.split('_')[2];
@@ -448,7 +435,6 @@ async function handleFinalizeEntry(connection, interaction) {
       return;
     }
 
-    // Collect user messages from thread to build preview
     const thread = await interaction.guild.channels.fetch(turnInfo[0].thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
@@ -462,8 +448,7 @@ async function handleFinalizeEntry(connection, interaction) {
       return;
     }
 
-    // Build preview content. Images use the message text as display label (matching finalization).
-    // Convert elements that Discord embeds don't render (headers → bold, -# → italic).
+    // Build preview content. Convert elements Discord embeds don't render (headers → bold, -# → italic).
     const previewParts = [];
     let previewImageCount = 0;
     for (const msg of userMessages.values()) {
@@ -483,16 +468,14 @@ async function handleFinalizeEntry(connection, interaction) {
       .replace(/^#{1,3} (.+)$/gm, '**$1**')
       .replace(/^-# (.+)$/gm, '*$1*');
 
-    const [txtFinalizeConfirm, txtFinalizeConfirmDesc, btnFinalizeConfirm, btnCancel] = await Promise.all([
+    const [txtFinalizeConfirm, btnFinalizeConfirm, btnCancel] = await Promise.all([
       getConfigValue(connection, 'txtFinalizeConfirm', guildId),
-      getConfigValue(connection, 'txtFinalizeConfirmDesc', guildId),
       getConfigValue(connection, 'btnFinalizeConfirm', guildId),
       getConfigValue(connection, 'btnCancel', guildId),
     ]);
 
-    const embed = buildEntryPreviewEmbed(previewContent, txtFinalizeConfirm, txtFinalizeConfirmDesc);
-
-    const row = new ActionRowBuilder().addComponents(
+    const pages = buildEntryPages(previewContent, { turnNumber: '—', writerName: null, showAuthors: false, storyEntryId: null });
+    const confirmRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`story_finalize_confirm_${storyId}`)
         .setLabel(btnFinalizeConfirm)
@@ -503,13 +486,83 @@ async function handleFinalizeEntry(connection, interaction) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    log(`handleFinalizeEntry: showing preview to user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
-    await interaction.editReply({ embeds: [embed], components: [row] });
+    pendingPreviewData.set(interaction.user.id, {
+      pages,
+      currentPage: 0,
+      imagePageIndex: 0,
+      storyId,
+      guildId,
+      title: txtFinalizeConfirm,
+    });
+
+    log(`handleFinalizeEntry: showing preview page 1/${pages.length} to user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+    await interaction.editReply(buildPreviewEmbed(interaction.user.id, 0, confirmRow));
 
   } catch (error) {
     log(`handleFinalizeEntry failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', guildId) });
   }
+}
+
+function buildPreviewEmbed(userId, pageIndex, confirmRow) {
+  const session = pendingPreviewData.get(userId);
+  if (!session) return { content: 'Preview session expired.', embeds: [], components: [] };
+  const page = session.pages[pageIndex];
+  return buildEntryEmbed(page, {
+    title: session.title,
+    pageIndex,
+    totalPages: session.pages.length,
+    context: 'preview',
+    extraButtons: [confirmRow],
+    guildId: session.guildId,
+    imagePageIndex: session.imagePageIndex ?? 0,
+  });
+}
+
+/**
+ * Handle preview pagination (story_preview_prev / next / back10 / fwd10 / img_prev / img_next).
+ */
+async function handlePreviewNav(connection, interaction) {
+  await interaction.deferUpdate();
+  const session = pendingPreviewData.get(interaction.user.id);
+  if (!session) {
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtFailedtoFinalize', interaction.guild.id), components: [] });
+    return;
+  }
+
+  const id = interaction.customId;
+  if (id === 'story_preview_prev') {
+    session.currentPage = Math.max(0, session.currentPage - 1);
+  } else if (id === 'story_preview_next') {
+    session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 1);
+  } else if (id === 'story_preview_back10') {
+    session.currentPage = Math.max(0, session.currentPage - 10);
+  } else if (id === 'story_preview_fwd10') {
+    session.currentPage = Math.min(session.pages.length - 1, session.currentPage + 10);
+  } else if (id === 'story_preview_img_prev') {
+    session.imagePageIndex = Math.max(0, (session.imagePageIndex ?? 0) - 1);
+  } else if (id === 'story_preview_img_next') {
+    const page = session.pages[session.currentPage];
+    const total = Math.ceil((page.imageUrls?.length ?? 0) / 4);
+    session.imagePageIndex = Math.min(total - 1, (session.imagePageIndex ?? 0) + 1);
+  }
+
+  const [btnFinalizeConfirm, btnCancel] = await Promise.all([
+    getConfigValue(connection, 'btnFinalizeConfirm', session.guildId),
+    getConfigValue(connection, 'btnCancel', session.guildId),
+  ]);
+  const confirmRow = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`story_finalize_confirm_${session.storyId}`)
+      .setLabel(btnFinalizeConfirm)
+      .setStyle(ButtonStyle.Success),
+    new ButtonBuilder()
+      .setCustomId(`story_finalize_cancel_${session.storyId}`)
+      .setLabel(btnCancel)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await interaction.editReply(buildPreviewEmbed(interaction.user.id, session.currentPage, confirmRow));
 }
 
 /**
@@ -637,14 +690,14 @@ async function doFinalizeEntry(connection, interaction, storyId) {
 
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
-      const entryEmbed = new EmbedBuilder().setDescription(entryContent);
-      if (show_authors) entryEmbed.setAuthor({ name: `Turn ${turn_number} — ${discord_display_name}` });
-      await storyThread.send({ embeds: [entryEmbed] });
+      const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
+      await storyThread.send({ embeds: buildThreadEmbeds(entryContent, authorLine) });
       log(`doFinalizeEntry: entry posted to story thread ${story_thread_id} as turn ${turn_number}`, { show: true, guildName: interaction?.guild?.name });
     } catch (embedError) {
       log(`doFinalizeEntry: failed to post entry to story thread: ${embedError}`, { show: true, guildName: interaction?.guild?.name });
     }
 
+    pendingPreviewData.delete(interaction.user.id);
     // Reply before deleting thread — interaction context is tied to the thread
     await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', interaction.guild.id), components: [] });
     log(`doFinalizeEntry: complete — deleting turn thread ${turn.thread_id}`, { show: true, guildName: interaction?.guild?.name });
@@ -880,8 +933,7 @@ export {
   handleFinalizeEntry,
   handleFinalizeConfirm,
   handleFinalizeImageConfirm,
+  handlePreviewNav,
   handleSkipTurn,
   handleSkipConfirm,
-  buildEntryPreviewEmbed,
-  createPreviewEmbed,
 };

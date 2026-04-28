@@ -1,5 +1,6 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin } from '../utilities.js';
+import { buildThreadEmbeds } from './entryRenderer.js';
 import { pendingReadData, pendingEditData } from './state.js';
 import { buildReadEmbed } from './read.js';
 
@@ -662,17 +663,13 @@ async function handleRepostEntry(connection, interaction) {
       showEdited = !isGrace;
     }
 
-    const embed = new EmbedBuilder().setDescription(content);
-    if (show_authors) {
-      const authorLine = showEdited
-        ? `Turn ${turn_number} — ${discord_display_name} (edited)`
-        : `Turn ${turn_number} — ${discord_display_name}`;
-      embed.setAuthor({ name: authorLine });
-    }
+    const authorLine = show_authors
+      ? `Turn ${turn_number} — ${discord_display_name}${showEdited ? ' (edited)' : ''}`
+      : null;
 
     if (storyThread.locked) await storyThread.setLocked(false);
     if (storyThread.archived) await storyThread.setArchived(false);
-    await storyThread.send({ embeds: [embed] });
+    await storyThread.send({ embeds: buildThreadEmbeds(content, authorLine) });
 
     const userId = interaction.user.id;
     const readSession = pendingReadData.get(userId);

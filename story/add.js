@@ -1,6 +1,7 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
+import { RATING_LABELS, CATEGORY_OPTIONS, WARNING_OPTIONS } from './metadata.js';
 
 // Temporary storage for first modal data while user completes second modal
 export const pendingStoryData = new Map();
@@ -50,7 +51,16 @@ export async function handleAddStory(connection, interaction) {
       delayWriters: null,
       orderType: 1,
       showAuthors: 1,
-      maxWriters: null
+      maxWriters: null,
+      // AO3 metadata
+      rating: 'NR',
+      warnings: [],
+      fandom: '',
+      mainPairing: '',
+      otherRelationships: '',
+      characters: '',
+      category: '',
+      additionalTags: ''
     };
 
     pendingStoryData.set(interaction.user.id, {
@@ -92,6 +102,15 @@ export function buildStoryAddMessage(cfg, state) {
   const orderLabel = orderLabels[state.orderType];
   const orderDesc = orderDescs[state.orderType];
 
+  const ratingLabel = RATING_LABELS[state.rating] ?? '[NR] Not Rated';
+  const warningsDisplay = state.warnings?.length ? state.warnings.join(', ') : 'None set';
+  const metadataLines = [
+    `**Rating:** ${ratingLabel}`,
+    `**Warnings:** ${warningsDisplay}`,
+    state.fandom ? `**Fandom:** ${state.fandom}` : null,
+    state.category ? `**Category:** ${state.category}` : null,
+  ].filter(Boolean).join('\n');
+
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtCreateStoryTitle)
     .setDescription(cfg.txtStoryAddIntro)
@@ -106,7 +125,8 @@ export function buildStoryAddMessage(cfg, state) {
       { name: cfg.lblPrivateToggle, value: `${privateLabel} — ${privateDesc}`, inline: false },
       { name: cfg.lblShowAuthors, value: `${state.showAuthors ? 'Yes' : 'No'} — ${showAuthorsDesc}`, inline: false },
       { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
-      { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} hours / ${delayWriters} writers`, inline: false }
+      { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} hours / ${delayWriters} writers`, inline: false },
+      { name: cfg.btnSetMetadata ?? 'Story Metadata', value: metadataLines, inline: false }
     )
     .setColor(state.quickMode ? 0xE040FB : 0x57F287);
 
@@ -150,7 +170,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 4: Set AO3 Name, Keep Private toggle, Set Delay Hours, Set Delay Writers, Set Max Writers
+  // Row 4: Set AO3 Name, Keep Private toggle, Set Delay Hours, Set Delay Writers
   const row4 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_set_ao3')
@@ -174,8 +194,25 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 5: Create Story — alone so it stands out
+  // Row 5: Metadata controls + Create Story
+  const ratingBadge = state.rating && state.rating !== 'NR' ? `[${state.rating}] ` : '';
   const row5 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_add_set_rating')
+      .setLabel(`Rating: ${ratingBadge}${state.rating ?? 'NR'}`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_add_set_warnings')
+      .setLabel('Set Warnings')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_add_set_category')
+      .setLabel(`Category: ${state.category || 'Not set'}`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_add_set_metadata')
+      .setLabel(cfg.btnSetMetadata ?? 'Story Metadata')
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_create')
       .setLabel(cfg.btnCreateStory)
@@ -291,6 +328,13 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       } else {
         state.maxWriters = null;
       }
+
+    } else if (customId === 'story_add_metadata_modal') {
+      state.fandom            = sanitizeModalInput(interaction.fields.getTextInputValue('fandom'), 100) || '';
+      state.mainPairing       = sanitizeModalInput(interaction.fields.getTextInputValue('main_pairing'), 200) || '';
+      state.characters        = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
+      state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
+      state.additionalTags    = sanitizeModalInput(interaction.fields.getTextInputValue('additional_tags'), 1000, true) || '';
     }
 
     // Acknowledge the modal and update the original form
@@ -472,9 +516,163 @@ export async function handleAddStoryButton(connection, interaction) {
         )
     );
 
+  } else if (customId === 'story_add_set_rating') {
+    await interaction.reply({
+      content: 'Select a rating for this story:',
+      components: [buildRatingSelectRow('story_add_rating_select')],
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+
+  } else if (customId === 'story_add_set_warnings') {
+    await interaction.reply({
+      content: 'Select content warnings (choose all that apply):',
+      components: [buildWarningsSelectRow('story_add_warnings_select', state.warnings ?? [])],
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+
+  } else if (customId === 'story_add_set_category') {
+    await interaction.reply({
+      content: 'Select a relationship category:',
+      components: [buildCategorySelectRow('story_add_category_select', state.category ?? '')],
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+
+  } else if (customId === 'story_add_set_metadata') {
+    await showMetadataModal(interaction, state, 'story_add_metadata_modal');
+
   } else if (customId === 'story_add_create') {
     await handleCreateStorySubmit(connection, interaction, state);
   }
+}
+
+/**
+ * Show the AO3 metadata modal (up to 5 text inputs — Discord limit).
+ * Uses fandom + main pairing + other relationships + characters + additional tags.
+ * Rating, warnings, and category are handled via select menus (separate interaction flow).
+ */
+async function showMetadataModal(interaction, state, customId) {
+  const modal = new ModalBuilder()
+    .setCustomId(customId)
+    .setTitle('Story Metadata');
+
+  modal.addComponents(
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('fandom')
+        .setLabel('Fandom (up to 100 characters)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(100)
+        .setValue(state.fandom ?? '')
+        .setPlaceholder('e.g. My Hero Academia, Original Work')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('main_pairing')
+        .setLabel('Main Pairing (up to 200 characters)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(200)
+        .setValue(state.mainPairing ?? '')
+        .setPlaceholder('Full character names, e.g. Midoriya Izuku/Bakugou Katsuki')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('characters')
+        .setLabel('Characters (up to 500 characters)')
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(500)
+        .setValue(state.characters ?? '')
+        .setPlaceholder('Comma-separated character names')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('other_relationships')
+        .setLabel('Other Relationships (up to 1000 characters)')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(1000)
+        .setValue(state.otherRelationships ?? '')
+        .setPlaceholder('Additional pairings or relationships, comma-separated')
+    ),
+    new ActionRowBuilder().addComponents(
+      new TextInputBuilder()
+        .setCustomId('additional_tags')
+        .setLabel('Additional Tags (up to 1000 characters)')
+        .setStyle(TextInputStyle.Paragraph)
+        .setRequired(false)
+        .setMaxLength(1000)
+        .setValue(state.additionalTags ?? '')
+        .setPlaceholder('Comma-separated tags, e.g. slow burn, hurt/comfort, AU')
+    )
+  );
+
+  await interaction.showModal(modal);
+}
+
+// Build a rating select menu row
+function buildRatingSelectRow(customId) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder('Select a rating...')
+      .addOptions(Object.entries(RATING_LABELS).map(([value, label]) => ({ label, value })))
+  );
+}
+
+// Build a warnings multi-select menu row
+function buildWarningsSelectRow(customId, selectedWarnings = []) {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder('Select all that apply...')
+      .setMinValues(1)
+      .setMaxValues(WARNING_OPTIONS.length)
+      .addOptions(WARNING_OPTIONS.map(w => ({ label: w, value: w, default: selectedWarnings.includes(w) })))
+  );
+}
+
+// Build a category select menu row
+function buildCategorySelectRow(customId, selectedCategory = '') {
+  return new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId(customId)
+      .setPlaceholder('Select a category...')
+      .addOptions(CATEGORY_OPTIONS.map(c => ({ label: c, value: c, default: c === selectedCategory })))
+  );
+}
+
+// Handle select menu interactions from the story add ephemeral form
+export async function handleAddStorySelectMenu(connection, interaction) {
+  const userId = interaction.user.id;
+  const state = pendingStoryData.get(userId);
+
+  if (!state) {
+    await interaction.reply({
+      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  const customId = interaction.customId;
+
+  if (customId === 'story_add_rating_select') {
+    state.rating = interaction.values[0];
+  } else if (customId === 'story_add_warnings_select') {
+    state.warnings = interaction.values;
+  } else if (customId === 'story_add_category_select') {
+    state.category = interaction.values[0];
+  } else {
+    return;
+  }
+
+  await interaction.update({ content: '✅ Selection saved.', components: [] });
+  await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
 }
 
 // Handle Create Story button — validates and submits to CreateStory
@@ -502,7 +700,15 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
       delayWriters: state.delayWriters,
       orderType: state.orderType,
       showAuthors: state.showAuthors,
-      maxWriters: state.maxWriters
+      maxWriters: state.maxWriters,
+      rating: state.rating ?? 'NR',
+      warnings: state.warnings?.length ? state.warnings.join(', ') : null,
+      fandom: state.fandom || null,
+      mainPairing: state.mainPairing || null,
+      otherRelationships: state.otherRelationships || null,
+      characters: state.characters || null,
+      category: state.category || null,
+      additionalTags: state.additionalTags || null
     };
 
     const result = await CreateStory(connection, interaction, storyInput);

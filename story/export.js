@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log } from '../utilities.js';
 import { marked } from 'marked';
+import { RATING_LABELS, formatWarnings } from './metadata.js';
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
@@ -116,7 +117,9 @@ export async function discordMarkdownToHtml(text, guild = null) {
  */
 export async function generateStoryExport(connection, storyId, guildId, guild = null) {
   const [storyRows] = await connection.execute(
-    `SELECT story_id, guild_story_id, title, created_at, story_status, quick_mode, closed_at, show_authors, summary, tags FROM story WHERE story_id = ? AND guild_id = ?`,
+    `SELECT story_id, guild_story_id, title, created_at, story_status, quick_mode, closed_at, show_authors,
+            summary, tags, rating, warnings, fandom, main_pairing, other_relationships, characters, category, additional_tags
+     FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
   );
   if (storyRows.length === 0) return null;
@@ -174,6 +177,20 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
+  const ratingLabel = RATING_LABELS[story.rating] ?? '[NR] Not Rated';
+  const warningsText = story.warnings ? formatWarnings(story.warnings) : 'Creator Chose Not To Warn';
+  const ao3MetaLines = [
+    story.fandom           ? `<div class="meta"><strong>Fandom:</strong> ${story.fandom}</div>` : '',
+    story.category         ? `<div class="meta"><strong>Category:</strong> ${story.category}</div>` : '',
+    `<div class="meta"><strong>Rating:</strong> ${ratingLabel}</div>`,
+    `<div class="meta"><strong>Warnings:</strong> ${warningsText}</div>`,
+    story.main_pairing     ? `<div class="meta"><strong>Relationship:</strong> ${story.main_pairing}</div>` : '',
+    story.other_relationships ? `<div class="meta"><strong>Additional Relationships:</strong> ${story.other_relationships}</div>` : '',
+    story.characters       ? `<div class="meta"><strong>Characters:</strong> ${story.characters}</div>` : '',
+    story.tags             ? `<div class="meta"><strong>Tags:</strong> ${story.tags}</div>` : '',
+    story.additional_tags  ? `<div class="meta"><strong>Additional Tags:</strong> ${story.additional_tags}</div>` : '',
+  ].filter(Boolean).join('\n    ');
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -199,7 +216,8 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     <h1>${story.title}</h1>
     <div class="meta">Started: ${publishedDate} &nbsp; ${secondDateLabel}: ${secondDate}</div>
     <div class="meta">Story #${story.guild_story_id} &nbsp;·&nbsp; ${modeLabel} &nbsp;·&nbsp; ${turnCount} turn(s) &nbsp;·&nbsp; ~${wordCount.toLocaleString()} words</div>
-    <div class="meta">Writers: ${writersList}</div>${story.tags ? `\n    <div class="meta">Tags: ${story.tags}</div>` : ''}
+    <div class="meta">Writers: ${writersList}</div>
+    ${ao3MetaLines}
     <div class="meta">Exported: ${exportDate}</div>
   </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
   ${entriesHtml}

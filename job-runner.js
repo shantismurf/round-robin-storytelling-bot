@@ -193,41 +193,52 @@ async function handleTurnReminder(connection, client, payload) {
 
   // Get writer's notification preference
   const [writerRows] = await connection.execute(
-    `SELECT notification_prefs FROM story_writer
-     WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
-    [storyId, writerUserId]
+    `SELECT sw.notification_prefs, s.quick_mode, t.thread_id
+     FROM story_writer sw
+     JOIN story s ON sw.story_id = s.story_id
+     LEFT JOIN turn t ON t.turn_id = ? AND t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
+    [turnId, storyId, writerUserId]
   );
   if (writerRows.length === 0) return; // writer left
 
-  const notificationPrefs = writerRows[0].notification_prefs;
+  const { notification_prefs: notificationPrefs, quick_mode: quickMode, thread_id: turnThreadId } = writerRows[0];
   const ctx = await buildSyntheticContext(client, guildId);
 
+  // Build thread link — normal mode links to the turn thread, quick mode to the story thread
+  const linkThreadId = (!quickMode && turnThreadId) ? turnThreadId : story.story_thread_id;
+  const threadUrl = `https://discord.com/channels/${guildId}/${linkThreadId}`;
+  const modeKey = quickMode ? 'Quick' : 'Normal';
+
+  function applyReminderTokens(text) {
+    return text
+      .replace(/\[story_title\]/g, story.title)
+      .replace(/\[turn_end_full\]/g, `<t:${unixTs}:F>`)
+      .replace(/\[turn_end_relative\]/g, `<t:${unixTs}:R>`)
+      .replace(/\[turn_thread_link\]/g, threadUrl);
+  }
+
   if (notificationPrefs === 'mention') {
-    await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs);
+    await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyReminderTokens);
   } else {
     try {
       const user = await client.users.fetch(writerUserId);
-      const txtDMTurnReminder = await getConfigValue(connection, 'txtDMTurnReminder', guildId);
-      await user.send(txtDMTurnReminder
-        .replace('[story_title]', story.title)
-        .replace('[turn_end_full]', `<t:${unixTs}:F>`)
-        .replace('[turn_end_relative]', `<t:${unixTs}:R>`));
+      const dmKey = `txtDMTurnReminder${modeKey}`;
+      const txt = await getConfigValue(connection, dmKey, guildId);
+      await user.send(applyReminderTokens(txt));
     } catch (dmErr) {
       // DM failed — fall back to channel mention
-      await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs);
+      await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyReminderTokens);
     }
   }
 
   log(`Turn reminder sent for turn ${turnId} (story ${storyId})`, { show: true, guildName: ctx.guild?.name });
 }
 
-async function sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs) {
-  const txtMentionTurnReminder = await getConfigValue(connection, 'txtMentionTurnReminder', guildId);
+async function sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyTokens) {
+  const mentionKey = `txtMentionTurnReminder${modeKey}`;
+  const txt = await getConfigValue(connection, mentionKey, guildId);
   const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
   const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
-  const msg = txtMentionTurnReminder
-    .replace('[story_title]', story.title)
-    .replace('[turn_end_full]', `<t:${unixTs}:F>`)
-    .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
-  await channel.send(`<@${writerUserId}> ${msg}`);
+  await channel.send(`<@${writerUserId}> ${applyTokens(txt)}`);
 }

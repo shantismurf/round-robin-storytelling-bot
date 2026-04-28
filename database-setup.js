@@ -96,6 +96,48 @@ export async function dbSetup(connection) {
     `);
     log('Migration: story_entry_edit table created.', { show: true });
   }
+
+  // Migration: add AO3 metadata columns to story table
+  const [ratingCol] = await connection.execute(
+    `SELECT COLUMN_NAME FROM INFORMATION_SCHEMA.COLUMNS
+     WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'story' AND COLUMN_NAME = 'rating'`
+  );
+  if (ratingCol.length === 0) {
+    log('Migration: adding AO3 metadata columns to story table...', { show: true });
+    await connection.execute(
+      `ALTER TABLE story
+        ADD COLUMN rating ENUM('NR','G','T','M','E') NOT NULL DEFAULT 'NR' AFTER tags,
+        ADD COLUMN warnings TEXT NULL AFTER rating,
+        ADD COLUMN fandom VARCHAR(100) NULL AFTER warnings,
+        ADD COLUMN main_pairing VARCHAR(200) NULL AFTER fandom,
+        ADD COLUMN other_relationships TEXT NULL AFTER main_pairing,
+        ADD COLUMN characters TEXT NULL AFTER other_relationships,
+        ADD COLUMN category VARCHAR(50) NULL AFTER characters,
+        ADD COLUMN additional_tags TEXT NULL AFTER category,
+        ADD COLUMN restricted_thread_id VARCHAR(20) NULL AFTER additional_tags`
+    );
+    log('Migration: AO3 metadata columns added.', { show: true });
+  }
+
+  // Migration: create story_tag_submission table
+  const [tagTable] = await connection.execute(`SHOW TABLES LIKE 'story_tag_submission'`);
+  if (tagTable.length === 0) {
+    log('Migration: creating story_tag_submission table...', { show: true });
+    await connection.execute(`
+      CREATE TABLE story_tag_submission (
+        submission_id BIGINT AUTO_INCREMENT PRIMARY KEY,
+        story_id BIGINT NOT NULL,
+        submitter_user_id VARCHAR(30) NOT NULL,
+        submitter_display_name VARCHAR(255) NOT NULL,
+        tag_text VARCHAR(200) NOT NULL,
+        submission_status ENUM('pending','approved','rejected') NOT NULL DEFAULT 'pending',
+        submitted_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+        reviewed_at TIMESTAMP NULL,
+        CONSTRAINT fk_tag_sub_story FOREIGN KEY (story_id) REFERENCES story(story_id) ON DELETE CASCADE
+      ) ENGINE=InnoDB
+    `);
+    log('Migration: story_tag_submission table created.', { show: true });
+  }
 }
 
 export async function setupDatabase(config) {

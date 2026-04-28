@@ -1,0 +1,23 @@
+# Environment secrets (Critical for security)
+.env
+.env.*
+*.key
+*.pem
+
+# Dependencies and Build Artifacts
+node_modules/
+dist/
+build/
+vendor/
+__pycache__/
+
+# Massive data files or logs
+*.log
+*.csv
+*.json (if they are large data dumps)
+temp/
+
+# System and IDE files
+.DS_Store
+.vscode/
+.idea/
