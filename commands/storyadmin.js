@@ -163,11 +163,11 @@ function buildSetupPanel(state, cfg) {
     .setTitle(cfg.txtSetupPanelTitle)
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.txtSetupModalTitleFeed,           value: desc('txtSetupEmbedDescFeed')           + fieldVal(state.feedChannelId),                  inline: false },
-      { name: cfg.txtSetupModalTitleMedia,          value: desc('txtSetupEmbedDescMedia')           + fieldVal(state.mediaChannelId),                 inline: false },
+      { name: cfg.txtSetupModalTitleFeed,           value: desc('txtSetupEmbedDescFeed')           + fieldVal(state.feedChannelId),                  inline: true },
+      { name: cfg.txtSetupModalTitleMedia,          value: desc('txtSetupEmbedDescMedia')           + fieldVal(state.mediaChannelId),                 inline: true },
       { name: cfg.txtSetupModalTitleRole,           value: desc('txtSetupEmbedDescAdminRole')       + strVal(state.adminRoleName),                    inline: false },
-      { name: cfg.txtSetupModalTitleRestrictedFeed, value: desc('txtSetupEmbedDescRestrictedFeed')  + fieldVal(state.restrictedFeedChannelId),         inline: false },
-      { name: cfg.txtSetupModalTitleRestrictedMedia,value: desc('txtSetupEmbedDescRestrictedMedia') + fieldVal(state.restrictedMediaChannelId),        inline: false },
+      { name: cfg.txtSetupModalTitleRestrictedFeed, value: desc('txtSetupEmbedDescRestrictedFeed')  + fieldVal(state.restrictedFeedChannelId),         inline: true },
+      { name: cfg.txtSetupModalTitleRestrictedMedia,value: desc('txtSetupEmbedDescRestrictedMedia') + fieldVal(state.restrictedMediaChannelId),        inline: true },
       { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + fieldVal(state.roundupChannelId, 'Disabled'),    inline: false },
       { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + strVal(state.roundupDay),                       inline: true  },
       { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + strVal(state.roundupHour),                      inline: true  },
