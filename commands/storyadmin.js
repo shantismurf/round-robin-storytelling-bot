@@ -246,7 +246,14 @@ async function handleSetup(connection, interaction) {
 
   pendingSetupData.set(interaction.user.id, state);
   log(`handleSetup: opened panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
-  await interaction.reply({ ...buildSetupPanel(state, cfg), flags: MessageFlags.Ephemeral });
+  let panel;
+  try {
+    panel = buildSetupPanel(state, cfg);
+  } catch (err) {
+    log(`handleSetup: buildSetupPanel threw: ${err}\n${err.stack}`, { show: true, guildName: interaction.guild.name });
+    throw err;
+  }
+  await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
 }
 
 function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
