@@ -233,18 +233,23 @@ async function handleSetup(connection, interaction) {
   };
 
   pendingSetupData.set(interaction.user.id, state);
+  log(`handleSetup: opened panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
   await interaction.reply({ ...buildSetupPanel(state, cfg), flags: MessageFlags.Ephemeral });
 }
 
 function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
-  const modal = new ModalBuilder().setCustomId(customId).setTitle(title);
+  // Guard against key-name fallbacks reaching Discord's string validators
+  const safeTitle = (title && !title.startsWith('txt')) ? title : 'Setup';
+  const safeLabel = (fieldLabel && !fieldLabel.startsWith('lbl')) ? fieldLabel : 'Value';
+  const safePlaceholder = (placeholder && !placeholder.startsWith('txt') && placeholder.length <= 100) ? placeholder : '';
+  const modal = new ModalBuilder().setCustomId(customId).setTitle(safeTitle);
   modal.addComponents(
     new ActionRowBuilder().addComponents(
       new TextInputBuilder()
         .setCustomId('value')
-        .setLabel(fieldLabel)
+        .setLabel(safeLabel)
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder(placeholder)
+        .setPlaceholder(safePlaceholder)
         .setValue(currentValue ?? '')
         .setRequired(false)
     )
@@ -263,6 +268,7 @@ async function handleSetupButton(connection, interaction) {
 
   const cfg = state.cfg;
   const id = interaction.customId;
+  log(`handleSetupButton: ${id} by ${interaction.user.tag} in guild ${state.guildId}`, { show: true, guildName: interaction.guild.name });
 
   if (id === 'storyadmin_setup_feed') {
     return await interaction.showModal(buildSetupFieldModal(
@@ -328,10 +334,12 @@ async function handleSetupChannelModal(connection, interaction, stateField, erro
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const raw = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 30);
   const channelId = raw.match(/\d+/)?.[0] ?? null;
+  log(`handleSetupChannelModal: field=${stateField} raw="${raw}" channelId=${channelId} guild=${state.guildId}`, { show: true, guildName: interaction.guild.name });
 
   if (channelId) {
     const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
     if (!channel) {
+      log(`handleSetupChannelModal: channel ${channelId} not found for field ${stateField}`, { show: true, guildName: interaction.guild.name });
       return await interaction.editReply({ content: await getConfigValue(connection, errorKey, state.guildId) });
     }
     state[stateField] = channelId;
@@ -594,6 +602,7 @@ async function handleSetupSave(connection, interaction) {
   }
 
   pendingSetupData.delete(interaction.user.id);
+  log(`handleSetupSave: complete for guild ${guildId} by ${interaction.user.tag}`, { show: true, guildName: interaction.guild.name });
   await interaction.editReply({ content: saved.join('\n'), embeds: [], components: [] });
 }
 
