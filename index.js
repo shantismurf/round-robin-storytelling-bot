@@ -98,6 +98,8 @@ async function main() {
   }
   client.once(Events.ClientReady, async () => {
     log(`Discord client ready as ${client.user.tag}`, { show: true });
+    const guildList = client.guilds.cache.map(g => `  • ${g.name} (${g.id})`).join('\n');
+    log(`Installed on ${client.guilds.cache.size} server(s):\n${guildList}`, { show: true });
     await bot.start();
     await loadCommands('./commands');
     startJobRunner(connection, client);
