@@ -249,11 +249,18 @@ async function handleSetup(connection, interaction) {
   let panel;
   try {
     panel = buildSetupPanel(state, cfg);
+    const fields = panel.embeds[0].data.fields;
+    log(`handleSetup: panel fields: ${JSON.stringify(fields.map(f => ({ name: f.name?.slice(0,30), value: f.value?.slice(0,30) })))}`, { show: true, guildName: interaction.guild.name });
   } catch (err) {
     log(`handleSetup: buildSetupPanel threw: ${err}\n${err.stack}`, { show: true, guildName: interaction.guild.name });
     throw err;
   }
-  await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
+  try {
+    await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
+  } catch (err) {
+    log(`handleSetup: reply threw: ${err}\n${err.stack}`, { show: true, guildName: interaction.guild.name });
+    throw err;
+  }
 }
 
 function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
