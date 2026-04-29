@@ -171,7 +171,7 @@ function buildSetupPanel(state, cfg) {
       { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + fieldVal(state.roundupChannelId, 'Disabled'),    inline: false },
       { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + strVal(state.roundupDay),                        inline: true  },
       { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + strVal(state.roundupHour),                       inline: true  },
-      { name: '\u200b',                             value: cfg.txtSetupModalSaveWarning,                                                               inline: false }
+      { name: '\u200b',                             value: cfg.txtSetupModalSaveWarning.replace(/{{ESC}}/g, '\u001b'),                                 inline: false }
     );
 
   const row1 = new ActionRowBuilder().addComponents(
