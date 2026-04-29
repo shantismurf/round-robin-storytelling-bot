@@ -256,7 +256,7 @@ async function handleSetup(connection, interaction) {
 
 function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
   // Guard against key-name fallbacks reaching Discord's string validators
-  log(`storyadmin setup: buildSetupFieldModal`, { show: false, guildName: interaction.guild.name });
+  log(`storyadmin setup: buildSetupFieldModal`, { show: false, guildName: 'system' });
   const safeTitle = (title && !title.startsWith('txt')) ? title : 'Setup';
   const safeLabel = (fieldLabel && !fieldLabel.startsWith('lbl')) ? fieldLabel : 'Value';
   const safePlaceholder = (placeholder && !placeholder.startsWith('txt') && placeholder.length <= 100) ? placeholder : '';
