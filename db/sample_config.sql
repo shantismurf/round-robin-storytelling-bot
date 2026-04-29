@@ -356,7 +356,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtSetupEmbedDescRoundupChannel', '-# Where the weekly activity summary is posted. Leave blank to disable.', 'en', 1),
 ('txtSetupEmbedDescRoundupDay', '-# Day of the week to post (0 = Sunday, 6 = Saturday).', 'en', 1),
 ('txtSetupEmbedDescRoundupHour', '-# Hour to post in UTC (0–23).', 'en', 1),
-('txtSetupModalSaveWarning','```ansi\n\u001b[1;31m=== You Must Click Save Settings to Apply Changes! ===\u001b[0m\n```','en',1),
+('txtSetupModalSaveWarning', CONCAT('```ansi\n', CHAR(27), '[1;31m=== You Must Click Save Settings to Apply Changes! ===', CHAR(27), '[0m\n```'), 'en', 1),
 -- Setup modal titles (≤45 chars)
 ('txtSetupModalTitleFeed', 'Story Feed Channel', 'en', 1),
 ('txtSetupModalTitleMedia', 'Media/Image Channel', 'en', 1),
