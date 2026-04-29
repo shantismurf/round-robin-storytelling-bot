@@ -154,7 +154,7 @@ async function handleHelp(connection, interaction, guildId) {
 // ---------------------------------------------------------------------------
 
 function buildSetupPanel(state, cfg) {
-  log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: interaction.guild.name });
+  log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: 'system' });
   const fieldVal = (id, fallback = 'Not set') => id ? `<#${id}>` : `\`${fallback}\``;
   const strVal   = (v,  fallback = 'Not set') => v  ? `\`${v}\``  : `\`${fallback}\``;
   const desc     = (key) => `*${cfg[key]}*\n`;
@@ -248,8 +248,9 @@ async function handleSetup(connection, interaction) {
   };
 
   pendingSetupData.set(interaction.user.id, state);
-  log(`handleSetup: opened panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
+  log(`handleSetup: begin opening panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
   const panel = buildSetupPanel(state, cfg);
+  log(`handleSetup: finished opening panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
   await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
 }
 
