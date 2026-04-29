@@ -140,9 +140,8 @@ async function main() {
             const configured = await isGuildConfigured(connection, interaction.guild.id);
             if (!configured) {
               const isAdmin = interaction.member?.permissions?.has('ManageGuild');
-              const msg = isAdmin
-                ? '⚠️ **Round Robin StoryBot has not been configured for this server.** Please run `/storyadmin setup` to set the story feed channel and admin role before using any other commands.'
-                : '⚠️ **Round Robin StoryBot has not been configured for this server yet.** Please ask a server admin to run `/storyadmin setup`.';
+              const msgKey = isAdmin ? 'txtSetupRequiredAdmin' : 'txtSetupRequiredUser';
+              const msg = await getConfigValue(connection, msgKey, 1);
               await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
               return;
             }
@@ -150,7 +149,7 @@ async function main() {
           await command.execute(connection, interaction);
         }
       } else if (interaction.isModalSubmit()) {
-        const significantModal = interaction.customId === 'storyadmin_setup_modal';
+        const significantModal = interaction.customId.startsWith('storyadmin_setup_');
         if (significantModal) {
           log(`${interaction.user.username} submitted modal ${interaction.customId}`, { show: true, guildName: interaction?.guild?.name });
         } else {

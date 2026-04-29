@@ -154,8 +154,11 @@ export async function resolveStoryId(connection, guildId, guildStoryId) {
 }
 
 export async function isGuildConfigured(connection, guildId) {
-  const val = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
-  return val && val !== 'cfgStoryFeedChannelId';
+  const [rows] = await connection.execute(
+    `SELECT config_value FROM config WHERE config_key = 'cfgStoryFeedChannelId' AND guild_id = ?`,
+    [guildId]
+  );
+  return rows.length > 0 && !!rows[0].config_value;
 }
 
 export async function getConfigValue(connection, key, guildId = 1) {

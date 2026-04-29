@@ -31,10 +31,40 @@ This Discord bot manages collaborative round-robin story writing events with the
 - Local variables from Discord objects use camelCase + Id: guildId, userId, channelId
 
 ### Configuration Management
-- Use `getConfigValue(key, guildID)` for all user-facing text and configuration variables. No hard-coded user-facing text.
-- getConfigValue supports multi-language with language code and  guild-specific customization. Default guild_id = 1
-- User-facing text is stored as `txtFieldName`, form labels are `lblFieldName`, button labels `btnFieldName`, and configuration variables are `cfgFieldName`. 
-- Variables within template text that must be replaced with contextual values use bracket notation: `[story_id]`and use `replaceTemplateVariables()` for processing, passing a valueKeyMap with contextual data.
+- Use `getConfigValue(key, guildID)` for all user-facing text and configuration variables. No hard-coded user-facing text (only "Yes", "No", "None", "On", "Off", and numeric literals may be hardcoded).
+- `getConfigValue` supports multi-language with language code and guild-specific customization. Default `guild_id = 1`.
+- Variables within template text that must be replaced with contextual values use bracket notation: `[story_id]` and use `replaceTemplateVariables()` for processing, passing a `valueKeyMap` with contextual data.
+
+#### Config Key Naming Convention: `[type][Location][Purpose][Name]`
+
+Keys follow a four-segment camelCase structure. Always search existing keys before adding new ones.
+
+| Segment | Role | Examples |
+|---|---|---|
+| **type** | What kind of value | `txt`, `lbl`, `btn`, `cfg` |
+| **Location** | Which feature/screen | `Setup`, `StoryAdd`, `ManageUser` |
+| **Purpose** | Where in the UI it appears | `EmbedTitle`, `ModalTitle`, `ModalField`, `ModalPlaceholder`, `Panel` |
+| **Name** | The specific field | `Feed`, `AdminRole`, `RoundupDay` |
+
+**Type prefixes:**
+- `txt` — message content: errors, prompts, announcements, embed field names, modal/embed titles, placeholder text
+- `lbl` — short labels: modal field labels (≤45 chars), embed field headers
+- `btn` — button labels (≤80 chars)
+- `cfg` — system settings: channel IDs, role names, numeric thresholds
+
+**Examples:**
+- `txtSetupEmbedTitleFeed` — the embed field header for the feed channel field on the setup panel
+- `lblSetupModalFieldFeed` — the label inside the feed channel modal input
+- `txtSetupModalPlaceholderFeed` — placeholder text inside that same input (≤100 chars)
+- `btnSetupFeed` — the button on the setup panel that opens the feed channel modal
+- `cfgStoryFeedChannelId` — the stored channel ID value
+
+**Discord character limits to enforce at naming time:**
+- Modal titles (`txtXxxModalTitle*`): ≤45 chars
+- Modal field labels (`lbl*ModalField*`): ≤45 chars  
+- Modal placeholders (`txt*ModalPlaceholder*`): ≤100 chars
+- Button labels (`btn*`): ≤80 chars
+- Embed field names (`txt*EmbedTitle*`, `lbl*`): ≤256 chars
 
 ### Error Handling Standards
 - Error messages should be sent to the console using the log() function. Parameters are: `message, { show = true/false, guildName = null } = {}` where show is true on detailed test environment logging.

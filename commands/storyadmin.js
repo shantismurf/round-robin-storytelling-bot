@@ -2,6 +2,7 @@ import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, But
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
 import { handleManage } from '../story/manage.js';
 import { PickNextWriter, NextTurn, skipActiveTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from '../storybot.js';
+import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 
 async function logAdminAction(connection, adminUserId, actionType, storyId, targetUserId = null, reason = null) {
   try {
@@ -17,6 +18,7 @@ async function logAdminAction(connection, adminUserId, actionType, storyId, targ
 
 // Pending confirmation data keyed by admin user ID
 const pendingManageUserData = new Map();
+const pendingSetupData = new Map();
 
 const data = new SlashCommandBuilder()
   .setName('storyadmin')
@@ -148,8 +150,48 @@ async function handleHelp(connection, interaction, guildId) {
 }
 
 // ---------------------------------------------------------------------------
-// /storyadmin setup
+// /storyadmin setup — embed control panel
 // ---------------------------------------------------------------------------
+
+function buildSetupPanel(state, cfg) {
+  const val = (id, fallback = '*Not set*') => id ? `<#${id}>` : fallback;
+
+  const embed = new EmbedBuilder()
+    .setTitle(cfg.txtSetupPanelTitle)
+    .setColor(0x5865f2)
+    .addFields(
+      { name: cfg.txtSetupEmbedTitleFeed,           value: val(state.feedChannelId),                        inline: false },
+      { name: cfg.txtSetupEmbedTitleMedia,          value: val(state.mediaChannelId),                       inline: false },
+      { name: cfg.txtSetupEmbedTitleAdminRole,      value: state.adminRoleName ? `**${state.adminRoleName}**` : '*Not set*', inline: false },
+      { name: cfg.txtSetupEmbedTitleRestrictedFeed, value: val(state.restrictedFeedChannelId),               inline: false },
+      { name: cfg.txtSetupEmbedTitleRestrictedMedia,value: val(state.restrictedMediaChannelId),              inline: false },
+      { name: cfg.txtSetupEmbedTitleRoundupChannel, value: val(state.roundupChannelId, '*Disabled*'),        inline: true  },
+      { name: cfg.txtSetupEmbedTitleRoundupDay,     value: state.roundupDay ?? '*Not set*',                  inline: true  },
+      { name: cfg.txtSetupEmbedTitleRoundupHour,    value: state.roundupHour ?? '*Not set*',                 inline: true  },
+    );
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('storyadmin_setup_feed').setLabel(cfg.btnSetupFeed).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('storyadmin_setup_media').setLabel(cfg.btnSetupMedia).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
+  );
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('storyadmin_setup_restricted_feed').setLabel(cfg.btnSetupRestrictedFeed).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('storyadmin_setup_restricted_media').setLabel(cfg.btnSetupRestrictedMedia).setStyle(ButtonStyle.Primary),
+  );
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('storyadmin_setup_roundup_channel').setLabel(cfg.btnSetupRoundupChannel).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('storyadmin_setup_roundup_day').setLabel(cfg.btnSetupRoundupDay).setStyle(ButtonStyle.Primary),
+    new ButtonBuilder().setCustomId('storyadmin_setup_roundup_hour').setLabel(cfg.btnSetupRoundupHour).setStyle(ButtonStyle.Primary),
+  );
+  const row4 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('storyadmin_setup_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary),
+  );
+
+  return { embeds: [embed], components: [row1, row2, row3, row4] };
+}
+
 async function handleSetup(connection, interaction) {
   if (!interaction.member.permissions.has('ManageGuild')) {
     return await interaction.reply({
@@ -160,149 +202,289 @@ async function handleSetup(connection, interaction) {
 
   const guildId = interaction.guild.id;
   const cfg = await getConfigValue(connection, [
-    'txtSetupModalTitle',
-    'lblSetupFeedChannel', 'txtSetupFeedChannelPlaceholder',
-    'lblSetupMediaChannel', 'txtSetupMediaChannelPlaceholder',
-    'lblSetupAdminRole', 'txtSetupAdminRolePlaceholder',
-    'lblSetupRestrictedFeedChannel', 'txtSetupRestrictedFeedPlaceholder',
-    'lblSetupRestrictedMediaChannel', 'txtSetupRestrictedMediaPlaceholder',
+    'txtSetupPanelTitle',
+    'txtSetupEmbedTitleFeed', 'txtSetupEmbedTitleMedia', 'txtSetupEmbedTitleAdminRole',
+    'txtSetupEmbedTitleRestrictedFeed', 'txtSetupEmbedTitleRestrictedMedia',
+    'txtSetupEmbedTitleRoundupChannel', 'txtSetupEmbedTitleRoundupDay', 'txtSetupEmbedTitleRoundupHour',
+    'btnSetupFeed', 'btnSetupMedia', 'btnSetupRole',
+    'btnSetupRestrictedFeed', 'btnSetupRestrictedMedia',
+    'btnSetupRoundupChannel', 'btnSetupRoundupDay', 'btnSetupRoundupHour',
+    'btnSetupSave', 'btnCancel',
+    'txtSetupRoundupDayInvalid', 'txtSetupRoundupHourInvalid',
     'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
-    'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId'
+    'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
+    'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
   ], guildId);
 
-  const modal = new ModalBuilder()
-    .setCustomId('storyadmin_setup_modal')
-    .setTitle(cfg.txtSetupModalTitle);
+  const cfgVal = (key) => cfg[key] && cfg[key] !== key ? cfg[key] : '';
 
+  const state = {
+    guildId,
+    feedChannelId:           cfgVal('cfgStoryFeedChannelId'),
+    mediaChannelId:          cfgVal('cfgMediaChannelId'),
+    adminRoleName:           cfgVal('cfgAdminRoleName'),
+    restrictedFeedChannelId: cfgVal('cfgRestrictedFeedChannelId'),
+    restrictedMediaChannelId:cfgVal('cfgRestrictedMediaChannelId'),
+    roundupChannelId:        cfgVal('cfgWeeklyRoundupChannelId'),
+    roundupDay:              cfgVal('cfgWeeklyRoundupDay'),
+    roundupHour:             cfgVal('cfgWeeklyRoundupHour'),
+    originalInteraction: interaction,
+    cfg,
+  };
+
+  pendingSetupData.set(interaction.user.id, state);
+  await interaction.reply({ ...buildSetupPanel(state, cfg), flags: MessageFlags.Ephemeral });
+}
+
+function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
+  const modal = new ModalBuilder().setCustomId(customId).setTitle(title);
   modal.addComponents(
     new ActionRowBuilder().addComponents(
       new TextInputBuilder()
-        .setCustomId('feed_channel')
-        .setLabel(cfg.lblSetupFeedChannel)
+        .setCustomId('value')
+        .setLabel(fieldLabel)
         .setStyle(TextInputStyle.Short)
-        .setPlaceholder(cfg.txtSetupFeedChannelPlaceholder)
-        .setValue(cfg.cfgStoryFeedChannelId !== 'cfgStoryFeedChannelId' ? cfg.cfgStoryFeedChannelId : '')
-        .setRequired(true)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('media_channel')
-        .setLabel(cfg.lblSetupMediaChannel)
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(cfg.txtSetupMediaChannelPlaceholder)
-        .setValue(cfg.cfgMediaChannelId !== 'cfgMediaChannelId' ? cfg.cfgMediaChannelId : '')
-        .setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('restricted_feed_channel')
-        .setLabel(cfg.lblSetupRestrictedFeedChannel ?? 'Mature/Explicit Feed Channel (optional)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(cfg.txtSetupRestrictedFeedPlaceholder ?? 'Channel ID for M/E stories. Age-restrict if server is not 18+.')
-        .setValue(cfg.cfgRestrictedFeedChannelId && cfg.cfgRestrictedFeedChannelId !== 'cfgRestrictedFeedChannelId' ? cfg.cfgRestrictedFeedChannelId : '')
-        .setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('restricted_media_channel')
-        .setLabel(cfg.lblSetupRestrictedMediaChannel ?? 'Mature/Explicit Media Channel (optional)')
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(cfg.txtSetupRestrictedMediaPlaceholder ?? 'Media channel for M/E stories. Age-restrict if server is not 18+.')
-        .setValue(cfg.cfgRestrictedMediaChannelId && cfg.cfgRestrictedMediaChannelId !== 'cfgRestrictedMediaChannelId' ? cfg.cfgRestrictedMediaChannelId : '')
-        .setRequired(false)
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('admin_role')
-        .setLabel(cfg.lblSetupAdminRole)
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(cfg.txtSetupAdminRolePlaceholder)
-        .setValue(cfg.cfgAdminRoleName !== 'cfgAdminRoleName' ? cfg.cfgAdminRoleName : '')
+        .setPlaceholder(placeholder)
+        .setValue(currentValue ?? '')
         .setRequired(false)
     )
   );
-
-  await interaction.showModal(modal);
+  return modal;
 }
 
-async function handleSetupModalSubmit(connection, interaction) {
+async function handleSetupButton(connection, interaction) {
+  const state = pendingSetupData.get(interaction.user.id);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  const cfg = state.cfg;
+  const id = interaction.customId;
+
+  if (id === 'storyadmin_setup_feed') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_feed_modal', cfg.txtSetupModalTitleFeed,
+      cfg.lblSetupModalFieldFeed, cfg.txtSetupModalPlaceholderFeed, state.feedChannelId
+    ));
+  }
+  if (id === 'storyadmin_setup_media') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_media_modal', cfg.txtSetupModalTitleMedia,
+      cfg.lblSetupModalFieldMedia, cfg.txtSetupModalPlaceholderMedia, state.mediaChannelId
+    ));
+  }
+  if (id === 'storyadmin_setup_role') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_role_modal', cfg.txtSetupModalTitleRole,
+      cfg.lblSetupModalFieldRole, cfg.txtSetupModalPlaceholderRole, state.adminRoleName
+    ));
+  }
+  if (id === 'storyadmin_setup_restricted_feed') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_restricted_feed_modal', cfg.txtSetupModalTitleRestrictedFeed,
+      cfg.lblSetupModalFieldRestrictedFeed, cfg.txtSetupModalPlaceholderRestrictedFeed, state.restrictedFeedChannelId
+    ));
+  }
+  if (id === 'storyadmin_setup_restricted_media') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_restricted_media_modal', cfg.txtSetupModalTitleRestrictedMedia,
+      cfg.lblSetupModalFieldRestrictedMedia, cfg.txtSetupModalPlaceholderRestrictedMedia, state.restrictedMediaChannelId
+    ));
+  }
+  if (id === 'storyadmin_setup_roundup_channel') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_roundup_channel_modal', cfg.txtSetupModalTitleRoundupChannel,
+      cfg.lblSetupModalFieldRoundupChannel, cfg.txtSetupModalPlaceholderRoundupChannel, state.roundupChannelId
+    ));
+  }
+  if (id === 'storyadmin_setup_roundup_day') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_roundup_day_modal', cfg.txtSetupModalTitleRoundupDay,
+      cfg.lblSetupModalFieldRoundupDay, cfg.txtSetupModalPlaceholderRoundupDay, state.roundupDay
+    ));
+  }
+  if (id === 'storyadmin_setup_roundup_hour') {
+    return await interaction.showModal(buildSetupFieldModal(
+      'storyadmin_setup_roundup_hour_modal', cfg.txtSetupModalTitleRoundupHour,
+      cfg.lblSetupModalFieldRoundupHour, cfg.txtSetupModalPlaceholderRoundupHour, state.roundupHour
+    ));
+  }
+  if (id === 'storyadmin_setup_save') return await handleSetupSave(connection, interaction);
+  if (id === 'storyadmin_setup_cancel') return await handleSetupCancel(connection, interaction);
+}
+
+async function handleSetupChannelModal(connection, interaction, stateField, errorKey) {
+  const adminId = interaction.user.id;
+  const state = pendingSetupData.get(adminId);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = interaction.guild.id;
+  const raw = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 30);
+  const channelId = raw.match(/\d+/)?.[0] ?? null;
 
-  const feedRaw             = sanitizeModalInput(interaction.fields.getTextInputValue('feed_channel'), 30);
-  const mediaRaw            = sanitizeModalInput(interaction.fields.getTextInputValue('media_channel'), 30);
-  const restrictedFeedRaw   = sanitizeModalInput(interaction.fields.getTextInputValue('restricted_feed_channel'), 30);
-  const restrictedMediaRaw  = sanitizeModalInput(interaction.fields.getTextInputValue('restricted_media_channel'), 30);
-  const roleRaw             = sanitizeModalInput(interaction.fields.getTextInputValue('admin_role'), 100);
+  if (channelId) {
+    const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
+    if (!channel) {
+      return await interaction.editReply({ content: await getConfigValue(connection, errorKey, state.guildId) });
+    }
+    state[stateField] = channelId;
+  } else {
+    state[stateField] = '';
+  }
 
-  // Extract channel IDs from mention (<#ID>) or raw ID
-  const feedChannelId            = feedRaw.match(/\d+/)?.[0];
-  const mediaChannelId           = mediaRaw.match(/\d+/)?.[0];
-  const restrictedFeedChannelId  = restrictedFeedRaw.match(/\d+/)?.[0];
-  const restrictedMediaChannelId = restrictedMediaRaw.match(/\d+/)?.[0];
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
+  await interaction.deleteReply();
+}
 
-  // Validate feed channel exists
-  const feedChannel = feedChannelId
-    ? await interaction.guild.channels.fetch(feedChannelId).catch(() => null)
+async function handleSetupRoleModal(connection, interaction) {
+  const adminId = interaction.user.id;
+  const state = pendingSetupData.get(adminId);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  state.adminRoleName = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 100);
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
+  await interaction.deleteReply();
+}
+
+async function handleSetupRoundupDayModal(connection, interaction) {
+  const adminId = interaction.user.id;
+  const state = pendingSetupData.get(adminId);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const raw = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 10);
+  const day = parseInt(raw, 10);
+  if (isNaN(day) || day < 0 || day > 6) {
+    return await interaction.editReply({ content: state.cfg.txtSetupRoundupDayInvalid });
+  }
+  state.roundupDay = String(day);
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
+  await interaction.deleteReply();
+}
+
+async function handleSetupRoundupHourModal(connection, interaction) {
+  const adminId = interaction.user.id;
+  const state = pendingSetupData.get(adminId);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  const raw = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 10);
+  const hour = parseInt(raw, 10);
+  if (isNaN(hour) || hour < 0 || hour > 23) {
+    return await interaction.editReply({ content: state.cfg.txtSetupRoundupHourInvalid });
+  }
+  state.roundupHour = String(hour);
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
+  await interaction.deleteReply();
+}
+
+async function handleSetupSave(connection, interaction) {
+  const state = pendingSetupData.get(interaction.user.id);
+  if (!state) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+
+  await interaction.deferUpdate();
+  const { guildId } = state;
+
+  // Re-validate all set channel IDs
+  const feedChannel = state.feedChannelId
+    ? await interaction.guild.channels.fetch(state.feedChannelId).catch(() => null)
     : null;
-
   if (!feedChannel) {
     return await interaction.editReply({
+      ...buildSetupPanel(state, state.cfg),
       content: await getConfigValue(connection, 'txtSetupFeedChannelInvalid', guildId)
     });
   }
 
-  // Validate media channel if provided
   let mediaChannel = null;
-  if (mediaChannelId) {
-    mediaChannel = await interaction.guild.channels.fetch(mediaChannelId).catch(() => null);
+  if (state.mediaChannelId) {
+    mediaChannel = await interaction.guild.channels.fetch(state.mediaChannelId).catch(() => null);
     if (!mediaChannel) {
       return await interaction.editReply({
+        ...buildSetupPanel(state, state.cfg),
         content: await getConfigValue(connection, 'txtSetupMediaChannelInvalid', guildId)
       });
     }
   }
 
-  // Validate restricted feed channel if provided
   let restrictedFeedChannel = null;
-  if (restrictedFeedChannelId) {
-    restrictedFeedChannel = await interaction.guild.channels.fetch(restrictedFeedChannelId).catch(() => null);
+  if (state.restrictedFeedChannelId) {
+    restrictedFeedChannel = await interaction.guild.channels.fetch(state.restrictedFeedChannelId).catch(() => null);
     if (!restrictedFeedChannel) {
       return await interaction.editReply({
+        ...buildSetupPanel(state, state.cfg),
         content: await getConfigValue(connection, 'txtSetupRestrictedChannelInvalid', guildId)
       });
     }
   }
 
-  // Validate restricted media channel if provided
   let restrictedMediaChannel = null;
-  if (restrictedMediaChannelId) {
-    restrictedMediaChannel = await interaction.guild.channels.fetch(restrictedMediaChannelId).catch(() => null);
+  if (state.restrictedMediaChannelId) {
+    restrictedMediaChannel = await interaction.guild.channels.fetch(state.restrictedMediaChannelId).catch(() => null);
     if (!restrictedMediaChannel) {
       return await interaction.editReply({
+        ...buildSetupPanel(state, state.cfg),
         content: await getConfigValue(connection, 'txtSetupRestrictedMediaInvalid', guildId)
       });
     }
   }
 
-  // Write config values — INSERT or UPDATE if already set
+  // Write config values
   const upsert = (key, value) => connection.execute(
     `INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, 'en', ?)
      ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
     [key, value, guildId]
   );
 
-  await upsert('cfgStoryFeedChannelId', feedChannelId);
-  if (mediaChannelId)           await upsert('cfgMediaChannelId', mediaChannelId);
-  if (restrictedFeedChannelId)  await upsert('cfgRestrictedFeedChannelId', restrictedFeedChannelId);
-  if (restrictedMediaChannelId) await upsert('cfgRestrictedMediaChannelId', restrictedMediaChannelId);
-  if (roleRaw)        await upsert('cfgAdminRoleName', roleRaw);
+  await upsert('cfgStoryFeedChannelId', state.feedChannelId);
+  if (state.mediaChannelId)           await upsert('cfgMediaChannelId', state.mediaChannelId);
+  if (state.restrictedFeedChannelId)  await upsert('cfgRestrictedFeedChannelId', state.restrictedFeedChannelId);
+  if (state.restrictedMediaChannelId) await upsert('cfgRestrictedMediaChannelId', state.restrictedMediaChannelId);
+  if (state.adminRoleName)            await upsert('cfgAdminRoleName', state.adminRoleName);
+
+  // Roundup config
+  if (state.roundupChannelId) {
+    await upsert('cfgWeeklyRoundupChannelId', state.roundupChannelId);
+    await upsert('cfgWeeklyRoundupEnabled', '1');
+    await upsert('cfgWeeklyRoundupDay',  state.roundupDay  || '1');
+    await upsert('cfgWeeklyRoundupHour', state.roundupHour || '9');
+    await cancelPendingRoundupJobs(connection, guildId);
+    await scheduleNextRoundup(connection, guildId);
+  } else {
+    await upsert('cfgWeeklyRoundupEnabled', '0');
+    await cancelPendingRoundupJobs(connection, guildId);
+  }
 
   const botMember = interaction.guild.members.me;
   // Use the bot's managed integration role for permission overwrites — role-level overrides
   // work on private channels where user/member-level overrides fail due to Discord's restriction
   // that member overrides can only grant permissions already in the caller's effective channel perms.
-  const botRole = interaction.guild.members.me?.roles.cache.find(r => r.managed) ?? null;
+  const botRole = botMember?.roles.cache.find(r => r.managed) ?? null;
 
   // Attempt to set bot permissions on the feed channel automatically.
   // Note: As of January 12, 2026, PinMessages is a separate permission from ManageMessages.
@@ -336,9 +518,9 @@ async function handleSetupModalSubmit(connection, interaction) {
   // Grant admin role Manage Threads on the story feed channel so they can
   // see private turn threads without being explicitly added to each one.
   let threadPermissionNote = '';
-  if (roleRaw) {
-    const adminRole = interaction.guild.roles.cache.find(r => r.name === roleRaw)
-      ?? await interaction.guild.roles.fetch().then(roles => roles.find(r => r.name === roleRaw)).catch(() => null);
+  if (state.adminRoleName) {
+    const adminRole = interaction.guild.roles.cache.find(r => r.name === state.adminRoleName)
+      ?? await interaction.guild.roles.fetch().then(roles => roles.find(r => r.name === state.adminRoleName)).catch(() => null);
     if (adminRole) {
       await feedChannel.permissionOverwrites.edit(adminRole, {
         ViewChannel: true,
@@ -348,11 +530,11 @@ async function handleSetupModalSubmit(connection, interaction) {
     }
   }
 
-  // Check effective bot permissions on each channel and warn about any gaps.
-  // Re-fetch both channels so the permission overwrite changes above are reflected.
-  const feedChannelFresh = await interaction.guild.channels.fetch(feedChannelId).catch(() => feedChannel);
+  // Check effective bot permissions and warn about any gaps.
+  // Re-fetch channels so permission overwrite changes above are reflected.
+  const feedChannelFresh = await interaction.guild.channels.fetch(state.feedChannelId).catch(() => feedChannel);
   const mediaChannelFresh = mediaChannel
-    ? await interaction.guild.channels.fetch(mediaChannelId).catch(() => mediaChannel)
+    ? await interaction.guild.channels.fetch(state.mediaChannelId).catch(() => mediaChannel)
     : null;
 
   const permWarnings = [];
@@ -372,7 +554,7 @@ async function handleSetupModalSubmit(connection, interaction) {
     ];
     const missingFeed = feedRequired.filter(([flag]) => !feedPerms.has(flag)).map(([, label]) => label);
     if (missingFeed.length) {
-      permWarnings.push(`⚠️ Bot is missing permissions on <#${feedChannelId}>: **${missingFeed.join(', ')}**`);
+      permWarnings.push(`⚠️ Bot is missing permissions on <#${state.feedChannelId}>: **${missingFeed.join(', ')}**`);
     }
 
     if (mediaChannelFresh) {
@@ -385,31 +567,44 @@ async function handleSetupModalSubmit(connection, interaction) {
       ];
       const missingMedia = mediaRequired.filter(([flag]) => !mediaPerms.has(flag)).map(([, label]) => label);
       if (missingMedia.length) {
-        permWarnings.push(`⚠️ Bot is missing permissions on <#${mediaChannelId}>: **${missingMedia.join(', ')}**`);
+        permWarnings.push(`⚠️ Bot is missing permissions on <#${state.mediaChannelId}>: **${missingMedia.join(', ')}**`);
       }
     }
   }
 
-  const feedPermsOk = !permWarnings.some(w => w.includes(`<#${feedChannelId}>`));
-  const mediaPermsOk = !mediaChannelId || !permWarnings.some(w => w.includes(`<#${mediaChannelId}>`));
+  const feedPermsOk = !permWarnings.some(w => w.includes(`<#${state.feedChannelId}>`));
+  const mediaPermsOk = !state.mediaChannelId || !permWarnings.some(w => w.includes(`<#${state.mediaChannelId}>`));
 
-  const saved = [`${feedPermsOk ? '✅' : '⚠️'} Story feed channel: <#${feedChannelId}>`];
-  if (mediaChannelId)           saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${mediaChannelId}>`);
-  if (restrictedFeedChannelId)  saved.push(`✅ Mature/Explicit feed channel: <#${restrictedFeedChannelId}> *(Age-restrict this channel if the server is not already 18+)*`);
-  if (restrictedMediaChannelId) saved.push(`✅ Mature/Explicit media channel: <#${restrictedMediaChannelId}>`);
-  if (roleRaw)        saved.push(`✅ Admin role: **${roleRaw}**${threadPermissionNote}`);
-  if (!mediaChannelId) saved.push(`ℹ️ No media channel set — images will not be processed.`);
-  if (!roleRaw)        saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
+  const saved = [`${feedPermsOk ? '✅' : '⚠️'} Story feed channel: <#${state.feedChannelId}>`];
+  if (state.mediaChannelId)           saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${state.mediaChannelId}>`);
+  if (state.restrictedFeedChannelId)  saved.push(`✅ Restricted feed channel: <#${state.restrictedFeedChannelId}> *(Age-restrict this channel if the server is not already 18+)*`);
+  if (state.restrictedMediaChannelId) saved.push(`✅ Restricted media channel: <#${state.restrictedMediaChannelId}>`);
+  if (state.adminRoleName)            saved.push(`✅ Admin role: **${state.adminRoleName}**${threadPermissionNote}`);
+  if (!state.mediaChannelId)          saved.push(`ℹ️ No media channel set — images will not be processed.`);
+  if (!state.adminRoleName)           saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
+  if (state.roundupChannelId)         saved.push(`✅ Weekly roundup: <#${state.roundupChannelId}>, ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][state.roundupDay ?? 1]}s at ${state.roundupHour ?? 9}:00 UTC`);
+  else                                saved.push(`ℹ️ Weekly roundup disabled.`);
   if (permWarnings.length) {
     const botRoleName = botRole?.name ?? botMember?.displayName ?? 'the bot role';
     const fixMsg = replaceTemplateVariables(
       await getConfigValue(connection, 'txtSetupBotPermsFix', guildId),
-      { feed_channel: `<#${feedChannelId}>`, bot_role_name: botRoleName }
+      { feed_channel: `<#${state.feedChannelId}>`, bot_role_name: botRoleName }
     );
     saved.push('', ...permWarnings, '', fixMsg);
   }
 
-  await interaction.editReply({ content: saved.join('\n') });
+  pendingSetupData.delete(interaction.user.id);
+  await interaction.editReply({ content: saved.join('\n'), embeds: [], components: [] });
+}
+
+async function handleSetupCancel(connection, interaction) {
+  pendingSetupData.delete(interaction.user.id);
+  await interaction.deferUpdate();
+  await interaction.editReply({
+    content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
+    embeds: [],
+    components: []
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -1258,6 +1453,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleDeleteCancel(connection, interaction);
   } else if (interaction.customId.startsWith('storyadmin_mu_')) {
     await handleManageUserButton(connection, interaction);
+  } else if (interaction.customId.startsWith('storyadmin_setup_')) {
+    await handleSetupButton(connection, interaction);
   }
 }
 
@@ -1289,8 +1486,22 @@ async function handleManageUserModalSubmit(connection, interaction) {
 }
 
 async function handleModalSubmit(connection, interaction) {
-  if (interaction.customId === 'storyadmin_setup_modal') {
-    await handleSetupModalSubmit(connection, interaction);
+  if (interaction.customId === 'storyadmin_setup_feed_modal') {
+    await handleSetupChannelModal(connection, interaction, 'feedChannelId', 'txtSetupFeedChannelInvalid');
+  } else if (interaction.customId === 'storyadmin_setup_media_modal') {
+    await handleSetupChannelModal(connection, interaction, 'mediaChannelId', 'txtSetupMediaChannelInvalid');
+  } else if (interaction.customId === 'storyadmin_setup_restricted_feed_modal') {
+    await handleSetupChannelModal(connection, interaction, 'restrictedFeedChannelId', 'txtSetupRestrictedChannelInvalid');
+  } else if (interaction.customId === 'storyadmin_setup_restricted_media_modal') {
+    await handleSetupChannelModal(connection, interaction, 'restrictedMediaChannelId', 'txtSetupRestrictedMediaInvalid');
+  } else if (interaction.customId === 'storyadmin_setup_roundup_channel_modal') {
+    await handleSetupChannelModal(connection, interaction, 'roundupChannelId', 'txtSetupFeedChannelInvalid');
+  } else if (interaction.customId === 'storyadmin_setup_role_modal') {
+    await handleSetupRoleModal(connection, interaction);
+  } else if (interaction.customId === 'storyadmin_setup_roundup_day_modal') {
+    await handleSetupRoundupDayModal(connection, interaction);
+  } else if (interaction.customId === 'storyadmin_setup_roundup_hour_modal') {
+    await handleSetupRoundupHourModal(connection, interaction);
   } else if (interaction.customId === 'storyadmin_mu_ao3name_modal') {
     await handleManageUserModalSubmit(connection, interaction);
   }
