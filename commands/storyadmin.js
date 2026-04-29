@@ -154,6 +154,7 @@ async function handleHelp(connection, interaction, guildId) {
 // ---------------------------------------------------------------------------
 
 function buildSetupPanel(state, cfg) {
+  log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: interaction.guild.name });
   const fieldVal = (id, fallback = 'Not set') => id ? `<#${id}>` : `\`${fallback}\``;
   const strVal   = (v,  fallback = 'Not set') => v  ? `\`${v}\``  : `\`${fallback}\``;
   const desc     = (key) => `*${cfg[key]}*\n`;
@@ -195,7 +196,9 @@ function buildSetupPanel(state, cfg) {
 }
 
 async function handleSetup(connection, interaction) {
+  log(`storyadmin setup: handleSetup started`, { show: false, guildName: interaction.guild.name });
   if (!interaction.member.permissions.has('ManageGuild')) {
+    log(`storyadmin setup: handleSetup error, user does not have Manage Guild`, { show: false, guildName: interaction.guild.name });
     return await interaction.reply({
       content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
       flags: MessageFlags.Ephemeral
@@ -229,7 +232,7 @@ async function handleSetup(connection, interaction) {
     [guildId]
   );
   const guildCfg = Object.fromEntries(cfgRows.map(r => [r.config_key, r.config_value]));
-
+  log(`storyadmin setup: config values retrieved from system and user data`, { show: false, guildName: interaction.guild.name });
   const state = {
     guildId,
     feedChannelId:            guildCfg.cfgStoryFeedChannelId    || '',
@@ -252,6 +255,7 @@ async function handleSetup(connection, interaction) {
 
 function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
   // Guard against key-name fallbacks reaching Discord's string validators
+  log(`storyadmin setup: buildSetupFieldModal`, { show: false, guildName: interaction.guild.name });
   const safeTitle = (title && !title.startsWith('txt')) ? title : 'Setup';
   const safeLabel = (fieldLabel && !fieldLabel.startsWith('lbl')) ? fieldLabel : 'Value';
   const safePlaceholder = (placeholder && !placeholder.startsWith('txt') && placeholder.length <= 100) ? placeholder : '';
@@ -271,6 +275,7 @@ function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentV
 }
 
 async function handleSetupButton(connection, interaction) {
+  log(`storyadmin setup: handleSetupButton`, { show: false, guildName: interaction.guild.name });
   const state = pendingSetupData.get(interaction.user.id);
   if (!state) {
     return await interaction.reply({
