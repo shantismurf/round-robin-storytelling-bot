@@ -154,20 +154,22 @@ async function handleHelp(connection, interaction, guildId) {
 // ---------------------------------------------------------------------------
 
 function buildSetupPanel(state, cfg) {
-  const val = (id, fallback = '*Not set*') => id ? `<#${id}>` : fallback;
+  const fieldVal = (id, fallback = 'Not set') => id ? `<#${id}>` : `\`${fallback}\``;
+  const strVal   = (v,  fallback = 'Not set') => v  ? `\`${v}\``  : `\`${fallback}\``;
+  const desc     = (key) => `*${cfg[key]}*\n`;
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtSetupPanelTitle)
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.txtSetupEmbedTitleFeed,           value: val(state.feedChannelId),                        inline: false },
-      { name: cfg.txtSetupEmbedTitleMedia,          value: val(state.mediaChannelId),                       inline: false },
-      { name: cfg.txtSetupEmbedTitleAdminRole,      value: state.adminRoleName ? `**${state.adminRoleName}**` : '*Not set*', inline: false },
-      { name: cfg.txtSetupEmbedTitleRestrictedFeed, value: val(state.restrictedFeedChannelId),               inline: false },
-      { name: cfg.txtSetupEmbedTitleRestrictedMedia,value: val(state.restrictedMediaChannelId),              inline: false },
-      { name: cfg.txtSetupEmbedTitleRoundupChannel, value: val(state.roundupChannelId, '*Disabled*'),        inline: true  },
-      { name: cfg.txtSetupEmbedTitleRoundupDay,     value: state.roundupDay ?? '*Not set*',                  inline: true  },
-      { name: cfg.txtSetupEmbedTitleRoundupHour,    value: state.roundupHour ?? '*Not set*',                 inline: true  },
+      { name: cfg.txtSetupModalTitleFeed,           value: desc('txtSetupEmbedDescFeed')           + fieldVal(state.feedChannelId),                  inline: false },
+      { name: cfg.txtSetupModalTitleMedia,          value: desc('txtSetupEmbedDescMedia')           + fieldVal(state.mediaChannelId),                 inline: false },
+      { name: cfg.txtSetupModalTitleRole,           value: desc('txtSetupEmbedDescAdminRole')       + strVal(state.adminRoleName),                    inline: false },
+      { name: cfg.txtSetupModalTitleRestrictedFeed, value: desc('txtSetupEmbedDescRestrictedFeed')  + fieldVal(state.restrictedFeedChannelId),         inline: false },
+      { name: cfg.txtSetupModalTitleRestrictedMedia,value: desc('txtSetupEmbedDescRestrictedMedia') + fieldVal(state.restrictedMediaChannelId),        inline: false },
+      { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + fieldVal(state.roundupChannelId, 'Disabled'),    inline: false },
+      { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + strVal(state.roundupDay),                       inline: true  },
+      { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + strVal(state.roundupHour),                      inline: true  },
     );
 
   const row1 = new ActionRowBuilder().addComponents(
@@ -203,31 +205,41 @@ async function handleSetup(connection, interaction) {
   const guildId = interaction.guild.id;
   const cfg = await getConfigValue(connection, [
     'txtSetupPanelTitle',
-    'txtSetupEmbedTitleFeed', 'txtSetupEmbedTitleMedia', 'txtSetupEmbedTitleAdminRole',
-    'txtSetupEmbedTitleRestrictedFeed', 'txtSetupEmbedTitleRestrictedMedia',
-    'txtSetupEmbedTitleRoundupChannel', 'txtSetupEmbedTitleRoundupDay', 'txtSetupEmbedTitleRoundupHour',
+    'txtSetupModalTitleFeed', 'txtSetupModalTitleMedia', 'txtSetupModalTitleRole',
+    'txtSetupModalTitleRestrictedFeed', 'txtSetupModalTitleRestrictedMedia',
+    'txtSetupModalTitleRoundupChannel', 'txtSetupModalTitleRoundupDay', 'txtSetupModalTitleRoundupHour',
+    'txtSetupEmbedDescFeed', 'txtSetupEmbedDescMedia', 'txtSetupEmbedDescAdminRole',
+    'txtSetupEmbedDescRestrictedFeed', 'txtSetupEmbedDescRestrictedMedia',
+    'txtSetupEmbedDescRoundupChannel', 'txtSetupEmbedDescRoundupDay', 'txtSetupEmbedDescRoundupHour',
     'btnSetupFeed', 'btnSetupMedia', 'btnSetupRole',
     'btnSetupRestrictedFeed', 'btnSetupRestrictedMedia',
     'btnSetupRoundupChannel', 'btnSetupRoundupDay', 'btnSetupRoundupHour',
     'btnSetupSave', 'btnCancel',
     'txtSetupRoundupDayInvalid', 'txtSetupRoundupHourInvalid',
-    'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
-    'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
-    'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
   ], guildId);
 
-  const cfgVal = (key) => cfg[key] && cfg[key] !== key ? cfg[key] : '';
+  // Load current guild-specific config values without falling back to guild_id=1
+  const [cfgRows] = await connection.execute(
+    `SELECT config_key, config_value FROM config
+     WHERE guild_id = ? AND config_key IN (
+       'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
+       'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
+       'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour'
+     )`,
+    [guildId]
+  );
+  const guildCfg = Object.fromEntries(cfgRows.map(r => [r.config_key, r.config_value]));
 
   const state = {
     guildId,
-    feedChannelId:           cfgVal('cfgStoryFeedChannelId'),
-    mediaChannelId:          cfgVal('cfgMediaChannelId'),
-    adminRoleName:           cfgVal('cfgAdminRoleName'),
-    restrictedFeedChannelId: cfgVal('cfgRestrictedFeedChannelId'),
-    restrictedMediaChannelId:cfgVal('cfgRestrictedMediaChannelId'),
-    roundupChannelId:        cfgVal('cfgWeeklyRoundupChannelId'),
-    roundupDay:              cfgVal('cfgWeeklyRoundupDay'),
-    roundupHour:             cfgVal('cfgWeeklyRoundupHour'),
+    feedChannelId:            guildCfg.cfgStoryFeedChannelId    || '',
+    mediaChannelId:           guildCfg.cfgMediaChannelId         || '',
+    adminRoleName:            guildCfg.cfgAdminRoleName          || '',
+    restrictedFeedChannelId:  guildCfg.cfgRestrictedFeedChannelId  || '',
+    restrictedMediaChannelId: guildCfg.cfgRestrictedMediaChannelId || '',
+    roundupChannelId:         guildCfg.cfgWeeklyRoundupChannelId || '',
+    roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '',
+    roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '',
     originalInteraction: interaction,
     cfg,
   };
