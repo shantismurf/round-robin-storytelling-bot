@@ -246,21 +246,8 @@ async function handleSetup(connection, interaction) {
 
   pendingSetupData.set(interaction.user.id, state);
   log(`handleSetup: opened panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
-  let panel;
-  try {
-    panel = buildSetupPanel(state, cfg);
-    const fields = panel.embeds[0].data.fields;
-    log(`handleSetup: panel fields: ${JSON.stringify(fields.map(f => ({ name: f.name?.slice(0,30), value: f.value?.slice(0,30) })))}`, { show: true, guildName: interaction.guild.name });
-  } catch (err) {
-    log(`handleSetup: buildSetupPanel threw: ${err}\n${err.stack}`, { show: true, guildName: interaction.guild.name });
-    throw err;
-  }
-  try {
-    await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
-  } catch (err) {
-    log(`handleSetup: reply threw: ${err}\n${err.stack}`, { show: true, guildName: interaction.guild.name });
-    throw err;
-  }
+  const panel = buildSetupPanel(state, cfg);
+  await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
 }
 
 function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
@@ -294,7 +281,7 @@ async function handleSetupButton(connection, interaction) {
 
   const cfg = state.cfg;
   const id = interaction.customId;
-  log(`handleSetupButton: ${id} by ${interaction.user.tag} in guild ${state.guildId}`, { show: true, guildName: interaction.guild.name });
+  log(`handleSetupButton: ${id} by ${interaction.user.tag} in guild ${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
   if (id === 'storyadmin_setup_feed') {
     return await interaction.showModal(buildSetupFieldModal(
@@ -360,7 +347,7 @@ async function handleSetupChannelModal(connection, interaction, stateField, erro
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const raw = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 30);
   const channelId = raw.match(/\d+/)?.[0] ?? null;
-  log(`handleSetupChannelModal: field=${stateField} raw="${raw}" channelId=${channelId} guild=${state.guildId}`, { show: true, guildName: interaction.guild.name });
+  log(`handleSetupChannelModal: field=${stateField} raw="${raw}" channelId=${channelId} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
   if (channelId) {
     const channel = await interaction.guild.channels.fetch(channelId).catch(() => null);
@@ -681,7 +668,7 @@ async function handleSkip(connection, interaction) {
     await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminSkipSuccess', guildId) });
 
   } catch (error) {
-    log(`Error in handleSkip: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleSkip failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -741,7 +728,7 @@ async function handleReassign(connection, interaction) {
     });
 
   } catch (error) {
-    log(`Error in handleReassign: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleReassign failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -807,7 +794,7 @@ async function handleExtend(connection, interaction) {
     await interaction.editReply({ content: msg });
 
   } catch (error) {
-    log(`Error in handleExtend: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleExtend failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -934,7 +921,7 @@ async function handleManageUser(connection, interaction) {
     await interaction.editReply(buildManageUserPanel(state, cfg));
 
   } catch (error) {
-    log(`Error in handleManageUser: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleManageUser failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -1099,7 +1086,7 @@ async function handleNext(connection, interaction) {
     });
 
   } catch (error) {
-    log(`Error in handleNext: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleNext failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -1165,7 +1152,7 @@ async function handleDeleteEntry(connection, interaction) {
     await interaction.editReply({ embeds: [embed], components: [row] });
 
   } catch (error) {
-    log(`Error in handleDeleteEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleDeleteEntry failed for story ${storyId} turn ${turnNumber} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -1210,7 +1197,7 @@ async function handleDeleteEntryConfirm(connection, interaction) {
     });
 
   } catch (error) {
-    log(`Error in handleDeleteEntryConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleDeleteEntryConfirm failed for entry ${entryId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), embeds: [], components: [] });
   }
 }
@@ -1252,7 +1239,7 @@ async function handleRestoreEntry(connection, interaction) {
     });
 
   } catch (error) {
-    log(`Error in handleRestoreEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleRestoreEntry failed for entry ${entryId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -1297,7 +1284,7 @@ async function handleDelete(connection, interaction) {
     });
 
   } catch (error) {
-    log(`Error in handleDelete: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleDelete failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -1344,7 +1331,7 @@ async function handleDeleteConfirm(connection, interaction) {
     }
 
   } catch (error) {
-    log(`Error in handleDeleteConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleDeleteConfirm failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
   }
 }
@@ -1452,7 +1439,7 @@ async function handleManageUserConfirm(connection, interaction) {
     }
 
   } catch (error) {
-    log(`Error in handleManageUserConfirm (${action}): ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleManageUserConfirm (${action}) failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({
       content: await getConfigValue(connection, 'errProcessingRequest', guildId),
       embeds: [],
@@ -1515,7 +1502,7 @@ async function handleManageUserModalSubmit(connection, interaction) {
     await pending.originalInteraction.editReply(buildManageUserPanel(pending, pending.cfg));
     await interaction.deleteReply();
   } catch (error) {
-    log(`Error in handleManageUserModalSubmit: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleManageUserModalSubmit failed for story ${pending.storyId} guild ${pending.guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
 }

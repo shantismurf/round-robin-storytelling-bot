@@ -244,6 +244,7 @@ export async function handleReadEditButton(connection, interaction, session, ent
   // the first (and only) response to this interaction within the 3-second window.
   const page = session.pages.find(p => p.storyEntryId === entryId && p.isFirstChunk);
   const fullContent = session.contentMap?.get(entryId) ?? null;
+  log(`handleReadEditButton: entryId=${entryId} hasPage=${!!page} hasContent=${fullContent !== null}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!page || fullContent === null) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });

@@ -132,7 +132,7 @@ async function main() {
   client.on(Events.InteractionCreate, async interaction => {
     try {
       if (interaction.isChatInputCommand()) {
-        log(formatCommandLog(interaction), { show: false, guildName: interaction?.guild?.name });
+        log(formatCommandLog(interaction), { show: true, guildName: interaction?.guild?.name });
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
           // Block all commands (except /storyadmin setup) if the bot has not been configured for this server
@@ -141,6 +141,7 @@ async function main() {
           if (!isSetupCommand && interaction.guild) {
             const configured = await isGuildConfigured(connection, interaction.guild.id);
             if (!configured) {
+              log(`Setup required: blocked /${interaction.commandName} for guild ${interaction.guild.id}`, { show: true, guildName: interaction.guild.name });
               const isAdmin = interaction.member?.permissions?.has('ManageGuild');
               const msgKey = isAdmin ? 'txtSetupRequiredAdmin' : 'txtSetupRequiredUser';
               const msg = await getConfigValue(connection, msgKey, 1);
@@ -148,7 +149,7 @@ async function main() {
               return;
             }
           }
-          await command.execute(connection, interaction);
+          if (!interaction.replied) await command.execute(connection, interaction);
         }
       } else if (interaction.isModalSubmit()) {
         const significantModal = interaction.customId.startsWith('storyadmin_setup_');

@@ -66,10 +66,30 @@ Keys follow a four-segment camelCase structure. Always search existing keys befo
 - Button labels (`btn*`): ≤80 chars
 - Embed field names (`txt*EmbedTitle*`, `lbl*`): ≤256 chars
 
+### Logging Standards
+
+`log(message, { show, guildName })` has two tiers:
+
+| Tier | `show` | When visible | Use for |
+|---|---|---|---|
+| **Always-on** | `true` | Production + test | Errors, slash command invocations, significant state changes, warnings |
+| **Diagnostic** | `false` (default) | Test mode only | Button/modal entry, intermediate state, API call detail |
+
+**Rules:**
+1. Every slash command invocation logs at `show: true` (handled centrally in `index.js`)
+2. Every `catch` block logs function name + `error?.stack ?? error` + key params — **never `${error}` alone**
+3. Missing config keys, null channel/role fetches, missing required DB rows log at `show: true`
+4. Significant state changes (story created/closed/deleted, turn advanced/skipped, setup saved, writer paused/removed) log at `show: true`
+5. Button/modal handler entry, individual API calls, query results log at `show: false`
+
+**Error format:** `functionName failed for [key context]: ${error?.stack ?? error}`
+
+**State change format:** `FunctionName: description — user: tag, guild: id[, story: id]`
+
 ### Error Handling Standards
 - Error messages should be sent to the console using the log() function. Parameters are: `message, { show = true/false, guildName = null } = {}` where show is true on detailed test environment logging.
-- Include function name in error message: `FunctionName failed:` or `Error in FunctionName:`
-- Include key parameters for debugging context where helpful (e.g., IDs, user input)
+- Include function name in error message: `functionName failed:` or `Error in functionName:`
+- Include key parameters for debugging context (IDs, user input, story ID, guild ID)
 - Return structured objects with `success` boolean and `error`/`message` fields
 - Use database transactions for multi-step operations with rollback on errors
 

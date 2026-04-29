@@ -148,7 +148,7 @@ export async function resolveStoryId(connection, guildId, guildStoryId) {
     }
     return rows[0].story_id;
   } catch (err) {
-    log(`resolveStoryId failed: ${err}`, { show: true });
+    log(`resolveStoryId failed for guild_story_id=${guildStoryId} guild ${guildId}: ${err?.stack ?? err}`, { show: true });
     return null;
   }
 }
@@ -178,7 +178,10 @@ export async function getConfigValue(connection, key, guildId = 1) {
       }
       // Fall back to key name for any that weren't found
       for (const k of key) {
-        if (!result[k]) result[k] = k;
+        if (!result[k]) {
+          log(`Config key not found: '${k}' (guild ${guildId})`, { show: true });
+          result[k] = k;
+        }
       }
       return result;
     }
@@ -186,9 +189,12 @@ export async function getConfigValue(connection, key, guildId = 1) {
       `SELECT config_value FROM config WHERE config_key = ? AND guild_id IN (1, ?) ORDER BY (guild_id = ?) DESC LIMIT 1`,
       [key, guildId, guildId]
     );
+    if (!configRows[0]?.config_value) {
+      log(`Config key not found: '${key}' (guild ${guildId})`, { show: true });
+    }
     return configRows[0]?.config_value || key;
   } catch (error) {
-    log(`Config lookup failed for key '${Array.isArray(key) ? key.join(', ') : key}': ${error}`, { show: true });
+    log(`Config lookup failed for key '${Array.isArray(key) ? key.join(', ') : key}': ${error?.stack ?? error}`, { show: true });
     if (Array.isArray(key)) {
       return Object.fromEntries(key.map(k => [k, k]));
     }
@@ -438,7 +444,7 @@ export async function validateStoryAccess(connection, storyId, guildId) {
 
     return { success: true, story };
   } catch (error) {
-    log(`Error in validateStoryAccess: ${error}`, { show: true });
+    log(`validateStoryAccess failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true });
   }
 }
 
@@ -467,7 +473,7 @@ export async function validateActiveWriter(connection, userId, storyId) {
 
     return { success: true };
   } catch (error) {
-    log(`Error in validateActiveWriter: ${error}`, { show: true });
+    log(`validateActiveWriter failed for user ${userId} story ${storyId}: ${error?.stack ?? error}`, { show: true });
   }
 }
 
