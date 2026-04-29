@@ -212,6 +212,7 @@ async function handleSetup(connection, interaction) {
     'txtSetupModalTitleFeed', 'txtSetupModalTitleMedia', 'txtSetupModalTitleRole',
     'txtSetupModalTitleRestrictedFeed', 'txtSetupModalTitleRestrictedMedia',
     'txtSetupModalTitleRoundupChannel', 'txtSetupModalTitleRoundupDay', 'txtSetupModalTitleRoundupHour',
+    'txtSetupModalSaveWarning',
     'txtSetupEmbedDescFeed', 'txtSetupEmbedDescMedia', 'txtSetupEmbedDescAdminRole',
     'txtSetupEmbedDescRestrictedFeed', 'txtSetupEmbedDescRestrictedMedia',
     'txtSetupEmbedDescRoundupChannel', 'txtSetupEmbedDescRoundupDay', 'txtSetupEmbedDescRoundupHour',
