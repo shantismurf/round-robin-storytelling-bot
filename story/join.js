@@ -135,9 +135,17 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
       }
     }
 
+    if (buttonStoryId !== null) {
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    }
+
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
     if (!joinInfo.success) {
-      await interaction.reply({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
+      if (interaction.deferred) {
+        await interaction.followUp({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
+      } else {
+        await interaction.reply({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
+      }
       return;
     }
 
@@ -147,12 +155,18 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
-    await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
+    if (interaction.deferred) {
+      await interaction.followUp({ ...embedData, flags: MessageFlags.Ephemeral });
+    } else {
+      await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
+    }
 
   } catch (error) {
     log(`handleJoin failed for user=${interaction.user.id} storyId=${buttonStoryId ?? 'slash'}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     const errMsg = await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id);
-    if (!interaction.replied && !interaction.deferred) {
+    if (interaction.deferred) {
+      await interaction.followUp({ content: errMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
+    } else if (!interaction.replied) {
       await interaction.reply({ content: errMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
     }
   }
