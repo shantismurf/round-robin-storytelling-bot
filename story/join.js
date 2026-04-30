@@ -145,13 +145,8 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
     pendingJoinData.set(interaction.user.id, state);
 
-    // Add user to thread before replying so the ephemeral is visible to them
-    if (interaction.channel?.isThread?.()) {
-      await interaction.channel.members.add(interaction.user.id).catch(() => {});
-    }
-
     const embedData = await buildJoinEmbed(connection, state);
-    await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: 'DEBUG: non-ephemeral test' });
 
   } catch (error) {
     log(`handleJoin failed for user=${interaction.user.id} storyId=${buttonStoryId ?? 'slash'}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
