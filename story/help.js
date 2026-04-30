@@ -9,10 +9,11 @@ export async function buildHelpPage1(connection, guildId) {
   const cfg = await getConfigValue(connection, [
     'txtHelp1Title', 'txtHelp1Footer', 'btnHelp1ToPage2',
     'lblHelp1FindJoin', 'txtHelp1FindJoin',
+    'lblHelp1JoiningOptions', 'txtHelp1JoiningOptions',
     'lblHelp1Dashboard', 'txtHelp1Dashboard',
+    'lblHelp1ManageParticipation', 'txtHelp1ManageParticipation',
     'lblHelp1WriteNormal', writeNormalKey,
     'lblHelp1WriteQuick', 'txtHelp1WriteQuick',
-    'lblHelp1ManageParticipation', 'txtHelp1ManageParticipation'
   ], guildId);
 
   const embed = new EmbedBuilder()
@@ -20,10 +21,11 @@ export async function buildHelpPage1(connection, guildId) {
     .setColor(0x5865f2)
     .addFields(
       { name: cfg.lblHelp1FindJoin, value: cfg.txtHelp1FindJoin, inline: false },
+      { name: cfg.lblHelp1JoiningOptions, value: cfg.txtHelp1JoiningOptions, inline: false },
       { name: cfg.lblHelp1Dashboard, value: cfg.txtHelp1Dashboard, inline: false },
+      { name: cfg.lblHelp1ManageParticipation, value: cfg.txtHelp1ManageParticipation, inline: false },
       { name: cfg.lblHelp1WriteNormal, value: cfg[writeNormalKey], inline: false },
       { name: cfg.lblHelp1WriteQuick, value: cfg.txtHelp1WriteQuick, inline: false },
-      { name: cfg.lblHelp1ManageParticipation, value: cfg.txtHelp1ManageParticipation, inline: false }
     )
     .setFooter({ text: cfg.txtHelp1Footer });
 
