@@ -177,7 +177,7 @@ async function main() {
           }
         }
       } else if (interaction.isButton()) {
-        log(`${interaction.user.username} clicked button ${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+        log(`${interaction.user.username} clicked button ${interaction.customId}`, { show: true, guildName: interaction?.guild?.name });
 
         const dedupKey = `${interaction.user.id}:${interaction.customId}`;
         if (processingButtons.has(dedupKey)) {
