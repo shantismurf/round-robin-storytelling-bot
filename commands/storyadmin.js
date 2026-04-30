@@ -243,8 +243,8 @@ async function handleSetup(connection, interaction) {
     restrictedFeedChannelId:  guildCfg.cfgRestrictedFeedChannelId  || '',
     restrictedMediaChannelId: guildCfg.cfgRestrictedMediaChannelId || '',
     roundupChannelId:         guildCfg.cfgWeeklyRoundupChannelId || '',
-    roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '',
-    roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '',
+    roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '1',
+    roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '9',
     originalInteraction: interaction,
     cfg,
   };
@@ -263,17 +263,14 @@ function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentV
   const safeLabel = (fieldLabel && !fieldLabel.startsWith('lbl')) ? fieldLabel : 'Value';
   const safePlaceholder = (placeholder && !placeholder.startsWith('txt') && placeholder.length <= 100) ? placeholder : '';
   const modal = new ModalBuilder().setCustomId(customId).setTitle(safeTitle);
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('value')
-        .setLabel(safeLabel)
-        .setStyle(TextInputStyle.Short)
-        .setPlaceholder(safePlaceholder)
-        .setValue(currentValue ?? '')
-        .setRequired(false)
-    )
-  );
+  const textInput = new TextInputBuilder()
+    .setCustomId('value')
+    .setLabel(safeLabel)
+    .setStyle(TextInputStyle.Short)
+    .setPlaceholder(safePlaceholder)
+    .setRequired(false);
+  if (currentValue) textInput.setValue(currentValue);
+  modal.addComponents(new ActionRowBuilder().addComponents(textInput));
   return modal;
 }
 
@@ -438,6 +435,11 @@ async function handleSetupSave(connection, interaction) {
 
   await interaction.deferUpdate();
   const { guildId } = state;
+
+  const dayNames = await getConfigValue(connection, [
+    'txtRoundupDay0', 'txtRoundupDay1', 'txtRoundupDay2', 'txtRoundupDay3',
+    'txtRoundupDay4', 'txtRoundupDay5', 'txtRoundupDay6'
+  ], guildId);
 
   // Re-validate all set channel IDs
   const feedChannel = state.feedChannelId
@@ -606,12 +608,15 @@ async function handleSetupSave(connection, interaction) {
 
   const saved = [`${feedPermsOk ? '✅' : '⚠️'} Story feed channel: <#${state.feedChannelId}>`];
   if (state.mediaChannelId)           saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${state.mediaChannelId}>`);
-  if (state.restrictedFeedChannelId)  saved.push(`✅ Restricted feed channel: <#${state.restrictedFeedChannelId}> *(Age-restrict this channel if the server is not already 18+)*`);
+  if (state.restrictedFeedChannelId) {
+    const rfNote = restrictedFeedChannel?.nsfw ? '' : ' *(Age-restrict this channel if the server is not already 18+)*';
+    saved.push(`✅ Restricted feed channel: <#${state.restrictedFeedChannelId}>${rfNote}`);
+  }
   if (state.restrictedMediaChannelId) saved.push(`✅ Restricted media channel: <#${state.restrictedMediaChannelId}>`);
   if (state.adminRoleName)            saved.push(`✅ Admin role: **${state.adminRoleName}**${threadPermissionNote}`);
   if (!state.mediaChannelId)          saved.push(`ℹ️ No media channel set — images will not be processed.`);
   if (!state.adminRoleName)           saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
-  if (state.roundupChannelId)         saved.push(`✅ Weekly roundup: <#${state.roundupChannelId}>, ${['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][state.roundupDay ?? 1]}s at ${state.roundupHour ?? 9}:00 UTC`);
+  if (state.roundupChannelId)         saved.push(`✅ Weekly roundup: <#${state.roundupChannelId}>, ${dayNames[`txtRoundupDay${state.roundupDay ?? 1}`]}s at ${state.roundupHour ?? 9}:00 UTC`);
   else                                saved.push(`ℹ️ Weekly roundup disabled.`);
   if (permWarnings.length) {
     const botRoleName = botRole?.name ?? botMember?.displayName ?? 'the bot role';
