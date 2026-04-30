@@ -134,7 +134,9 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
       }
     }
 
+    log(`DEBUG: about to reply, replied=${interaction.replied} deferred=${interaction.deferred}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: 'DEBUG: join button reached handler', flags: MessageFlags.Ephemeral });
+    log(`DEBUG: reply sent successfully`, { show: true, guildName: interaction?.guild?.name });
     return;
 
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
