@@ -121,12 +121,15 @@ export async function buildJoinEmbed(connection, state) {
 }
 
 export async function handleJoin(connection, interaction, buttonStoryId = null) {
+  log(`handleJoin entry: buttonStoryId=${buttonStoryId} user=${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
   try {
     const guildId = interaction.guild.id;
     let storyId;
     if (buttonStoryId !== null) {
       storyId = buttonStoryId;
+      log(`handleJoin: calling deferReply`, { show: true, guildName: interaction?.guild?.name });
       await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      log(`handleJoin: deferReply done`, { show: true, guildName: interaction?.guild?.name });
     } else {
       storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
       if (storyId === null) {
@@ -135,7 +138,9 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
       }
     }
 
+    log(`handleJoin: calling validateJoinEligibility storyId=${storyId}`, { show: true, guildName: interaction?.guild?.name });
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
+    log(`handleJoin: eligibility success=${joinInfo.success}`, { show: true, guildName: interaction?.guild?.name });
     if (!joinInfo.success) {
       if (interaction.deferred) {
         await interaction.editReply({ content: joinInfo.error });
@@ -145,17 +150,20 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
       return;
     }
 
+    log(`handleJoin: building embed`, { show: true, guildName: interaction?.guild?.name });
     const existingAO3Name = await getPreviousAO3Name(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
     const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
+    log(`handleJoin: calling editReply`, { show: true, guildName: interaction?.guild?.name });
     if (interaction.deferred) {
       await interaction.editReply(embedData);
     } else {
       await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
     }
+    log(`handleJoin: editReply done`, { show: true, guildName: interaction?.guild?.name });
 
   } catch (error) {
     log(`handleJoin failed for user=${interaction.user.id} storyId=${buttonStoryId ?? 'slash'}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
