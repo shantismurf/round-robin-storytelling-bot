@@ -68,8 +68,9 @@ export async function validateJoinEligibility(connection, storyId, guildId, user
   }
 }
 
-export async function buildJoinEmbed(connection, state) {
-  const { storyId, guildId, storyTitle, privacy, notificationPrefs, ao3Name, displayName } = state;
+export async function buildJoinEmbed(connection, state, threadMode = false) {
+  const { storyId, guildId, storyTitle, privacy, notificationPrefs, ao3Name, displayName, threadMode: stateThreadMode } = state;
+  const isThreadMode = threadMode || stateThreadMode;
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacySelect', 'lblJoinNotifSelect',
     'lblJoinAO3Name', 'txtJoinAO3NotSet', 'btnJoinSetAO3', 'btnJoinConfirm', 'btnCancel'
@@ -112,7 +113,7 @@ export async function buildJoinEmbed(connection, state) {
       .setLabel(cfg.btnJoinConfirm)
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`story_join_cancel_${storyId}`)
+      .setCustomId(isThreadMode ? `story_join_thread_cancel_${storyId}` : `story_join_cancel_${storyId}`)
       .setLabel(cfg.btnCancel)
       .setStyle(ButtonStyle.Danger)
   );
@@ -147,12 +148,16 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     log(`handleJoin: building embed`, { show: false, guildName: interaction?.guild?.name });
     const existingAO3Name = await getPreviousAO3Name(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
+    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName, threadMode: buttonStoryId !== null };
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
-    log(`handleJoin: replying ephemeral`, { show: false, guildName: interaction?.guild?.name });
-    await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
+    log(`handleJoin: replying`, { show: false, guildName: interaction?.guild?.name });
+    if (buttonStoryId !== null) {
+      await interaction.reply(embedData);
+    } else {
+      await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
+    }
     log(`handleJoin: complete`, { show: false, guildName: interaction?.guild?.name });
 
   } catch (error) {

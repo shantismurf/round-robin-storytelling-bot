@@ -752,7 +752,7 @@ export async function postStoryThreadActivity(connection, guild, storyId, messag
  * Stores the message ID in story.status_message_id so it can be edited in place.
  * If the message has been deleted, a new one is posted automatically.
  */
-export async function updateStoryStatusMessage(connection, guild, storyId, { forceRepost = false } = {}) {
+export async function updateStoryStatusMessage(connection, guild, storyId) {
   try {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
@@ -973,11 +973,6 @@ export async function updateStoryStatusMessage(connection, guild, storyId, { for
     let message = null;
     if (story.status_message_id) {
       message = await storyThread.messages.fetch(story.status_message_id).catch(() => null);
-    }
-
-    if (message && forceRepost) {
-      await message.delete().catch(() => {});
-      message = null;
     }
 
     if (message) {

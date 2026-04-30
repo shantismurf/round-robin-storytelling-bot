@@ -10,7 +10,7 @@ import { handleRead, handleReadNav } from '../story/read.js';
 import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry } from '../story/edit.js';
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
 import { handleManage, handleManageButton, handleManageSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
-import { handleTagSubmit, handleTagSubmitModalSubmit } from '../story/tags.js';
+import { handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
@@ -231,15 +231,21 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_close_cancel_')) {
     await handleCloseCancel(connection, interaction);
+  } else if (interaction.customId.startsWith('story_manage_review_tags_read_')) {
+    await handleEditTagsButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_confirm_')) {
     await handleJoinConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_set_ao3_')) {
     await handleJoinSetAO3Button(connection, interaction);
+  } else if (interaction.customId.startsWith('story_join_thread_cancel_')) {
+    await interaction.message.delete().catch(() => {});
+    pendingJoinData.delete(interaction.user.id);
   } else if (interaction.customId.startsWith('story_join_cancel_')) {
     await interaction.deferUpdate();
     await interaction.editReply({ content: await getConfigValue(connection, 'btnCancel', interaction.guild.id), embeds: [], components: [] });
+    pendingJoinData.delete(interaction.user.id);
   } else if (interaction.customId.startsWith('story_join_')) {
     const storyId = parseInt(interaction.customId.split('_').at(-1));
     await handleJoin(connection, interaction, storyId);
@@ -261,6 +267,10 @@ async function handleButtonInteraction(connection, interaction) {
     await handleTagReviewButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_submit_tag_')) {
     await handleTagSubmit(connection, interaction);
+  } else if (interaction.customId.startsWith('story_view_tags_')) {
+    await handleViewTagsButton(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_view_prev_') || interaction.customId.startsWith('story_tag_view_next_')) {
+    await handleViewTagsNav(connection, interaction);
   }
 }
 
