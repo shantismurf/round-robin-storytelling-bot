@@ -12,12 +12,8 @@ const data = new SlashCommandBuilder()
   .setName('mystory')
   .setDescription('Your personal story dashboard')
   .addSubcommand(s =>
-    s.setName('active')
-      .setDescription('See your active and paused stories')
-  )
-  .addSubcommand(s =>
-    s.setName('history')
-      .setDescription('See all stories you\'ve been in, including completed ones')
+    s.setName('list')
+      .setDescription('See all your stories — active, paused, delayed, and closed')
       .addIntegerOption(o =>
         o.setName('page')
           .setDescription('Page number')
@@ -34,44 +30,8 @@ const data = new SlashCommandBuilder()
           .setAutocomplete(true))
   )
   .addSubcommand(s =>
-    s.setName('leave')
-      .setDescription('Leave a story you\'re currently in')
-      .addStringOption(o =>
-        o.setName('story_id')
-          .setDescription('Story to leave')
-          .setRequired(true)
-          .setAutocomplete(true))
-  )
-  .addSubcommand(s =>
-    s.setName('pass')
-      .setDescription('Skip (pass) your current turn in a story')
-      .addStringOption(o =>
-        o.setName('story_id')
-          .setDescription('Story where you want to pass your turn')
-          .setRequired(true)
-          .setAutocomplete(true))
-  )
-  .addSubcommand(s =>
-    s.setName('pause')
-      .setDescription('Pause your participation in a story (or all active stories)')
-      .addStringOption(o =>
-        o.setName('story_id')
-          .setDescription('Story to pause — leave blank to pause all active stories')
-          .setRequired(false)
-          .setAutocomplete(true))
-  )
-  .addSubcommand(s =>
-    s.setName('resume')
-      .setDescription('Resume your participation in a paused story (or all paused stories)')
-      .addStringOption(o =>
-        o.setName('story_id')
-          .setDescription('Story to resume — leave blank to resume all paused stories')
-          .setRequired(false)
-          .setAutocomplete(true))
-  )
-  .addSubcommand(s =>
     s.setName('manage')
-      .setDescription('Update your AO3 name, notification preference, and turn privacy for a story')
+      .setDescription('Update settings or take action for one of your stories')
       .addStringOption(o =>
         o.setName('story_id')
           .setDescription('Story to manage your settings for')
@@ -90,13 +50,8 @@ async function execute(connection, interaction) {
   }
 
   const subcommand = interaction.options.getSubcommand();
-  if (subcommand === 'active') await handleStatus(connection, interaction);
-  else if (subcommand === 'history') await handleHistory(connection, interaction);
+  if (subcommand === 'list') await handleList(connection, interaction);
   else if (subcommand === 'catchup') await handleCatchUp(connection, interaction);
-  else if (subcommand === 'leave') await handleLeave(connection, interaction);
-  else if (subcommand === 'pass') await handlePass(connection, interaction);
-  else if (subcommand === 'pause') await handlePause(connection, interaction);
-  else if (subcommand === 'resume') await handleResume(connection, interaction);
   else if (subcommand === 'manage') await handleMyStoryManage(connection, interaction);
   else if (subcommand === 'help') await handleHelp(connection, interaction);
 }
@@ -104,12 +59,16 @@ async function execute(connection, interaction) {
 async function handleButtonInteraction(connection, interaction) {
   if (interaction.customId.startsWith('catchup_prev_') || interaction.customId.startsWith('catchup_next_')) {
     await handleCatchUpNavigation(connection, interaction);
-  } else if (interaction.customId.startsWith('mystory_hist_prev_') || interaction.customId.startsWith('mystory_hist_next_')) {
-    await handleHistoryNavigation(connection, interaction);
-  } else if (interaction.customId.startsWith('mystory_leave_confirm_')) {
-    await handleLeaveConfirm(connection, interaction);
-  } else if (interaction.customId.startsWith('mystory_leave_cancel_')) {
-    await handleLeaveCancel(connection, interaction);
+  } else if (interaction.customId.startsWith('mystory_list_prev_') || interaction.customId.startsWith('mystory_list_next_')) {
+    await handleListNavigation(connection, interaction);
+  } else if (interaction.customId.startsWith('mystory_manage_leave_confirm_')) {
+    await handlePanelLeaveConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('mystory_manage_leave_cancel_') || interaction.customId.startsWith('mystory_manage_pass_cancel_') || interaction.customId.startsWith('mystory_manage_pause_cancel_')) {
+    await handlePanelActionCancel(connection, interaction);
+  } else if (interaction.customId.startsWith('mystory_manage_pass_confirm_')) {
+    await handlePanelPassConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('mystory_manage_pause_confirm_')) {
+    await handlePanelPauseConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('mystory_manage_')) {
     await handleMyStoryManageButton(connection, interaction);
   }
@@ -142,137 +101,13 @@ async function handleHelp(connection, interaction) {
   await interaction.editReply({ embeds: [embed] });
 }
 
-/**
- * /mystory status — personal dashboard showing all stories the user is in
- */
-async function handleStatus(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = interaction.guild.id;
-  const userId = interaction.user.id;
-
-  try {
-    const cfg = await getConfigValue(connection, [
-      'txtMyStoriesTitle', 'txtMyStoryNone',
-      'txtMyTurnQuick', 'txtMyTurnNormal', 'txtOthersTurn',
-      'txtTurnWaiting', 'txtMyTurnHistory', 'txtMyTurnNoHistory',
-      'txtModeQuick', 'txtModeNormal', 'txtWriterStatusPaused', 'errProcessingRequest'
-    ], guildId);
-
-    const [stories] = await connection.execute(
-      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode, sw.sw_status as writer_status
-       FROM story_writer sw
-       JOIN story s ON sw.story_id = s.story_id
-       WHERE sw.discord_user_id = ? AND sw.sw_status IN (1, 2) AND s.guild_id = ? AND s.story_status != 3
-       ORDER BY s.story_status ASC, s.created_at DESC`,
-      [userId, guildId]
-    );
-
-    if (stories.length === 0) {
-      return await interaction.editReply({ content: cfg.txtMyStoryNone });
-    }
-
-    const storyIds = stories.map(s => s.story_id);
-    const placeholders = storyIds.map(() => '?').join(',');
-
-    // Active turns for each story
-    const [activeTurns] = await connection.execute(
-      `SELECT sw.story_id, sw.discord_user_id, sw.discord_display_name,
-              UNIX_TIMESTAMP(t.turn_ends_at) as turn_ends_at_unix, t.thread_id
-       FROM turn t
-       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id IN (${placeholders}) AND t.turn_status = 1`,
-      storyIds
-    );
-
-    // User's personal turn history per story
-    const [myTurns] = await connection.execute(
-      `SELECT sw.story_id, COUNT(*) as my_turn_count, UNIX_TIMESTAMP(MAX(t.ended_at)) as my_last_turn_at_unix
-       FROM turn t
-       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id IN (${placeholders}) AND sw.discord_user_id = ? AND t.turn_status = 0
-       GROUP BY sw.story_id`,
-      [...storyIds, userId]
-    );
-
-    const activeTurnMap = Object.fromEntries(activeTurns.map(t => [t.story_id, t]));
-    const myTurnMap = Object.fromEntries(myTurns.map(t => [t.story_id, t]));
-
-    const embed = new EmbedBuilder()
-      .setTitle(cfg.txtMyStoriesTitle)
-      .setColor(0x5865f2)
-      .setTimestamp();
-
-    for (const story of stories) {
-      const activeTurn = activeTurnMap[story.story_id];
-      const myHistory = myTurnMap[story.story_id];
-      const isMyTurn = activeTurn && String(activeTurn.discord_user_id) === userId;
-
-      const statusIcon = story.story_status === 1 ? '🟢' : story.story_status === 2 ? '⏸️' : '🏁';
-      const modeLabel = story.quick_mode ? cfg.txtModeQuick : cfg.txtModeNormal;
-
-      let turnLine = '';
-      if (isMyTurn) {
-        if (story.quick_mode) {
-          turnLine = replaceTemplateVariables(cfg.txtMyTurnQuick, { story_id: story.guild_story_id });
-        } else {
-          const threadRef = activeTurn.thread_id ? ` · <#${activeTurn.thread_id}>` : '';
-          const endsAt = activeTurn.turn_ends_at_unix
-            ? ` — ends <t:${activeTurn.turn_ends_at_unix}:R>`
-            : '';
-          turnLine = `${cfg.txtMyTurnNormal}${threadRef}${endsAt}`;
-        }
-      } else if (activeTurn) {
-        const endsAt = activeTurn.turn_ends_at_unix
-          ? ` — ends <t:${activeTurn.turn_ends_at_unix}:R>`
-          : '';
-        turnLine = replaceTemplateVariables(cfg.txtOthersTurn, { writer_name: activeTurn.discord_display_name }) + endsAt;
-      } else if (story.story_status === 1) {
-        turnLine = cfg.txtTurnWaiting;
-      }
-
-      const myTurnCount = myHistory?.my_turn_count ?? 0;
-      const lastTurnUnix = myHistory?.my_last_turn_at_unix;
-      const historyLine = lastTurnUnix
-        ? replaceTemplateVariables(cfg.txtMyTurnHistory, {
-            last_turn_at: `<t:${lastTurnUnix}:R>`,
-            turn_count: myTurnCount
-          })
-        : cfg.txtMyTurnNoHistory;
-
-      const isPaused = story.writer_status === 2;
-      const pausedLine = isPaused ? cfg.txtWriterStatusPaused : null;
-      const lines = [pausedLine, turnLine, historyLine].filter(Boolean);
-      let fieldValue;
-      if (lines.length === 0) {
-        fieldValue = '└ —';
-      } else if (lines.length === 1) {
-        fieldValue = `└ ${lines[0]}`;
-      } else {
-        const middleLines = lines.slice(0, -1).map(l => `├ ${l}`).join('\n');
-        fieldValue = `${middleLines}\n└ ${lines[lines.length - 1]}`;
-      }
-
-      embed.addFields({
-        name: `${statusIcon} ${story.title} (#${story.guild_story_id}) · ${modeLabel}`,
-        value: fieldValue,
-        inline: false
-      });
-    }
-
-    await interaction.editReply({ embeds: [embed] });
-
-  } catch (error) {
-    log(`Error in handleStatus: ${error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
-  }
-}
-
-const HISTORY_PAGE_SIZE = 5;
+const LIST_PAGE_SIZE = 5;
 
 /**
- * /mystory history — all stories the user has ever been in, including closed
+ * /mystory list — merged active+history, sorted active→paused→delayed→closed, paginated
  */
-async function handleHistory(connection, interaction) {
+async function handleList(connection, interaction) {
+  log(`handleList: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -280,8 +115,8 @@ async function handleHistory(connection, interaction) {
 
   try {
     const [stories] = await connection.execute(
-      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode, s.created_at, s.closed_at,
-              sw.sw_status,
+      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode,
+              sw.sw_status as writer_status,
               COUNT(DISTINCT t.turn_id) as my_turn_count,
               COALESCE(SUM(LENGTH(se.content) - LENGTH(REPLACE(se.content, ' ', '')) + 1), 0) as my_word_count,
               UNIX_TIMESTAMP(MIN(t.started_at)) as my_first_turn_unix,
@@ -297,109 +132,51 @@ async function handleHistory(connection, interaction) {
        LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
        WHERE sw.discord_user_id = ? AND s.guild_id = ?
        GROUP BY s.story_id, sw.sw_status
-       HAVING (COUNT(DISTINCT t.turn_id) > 0 OR sw.sw_status = 1)
-       ORDER BY s.story_status ASC, s.created_at DESC`,
+       ORDER BY
+         CASE WHEN sw.sw_status IN (1, 2) AND s.story_status != 3 THEN 0 ELSE 1 END ASC,
+         CASE s.story_status WHEN 1 THEN 0 WHEN 2 THEN 1 WHEN 0 THEN 2 ELSE 3 END ASC,
+         s.created_at DESC`,
       [userId, guildId]
     );
+    log(`handleList: fetched ${stories.length} stories`, { show: false, guildName: interaction?.guild?.name });
 
     if (stories.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtMyStoryNone', guildId) });
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtMyListNone', guildId) });
     }
 
-    const totalPages = Math.ceil(stories.length / HISTORY_PAGE_SIZE);
+    const totalPages = Math.ceil(stories.length / LIST_PAGE_SIZE);
     const clampedPage = Math.min(page, totalPages);
-    const pageStart = (clampedPage - 1) * HISTORY_PAGE_SIZE;
-    const pageStories = stories.slice(pageStart, pageStart + HISTORY_PAGE_SIZE);
+    const pageStart = (clampedPage - 1) * LIST_PAGE_SIZE;
+    const pageStories = stories.slice(pageStart, pageStart + LIST_PAGE_SIZE);
 
-    const fmt = unix => unix ? `<t:${unix}:d>` : null;
-    const statusIcon = s => s === 1 ? '🟢' : s === 2 ? '⏸️' : '🏁';
-    const statusText = s => s === 1 ? 'Active' : s === 2 ? 'Paused' : 'Closed';
-
-    const [txtModeQuick, txtModeNormal] = await Promise.all([
+    const [txtModeQuick, txtModeNormal, txtMyListTitle] = await Promise.all([
       getConfigValue(connection, 'txtModeQuick', guildId),
-      getConfigValue(connection, 'txtModeNormal', guildId)
+      getConfigValue(connection, 'txtModeNormal', guildId),
+      getConfigValue(connection, 'txtMyListTitle', guildId)
     ]);
 
-    const embed = new EmbedBuilder()
-      .setTitle(`📖 Your Story History (Page ${clampedPage}/${totalPages})`)
-      .setColor(0x5865f2)
-      .setTimestamp();
-
-    for (const story of pageStories) {
-      const modeLabel = story.quick_mode ? txtModeQuick : txtModeNormal;
-      const dateRange = story.my_first_turn_unix
-        ? `${fmt(story.my_first_turn_unix)} – ${fmt(story.my_last_turn_unix ?? story.my_first_turn_unix)}`
-        : `Joined ${fmt(story.created_at_unix)}`;
-      const myStats = story.my_turn_count > 0
-        ? `Your turns: ${story.my_turn_count} · ~${Number(story.my_word_count).toLocaleString()} words`
-        : 'No turns taken';
-      const totalTurns = story.total_turn_count > 0
-        ? `Story total: ${story.total_turn_count} turn(s)`
-        : 'Story total: 0 turns';
-
-      embed.addFields({
-        name: `${statusIcon(story.story_status)} ${story.title} (#${story.guild_story_id}) · ${modeLabel} · ${statusText(story.story_status)}`,
-        value: `├ ${myStats} · ${totalTurns}\n└ ${dateRange}`,
-        inline: false
-      });
-    }
-
+    const embed = buildListEmbed(pageStories, clampedPage, totalPages, txtModeQuick, txtModeNormal, txtMyListTitle);
     const components = [];
     if (totalPages > 1) {
-      const navRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`mystory_hist_prev_${clampedPage}`)
-          .setLabel('◀️ Prev')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(clampedPage === 1),
-        new ButtonBuilder()
-          .setCustomId(`mystory_hist_next_${clampedPage}`)
-          .setLabel('Next ▶️')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(clampedPage === totalPages)
-      );
-      components.push(navRow);
-
-      // Cache story list for nav buttons
-      pendingCatchUpData.set(`hist_${userId}`, { stories, txtModeQuick, txtModeNormal });
+      components.push(buildListNavRow(clampedPage, totalPages));
+      pendingCatchUpData.set(`list_${userId}`, { stories, txtModeQuick, txtModeNormal, txtMyListTitle });
     }
 
     await interaction.editReply({ embeds: [embed], components });
 
   } catch (error) {
-    log(`Error in handleHistory: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleList failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
 
-async function handleHistoryNavigation(connection, interaction) {
-  await interaction.deferUpdate();
-  const parts = interaction.customId.split('_');
-  const direction = parts[2]; // 'prev' or 'next'
-  const currentPage = parseInt(parts[3]);
-  const newPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
-  const userId = interaction.user.id;
-  const guildId = interaction.guild.id;
-
-  const cached = pendingCatchUpData.get(`hist_${userId}`);
-  if (!cached) {
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtCatchupSessionExpired', guildId), embeds: [], components: [] });
-  }
-
-  const { stories, txtModeQuick, txtModeNormal } = cached;
-  const totalPages = Math.ceil(stories.length / HISTORY_PAGE_SIZE);
-  const clampedPage = Math.min(Math.max(newPage, 1), totalPages);
-  const pageStart = (clampedPage - 1) * HISTORY_PAGE_SIZE;
-  const pageStories = stories.slice(pageStart, pageStart + HISTORY_PAGE_SIZE);
-
+function buildListEmbed(pageStories, clampedPage, totalPages, txtModeQuick, txtModeNormal, txtMyListTitle) {
   const fmt = unix => unix ? `<t:${unix}:d>` : null;
-  const statusIcon = s => s === 1 ? '🟢' : s === 2 ? '⏸️' : '🏁';
-  const statusText = s => s === 1 ? 'Active' : s === 2 ? 'Paused' : 'Closed';
+  const statusIcon = s => s === 1 ? '🟢' : s === 2 ? '⏸️' : s === 0 ? '⏳' : '🏁';
+  const statusText = s => s === 1 ? 'Active' : s === 2 ? 'Paused' : s === 0 ? 'Delayed' : 'Closed';
 
-  const embed = new EmbedBuilder()
-    .setTitle(`📖 Your Story History (Page ${clampedPage}/${totalPages})`)
-    .setColor(0x5865f2)
-    .setTimestamp();
+  const title = replaceTemplateVariables(txtMyListTitle, { page: clampedPage, total: totalPages });
+  const embed = new EmbedBuilder().setTitle(title).setColor(0x5865f2).setTimestamp();
 
   for (const story of pageStories) {
     const modeLabel = story.quick_mode ? txtModeQuick : txtModeNormal;
@@ -408,31 +185,58 @@ async function handleHistoryNavigation(connection, interaction) {
       : `Joined ${fmt(story.created_at_unix)}`;
     const myStats = story.my_turn_count > 0
       ? `Your turns: ${story.my_turn_count} · ~${Number(story.my_word_count).toLocaleString()} words`
-      : 'No turns taken';
+      : 'No turns yet';
     const totalTurns = story.total_turn_count > 0
       ? `Story total: ${story.total_turn_count} turn(s)`
       : 'Story total: 0 turns';
+    const writerPaused = story.writer_status === 2 ? ' · ⏸ You are paused' : '';
 
     embed.addFields({
-      name: `${statusIcon(story.story_status)} ${story.title} (#${story.guild_story_id}) · ${modeLabel} · ${statusText(story.story_status)}`,
+      name: `${statusIcon(story.story_status)} ${story.title} (#${story.guild_story_id}) · ${modeLabel} · ${statusText(story.story_status)}${writerPaused}`,
       value: `├ ${myStats} · ${totalTurns}\n└ ${dateRange}`,
       inline: false
     });
   }
+  return embed;
+}
 
-  const navRow = new ActionRowBuilder().addComponents(
+function buildListNavRow(clampedPage, totalPages) {
+  return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`mystory_hist_prev_${clampedPage}`)
+      .setCustomId(`mystory_list_prev_${clampedPage}`)
       .setLabel('◀️ Prev')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(clampedPage === 1),
     new ButtonBuilder()
-      .setCustomId(`mystory_hist_next_${clampedPage}`)
+      .setCustomId(`mystory_list_next_${clampedPage}`)
       .setLabel('Next ▶️')
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(clampedPage === totalPages)
   );
+}
 
+async function handleListNavigation(connection, interaction) {
+  await interaction.deferUpdate();
+  const parts = interaction.customId.split('_');
+  const direction = parts[2]; // 'prev' or 'next'
+  const currentPage = parseInt(parts[3]);
+  const newPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
+  const userId = interaction.user.id;
+  const guildId = interaction.guild.id;
+
+  const cached = pendingCatchUpData.get(`list_${userId}`);
+  if (!cached) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtCatchupSessionExpired', guildId), embeds: [], components: [] });
+  }
+
+  const { stories, txtModeQuick, txtModeNormal, txtMyListTitle } = cached;
+  const totalPages = Math.ceil(stories.length / LIST_PAGE_SIZE);
+  const clampedPage = Math.min(Math.max(newPage, 1), totalPages);
+  const pageStart = (clampedPage - 1) * LIST_PAGE_SIZE;
+  const pageStories = stories.slice(pageStart, pageStart + LIST_PAGE_SIZE);
+
+  const embed = buildListEmbed(pageStories, clampedPage, totalPages, txtModeQuick, txtModeNormal, txtMyListTitle);
+  const navRow = buildListNavRow(clampedPage, totalPages);
   await interaction.editReply({ embeds: [embed], components: [navRow] });
 }
 
@@ -572,413 +376,64 @@ function buildCatchUpNavRow(currentPage, totalPages) {
   );
 }
 
-/**
- * /mystory leave — leave a story with confirmation
- */
-async function handleLeave(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
-  if (storyId === null) {
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
-  }
-  const userId = interaction.user.id;
-
-  try {
-    const [storyRows] = await connection.execute(
-      `SELECT s.story_id, s.title, s.story_status FROM story s
-       JOIN story_writer sw ON sw.story_id = s.story_id
-       WHERE s.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
-      [storyId, guildId, userId]
-    );
-    if (storyRows.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId) });
-    }
-    const story = storyRows[0];
-
-    // Check if it's currently the user's turn
-    const [activeTurnRows] = await connection.execute(
-      `SELECT t.turn_id FROM turn t
-       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [storyId, userId]
-    );
-    const isMyTurn = activeTurnRows.length > 0;
-
-    // Count remaining active writers (excluding this user)
-    const [writerCountRows] = await connection.execute(
-      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
-      [storyId, userId]
-    );
-    const isLastWriter = writerCountRows[0].count === 0;
-
-    let leaveConfirmKey;
-    if (isLastWriter) {
-      leaveConfirmKey = 'txtLeaveConfirmLastWriter';
-    } else if (isMyTurn) {
-      leaveConfirmKey = 'txtLeaveConfirmMyTurn';
-    } else {
-      leaveConfirmKey = 'txtLeaveConfirm';
-    }
-
-    const [txtLeaveConfirmKey, btnLeaveStory, btnCancel] = await Promise.all([
-      getConfigValue(connection, leaveConfirmKey, guildId),
-      getConfigValue(connection, 'btnLeaveStory', guildId),
-      getConfigValue(connection, 'btnCancel', guildId)
-    ]);
-
-    const confirmMsg = replaceTemplateVariables(txtLeaveConfirmKey, { story_title: story.title });
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`mystory_leave_confirm_${storyId}`)
-        .setLabel(btnLeaveStory)
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`mystory_leave_cancel_${storyId}`)
-        .setLabel(btnCancel)
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    await interaction.editReply({ content: confirmMsg, components: [row] });
-
-  } catch (error) {
-    log(`Error in handleLeave: ${error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
-  }
-}
-
-async function handleLeaveConfirm(connection, interaction) {
-  await interaction.deferUpdate();
-  const storyId = parseInt(interaction.customId.split('_')[3]);
-  const guildId = interaction.guild.id;
-  const userId = interaction.user.id;
-
-  try {
-    const [writerRows] = await connection.execute(
-      `SELECT sw.story_writer_id FROM story_writer sw
-       JOIN story s ON sw.story_id = s.story_id
-       WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
-      [storyId, guildId, userId]
-    );
-    if (writerRows.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId), components: [] });
-    }
-
-    // If it's their turn, end it and advance before marking them as left
-    const [activeTurnRows] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id FROM turn t
-       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [storyId, userId]
-    );
-
-    // Check if this user is the last active writer
-    const [remainingRows] = await connection.execute(
-      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
-      [storyId, userId]
-    );
-    const isLastWriter = remainingRows[0].count === 0;
-
-    if (activeTurnRows.length > 0) {
-      const activeTurn = activeTurnRows[0];
-      await connection.execute(
-        `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-        [activeTurn.turn_id]
-      );
-      if (activeTurn.thread_id) {
-        try {
-          const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (thread) await deleteThreadAndAnnouncement(thread);
-        } catch (err) {
-          log(`Could not delete turn thread on leave: ${err}`, { show: true, guildName: interaction?.guild?.name });
-        }
-      }
-    }
-
-    // Mark as left
-    await connection.execute(
-      `UPDATE story_writer SET sw_status = 0, left_at = NOW() WHERE story_id = ? AND discord_user_id = ?`,
-      [storyId, userId]
-    );
-
-    if (isLastWriter) {
-      // No writers remain — auto-close the story
-      await connection.execute(
-        `UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`,
-        [storyId]
-      );
-      log(`Story ${storyId} auto-closed — last writer left`, { show: true, guildName: interaction?.guild?.name });
-    } else if (activeTurnRows.length > 0) {
-      // Had an active turn and other writers remain — advance to next
-      try {
-        const nextWriterId = await PickNextWriter(connection, storyId);
-        if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-      } catch (err) {
-        log(`Could not advance turn after leave: ${err}`, { show: true, guildName: interaction?.guild?.name });
-      }
-    }
-
-    log(`${interaction.user.username} left story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtLeftStorySuccess', guildId), components: [] });
-
-  } catch (error) {
-    log(`Error in handleLeaveConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
-  }
-}
-
-async function handleLeaveCancel(connection, interaction) {
-  await interaction.deferUpdate();
-  await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), components: [] });
-}
-
-/**
- * /mystory pass — skip the user's current turn in a story
- */
-async function handlePass(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
-  if (storyId === null) {
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
-  }
-  const userId = interaction.user.id;
-
-  try {
-    const [turnInfo] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id FROM turn t
-       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [storyId, userId]
-    );
-
-    if (turnInfo.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId) });
-    }
-
-    const turn = turnInfo[0];
-
-    await connection.execute(
-      `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-      [turn.turn_id]
-    );
-
-    const nextWriterId = await PickNextWriter(connection, storyId);
-    await NextTurn(connection, interaction, nextWriterId);
-
-    if (turn.thread_id) {
-      try {
-        const thread = await interaction.guild.channels.fetch(turn.thread_id);
-        if (thread) await thread.delete('Turn passed');
-      } catch (err) {
-        log(`Failed to delete thread after pass: ${err}`, { show: true, guildName: interaction?.guild?.name });
-      }
-    }
-
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtPassSuccess', guildId) });
-
-  } catch (error) {
-    log(`Error in handlePass: ${error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
-  }
-}
-
-/**
- * /mystory pause [story_id] — pause participation in one or all active stories.
- * If it is currently the user's turn, the turn is auto-passed before pausing.
- */
-async function handlePause(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = interaction.guild.id;
-  const userId = interaction.user.id;
-  const _rawStoryId = interaction.options.getString('story_id');
-  const guildStoryId = _rawStoryId != null ? parseInt(_rawStoryId, 10) : null;
-
-  try {
-    let storiesToPause;
-
-    if (guildStoryId !== null) {
-      const storyId = await resolveStoryId(connection, guildId, guildStoryId);
-      if (storyId === null) {
-        return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
-      }
-      const [rows] = await connection.execute(
-        `SELECT sw.story_writer_id, s.story_id, s.title, s.guild_story_id
-         FROM story_writer sw
-         JOIN story s ON sw.story_id = s.story_id
-         WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
-        [storyId, guildId, userId]
-      );
-      storiesToPause = rows;
-    } else {
-      const [rows] = await connection.execute(
-        `SELECT sw.story_writer_id, s.story_id, s.title, s.guild_story_id
-         FROM story_writer sw
-         JOIN story s ON sw.story_id = s.story_id
-         WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
-        [guildId, userId]
-      );
-      storiesToPause = rows;
-    }
-
-    if (storiesToPause.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveStoriesToPause', guildId) });
-    }
-
-    const pausedTitles = [];
-
-    for (const story of storiesToPause) {
-      // Check if it's currently the user's turn
-      const [activeTurnRows] = await connection.execute(
-        `SELECT t.turn_id, t.thread_id FROM turn t
-         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-         WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-        [story.story_id, userId]
-      );
-
-      // Pause the writer first so PickNextWriter excludes them
-      await connection.execute(
-        `UPDATE story_writer SET sw_status = 2 WHERE story_writer_id = ?`,
-        [story.story_writer_id]
-      );
-
-      if (activeTurnRows.length > 0) {
-        // Auto-pass: end the current turn and advance to the next writer
-        const activeTurn = activeTurnRows[0];
-        await connection.execute(
-          `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-          [activeTurn.turn_id]
-        );
-        if (activeTurn.thread_id) {
-          try {
-            const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-            if (thread) await thread.delete('Writer paused — turn passed');
-          } catch (err) {
-            log(`Failed to delete thread on pause for story ${story.story_id}: ${err}`, { show: true, guildName: interaction?.guild?.name });
-          }
-        }
-        try {
-          const nextWriterId = await PickNextWriter(connection, story.story_id);
-          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-        } catch (err) {
-          log(`Could not advance turn after pause for story ${story.story_id}: ${err}`, { show: true, guildName: interaction?.guild?.name });
-        }
-      }
-
-      pausedTitles.push(`${story.title} (#${story.guild_story_id})`);
-    }
-
-    const cfg = await getConfigValue(connection, ['txtPauseDM', 'txtPauseSuccess'], guildId);
-    const storyList = pausedTitles.map(title => `• ${title}`).join('\n');
-    const dmText = replaceTemplateVariables(cfg.txtPauseDM, {
-      story_list: storyList,
-      resume_command: '/mystory resume'
-    });
-
-    try {
-      await interaction.user.send(dmText);
-    } catch (dmErr) {
-      log(`Could not send pause DM to ${interaction.user.username}: ${dmErr}`, { show: true, guildName: interaction?.guild?.name });
-    }
-
-    log(`${interaction.user.username} paused in ${pausedTitles.length} story(s): ${pausedTitles.join(', ')}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: cfg.txtPauseSuccess });
-
-  } catch (error) {
-    log(`Error in handlePause: ${error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
-  }
-}
-
-/**
- * /mystory resume [story_id] — resume participation in one or all paused stories.
- */
-async function handleResume(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = interaction.guild.id;
-  const userId = interaction.user.id;
-  const _rawStoryId = interaction.options.getString('story_id');
-  const guildStoryId = _rawStoryId != null ? parseInt(_rawStoryId, 10) : null;
-
-  try {
-    let storiesToResume;
-
-    if (guildStoryId !== null) {
-      const storyId = await resolveStoryId(connection, guildId, guildStoryId);
-      if (storyId === null) {
-        return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
-      }
-      const [rows] = await connection.execute(
-        `SELECT sw.story_writer_id, s.title, s.guild_story_id
-         FROM story_writer sw
-         JOIN story s ON sw.story_id = s.story_id
-         WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 2`,
-        [storyId, guildId, userId]
-      );
-      storiesToResume = rows;
-    } else {
-      const [rows] = await connection.execute(
-        `SELECT sw.story_writer_id, s.title, s.guild_story_id
-         FROM story_writer sw
-         JOIN story s ON sw.story_id = s.story_id
-         WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 2`,
-        [guildId, userId]
-      );
-      storiesToResume = rows;
-    }
-
-    if (storiesToResume.length === 0) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtNotPaused', guildId) });
-    }
-
-    for (const story of storiesToResume) {
-      await connection.execute(
-        `UPDATE story_writer SET sw_status = 1 WHERE story_writer_id = ?`,
-        [story.story_writer_id]
-      );
-    }
-
-    const resumedTitles = storiesToResume.map(s => `${s.title} (#${s.guild_story_id})`).join(', ');
-    log(`${interaction.user.username} resumed in: ${resumedTitles}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtResumeSuccess', guildId) });
-
-  } catch (error) {
-    log(`Error in handleResume: ${error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
-  }
-}
-
 // ---------------------------------------------------------------------------
 // /mystory manage — self-service writer settings panel
 // ---------------------------------------------------------------------------
 
 function buildMyStoryManagePanel(state, cfg) {
+  const statusLabel = state.writerStatus === 1
+    ? (cfg.txtMyStoryManageActiveStatus ?? 'Active')
+    : (cfg.txtMyStoryManagePausedStatus ?? 'Paused');
+
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(cfg.txtMyStoryManageTitle, { story_title: state.storyTitle }))
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.lblMyStoryManageAO3,     value: state.ao3Name || '*Not set*',                                   inline: true },
-      { name: cfg.lblMyStoryManageNotif,   value: state.notificationPrefs === 'dm' ? 'DM' : 'Mention in channel', inline: true },
-      { name: cfg.lblMyStoryManagePrivacy, value: state.turnPrivacy ? 'Private' : 'Public',                       inline: true }
-    );
+      { name: cfg.lblMyStoryManageStatus ?? 'Status',   value: statusLabel,                                            inline: true },
+      { name: cfg.lblMyStoryManageAO3,                   value: state.ao3Name || '*Not set*',                          inline: true },
+      { name: cfg.lblMyStoryManageNotif,                 value: state.notificationPrefs === 'dm' ? 'DM' : 'Mention',   inline: true },
+      { name: cfg.lblMyStoryManagePrivacy,               value: state.turnPrivacy ? 'Private' : 'Public',              inline: true }
+    )
+    .setDescription('-# Notifications and Privacy are staged — click **Save Settings** to apply.');
 
   const notifToggleLabel   = state.notificationPrefs === 'dm' ? 'Switch to: Mention' : 'Switch to: DM';
   const privacyToggleLabel = state.turnPrivacy ? 'Make Public' : 'Make Private';
 
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mystory_manage_ao3').setLabel(cfg.btnAdminMUAO3Name).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('mystory_manage_ao3').setLabel(cfg.btnAdminMUAO3Name ?? 'Update Name').setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('mystory_manage_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('mystory_manage_privacy').setLabel(privacyToggleLabel).setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave ?? '✅ Save Changes').setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
   );
 
-  return { embeds: [embed], components: [row1, row2] };
+  // Action row: Pass (disabled if no active turn), Pause/Resume toggle, Leave
+  const pauseResumeLabel = state.writerStatus === 1
+    ? (cfg.btnMyStoryManagePause ?? '⏸️ Pause')
+    : (cfg.btnMyStoryManageResume ?? '▶️ Resume');
+  const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('mystory_manage_pass')
+      .setLabel(cfg.btnMyStoryManagePass ?? '⏭️ Pass My Turn')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(!state.hasActiveTurn),
+    new ButtonBuilder()
+      .setCustomId(state.writerStatus === 1 ? 'mystory_manage_pause' : 'mystory_manage_resume')
+      .setLabel(pauseResumeLabel)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('mystory_manage_leave')
+      .setLabel(cfg.btnMyStoryManageLeave ?? '🚪 Leave Story')
+      .setStyle(ButtonStyle.Danger)
+  );
+
+  return { embeds: [embed], components: [row1, row2, row3] };
 }
 
 async function handleMyStoryManage(connection, interaction) {
+  log(`handleMyStoryManage: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -997,7 +452,7 @@ async function handleMyStoryManage(connection, interaction) {
     }
 
     const [writerRows] = await connection.execute(
-      `SELECT story_writer_id, AO3_name, notification_prefs, turn_privacy
+      `SELECT story_writer_id, AO3_name, notification_prefs, turn_privacy, sw_status
        FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (1, 2)`,
       [storyId, interaction.user.id]
     );
@@ -1006,9 +461,20 @@ async function handleMyStoryManage(connection, interaction) {
     }
     const writer = writerRows[0];
 
+    // Check if it's currently the user's active turn
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
+      [storyId, interaction.user.id]
+    );
+    log(`handleMyStoryManage: writerStatus=${writer.sw_status} hasActiveTurn=${activeTurnRows.length > 0}`, { show: false, guildName: interaction?.guild?.name });
+
     const cfg = await getConfigValue(connection, [
-      'txtMyStoryManageTitle', 'lblMyStoryManageAO3', 'lblMyStoryManageNotif',
-      'lblMyStoryManagePrivacy', 'btnMyStoryManageSave', 'btnCancel', 'btnAdminMUAO3Name'
+      'txtMyStoryManageTitle', 'lblMyStoryManageStatus', 'lblMyStoryManageAO3', 'lblMyStoryManageNotif',
+      'lblMyStoryManagePrivacy', 'btnMyStoryManageSave', 'btnCancel', 'btnAdminMUAO3Name',
+      'btnMyStoryManagePause', 'btnMyStoryManageResume', 'btnMyStoryManagePass', 'btnMyStoryManageLeave',
+      'txtMyStoryManageActiveStatus', 'txtMyStoryManagePausedStatus'
     ], guildId);
 
     const state = {
@@ -1016,9 +482,11 @@ async function handleMyStoryManage(connection, interaction) {
       guildId,
       storyTitle: storyRows[0].title,
       storyWriterId: writer.story_writer_id,
+      writerStatus: writer.sw_status,
       ao3Name: writer.AO3_name,
       notificationPrefs: writer.notification_prefs,
       turnPrivacy: writer.turn_privacy,
+      hasActiveTurn: activeTurnRows.length > 0,
       originalInteraction: interaction,
       cfg
     };
@@ -1027,12 +495,13 @@ async function handleMyStoryManage(connection, interaction) {
     await interaction.editReply(buildMyStoryManagePanel(state, cfg));
 
   } catch (error) {
-    log(`Error in handleMyStoryManage: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleMyStoryManage failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
 
 async function handleMyStoryManageButton(connection, interaction) {
+  log(`handleMyStoryManageButton: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingMyStoryManageData.get(userId);
   const customId = interaction.customId;
@@ -1076,25 +545,265 @@ async function handleMyStoryManageButton(connection, interaction) {
         `UPDATE story_writer SET AO3_name = ?, notification_prefs = ?, turn_privacy = ? WHERE story_writer_id = ?`,
         [state.ao3Name, state.notificationPrefs, state.turnPrivacy, state.storyWriterId]
       );
+      log(`mystory manage saved for writer ${state.storyWriterId} in story ${state.storyId}`, { show: true, guildName: interaction?.guild?.name });
       pendingMyStoryManageData.delete(userId);
-      await interaction.editReply({
-        content: await getConfigValue(connection, 'txtMyStoryManageSaved', state.guildId),
-        embeds: [],
-        components: []
-      });
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtMyStoryManageSaved', state.guildId), embeds: [], components: [] });
     } catch (error) {
-      log(`Error saving mystory manage: ${error}`, { show: true, guildName: interaction?.guild?.name });
+      log(`mystory manage save failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', state.guildId), embeds: [], components: [] });
     }
 
   } else if (customId === 'mystory_manage_cancel') {
     await interaction.deferUpdate();
     pendingMyStoryManageData.delete(userId);
-    await interaction.editReply({
-      content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
-      embeds: [],
-      components: []
-    });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
+
+  } else if (customId === 'mystory_manage_pass') {
+    await interaction.deferUpdate();
+    const cfg = state.cfg;
+    const confirmMsg = replaceTemplateVariables(cfg.txtMyPassConfirm ?? '⏭️ **Pass your turn in [story_title]?** This cannot be undone.', { story_title: state.storyTitle });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`mystory_manage_pass_confirm_${state.storyId}`).setLabel(cfg.btnMyPassConfirm ?? 'Yes, Pass My Turn').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`mystory_manage_pass_cancel_${state.storyId}`).setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+    );
+    await interaction.editReply({ content: confirmMsg, embeds: [], components: [row] });
+
+  } else if (customId === 'mystory_manage_pause') {
+    await interaction.deferUpdate();
+    const cfg = state.cfg;
+    const confirmMsg = replaceTemplateVariables(cfg.txtMyPauseConfirm ?? '⏸️ **Pause your participation in [story_title]?**', { story_title: state.storyTitle });
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`mystory_manage_pause_confirm_${state.storyId}`).setLabel(cfg.btnMyPauseConfirm ?? 'Yes, Pause').setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`mystory_manage_pause_cancel_${state.storyId}`).setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+    );
+    await interaction.editReply({ content: confirmMsg, embeds: [], components: [row] });
+
+  } else if (customId === 'mystory_manage_resume') {
+    await interaction.deferUpdate();
+    try {
+      await connection.execute(
+        `UPDATE story_writer SET sw_status = 1 WHERE story_writer_id = ?`,
+        [state.storyWriterId]
+      );
+      log(`${interaction.user.username} resumed in story ${state.storyId}`, { show: true, guildName: interaction?.guild?.name });
+      state.writerStatus = 1;
+      pendingMyStoryManageData.delete(userId);
+      const successMsg = replaceTemplateVariables(state.cfg.txtMyResumeSuccess ?? '▶️ You have rejoined the rotation for **[story_title]**.', { story_title: state.storyTitle });
+      await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+    } catch (error) {
+      log(`mystory manage resume failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', state.guildId), embeds: [], components: [] });
+    }
+
+  } else if (customId === 'mystory_manage_leave') {
+    await interaction.deferUpdate();
+    const cfg = state.cfg;
+    // Check if it's the user's turn and if they're the last writer
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_id FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
+      [state.storyId, userId]
+    );
+    const [writerCountRows] = await connection.execute(
+      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
+      [state.storyId, userId]
+    );
+    const isMyTurn = activeTurnRows.length > 0;
+    const isLastWriter = writerCountRows[0].count === 0;
+
+    let confirmKey;
+    if (isLastWriter) confirmKey = 'txtLeaveConfirmLastWriter';
+    else if (isMyTurn) confirmKey = 'txtLeaveConfirmMyTurn';
+    else confirmKey = 'txtLeaveConfirm';
+
+    const [confirmMsg, btnLeaveStory, btnCancel] = await Promise.all([
+      getConfigValue(connection, confirmKey, state.guildId),
+      getConfigValue(connection, 'btnLeaveStory', state.guildId),
+      getConfigValue(connection, 'btnCancel', state.guildId)
+    ]);
+
+    const row = new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`mystory_manage_leave_confirm_${state.storyId}`).setLabel(btnLeaveStory).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`mystory_manage_leave_cancel_${state.storyId}`).setLabel(btnCancel).setStyle(ButtonStyle.Secondary)
+    );
+    await interaction.editReply({ content: replaceTemplateVariables(confirmMsg, { story_title: state.storyTitle }), embeds: [], components: [row] });
+  }
+}
+
+async function handlePanelPassConfirm(connection, interaction) {
+  log(`handlePanelPassConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferUpdate();
+  const storyId = parseInt(interaction.customId.split('_').at(-1));
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  try {
+    const [turnInfo] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
+      [storyId, userId]
+    );
+    if (turnInfo.length === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId), components: [] });
+      return;
+    }
+    const turn = turnInfo[0];
+    await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [turn.turn_id]);
+    const nextWriterId = await PickNextWriter(connection, storyId);
+    await NextTurn(connection, interaction, nextWriterId);
+    if (turn.thread_id) {
+      try {
+        const thread = await interaction.guild.channels.fetch(turn.thread_id);
+        if (thread) await thread.delete('Turn passed from manage panel');
+      } catch (err) {
+        log(`handlePanelPassConfirm: failed to delete thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
+      }
+    }
+    pendingMyStoryManageData.delete(userId);
+    log(`${interaction.user.username} passed turn in story ${storyId} via manage panel`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtMyPassSuccess', guildId), embeds: [], components: [] });
+  } catch (error) {
+    log(`handlePanelPassConfirm failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
+  }
+}
+
+async function handlePanelPauseConfirm(connection, interaction) {
+  log(`handlePanelPauseConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferUpdate();
+  const storyId = parseInt(interaction.customId.split('_').at(-1));
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  try {
+    const [writerRows] = await connection.execute(
+      `SELECT sw.story_writer_id, s.title, s.guild_story_id FROM story_writer sw
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
+      [storyId, guildId, userId]
+    );
+    if (writerRows.length === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId), components: [] });
+      return;
+    }
+    const story = writerRows[0];
+
+    // Check for active turn before pausing
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
+      [storyId, userId]
+    );
+
+    await connection.execute(`UPDATE story_writer SET sw_status = 2 WHERE story_writer_id = ?`, [story.story_writer_id]);
+
+    if (activeTurnRows.length > 0) {
+      const activeTurn = activeTurnRows[0];
+      await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurn.turn_id]);
+      if (activeTurn.thread_id) {
+        try {
+          const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
+          if (thread) await thread.delete('Writer paused — turn passed');
+        } catch (err) {
+          log(`handlePanelPauseConfirm: failed to delete thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        }
+      }
+      try {
+        const nextWriterId = await PickNextWriter(connection, storyId);
+        if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+      } catch (err) {
+        log(`handlePanelPauseConfirm: failed to advance turn: ${err}`, { show: true, guildName: interaction?.guild?.name });
+      }
+    }
+
+    pendingMyStoryManageData.delete(userId);
+    log(`${interaction.user.username} paused in story ${storyId} via manage panel`, { show: true, guildName: interaction?.guild?.name });
+    const storyTitle = `${story.title} (#${story.guild_story_id})`;
+    const successMsg = replaceTemplateVariables(await getConfigValue(connection, 'txtMyPauseSuccess', guildId), { story_title: storyTitle });
+    await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+  } catch (error) {
+    log(`handlePanelPauseConfirm failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
+  }
+}
+
+async function handlePanelLeaveConfirm(connection, interaction) {
+  log(`handlePanelLeaveConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferUpdate();
+  const storyId = parseInt(interaction.customId.split('_').at(-1));
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  try {
+    const [writerRows] = await connection.execute(
+      `SELECT sw.story_writer_id FROM story_writer sw
+       JOIN story s ON sw.story_id = s.story_id
+       WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status IN (1, 2)`,
+      [storyId, guildId, userId]
+    );
+    if (writerRows.length === 0) {
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId), components: [] });
+      return;
+    }
+
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
+      [storyId, userId]
+    );
+    const [remainingRows] = await connection.execute(
+      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
+      [storyId, userId]
+    );
+    const isLastWriter = remainingRows[0].count === 0;
+
+    if (activeTurnRows.length > 0) {
+      const activeTurn = activeTurnRows[0];
+      await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurn.turn_id]);
+      if (activeTurn.thread_id) {
+        try {
+          const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
+          if (thread) await deleteThreadAndAnnouncement(thread);
+        } catch (err) {
+          log(`handlePanelLeaveConfirm: failed to delete thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        }
+      }
+    }
+
+    await connection.execute(`UPDATE story_writer SET sw_status = 0, left_at = NOW() WHERE story_id = ? AND discord_user_id = ?`, [storyId, userId]);
+
+    if (isLastWriter) {
+      await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
+      log(`Story ${storyId} auto-closed — last writer left via manage panel`, { show: true, guildName: interaction?.guild?.name });
+    } else if (activeTurnRows.length > 0) {
+      try {
+        const nextWriterId = await PickNextWriter(connection, storyId);
+        if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+      } catch (err) {
+        log(`handlePanelLeaveConfirm: failed to advance turn: ${err}`, { show: true, guildName: interaction?.guild?.name });
+      }
+    }
+
+    pendingMyStoryManageData.delete(userId);
+    log(`${interaction.user.username} left story ${storyId} via manage panel`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtLeftStorySuccess', guildId), embeds: [], components: [] });
+  } catch (error) {
+    log(`handlePanelLeaveConfirm failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
+  }
+}
+
+async function handlePanelActionCancel(connection, interaction) {
+  await interaction.deferUpdate();
+  const userId = interaction.user.id;
+  const state = pendingMyStoryManageData.get(userId);
+  if (state) {
+    await interaction.editReply(buildMyStoryManagePanel(state, state.cfg));
+  } else {
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
   }
 }
 
@@ -1139,19 +848,7 @@ async function handleAutocomplete(connection, interaction) {
 
   let rows;
 
-  if (subcommand === 'pass') {
-    // Only stories where it is currently the user's active turn
-    [rows] = await connection.execute(
-      `SELECT s.guild_story_id, s.title FROM story s
-       JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
-       JOIN turn t ON t.story_writer_id = sw.story_writer_id AND t.turn_status = 1
-       WHERE s.guild_id = ? AND s.story_status = 1
-         AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-       ORDER BY s.guild_story_id LIMIT 25`,
-      [interaction.user.id, guildId, typed, typedPrefix]
-    );
-
-  } else if (subcommand === 'catchup') {
+  if (subcommand === 'catchup') {
     // Non-closed stories the user is in that have at least one confirmed entry
     [rows] = await connection.execute(
       `SELECT s.guild_story_id, s.title FROM story s
@@ -1169,14 +866,11 @@ async function handleAutocomplete(connection, interaction) {
     );
 
   } else {
-    const swStatusFilter =
-      subcommand === 'pause'  ? '= 1' :
-      subcommand === 'resume' ? '= 2' : 'IN (1, 2)';
-
+    // manage: active or paused writers in non-closed stories
     [rows] = await connection.execute(
       `SELECT s.guild_story_id, s.title FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id
-       WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status ${swStatusFilter}
+       WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status IN (1, 2)
          AND s.story_status != 3
          AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
        ORDER BY s.guild_story_id LIMIT 25`,

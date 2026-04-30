@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, discordTimestamp } from '../utilities.js';
+import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, checkIsCreator, discordTimestamp } from '../utilities.js';
 import { generateStoryExport } from './export.js';
 import { isRestricted, RATING_BADGE } from './metadata.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './state.js';
@@ -108,6 +108,36 @@ export function buildReadEmbed(session, pageIndex) {
     );
   }
   extraButtons.push(new ActionRowBuilder().addComponents(...utilityButtons));
+
+  // Tag row: Submit Tag always shown for writers; View Tags when pending submissions exist; Edit Tags for creator/admin
+  const tagButtons = [];
+  if (session.isActiveWriter) {
+    tagButtons.push(
+      new ButtonBuilder()
+        .setCustomId(`story_submit_tag_${session.storyId}`)
+        .setLabel(session.btnSubmitTagRead ?? '🏷️ Submit Tag')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+  if (session.pendingTagCount > 0) {
+    tagButtons.push(
+      new ButtonBuilder()
+        .setCustomId(`story_view_tags_${session.storyId}`)
+        .setLabel(session.btnViewTags ?? '🏷️ View Tags')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+  if (session.isAdminOrCreator) {
+    tagButtons.push(
+      new ButtonBuilder()
+        .setCustomId(`story_manage_review_tags_read_${session.storyId}`)
+        .setLabel(session.btnEditTags ?? '✏️ Edit Tags')
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+  if (tagButtons.length > 0) {
+    extraButtons.push(new ActionRowBuilder().addComponents(...tagButtons));
+  }
 
   const result = buildEntryEmbed(page, {
     title: `📖 ${session.title}`,
@@ -218,8 +248,27 @@ export async function handleRead(connection, interaction) {
       contentMap.set(entry.story_entry_id, entry.content);
     }
 
-    // Check admin status for contextual Edit button in buildReadEmbed
-    const isAdmin = await checkIsAdmin(connection, interaction, guildId);
+    // Check admin/creator status and active writer for tag buttons
+    const [isAdmin, isCreator] = await Promise.all([
+      checkIsAdmin(connection, interaction, guildId),
+      checkIsCreator(connection, storyId, interaction.user.id)
+    ]);
+    const [writerRows] = await connection.execute(
+      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
+      [storyId, interaction.user.id]
+    );
+    const isActiveWriter = writerRows.length > 0;
+
+    const [[{ pendingTagCount }]] = await connection.execute(
+      `SELECT COUNT(*) AS pendingTagCount FROM story_tag_submission WHERE story_id = ? AND submission_status = 'pending'`,
+      [storyId]
+    );
+
+    const [btnSubmitTagRead, btnViewTags, btnEditTags] = await Promise.all([
+      getConfigValue(connection, 'btnSubmitTagRead', guildId),
+      getConfigValue(connection, 'btnViewTags', guildId),
+      getConfigValue(connection, 'btnEditTags', guildId)
+    ]);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
     const pages = buildPages(entries, story.show_authors, editInfoMap, hasAnyEditSet);
@@ -229,7 +278,14 @@ export async function handleRead(connection, interaction) {
 
     const ratingBadge = RATING_BADGE[story.rating] ?? '[NR]';
     const titleWithRating = `${story.title} ${ratingBadge}`;
-    const session = { pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id, title: titleWithRating, wordCount, guildId, userId: interaction.user.id, isAdmin, storyThreadId: story.story_thread_id, imagePageIndex: 0 };
+    const session = {
+      pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id,
+      title: titleWithRating, wordCount, guildId, userId: interaction.user.id,
+      isAdmin, isAdminOrCreator: isAdmin || isCreator, isActiveWriter,
+      pendingTagCount: Number(pendingTagCount),
+      btnSubmitTagRead, btnViewTags, btnEditTags,
+      storyThreadId: story.story_thread_id, imagePageIndex: 0
+    };
     pendingReadData.set(interaction.user.id, session);
 
     await interaction.editReply(buildReadEmbed(session, startPage));

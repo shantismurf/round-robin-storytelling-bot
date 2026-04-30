@@ -7,3 +7,5 @@ logs/
 LOGIC_ERRORS_REPORT.md
 CLAUDE.md
 TODO.md
+check-unconfigured.js
+adminmsg.js
