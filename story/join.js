@@ -134,11 +134,6 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
       }
     }
 
-    log(`DEBUG: about to reply, replied=${interaction.replied} deferred=${interaction.deferred}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.reply({ content: 'DEBUG: join button reached handler', flags: MessageFlags.Ephemeral });
-    log(`DEBUG: reply sent successfully`, { show: true, guildName: interaction?.guild?.name });
-    return;
-
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
     if (!joinInfo.success) {
       await interaction.reply({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
@@ -149,6 +144,11 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
     const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
     pendingJoinData.set(interaction.user.id, state);
+
+    // Add user to thread before replying so the ephemeral is visible to them
+    if (interaction.channel?.isThread?.()) {
+      await interaction.channel.members.add(interaction.user.id).catch(() => {});
+    }
 
     const embedData = await buildJoinEmbed(connection, state);
     await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
