@@ -38,8 +38,21 @@ export async function syncConfig(connection) {
     }
     console.log(`${formattedDate()}: Parsed ${fileEntries.length} entries from sample_config.sql`);
 
-    // Get all entries currently in the DB, exclude server setup config keys
-    const [dbRows] = await connection.execute('SELECT config_key, config_value, guild_id FROM config WHERE config_key NOT IN (\'cfgStoryFeedChannelId\',\'cfgMediaChannelId\', \'cfgAdminRoleName\')');
+    // Get all entries currently in the DB, exclude guild-specific setup keys that are
+    // written by /storyadmin setup and vary per server (not managed by sample_config.sql).
+    const setupOnlyKeys = [
+      'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
+      'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
+      'cfgWeeklyRoundupEnabled', 'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
+      'cfgHubServerId', 'cfgHubFaqChannelId',
+      'cfgFaqThreadOverview', 'cfgFaqThreadWriterCmds', 'cfgFaqThreadStoryCreation',
+      'cfgFaqThreadManaging', 'cfgFaqThreadAdminCmds',
+    ];
+    const placeholders = setupOnlyKeys.map(() => '?').join(',');
+    const [dbRows] = await connection.execute(
+      `SELECT config_key, config_value, guild_id FROM config WHERE config_key NOT IN (${placeholders})`,
+      setupOnlyKeys
+    );
     const dbMap = new Map(dbRows.map(r => [`${r.guild_id}:${r.config_key}`, r.config_value]));
     console.log(`${formattedDate()}: Found ${dbRows.length} entries in the database\n`);
 

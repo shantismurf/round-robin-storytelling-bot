@@ -2,10 +2,11 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilde
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, getTurnNumber, checkIsAdmin, checkIsCreator } from '../utilities.js';
 import { PickNextWriter, NextTurn, updateStoryStatusMessage, migrateStoryThread } from '../storybot.js';
 import { RATING_LABELS, WARNING_OPTIONS, CATEGORY_OPTIONS, crossesBarrier, isRestricted } from './metadata.js';
+import { buildTurnActionsRow, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './manageTurnActions.js';
 
 const pendingManageData = new Map();
 
-function buildManageMessage(cfg, state) {
+function buildManageMessage(cfg, state, activeTurn = null) {
   const orderEmojis = { 1: '🎲', 2: '🔄', 3: '📋' };
   const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
   const orderEmoji = orderEmojis[state.orderType];
@@ -117,7 +118,7 @@ function buildManageMessage(cfg, state) {
   const row5 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_save')
-      .setLabel(cfg.btnAdminConfigSave)
+      .setLabel(cfg.btnSaveSettings ?? cfg.btnAdminConfigSave ?? '✅ Save Settings')
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId('story_manage_cancel')
@@ -126,11 +127,19 @@ function buildManageMessage(cfg, state) {
   );
 
   const rows = [row1, row2, row3, row4, row5];
+
+  // Admin/creator-only turn actions rows
+  if (state.isAdminOrCreator) {
+    const taRows = buildTurnActionsRow(state, activeTurn, cfg);
+    rows.push(...taRows);
+  }
+
   return { embeds: [embed], components: rows };
 }
 
-async function handleManage(connection, interaction) {
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+async function handleManage(connection, interaction, alreadyDeferred = false) {
+  log(`handleManage: entry user=${interaction.user.id} alreadyDeferred=${alreadyDeferred}`, { show: false, guildName: interaction?.guild?.name });
+  if (!alreadyDeferred) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {
@@ -162,7 +171,7 @@ async function handleManage(connection, interaction) {
     }
 
     const cfg = await getConfigValue(connection, [
-      'txtAdminConfigTitle', 'btnAdminConfigSave', 'btnCancel',
+      'txtAdminConfigTitle', 'btnAdminConfigSave', 'btnSaveSettings', 'btnCancel',
       'lblTurnLength', 'btnSetTurnLength',
       'lblTimeoutReminder', 'btnSetTimeout',
       'lblMaxWriters', 'btnSetMaxWriters',
@@ -173,14 +182,34 @@ async function handleManage(connection, interaction) {
       'lblPrivateToggle',
       'lblRating', 'lblWarnings',
       'txtRatingChangeThreadWarning',
-      'btnSetMetadata', 'btnReviewTags'
+      'btnSetMetadata', 'btnReviewTags',
+      'txtSelectionStaged',
+      // Turn action cfg keys
+      'btnTurnSkip', 'btnTurnExtend', 'btnTurnNext', 'btnTurnReassign',
+      'btnTurnDeleteEntry', 'btnTurnRestoreEntry', 'txtTurnSkipConfirm',
+      'txtTurnReassignConfirm', 'txtTurnExtendModalTitle', 'lblTurnExtendHours',
+      'txtTurnExtendPlaceholder', 'txtTurnDeleteEntryModalTitle', 'lblTurnDeleteEntryTurn',
+      'txtTurnDeleteEntryPlaceholder', 'txtTurnRestoreEntryModalTitle', 'lblTurnRestoreEntryId',
+      'txtTurnRestoreEntryPlaceholder', 'txtTurnNextSelectWrite'
     ], guildId);
+    log(`handleManage: cfg loaded`, { show: false, guildName: interaction?.guild?.name });
 
     // Count pending tag submissions for this story
     const [[{ pendingTagCount }]] = await connection.execute(
       `SELECT COUNT(*) AS pendingTagCount FROM story_tag_submission WHERE story_id = ? AND submission_status = 'pending'`,
       [storyId]
     );
+
+    // Fetch active turn for turn actions section
+    const [activeTurnRows] = await connection.execute(
+      `SELECT t.turn_id, t.thread_id, sw.discord_display_name, sw.discord_user_id,
+              sw.story_writer_id, UNIX_TIMESTAMP(t.turn_ends_at) as turn_ends_unix
+       FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND t.turn_status = 1`,
+      [storyId]
+    );
+    const activeTurn = activeTurnRows.length > 0 ? activeTurnRows[0] : null;
+    log(`handleManage: activeTurn=${activeTurn ? activeTurn.turn_id : 'none'} isCreator=${isCreator} isAdmin=${isAdmin}`, { show: false, guildName: interaction?.guild?.name });
 
     const state = {
       cfg,
@@ -211,11 +240,15 @@ async function handleManage(connection, interaction) {
       characters: story.characters ?? '',
       category: story.category ?? '',
       additionalTags: story.additional_tags ?? '',
-      pendingTagCount: Number(pendingTagCount)
+      pendingTagCount: Number(pendingTagCount),
+      isAdminOrCreator: isCreator || isAdmin,
+      guildName: interaction.guild.name,
+      activeTurn
     };
 
     pendingManageData.set(interaction.user.id, state);
-    await interaction.editReply(buildManageMessage(cfg, state));
+    log(`handleManage: sending panel`, { show: false, guildName: interaction?.guild?.name });
+    await interaction.editReply(buildManageMessage(cfg, state, activeTurn));
 
   } catch (error) {
     log(`Error in handleManage: ${error}`, { show: true, guildName: interaction?.guild?.name });
@@ -387,6 +420,11 @@ async function handleManageButton(connection, interaction) {
 
   } else if (customId === 'story_manage_review_tags') {
     await handleReviewTags(connection, interaction, state);
+    return;
+
+  } else if (customId.startsWith('story_manage_ta_')) {
+    // Turn action buttons — delegate to manageTurnActions
+    await handleTurnActionButton(connection, interaction, state);
     return;
 
   } else if (customId === 'story_manage_save') {
@@ -790,11 +828,13 @@ async function handleManageModalSubmit(connection, interaction) {
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+    const stagedMsg = state.cfg.txtSelectionStaged ?? 'Selection saved — click **Save Settings** on the panel to apply.';
+    await interaction.editReply({ content: stagedMsg });
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
     await interaction.deleteReply();
 
   } catch (error) {
-    log(`Error in handleManageModalSubmit: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`Error in handleManageModalSubmit: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
 }
@@ -822,8 +862,9 @@ async function handleManageSelectMenu(connection, interaction) {
     return;
   }
 
-  await interaction.update({ content: '✅ Selection saved.', components: [] });
-  await state.originalInteraction.editReply(buildManageMessage(state.cfg, state));
+  const stagedMsg = state.cfg.txtSelectionStaged ?? 'Selection saved — click **Save Settings** on the panel to apply.';
+  await interaction.update({ content: stagedMsg, components: [] });
+  await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 }
 
 /**
@@ -891,4 +932,9 @@ export {
   applyPauseActions,
   applyResumeActions,
   handleManageModalSubmit,
+  // Re-export turn action handlers for routing in story.js / storyadmin.js
+  handleTurnActionConfirm,
+  handleTurnActionCancel,
+  handleTurnActionSelectMenu,
+  handleTurnActionModal,
 };
