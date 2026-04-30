@@ -19,7 +19,7 @@ async function refreshAllStatusMessages(connection, client) {
     for (const story of stories) {
       try {
         const guild = await client.guilds.fetch(story.guild_id);
-        await updateStoryStatusMessage(connection, guild, story.story_id);
+        await updateStoryStatusMessage(connection, guild, story.story_id, { forceRepost: true });
       } catch (err) {
         log(`Failed to refresh status for story ${story.story_id}: ${err}`, { show: true });
       }
