@@ -76,7 +76,7 @@ export async function syncConfig(connection) {
       for (const entry of missing) {
         console.log(`  + ${entry.config_key}`);
         await connection.execute(
-          'INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, ?, ?)',
+          'INSERT IGNORE INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, ?, ?)',
           [entry.config_key, entry.config_value, entry.language_code, entry.guild_id]
         );
       }
