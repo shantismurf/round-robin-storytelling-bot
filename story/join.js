@@ -121,7 +121,7 @@ export async function buildJoinEmbed(connection, state) {
 }
 
 export async function handleJoin(connection, interaction, buttonStoryId = null) {
-  log(`handleJoin entry: buttonStoryId=${buttonStoryId} user=${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleJoin entry: buttonStoryId=${buttonStoryId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const guildId = interaction.guild.id;
     let storyId;
@@ -130,17 +130,21 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     } else {
       storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
       if (storyId === null) {
+        log(`handleJoin: storyId not found for input`, { show: false, guildName: interaction?.guild?.name });
         await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
         return;
       }
     }
 
+    log(`handleJoin: calling validateJoinEligibility storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
+    log(`handleJoin: eligibility success=${joinInfo.success}`, { show: false, guildName: interaction?.guild?.name });
     if (!joinInfo.success) {
       await interaction.reply({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
 
+    log(`handleJoin: building embed`, { show: false, guildName: interaction?.guild?.name });
     const existingAO3Name = await getPreviousAO3Name(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
     const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName };
@@ -149,9 +153,10 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     const embedData = await buildJoinEmbed(connection, state);
 
     if (buttonStoryId !== null) {
-      // Button click from thread — send join panel via DM, ephemeral replies don't surface in threads
+      log(`handleJoin: button path — sending DM`, { show: false, guildName: interaction?.guild?.name });
       try {
         await interaction.user.send(embedData);
+        log(`handleJoin: DM sent successfully`, { show: false, guildName: interaction?.guild?.name });
         const txtJoinDMSent = await getConfigValue(connection, 'txtJoinDMSent', guildId);
         await interaction.reply({ content: txtJoinDMSent, flags: MessageFlags.Ephemeral });
       } catch (dmError) {
@@ -160,8 +165,10 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
         await interaction.reply({ content: txtJoinDMFailed, flags: MessageFlags.Ephemeral });
       }
     } else {
+      log(`handleJoin: slash path — replying ephemeral`, { show: false, guildName: interaction?.guild?.name });
       await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
     }
+    log(`handleJoin: complete`, { show: false, guildName: interaction?.guild?.name });
 
   } catch (error) {
     log(`handleJoin failed for user=${interaction.user.id} storyId=${buttonStoryId ?? 'slash'}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
