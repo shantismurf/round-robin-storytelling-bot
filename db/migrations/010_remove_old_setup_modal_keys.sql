@@ -18,7 +18,7 @@ DELETE FROM config WHERE config_key IN (
 );
 
 -- Remove blank guild-specific roundup/restricted entries written by old setup code.
--- Safe to remove: if blank they have no effect; setup will re-write them when saved.
+-- Safe to remove: if blank they have no effect. Setup will re-write them when saved.
 DELETE FROM config
 WHERE config_key IN (
   'cfgRestrictedFeedChannelId',

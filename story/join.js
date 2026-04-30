@@ -121,6 +121,7 @@ export async function buildJoinEmbed(connection, state) {
 }
 
 export async function handleJoin(connection, interaction, buttonStoryId = null) {
+  log(`handleJoin: user=${interaction.user.id} buttonStoryId=${buttonStoryId ?? 'null'} guild=${interaction.guild?.id}`, { show: true, guildName: interaction?.guild?.name });
   try {
     const guildId = interaction.guild.id;
     let storyId;
@@ -135,6 +136,7 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     }
 
     const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
+    log(`handleJoin: validateJoinEligibility result success=${joinInfo.success} storyId=${storyId}`, { show: true, guildName: interaction?.guild?.name });
     if (!joinInfo.success) {
       await interaction.reply({ content: joinInfo.error, flags: MessageFlags.Ephemeral });
       return;
@@ -147,10 +149,13 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
 
     const embedData = await buildJoinEmbed(connection, state);
     await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
+    log(`handleJoin: replied successfully for storyId=${storyId}`, { show: true, guildName: interaction?.guild?.name });
 
   } catch (error) {
-    log(`Error in handleJoin: ${error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
+    log(`handleJoin failed for user=${interaction.user.id} storyId=${buttonStoryId ?? 'slash'}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id), flags: MessageFlags.Ephemeral }).catch(() => {});
+    }
   }
 }
 
@@ -262,7 +267,7 @@ export async function handleJoinConfirm(connection, interaction) {
     }
   } catch (error) {
     await txn.rollback();
-    log(`Error in handleJoinConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleJoinConfirm failed for storyId=${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'txtJoinProcessFailed', guildId), embeds: [], components: [] });
   } finally {
     txn.release();
