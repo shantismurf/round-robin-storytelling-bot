@@ -48,7 +48,6 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblRating ?? 'Rating', value: ratingLabel + barrierWarning, inline: true },
       { name: cfg.lblCategory ?? 'Category', value: state.category || '*Not set*', inline: true },
       { name: cfg.lblWarnings ?? 'Warnings', value: warningsDisplay, inline: false },
-      { name: cfg.lblSummary, value: state.summary || '*Not set*', inline: false },
       { name: cfg.lblTags, value: state.tags || '*Not set*', inline: false },
     );
 
@@ -182,7 +181,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'lblMaxWriters', 'btnSetMaxWriters',
       'lblOpenToWriters', 'lblShowAuthors',
       'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
-      'lblSummary', 'btnSetSummary',
       'lblTags', 'btnSetTags',
       'lblPrivateToggle',
       'lblRating', 'lblWarnings', 'lblCategory',
@@ -395,25 +393,6 @@ async function handleManageButton(connection, interaction) {
               .setRequired(false)
               .setValue(state.maxWriters != null ? String(state.maxWriters) : '')
               .setPlaceholder('Enter a number, or leave blank for no limit')
-          )
-        )
-    );
-
-  } else if (customId === 'story_manage_set_summary') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_manage_summary_modal')
-        .setTitle(state.cfg.lblSummary)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('summary')
-              .setLabel(state.cfg.lblSummary)
-              .setStyle(TextInputStyle.Paragraph)
-              .setRequired(false)
-              .setValue(state.summary)
-              .setMaxLength(4000)
-              .setPlaceholder('Enter a summary for this story (used in exports)')
           )
         )
     );
@@ -838,9 +817,6 @@ async function handleManageModalSubmit(connection, interaction) {
       } else {
         state.maxWriters = null;
       }
-
-    } else if (interaction.customId === 'story_manage_summary_modal') {
-      state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 4000, true) ?? '';
 
     } else if (interaction.customId === 'story_manage_tags_modal') {
       state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 500) ?? '';

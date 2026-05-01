@@ -494,4 +494,4 @@ export async function handleTurnActionModal(connection, interaction) {
   }
 }
 
-export { pendingTurnActionData, buildTurnActionsPanel };
+export { pendingTurnActionData };

@@ -11,10 +11,8 @@ async function getMetaCfg(connection, guildId) {
     'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'btnSaveSettings', 'btnCancel',
     'lblMetaCategory', 'lblMetaRating', 'lblMetaWarnings',
     'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaOtherRelationships',
-    'lblMetaCharacters', 'lblMetaTags',
+    'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'txtMetaMainRelationshipPlaceholder',
-    'lblMetaRating', 'lblMetaWarnings', 'lblMetaFandom', 'lblMetaCategory',
-    'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaCharacters', 'lblMetaTags',
   ], guildId);
 }
 
@@ -27,22 +25,24 @@ export function buildMetadataPanel(cfg, state) {
   const otherRelDisplay = state.otherRelationships || '*Not set*';
   const charsDisplay = state.characters || '*Not set*';
   const tagsDisplay = state.additionalTags || '*Not set*';
+  const summaryDisplay = state.summary || '*Not set*';
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtMetaPanelTitle ?? 'Story Metadata')
     .setColor(0x5865f2)
     .addFields(
       { name: cfg.lblMetaCategory ?? '📊 Category', value: categoryDisplay, inline: true },
+      { name: cfg.lblMetaFandom ?? '📖 Fandom', value: fandomDisplay, inline: true },
       { name: cfg.lblMetaRating ?? '🔞 Rating', value: ratingLabel, inline: true },
-      { name: cfg.lblMetaWarnings ?? '⚠️ Warnings', value: warningsDisplay, inline: false },
-      { name: cfg.lblMetaFandom ?? '📖 Fandom', value: fandomDisplay, inline: false },
+      { name: cfg.lblMetaWarnings ?? '⚠️ Warnings', value: warningsDisplay, inline: true },
       { name: cfg.lblMetaMainRelationship ?? '💞 Main Relationship', value: mainRelDisplay, inline: true },
       { name: cfg.lblMetaOtherRelationships ?? '🫂 Other Relationships', value: otherRelDisplay, inline: true },
-      { name: cfg.lblMetaCharacters ?? '🧑 Characters', value: charsDisplay, inline: true },
-      { name: cfg.lblMetaTags ?? '🏷️ Tags', value: tagsDisplay, inline: true },
+      { name: cfg.lblMetaCharacters ?? '🧑 Characters', value: charsDisplay, inline: false },
+      { name: cfg.lblMetaTags ?? '🏷️ Tags', value: tagsDisplay, inline: false },
+      { name: cfg.lblMetaSummary ?? '📝 Summary', value: summaryDisplay, inline: false },
     );
 
-  // Row 1 (2): Category: <> | Fandom
+  // Row 1 (4): Category: <> | Fandom | Rating: <> | Set Warnings
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_cycle_category')
@@ -51,11 +51,7 @@ export function buildMetadataPanel(cfg, state) {
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_fandom')
       .setLabel('Fandom')
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  // Row 2 (2): Rating: <> | Set Warnings
-  const row2 = new ActionRowBuilder().addComponents(
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_cycle_rating')
       .setLabel(`Rating: ${state.rating ?? 'NR'}`)
@@ -66,8 +62,8 @@ export function buildMetadataPanel(cfg, state) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 3 (2): Main Relationship | Other Relationships
-  const row3 = new ActionRowBuilder().addComponents(
+  // Row 2 (2): Main Relationship | Other Relationships
+  const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_mainrel')
       .setLabel('Main Relationship')
@@ -78,8 +74,8 @@ export function buildMetadataPanel(cfg, state) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 4 (2): Characters | Tags
-  const row4 = new ActionRowBuilder().addComponents(
+  // Row 3 (3): Characters | Tags | Set Summary
+  const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_characters')
       .setLabel('Characters')
@@ -87,22 +83,22 @@ export function buildMetadataPanel(cfg, state) {
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_tags')
       .setLabel('Tags')
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_add_meta_set_summary')
+      .setLabel('Set Summary')
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 5 (2): Save Settings | Cancel
-  const row5 = new ActionRowBuilder().addComponents(
+  // Row 4 (1): Save Settings
+  const row4 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_save')
       .setLabel(cfg.btnSaveSettings ?? 'Save Settings')
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId('story_add_meta_cancel')
-      .setLabel(cfg.btnCancel ?? 'Cancel')
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Success)
   );
 
-  return { embeds: [embed], components: [row1, row2, row3, row4, row5], flags: MessageFlags.Ephemeral };
+  return { embeds: [embed], components: [row1, row2, row3, row4], flags: MessageFlags.Ephemeral };
 }
 
 export async function handleMetadataButton(connection, interaction) {
@@ -242,8 +238,24 @@ export async function handleMetadataButton(connection, interaction) {
         ))
     );
 
+  } else if (customId === 'story_add_meta_set_summary') {
+    await interaction.showModal(
+      new ModalBuilder()
+        .setCustomId('story_add_meta_summary_modal')
+        .setTitle(cfg.lblMetaSummary ?? 'Summary')
+        .addComponents(new ActionRowBuilder().addComponents(
+          new TextInputBuilder()
+            .setCustomId('summary')
+            .setLabel(cfg.lblMetaSummary ?? 'Summary')
+            .setStyle(TextInputStyle.Paragraph)
+            .setRequired(false)
+            .setMaxLength(4000)
+            .setValue(metaState.summary ?? '')
+            .setPlaceholder('A brief description of the story (optional)')
+        ))
+    );
+
   } else if (customId === 'story_add_meta_save') {
-    // Merge metaState back into the add session state
     Object.assign(addState, {
       rating: metaState.rating,
       warnings: metaState.warnings,
@@ -253,6 +265,7 @@ export async function handleMetadataButton(connection, interaction) {
       characters: metaState.characters,
       category: metaState.category,
       additionalTags: metaState.additionalTags,
+      summary: metaState.summary,
     });
     pendingMetaPanelData.delete(userId);
     await interaction.update({ content: cfg.txtMetaSaveSuccess ?? 'Metadata saved.', embeds: [], components: [] });
@@ -289,6 +302,8 @@ export async function handleMetadataModal(connection, interaction) {
       metaState.characters = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
     } else if (customId === 'story_add_meta_tags_modal') {
       metaState.additionalTags = sanitizeModalInput(interaction.fields.getTextInputValue('additional_tags'), 1000, true) || '';
+    } else if (customId === 'story_add_meta_summary_modal') {
+      metaState.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 4000, true) || '';
     }
 
     // Find the open metadata panel message and update it
