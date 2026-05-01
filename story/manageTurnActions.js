@@ -17,27 +17,30 @@ async function logAdminAction(connection, adminUserId, actionType, storyId, targ
   }
 }
 
-// Build the turn actions section embed + buttons.
-// Called from manage.js buildManageMessage when isAdmin || isCreator.
-// Returns { embed, components } to be merged into the manage panel by the caller.
-export function buildTurnActionsRow(state, activeTurn, cfg) {
-  log(`buildTurnActionsRow: storyId=${state.storyId} activeTurn=${!!activeTurn}`, { show: false, guildName: state.guildName });
+// Build the standalone Turn Actions ephemeral panel (opened via Manage Turns button).
+export function buildTurnActionsPanel(state, activeTurn, cfg) {
+  log(`buildTurnActionsPanel: storyId=${state.storyId} activeTurn=${!!activeTurn}`, { show: false, guildName: state.guildName });
 
-  const buttons = [
-    new ButtonBuilder().setCustomId('story_manage_ta_skip').setLabel(cfg.btnTurnSkip ?? '⏭️ Skip Current Turn').setStyle(ButtonStyle.Danger).setDisabled(!activeTurn),
-    new ButtonBuilder().setCustomId('story_manage_ta_extend').setLabel(cfg.btnTurnExtend ?? '⏰ Extend Deadline').setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn),
-    new ButtonBuilder().setCustomId('story_manage_ta_next').setLabel(cfg.btnTurnNext ?? '👆 Designate Next Writer').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('story_manage_ta_reassign').setLabel(cfg.btnTurnReassign ?? '↩️ Reassign to Previous').setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn),
-  ];
-  const buttons2 = [
-    new ButtonBuilder().setCustomId('story_manage_ta_deleteentry').setLabel(cfg.btnTurnDeleteEntry ?? '🗑️ Delete an Entry').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('story_manage_ta_restoreentry').setLabel(cfg.btnTurnRestoreEntry ?? '♻️ Restore Deleted Entry').setStyle(ButtonStyle.Secondary),
-  ];
+  const activeDesc = activeTurn
+    ? replaceTemplateVariables(cfg.txtManageTurnsActiveTurn ?? 'Active writer: **[writer_name]** · Turn ends <t:[turn_ends_unix]:R>', {
+        writer_name: activeTurn.discord_display_name,
+        turn_ends_unix: activeTurn.turn_ends_unix ?? ''
+      })
+    : (cfg.txtManageTurnsNoTurn ?? 'No active turn.');
 
-  return [
-    new ActionRowBuilder().addComponents(...buttons),
-    new ActionRowBuilder().addComponents(...buttons2),
-  ];
+  const embed = new EmbedBuilder()
+    .setTitle(replaceTemplateVariables(cfg.txtManageTurnsPanelTitle ?? 'Turn Actions — [story_title]', { story_title: state.title }))
+    .setDescription(activeDesc)
+    .setColor(0x5865f2);
+
+  const row1 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('story_manage_ta_skip').setLabel(cfg.btnTurnSkip ?? 'Skip Current Turn').setStyle(ButtonStyle.Danger).setDisabled(!activeTurn),
+    new ButtonBuilder().setCustomId('story_manage_ta_extend').setLabel(cfg.btnTurnExtend ?? 'Extend Deadline').setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn),
+    new ButtonBuilder().setCustomId('story_manage_ta_next').setLabel(cfg.btnTurnNext ?? 'Designate Next Writer').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('story_manage_ta_reassign').setLabel(cfg.btnTurnReassign ?? 'Reassign to Previous').setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn)
+  );
+
+  return { embeds: [embed], components: [row1], flags: MessageFlags.Ephemeral };
 }
 
 export async function handleTurnActionButton(connection, interaction, manageState) {
@@ -491,4 +494,4 @@ export async function handleTurnActionModal(connection, interaction) {
   }
 }
 
-export { pendingTurnActionData };
+export { pendingTurnActionData, buildTurnActionsPanel };

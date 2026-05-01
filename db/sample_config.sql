@@ -227,7 +227,7 @@ Words: ~[word_count]', 'en', 1),
 ('btnCreateStory', '✅ Create Story', 'en', 1),
 ('lblModeToggle', 'Story Mode', 'en', 1),
 ('lblHideToggle', 'Hide Threads', 'en', 1),
-('btnAddHideToggle', 'Hide My Threads', 'en', 1),
+('btnAddHideToggle', 'Hide Turn Threads', 'en', 1),
 ('lblPrivateToggle', 'Turns', 'en', 1),
 ('txtPrivateOffDesc', 'Your turn threads will be visible to other writers.', 'en', 1),
 ('txtPrivateOnDesc', 'Your turn threads will only be visible to you and admins.', 'en', 1),
@@ -697,4 +697,72 @@ Words: ~[word_count]', 'en', 1),
 ('cfgFaqThreadWriterCmds', '', 'en', 1),
 ('cfgFaqThreadStoryCreation', '', 'en', 1),
 ('cfgFaqThreadManaging', '', 'en', 1),
-('cfgFaqThreadAdminCmds', '', 'en', 1);
+('cfgFaqThreadAdminCmds', '', 'en', 1),
+
+-- Shared section break line (embed field name, reused across all panels)
+('txtSectionBreakLine', '═══════════', 'en', 1),
+
+-- Story Add section break descriptors (embed field values, stacked under the line)
+('txtStoryAddSectionBreakSettings', '**⚙️ Story Settings**', 'en', 1),
+('txtStoryAddSectionBreakMeta', '**📋 Story Metadata**', 'en', 1),
+('txtStoryAddSectionBreakJoin', '**🖊️ My Join Settings**', 'en', 1),
+
+-- Metadata panel labels (emoji in embed fields, not buttons)
+('lblMetaCategory', '📊 Category', 'en', 1),
+('lblMetaRating', '🔞 Rating', 'en', 1),
+('lblMetaWarnings', '⚠️ Warnings', 'en', 1),
+('lblMetaFandom', '📖 Fandom', 'en', 1),
+('lblMetaMainRelationship', '💞 Main Relationship', 'en', 1),
+('lblMetaOtherRelationships', '🫂 Other Relationships', 'en', 1),
+('lblMetaCharacters', '🧑 Characters', 'en', 1),
+('lblMetaTags', '🏷️ Tags', 'en', 1),
+('txtMetaMainRelationshipPlaceholder', 'Bilbo Baggins/Thorin Oakenshield', 'en', 1),
+('txtMetaPanelTitle', 'Story Metadata', 'en', 1),
+('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1),
+
+-- Notifications toggle (story add join settings)
+('lblMyNotifications', 'Notifications', 'en', 1),
+
+-- Story manage embed
+('txtManageEmbedTitle', 'Story Settings', 'en', 1),
+('lblManageStoryTitle', '📖 Story Title', 'en', 1),
+('lblManageStoryStatus', 'Story Status', 'en', 1),
+('lblManageJoinStatus', 'Join Status', 'en', 1),
+('txtManageSectionBreakMeta', '**📋 Story Metadata**', 'en', 1),
+('txtManageStoryStatusActive', '▶️ Active', 'en', 1),
+('txtManageStoryStatusPaused', '⏸️ Paused', 'en', 1),
+('txtManageJoinOpen', '🔓 Open', 'en', 1),
+('txtManageJoinClosed', '🔒 Closed', 'en', 1),
+
+-- Manage story title edit
+('txtManageSetTitleModalTitle', 'Edit Story Title', 'en', 1),
+('lblManageSetTitleField', 'New Title', 'en', 1),
+('txtManageSetTitlePlaceholder', 'Enter the new story title', 'en', 1),
+
+-- Manage turns / entries sub-panel buttons
+('btnManageTurns', 'Manage Turns', 'en', 1),
+('btnManageEntries', 'Manage Entries', 'en', 1),
+('txtManageTurnsPanelTitle', 'Turn Actions — [story_title]', 'en', 1),
+('txtManageTurnsNoTurn', 'No active turn.', 'en', 1),
+('txtManageTurnsActiveTurn', 'Active writer: **[writer_name]** · Turn ends <t:[turn_ends_unix]:R>', 'en', 1),
+('txtManageEntriesSelectWriter', 'Select a writer to browse their entries:', 'en', 1),
+('txtManageEntriesFilterModal', 'Filter Writers by Name', 'en', 1),
+('lblManageEntriesFilterField', 'Name fragment (partial match)', 'en', 1),
+('txtManageEntriesFilterPlaceholder', 'e.g. shanti', 'en', 1),
+('txtManageEntriesNoWriters', '❌ No writers with entries found for this story.', 'en', 1),
+('txtManageEntriesNoMatch', '❌ No writers matched that filter. Try a different name fragment.', 'en', 1),
+('txtManageEntriesSelectEntry', 'Select an entry to preview:', 'en', 1),
+('txtManageEntriesNoEntries', '❌ No entries found for this writer.', 'en', 1),
+('txtManageEntriesPreviewTitle', 'Turn [turn_number] — [writer_name]', 'en', 1),
+('txtManageEntriesPreviewFooter', 'Entry ID: [entry_id] · Status: [status] · ~[word_count] words', 'en', 1),
+('btnManageEntriesDelete', 'Delete Entry', 'en', 1),
+('btnManageEntriesRestore', 'Restore Entry', 'en', 1),
+('btnManageEntriesBack', 'Back', 'en', 1),
+('txtManageEntryDeleteSuccess', '✅ Entry deleted. Entry ID: **[entry_id]** (use Restore Entry to undo).', 'en', 1),
+('txtManageEntryRestoreSuccess', '✅ Entry restored for **[writer_name]**.', 'en', 1),
+('txtManageEntryAlreadyDeleted', '❌ This entry is already deleted.', 'en', 1),
+('txtManageEntryAlreadyConfirmed', '❌ This entry is not deleted.', 'en', 1),
+
+-- Help Page 2 — metadata section
+('lblHelp2Metadata', '📋 Story Metadata', 'en', 1),
+('txtHelp2Metadata', 'Optional AO3-style metadata set via the **Metadata** button in the story create form:\n- 🔞 **Rating** — G, T, M, E, or Not Rated. Affects which feed channel the story posts to.\n- ⚠️ **Warnings** — Select all that apply (violence, major character death, etc.).\n- 📊 **Category** — Gen, F/F, F/M, M/M, Multi, or Other.\n- 📖 **Fandom** — The source material(s) for the story.\n- 💞 **Main Relationship** — Primary ship or pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships.\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags (e.g. slow burn, hurt/comfort, AU).', 'en', 1);

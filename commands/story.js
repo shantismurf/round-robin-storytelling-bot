@@ -10,6 +10,7 @@ import { handleRead, handleReadNav } from '../story/read.js';
 import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry } from '../story/edit.js';
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
 import { handleManage, handleManageButton, handleManageSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
+import { handleManageEntriesButton, handleManageEntriesSelectMenu, handleManageEntriesActionButton, handleManageEntriesModal } from '../story/manageEntries.js';
 import { handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
@@ -190,6 +191,8 @@ async function handleModalSubmit(connection, interaction) {
     await handleWriteModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_ao3_')) {
     await handleJoinAO3ModalSubmit(connection, interaction);
+  } else if (interaction.customId === 'story_manage_entries_filter_modal') {
+    await handleManageEntriesModal(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_edit_modal_')) {
@@ -233,6 +236,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseCancel(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_review_tags_read_')) {
     await handleEditTagsButton(connection, interaction);
+  } else if (interaction.customId === 'story_manage_entries_delete' || interaction.customId === 'story_manage_entries_restore') {
+    await handleManageEntriesActionButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_confirm_')) {
@@ -306,6 +311,8 @@ async function handleSelectMenuInteraction(connection, interaction) {
   } else if (interaction.customId.startsWith('story_add_') && interaction.customId.endsWith('_select')) {
     await handleAddStorySelectMenu(connection, interaction);
 
+  } else if (interaction.customId === 'story_manage_entries_writer_select' || interaction.customId === 'story_manage_entries_entry_select') {
+    await handleManageEntriesSelectMenu(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_') && interaction.customId.endsWith('_select')) {
     await handleManageSelectMenu(connection, interaction);
   }
