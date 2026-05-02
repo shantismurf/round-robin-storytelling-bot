@@ -106,28 +106,32 @@ export async function handleMetadataButton(connection, interaction) {
   const userId = interaction.user.id;
   log(`handleMetadataButton: customId=${customId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
 
-  const addState = pendingStoryData.get(userId);
-  if (!addState) {
-    await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
-    return;
-  }
+  try {
+    const addState = pendingStoryData.get(userId);
+    if (!addState) {
+      log(`handleMetadataButton: no pendingStoryData for user=${userId} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      return;
+    }
 
-  const cfg = await getMetaCfg(connection, interaction.guild.id);
+    const cfg = await getMetaCfg(connection, interaction.guild.id);
 
-  // Opening the metadata panel
-  if (customId === 'story_add_open_metadata') {
-    pendingMetaPanelData.set(userId, { metaState: { ...addState }, guildId: interaction.guild.id });
-    await interaction.reply(buildMetadataPanel(cfg, addState));
-    return;
-  }
+    // Opening the metadata panel
+    if (customId === 'story_add_open_metadata') {
+      pendingMetaPanelData.set(userId, { metaState: { ...addState }, guildId: interaction.guild.id });
+      log(`handleMetadataButton: opened metadata panel for user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.reply(buildMetadataPanel(cfg, addState));
+      return;
+    }
 
-  // All other meta buttons require the panel to be open
-  const metaEntry = pendingMetaPanelData.get(userId);
-  if (!metaEntry) {
-    await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
-    return;
-  }
-  const metaState = metaEntry.metaState;
+    // All other meta buttons require the panel to be open
+    const metaEntry = pendingMetaPanelData.get(userId);
+    if (!metaEntry) {
+      log(`handleMetadataButton: no pendingMetaPanelData for user=${userId} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      return;
+    }
+    const metaState = metaEntry.metaState;
 
   if (customId === 'story_add_meta_cycle_category') {
     const idx = CATEGORY_OPTIONS.indexOf(metaState.category);
@@ -268,12 +272,19 @@ export async function handleMetadataButton(connection, interaction) {
       summary: metaState.summary,
     });
     pendingMetaPanelData.delete(userId);
+    log(`handleMetadataButton: metadata saved for user=${userId}`, { show: false, guildName: interaction?.guild?.name });
     await interaction.update({ content: cfg.txtMetaSaveSuccess ?? 'Metadata saved.', embeds: [], components: [] });
     await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
 
   } else if (customId === 'story_add_meta_cancel') {
     pendingMetaPanelData.delete(userId);
     await interaction.update({ content: 'Metadata cancelled — no changes saved.', embeds: [], components: [] });
+  }
+  } catch (error) {
+    log(`handleMetadataButton failed: customId=${customId} user=${userId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: await getConfigValue(connection, 'txtActionFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
+    }
   }
 }
 
@@ -284,6 +295,7 @@ export async function handleMetadataModal(connection, interaction) {
 
   const metaEntry = pendingMetaPanelData.get(userId);
   if (!metaEntry) {
+    log(`handleMetadataModal: no pendingMetaPanelData for user=${userId} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
     return;
   }
@@ -306,15 +318,8 @@ export async function handleMetadataModal(connection, interaction) {
       metaState.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 4000, true) || '';
     }
 
-    // Find the open metadata panel message and update it
-    const addState = pendingStoryData.get(userId);
-    if (addState?.originalInteraction) {
-      await interaction.deferUpdate();
-      // We can't directly edit the metadata panel reply from a modal — use followUp pattern
-      await interaction.followUp({ ...buildMetadataPanel(cfg, metaState), flags: MessageFlags.Ephemeral });
-    } else {
-      await interaction.deferUpdate();
-    }
+    await interaction.deferUpdate();
+    await interaction.editReply(buildMetadataPanel(cfg, metaState));
   } catch (error) {
     log(`handleMetadataModal failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     if (!interaction.replied && !interaction.deferred) {

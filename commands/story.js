@@ -3,6 +3,7 @@ import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin } 
 
 // Sub-command handlers
 import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton, handleAddStorySelectMenu } from '../story/add.js';
+import { handleMetadataButton, handleMetadataModal, handleMetadataSelectMenu } from '../story/addMetadata.js';
 import { handleJoin, handleJoinSetAO3Button, handleJoinAO3ModalSubmit, handleJoinConfirm, buildJoinEmbed, pendingJoinData } from '../story/join.js';
 import { handleWrite, handleWriteModalSubmit, handleEntryConfirmation, handleViewLastEntry, handleFinalizeEntry, handleFinalizeConfirm, handleFinalizeImageConfirm, handlePreviewNav, handleSkipTurn, handleSkipConfirm } from '../story/write.js';
 import { pendingPreviewData } from '../story/state.js';
@@ -185,7 +186,9 @@ async function execute(connection, interaction) {
 }
 
 async function handleModalSubmit(connection, interaction) {
-  if (interaction.customId.startsWith('story_add_')) {
+  if (interaction.customId.startsWith('story_add_meta_')) {
+    await handleMetadataModal(connection, interaction);
+  } else if (interaction.customId.startsWith('story_add_')) {
     await handleAddStoryModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_write_')) {
     await handleWriteModalSubmit(connection, interaction);
@@ -203,7 +206,9 @@ async function handleModalSubmit(connection, interaction) {
 }
 
 async function handleButtonInteraction(connection, interaction) {
-  if (interaction.customId.startsWith('story_add_')) {
+  if (interaction.customId.startsWith('story_add_meta_')) {
+    await handleMetadataButton(connection, interaction);
+  } else if (interaction.customId.startsWith('story_add_')) {
     await handleAddStoryButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_list_')) {
     await handleListNavigation(connection, interaction);
