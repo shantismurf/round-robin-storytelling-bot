@@ -17,7 +17,7 @@ async function getMetaCfg(connection, guildId) {
 }
 
 export function buildMetadataPanel(cfg, state) {
-  const ratingLabel = RATING_LABELS[state.rating] ?? '[NR] Not Rated';
+  const ratingLabel = RATING_LABELS[state.rating] ?? cfg.txtRatingNR;
   const categoryDisplay = state.category || '*Not set*';
   const warningsDisplay = state.warnings?.length ? state.warnings.join(', ') : '*None set*';
   const fandomDisplay = state.fandom || '*Not set*';
@@ -28,18 +28,18 @@ export function buildMetadataPanel(cfg, state) {
   const summaryDisplay = state.summary || '*Not set*';
 
   const embed = new EmbedBuilder()
-    .setTitle(cfg.txtMetaPanelTitle ?? 'Story Metadata')
+    .setTitle(cfg.txtMetaPanelTitle)
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.lblMetaCategory ?? '📊 Category', value: categoryDisplay, inline: true },
-      { name: cfg.lblMetaFandom ?? '📖 Fandom', value: fandomDisplay, inline: true },
-      { name: cfg.lblMetaRating ?? '🔞 Rating', value: ratingLabel, inline: true },
-      { name: cfg.lblMetaWarnings ?? '⚠️ Warnings', value: warningsDisplay, inline: true },
-      { name: cfg.lblMetaMainRelationship ?? '💞 Main Relationship', value: mainRelDisplay, inline: true },
-      { name: cfg.lblMetaOtherRelationships ?? '🫂 Other Relationships', value: otherRelDisplay, inline: true },
-      { name: cfg.lblMetaCharacters ?? '🧑 Characters', value: charsDisplay, inline: false },
-      { name: cfg.lblMetaTags ?? '🏷️ Tags', value: tagsDisplay, inline: false },
-      { name: cfg.lblMetaSummary ?? '📝 Summary', value: summaryDisplay, inline: false },
+      { name: cfg.lblMetaCategory, value: categoryDisplay, inline: true },
+      { name: cfg.lblMetaFandom, value: fandomDisplay, inline: true },
+      { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
+      { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
+      { name: cfg.lblMetaMainRelationship, value: mainRelDisplay, inline: true },
+      { name: cfg.lblMetaOtherRelationships, value: otherRelDisplay, inline: true },
+      { name: cfg.lblMetaCharacters, value: charsDisplay, inline: false },
+      { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
+      { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
     );
 
   // Row 1 (4): Category: <> | Fandom | Rating: <> | Set Warnings
@@ -54,7 +54,7 @@ export function buildMetadataPanel(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_cycle_rating')
-      .setLabel(`Rating: ${state.rating ?? 'NR'}`)
+      .setLabel(`Rating: ${state.rating ?? cfg.txtRatingNR}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_warnings')
@@ -94,7 +94,7 @@ export function buildMetadataPanel(cfg, state) {
   const row4 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_save')
-      .setLabel(cfg.btnSaveSettings ?? 'Save Settings')
+      .setLabel(cfg.btnSaveSettings)
       .setStyle(ButtonStyle.Success)
   );
 
@@ -136,12 +136,14 @@ export async function handleMetadataButton(connection, interaction) {
   if (customId === 'story_add_meta_cycle_category') {
     const idx = CATEGORY_OPTIONS.indexOf(metaState.category);
     metaState.category = CATEGORY_OPTIONS[(idx + 1) % CATEGORY_OPTIONS.length] ?? CATEGORY_OPTIONS[0];
+    log(`handleMetadataButton: category changed to '${metaState.category}'`, { show: false, guildName: interaction?.guild?.name });
     await interaction.update(buildMetadataPanel(cfg, metaState));
 
   } else if (customId === 'story_add_meta_cycle_rating') {
     const ratingKeys = Object.keys(RATING_LABELS);
     const idx = ratingKeys.indexOf(metaState.rating ?? 'NR');
     metaState.rating = ratingKeys[(idx + 1) % ratingKeys.length];
+    log(`handleMetadataButton: rating changed to '${metaState.rating}'`, { show: false, guildName: interaction?.guild?.name });
     await interaction.update(buildMetadataPanel(cfg, metaState));
 
   } else if (customId === 'story_add_meta_set_warnings') {
@@ -161,11 +163,11 @@ export async function handleMetadataButton(connection, interaction) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_add_meta_fandom_modal')
-        .setTitle(cfg.lblMetaFandom ?? 'Fandom')
+        .setTitle(cfg.lblMetaFandom)
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('fandom')
-            .setLabel(cfg.lblMetaFandom ?? 'Fandom')
+            .setLabel(cfg.lblMetaFandom)
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
             .setMaxLength(100)
@@ -178,16 +180,16 @@ export async function handleMetadataButton(connection, interaction) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_add_meta_mainrel_modal')
-        .setTitle(cfg.lblMetaMainRelationship ?? 'Main Relationship')
+        .setTitle(cfg.lblMetaMainRelationship)
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('main_relationship')
-            .setLabel(cfg.lblMetaMainRelationship ?? 'Main Relationship')
+            .setLabel(cfg.lblMetaMainRelationship)
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
             .setMaxLength(200)
             .setValue(metaState.mainPairing ?? '')
-            .setPlaceholder(cfg.txtMetaMainRelationshipPlaceholder ?? 'Bilbo Baggins/Thorin Oakenshield')
+            .setPlaceholder(cfg.txtMetaMainRelationshipPlaceholder)
         ))
     );
 
@@ -195,11 +197,11 @@ export async function handleMetadataButton(connection, interaction) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_add_meta_otherrel_modal')
-        .setTitle(cfg.lblMetaOtherRelationships ?? 'Other Relationships')
+        .setTitle(cfg.lblMetaOtherRelationships)
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('other_relationships')
-            .setLabel(cfg.lblMetaOtherRelationships ?? 'Other Relationships')
+            .setLabel(cfg.lblMetaOtherRelationships)
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
             .setMaxLength(1000)
@@ -212,11 +214,11 @@ export async function handleMetadataButton(connection, interaction) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_add_meta_characters_modal')
-        .setTitle(cfg.lblMetaCharacters ?? 'Characters')
+        .setTitle(cfg.lblMetaCharacters)
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('characters')
-            .setLabel(cfg.lblMetaCharacters ?? 'Characters')
+            .setLabel(cfg.lblMetaCharacters)
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
             .setMaxLength(500)
@@ -229,11 +231,11 @@ export async function handleMetadataButton(connection, interaction) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_add_meta_tags_modal')
-        .setTitle(cfg.lblMetaTags ?? 'Tags')
+        .setTitle(cfg.lblMetaTags)
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('additional_tags')
-            .setLabel(cfg.lblMetaTags ?? 'Tags')
+            .setLabel(cfg.lblMetaTags)
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
             .setMaxLength(1000)
@@ -246,11 +248,11 @@ export async function handleMetadataButton(connection, interaction) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_add_meta_summary_modal')
-        .setTitle(cfg.lblMetaSummary ?? 'Summary')
+        .setTitle(cfg.lblMetaSummary)
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('summary')
-            .setLabel(cfg.lblMetaSummary ?? 'Summary')
+            .setLabel(cfg.lblMetaSummary)
             .setStyle(TextInputStyle.Paragraph)
             .setRequired(false)
             .setMaxLength(4000)
@@ -272,8 +274,8 @@ export async function handleMetadataButton(connection, interaction) {
       summary: metaState.summary,
     });
     pendingMetaPanelData.delete(userId);
-    log(`handleMetadataButton: metadata saved for user=${userId}`, { show: false, guildName: interaction?.guild?.name });
-    await interaction.update({ content: cfg.txtMetaSaveSuccess ?? 'Metadata saved.', embeds: [], components: [] });
+    log(`handleMetadataButton: metadata saved for user=${userId}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
     await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
 
   } else if (customId === 'story_add_meta_cancel') {
@@ -344,6 +346,7 @@ export async function handleMetadataSelectMenu(connection, interaction) {
   if (customId === 'story_add_meta_warnings_select') {
     metaState.warnings = interaction.values;
     const cfg = await getMetaCfg(connection, interaction.guild.id);
-    await interaction.update({ content: cfg.txtMetaSaveSuccess ?? 'Warnings saved.', components: [] });
+    log(`handleMetadataSelectMenu: warnings saved for user=${userId}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.update({ content: cfg.txtMetaSaveSuccess, components: [] });
   }
 }

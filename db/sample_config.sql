@@ -16,6 +16,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtPaused', 'Paused', 'en', 1),
 ('txtDelayed', 'Delayed', 'en', 1),
 ('txtNotSet', 'Not Set', 'en', 1),
+('txtNoLimit', '∞', 'en', 1),
+('txtUnknownWriter', 'Unknown', 'en', 1),
 ('txtPause', 'Pause', 'en', 1),
 ('txtResume', 'Resume', 'en', 1),
 ('txtHrs', 'hrs', 'en', 1),
@@ -570,7 +572,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtMediaPostLabel', '📎 Story #[story_id] — Turn [turn_id]', 'en', 1),
 
 -- /story ping
-('txtPingWriters', '📢 [mentions]\n] [message]', 'en', 1),
+('txtPingWriters', '📢 [mentions]\n[message]', 'en', 1),
 ('txtPingWritersSent', '✅ All active writers have been pinged in the story thread.', 'en', 1),
 
 -- Weekly Roundup

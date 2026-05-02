@@ -16,7 +16,7 @@ async function getEntryCfg(connection, guildId) {
     'btnManageEntriesDelete', 'btnManageEntriesRestore', 'btnManageEntriesBack', 'btnCancel',
     'txtManageEntryDeleteSuccess', 'txtManageEntryRestoreSuccess',
     'txtManageEntryAlreadyDeleted', 'txtManageEntryAlreadyConfirmed',
-    'txtActionSessionExpired', 'errProcessingRequest',
+    'txtActionSessionExpired', 'errProcessingRequest', 'txtUnknownWriter',
   ], guildId);
 }
 
@@ -84,7 +84,7 @@ function buildWriterSelectMessage(cfg, writers, hasMore, prompt, filterFragment 
     .addOptions(options);
 
   return {
-    content: prompt ?? cfg.txtManageEntriesSelectWriter ?? 'Select a writer to browse their entries:',
+    content: prompt ?? cfg.txtManageEntriesSelectWriter,
     components: [new ActionRowBuilder().addComponents(select)],
     flags: MessageFlags.Ephemeral
   };
@@ -115,7 +115,7 @@ function buildEntrySelectMessage(cfg, entries, writerName, hasMore, entryOffset 
     .addOptions(options);
 
   return {
-    content: cfg.txtManageEntriesSelectEntry ?? 'Select an entry to preview:',
+    content: cfg.txtManageEntriesSelectEntry,
     components: [new ActionRowBuilder().addComponents(select)],
     flags: MessageFlags.Ephemeral
   };
@@ -132,7 +132,8 @@ export async function handleManageEntriesButton(connection, interaction, manageS
   if (customId === 'story_manage_entries_open') {
     const writers = await fetchContributingWriters(connection, storyId);
     if (writers.length === 0) {
-      await interaction.reply({ content: cfg.txtManageEntriesNoWriters ?? 'No writers with entries found.', flags: MessageFlags.Ephemeral });
+      log(`No writers found with entries for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.reply({ content: cfg.txtManageEntriesNoWriters, flags: MessageFlags.Ephemeral });
       return;
     }
 
@@ -143,14 +144,14 @@ export async function handleManageEntriesButton(connection, interaction, manageS
       await interaction.showModal(
         new ModalBuilder()
           .setCustomId('story_manage_entries_filter_modal')
-          .setTitle(cfg.txtManageEntriesFilterModal ?? 'Filter Writers by Name')
+          .setTitle(cfg.txtManageEntriesFilterModal)
           .addComponents(new ActionRowBuilder().addComponents(
             new TextInputBuilder()
               .setCustomId('name_fragment')
-              .setLabel(cfg.lblManageEntriesFilterField ?? 'Name fragment (partial match)')
+              .setLabel(cfg.lblManageEntriesFilterField)
               .setStyle(TextInputStyle.Short)
               .setRequired(false)
-              .setPlaceholder(cfg.txtManageEntriesFilterPlaceholder ?? 'e.g. shanti')
+              .setPlaceholder(cfg.txtManageEntriesFilterPlaceholder)
           ))
       );
     } else {
@@ -160,7 +161,8 @@ export async function handleManageEntriesButton(connection, interaction, manageS
   } else if (customId === 'story_manage_entries_back') {
     const pending = pendingEntryData.get(userId);
     if (!pending) {
-      await interaction.update({ content: cfg.txtActionSessionExpired ?? 'Session expired.', components: [] });
+      log(`Session expired for user ${userId}, customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.update({ content: cfg.txtActionSessionExpired, components: [] });
       return;
     }
     const writers = await fetchContributingWriters(connection, pending.storyId, pending.filterFragment ?? null, pending.writerOffset ?? 0);
@@ -189,7 +191,8 @@ export async function handleManageEntriesModal(connection, interaction) {
 
     const writers = await fetchContributingWriters(connection, pending.storyId, fragment, 0);
     if (writers.length === 0) {
-      await interaction.reply({ content: cfg.txtManageEntriesNoMatch ?? 'No writers matched that filter.', flags: MessageFlags.Ephemeral });
+      log(`No writers matched filter "${fragment}" for story ${pending.storyId}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.reply({ content: cfg.txtManageEntriesNoMatch, flags: MessageFlags.Ephemeral });
       return;
     }
     const hasMore = writers.length > WRITER_PAGE_SIZE;
@@ -204,6 +207,7 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
 
   const pending = pendingEntryData.get(userId);
   if (!pending) {
+    log(`Session expired for user ${userId}, customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), components: [] });
     return;
   }
@@ -223,7 +227,8 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
 
       const writers = await fetchContributingWriters(connection, pending.storyId, fragment, newOffset);
       if (writers.length === 0) {
-        await interaction.update({ content: cfg.txtManageEntriesNoMatch ?? 'No more writers found.', components: [] });
+        log(`No more writers found for story ${pending.storyId} with fragment "${fragment}" at offset ${newOffset}`, { show: true, guildName: interaction?.guild?.name });
+        await interaction.update({ content: cfg.txtManageEntriesNoMatch, components: [] });
         return;
       }
       const hasMore = writers.length > WRITER_PAGE_SIZE;
@@ -232,17 +237,19 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
     }
 
     const storyWriterId = parseInt(selected);
+    log(`Writer selected: ${storyWriterId} by user ${userId}`, { show: false, guildName: interaction?.guild?.name });
     const [[writerRow]] = await connection.execute(
       `SELECT discord_display_name FROM story_writer WHERE story_writer_id = ?`,
       [storyWriterId]
     );
     pending.selectedWriterId = storyWriterId;
-    pending.selectedWriterName = writerRow?.discord_display_name ?? 'Unknown';
+    pending.selectedWriterName = writerRow?.discord_display_name ?? cfg.txtUnknownWriter;
     pending.entryOffset = 0;
 
     const entries = await fetchWriterEntries(connection, pending.storyId, storyWriterId, 0);
     if (entries.length === 0) {
-      await interaction.update({ content: cfg.txtManageEntriesNoEntries ?? 'No entries found for this writer.', components: [] });
+      log(`No entries found for writer ${storyWriterId} in story ${pending.storyId}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.update({ content: cfg.txtManageEntriesNoEntries, components: [] });
       return;
     }
     const hasMore = entries.length > ENTRY_PAGE_SIZE;
@@ -257,7 +264,8 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
       pending.entryOffset = newOffset;
       const entries = await fetchWriterEntries(connection, pending.storyId, pending.selectedWriterId, newOffset);
       if (entries.length === 0) {
-        await interaction.update({ content: cfg.txtManageEntriesNoEntries ?? 'No more entries.', components: [] });
+        log(`No more entries found for writer ${pending.selectedWriterId} at offset ${newOffset}`, { show: true, guildName: interaction?.guild?.name });
+        await interaction.update({ content: cfg.txtManageEntriesNoEntries, components: [] });
         return;
       }
       const hasMore = entries.length > ENTRY_PAGE_SIZE;
@@ -266,6 +274,7 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
     }
 
     const entryId = parseInt(selected);
+    log(`Entry selected: ${entryId} by user ${userId}`, { show: false, guildName: interaction?.guild?.name });
     const [[entry]] = await connection.execute(
       `SELECT se.story_entry_id, se.entry_status, se.content,
               LENGTH(se.content) - LENGTH(REPLACE(se.content, ' ', '')) + 1 AS word_count,
@@ -283,7 +292,8 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
     );
 
     if (!entry) {
-      await interaction.update({ content: cfg.errProcessingRequest ?? 'Entry not found.', components: [] });
+      log(`Entry not found: ${entryId}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.update({ content: cfg.errProcessingRequest, components: [] });
       return;
     }
 
@@ -295,13 +305,13 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
       : entry.content;
 
     const footerText = replaceTemplateVariables(
-      cfg.txtManageEntriesPreviewFooter ?? 'Entry ID: [entry_id] · Status: [status] · ~[word_count] words',
+      cfg.txtManageEntriesPreviewFooter,
       { entry_id: entryId, status: entry.entry_status, word_count: entry.word_count }
     );
 
     const embed = new EmbedBuilder()
       .setTitle(replaceTemplateVariables(
-        cfg.txtManageEntriesPreviewTitle ?? 'Turn [turn_number] — [writer_name]',
+        cfg.txtManageEntriesPreviewTitle,
         { turn_number: entry.turn_number, writer_name: pending.selectedWriterName }
       ))
       .setDescription(contentPreview)
@@ -311,17 +321,17 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('story_manage_entries_delete')
-        .setLabel(cfg.btnManageEntriesDelete ?? 'Delete Entry')
+        .setLabel(cfg.btnManageEntriesDelete)
         .setStyle(ButtonStyle.Danger)
         .setDisabled(entry.entry_status === 'deleted'),
       new ButtonBuilder()
         .setCustomId('story_manage_entries_restore')
-        .setLabel(cfg.btnManageEntriesRestore ?? 'Restore Entry')
+        .setLabel(cfg.btnManageEntriesRestore)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(entry.entry_status === 'confirmed'),
       new ButtonBuilder()
         .setCustomId('story_manage_entries_back')
-        .setLabel(cfg.btnManageEntriesBack ?? 'Back')
+        .setLabel(cfg.btnManageEntriesBack)
         .setStyle(ButtonStyle.Secondary)
     );
 
@@ -349,13 +359,14 @@ export async function handleManageEntriesActionButton(connection, interaction) {
         `SELECT entry_status FROM story_entry WHERE story_entry_id = ?`, [entryId]
       );
       if (!current || current.entry_status === 'deleted') {
-        await interaction.update({ content: cfg.txtManageEntryAlreadyDeleted ?? 'This entry is already deleted.', embeds: [], components: [] });
+        await interaction.update({ content: cfg.txtManageEntryAlreadyDeleted, embeds: [], components: [] });
         return;
       }
       await connection.execute(`UPDATE story_entry SET entry_status = 'deleted' WHERE story_entry_id = ?`, [entryId]);
+      log(`Entry deleted: ${entryId}`, { show: true, guildName: interaction?.guild?.name });
       pendingEntryData.delete(userId);
       await interaction.update({
-        content: replaceTemplateVariables(cfg.txtManageEntryDeleteSuccess ?? 'Entry deleted. Entry ID: **[entry_id]**', { entry_id: entryId }),
+        content: replaceTemplateVariables(cfg.txtManageEntryDeleteSuccess, { entry_id: entryId }),
         embeds: [],
         components: []
       });
@@ -365,20 +376,21 @@ export async function handleManageEntriesActionButton(connection, interaction) {
         `SELECT entry_status FROM story_entry WHERE story_entry_id = ?`, [entryId]
       );
       if (!current || current.entry_status === 'confirmed') {
-        await interaction.update({ content: cfg.txtManageEntryAlreadyConfirmed ?? 'This entry is not deleted.', embeds: [], components: [] });
+        await interaction.update({ content: cfg.txtManageEntryAlreadyConfirmed, embeds: [], components: [] });
         return;
       }
       await connection.execute(`UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?`, [entryId]);
+      log(`Entry restored: ${entryId} for writer ${pending.selectedWriterName}`, { show: true, guildName: interaction?.guild?.name });
       pendingEntryData.delete(userId);
       await interaction.update({
-        content: replaceTemplateVariables(cfg.txtManageEntryRestoreSuccess ?? 'Entry restored for **[writer_name]**.', { writer_name: pending.selectedWriterName }),
+        content: replaceTemplateVariables(cfg.txtManageEntryRestoreSuccess, { writer_name: pending.selectedWriterName }),
         embeds: [],
         components: []
       });
     }
   } catch (error) {
     log(`handleManageEntriesActionButton failed for entry ${entryId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.update({ content: cfg.errProcessingRequest ?? 'An error occurred.', embeds: [], components: [] });
+    await interaction.update({ content: cfg.errProcessingRequest, embeds: [], components: [] });
   }
 }
 

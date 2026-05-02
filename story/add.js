@@ -24,7 +24,7 @@ export async function handleAddStory(connection, interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const cfg = await getConfigValue(connection, [
-      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate',
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtNoLimit',
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
       'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
       'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',
@@ -101,7 +101,7 @@ export function buildStoryAddMessage(cfg, state) {
   const timeoutDisplay = state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}%`;
   const delayHours = state.delayHours ?? 0;
   const delayWriters = state.delayWriters ?? 0;
-  const maxWritersDisplay = state.maxWriters ? String(state.maxWriters) : '∞';
+  const maxWritersDisplay = state.maxWriters ? String(state.maxWriters) : cfg.txtNoLimit;
   const titleDisplay = state.storyTitle || cfg.txtStoryTitlePrompt;
   const orderEmojis = { 1: '\u{1F3B2}', 2: '\u{1F504}', 3: '\u{1F4CB}' };
   const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
@@ -119,7 +119,7 @@ export function buildStoryAddMessage(cfg, state) {
     state.category ? `**${cfg.lblMetaCategory}:** ${state.category}` : null,
   ].filter(Boolean).join('\n');
 
-  const sectionLine = cfg.txtSectionBreakLine ?? '═══════════';
+  const sectionLine = cfg.txtSectionBreakLine;
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtCreateStoryTitle)
@@ -127,7 +127,7 @@ export function buildStoryAddMessage(cfg, state) {
     .addFields(
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakSettings, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-     // { name: sectionLine, value: '\u0020', inline: true },
+      { name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
       { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
       { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
@@ -140,11 +140,11 @@ export function buildStoryAddMessage(cfg, state) {
       { name: '\u0020', value: '\u0020', inline: true }, // Spacer
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-    //  { name: sectionLine, value: '\u0020', inline: true },
+      { name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.btnSetMetadata, value: metadataSummaryLines, inline: false },
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-      { name: '\u0020', value: '\u0020', inline: false },
+      { name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.lblYourAO3Name, value: state.ao3Name, inline: true },
       { name: cfg.lblHideToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
       { name: cfg.lblMyNotifications, value: state.notifications ? cfg.txtOn : cfg.txtOff, inline: true },
@@ -219,7 +219,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_notifications')
-      .setLabel(`${cfg.lblMyNotifications ?? 'Notifications'}: ${state.notifications ? cfg.txtOn : cfg.txtOff}`)
+      .setLabel(`${cfg.lblMyNotifications}: ${state.notifications ? cfg.txtOn : cfg.txtOff}`)
       .setStyle(ButtonStyle.Secondary)
   );
 

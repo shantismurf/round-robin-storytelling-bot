@@ -22,22 +22,22 @@ export function buildTurnActionsPanel(state, activeTurn, cfg) {
   log(`buildTurnActionsPanel: storyId=${state.storyId} activeTurn=${!!activeTurn}`, { show: false, guildName: state.guildName });
 
   const activeDesc = activeTurn
-    ? replaceTemplateVariables(cfg.txtManageTurnsActiveTurn ?? 'Active writer: **[writer_name]** · Turn ends <t:[turn_ends_unix]:R>', {
+    ? replaceTemplateVariables(cfg.txtManageTurnsActiveTurn, {
         writer_name: activeTurn.discord_display_name,
         turn_ends_unix: activeTurn.turn_ends_unix ?? ''
       })
-    : (cfg.txtManageTurnsNoTurn ?? 'No active turn.');
+    : cfg.txtManageTurnsNoTurn;
 
   const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(cfg.txtManageTurnsPanelTitle ?? 'Turn Actions — [story_title]', { story_title: state.title }))
+    .setTitle(replaceTemplateVariables(cfg.txtManageTurnsPanelTitle, { story_title: state.title }))
     .setDescription(activeDesc)
     .setColor(0x5865f2);
 
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('story_manage_ta_skip').setLabel(cfg.btnTurnSkip ?? 'Skip Current Turn').setStyle(ButtonStyle.Danger).setDisabled(!activeTurn),
-    new ButtonBuilder().setCustomId('story_manage_ta_extend').setLabel(cfg.btnTurnExtend ?? 'Extend Deadline').setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn),
-    new ButtonBuilder().setCustomId('story_manage_ta_next').setLabel(cfg.btnTurnNext ?? 'Designate Next Writer').setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('story_manage_ta_reassign').setLabel(cfg.btnTurnReassign ?? 'Reassign to Previous').setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn)
+    new ButtonBuilder().setCustomId('story_manage_ta_skip').setLabel(cfg.btnTurnSkip).setStyle(ButtonStyle.Danger).setDisabled(!activeTurn),
+    new ButtonBuilder().setCustomId('story_manage_ta_extend').setLabel(cfg.btnTurnExtend).setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn),
+    new ButtonBuilder().setCustomId('story_manage_ta_next').setLabel(cfg.btnTurnNext).setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('story_manage_ta_reassign').setLabel(cfg.btnTurnReassign).setStyle(ButtonStyle.Secondary).setDisabled(!activeTurn)
   );
 
   return { embeds: [embed], components: [row1], flags: MessageFlags.Ephemeral };
@@ -50,7 +50,8 @@ export async function handleTurnActionButton(connection, interaction, manageStat
   const storyId = manageState.storyId;
   log(`handleTurnActionButton: customId=${customId} storyId=${storyId} user=${adminId}`, { show: false, guildName: interaction?.guild?.name });
 
-  if (customId === 'story_manage_ta_skip') {
+  try {
+    if (customId === 'story_manage_ta_skip') {
     log(`handleTurnActionButton: skip — fetching active turn for story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_display_name
@@ -67,8 +68,8 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     const msg = replaceTemplateVariables(cfg.txtTurnSkipConfirm, { writer_name: activeTurn.discord_display_name, story_title: manageState.title });
     pendingTurnActionData.set(adminId, { action: 'skip', storyId, guildId, activeTurn });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('story_manage_ta_confirm').setLabel(cfg.btnTurnSkip ?? '⏭️ Skip').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId('story_manage_ta_confirmcancel').setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('story_manage_ta_confirm').setLabel(cfg.btnTurnSkip).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId('story_manage_ta_confirmcancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
     await interaction.reply({ content: msg, components: [row], flags: MessageFlags.Ephemeral });
 
@@ -77,14 +78,14 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     const cfg = await getConfigValue(connection, ['txtTurnExtendModalTitle', 'lblTurnExtendHours', 'txtTurnExtendPlaceholder'], guildId);
     const modal = new ModalBuilder()
       .setCustomId('story_manage_ta_extend_modal')
-      .setTitle(cfg.txtTurnExtendModalTitle ?? 'Extend Deadline')
+      .setTitle(cfg.txtTurnExtendModalTitle)
       .addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('extend_hours')
-          .setLabel(cfg.lblTurnExtendHours ?? 'Hours to add')
+          .setLabel(cfg.lblTurnExtendHours)
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
-          .setPlaceholder(cfg.txtTurnExtendPlaceholder ?? 'Enter number of hours')
+          .setPlaceholder(cfg.txtTurnExtendPlaceholder)
       ));
     pendingTurnActionData.set(adminId, { action: 'extend', storyId, guildId });
     await interaction.showModal(modal);
@@ -108,7 +109,7 @@ export async function handleTurnActionButton(connection, interaction, manageStat
       .addOptions(writers.map(w => ({ label: w.discord_display_name.slice(0, 100), value: String(w.story_writer_id) })));
     pendingTurnActionData.set(adminId, { action: 'next', storyId, guildId, writers });
     await interaction.reply({
-      content: cfg.txtTurnNextSelectWrite ?? 'Select the writer who will receive the next turn:',
+      content: cfg.txtTurnNextSelectWrite,
       components: [new ActionRowBuilder().addComponents(select)],
       flags: MessageFlags.Ephemeral
     });
@@ -144,8 +145,8 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     });
     pendingTurnActionData.set(adminId, { action: 'reassign', storyId, guildId, activeTurn, prevWriter });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('story_manage_ta_confirm').setLabel(cfg.btnTurnReassign ?? '↩️ Reassign').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('story_manage_ta_confirmcancel').setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId('story_manage_ta_confirm').setLabel(cfg.btnTurnReassign).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('story_manage_ta_confirmcancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
     await interaction.reply({ content: msg, components: [row], flags: MessageFlags.Ephemeral });
 
@@ -154,14 +155,14 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     const cfg = await getConfigValue(connection, ['txtTurnDeleteEntryModalTitle', 'lblTurnDeleteEntryTurn', 'txtTurnDeleteEntryPlaceholder'], guildId);
     const modal = new ModalBuilder()
       .setCustomId('story_manage_ta_deleteentry_modal')
-      .setTitle(cfg.txtTurnDeleteEntryModalTitle ?? 'Delete Entry by Turn Number')
+      .setTitle(cfg.txtTurnDeleteEntryModalTitle)
       .addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('turn_number')
-          .setLabel(cfg.lblTurnDeleteEntryTurn ?? 'Turn number (as shown in /story read)')
+          .setLabel(cfg.lblTurnDeleteEntryTurn)
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
-          .setPlaceholder(cfg.txtTurnDeleteEntryPlaceholder ?? 'Enter turn number')
+          .setPlaceholder(cfg.txtTurnDeleteEntryPlaceholder)
       ));
     pendingTurnActionData.set(adminId, { action: 'deleteentry', storyId, guildId });
     await interaction.showModal(modal);
@@ -171,17 +172,23 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     const cfg = await getConfigValue(connection, ['txtTurnRestoreEntryModalTitle', 'lblTurnRestoreEntryId', 'txtTurnRestoreEntryPlaceholder'], guildId);
     const modal = new ModalBuilder()
       .setCustomId('story_manage_ta_restoreentry_modal')
-      .setTitle(cfg.txtTurnRestoreEntryModalTitle ?? 'Restore Deleted Entry')
+      .setTitle(cfg.txtTurnRestoreEntryModalTitle)
       .addComponents(new ActionRowBuilder().addComponents(
         new TextInputBuilder()
           .setCustomId('entry_id')
-          .setLabel(cfg.lblTurnRestoreEntryId ?? 'Entry ID')
+          .setLabel(cfg.lblTurnRestoreEntryId)
           .setStyle(TextInputStyle.Short)
           .setRequired(true)
-          .setPlaceholder(cfg.txtTurnRestoreEntryPlaceholder ?? 'Entry ID shown when entry was deleted')
+          .setPlaceholder(cfg.txtTurnRestoreEntryPlaceholder)
       ));
     pendingTurnActionData.set(adminId, { action: 'restoreentry', storyId, guildId });
     await interaction.showModal(modal);
+    }
+  } catch (error) {
+    log(`handleTurnActionButton failed for customId=${customId} story=${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    if (!interaction.replied) {
+      await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), flags: MessageFlags.Ephemeral });
+    }
   }
 }
 

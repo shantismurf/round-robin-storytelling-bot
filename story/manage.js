@@ -23,7 +23,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     ? `\n\n${cfg.txtRatingChangeThreadWarning}`
     : '';
 
-  const sectionLine = cfg.txtSectionBreakLine ?? '═══════════';
+  const sectionLine = cfg.txtSectionBreakLine;
   const statusDisplay = isPaused
     ? (cfg.txtManageStoryStatusPaused ?? `⏸️ ${cfg.txtPaused}`)
     : (cfg.txtManageStoryStatusActive ?? `▶️ ${cfg.Active}`);
@@ -39,7 +39,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblManageStoryStatus, value: statusDisplay, inline: true },
       { name: cfg.lblManageJoinStatus, value: joinDisplay, inline: true },
       { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
-      { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : '∞', inline: true },
+      { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : cfg.txtNoLimit, inline: true },
       { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
       { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled', inline: true },
       { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic, inline: true },
@@ -51,7 +51,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblTags, value: state.tags || cfg.txtNotSet, inline: false },
     );
 
-  const currentRatingDisplay = state.pendingRating ? `${state.pendingRating} ⚠️` : (state.rating ?? 'NR');
+  const currentRatingDisplay = state.pendingRating ? `${state.pendingRating} ⚠️` : (state.rating ?? state.cfg.txtRatingNR);
 
   // Row 1 (4): Set Title | Writer Order: <> | Status: <> | Join Status: <>
   const row1 = new ActionRowBuilder().addComponents(
@@ -77,7 +77,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_set_maxwriters')
-      .setLabel(replaceTemplateVariables(cfg.btnSetMaxWriters, { max_writers: state.maxWriters ?? '∞' }))
+      .setLabel(replaceTemplateVariables(cfg.btnSetMaxWriters, { max_writers: state.maxWriters ?? cfg.txtNoLimit }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_turnlength')
@@ -134,7 +134,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_save')
-      .setLabel(cfg.btnSaveSettings ?? cfg.btnAdminConfigSave)
+      .setLabel(cfg.btnSaveSettings)
       .setStyle(ButtonStyle.Success)
   );
 
@@ -175,7 +175,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     }
 
     const cfg = await getConfigValue(connection, [
-      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate',
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtNoLimit',
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
       'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
       'txtOpen','txtClosed','txtActive','txtPaused','txtHrs',
@@ -319,16 +319,16 @@ async function handleManageButton(connection, interaction) {
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_manage_title_modal')
-        .setTitle(state.cfg.txtManageSetTitleModalTitle ?? 'Edit Story Title')
+        .setTitle(state.cfg.txtManageSetTitleModalTitle)
         .addComponents(new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('story_title')
-            .setLabel(state.cfg.lblManageSetTitleField ?? 'New Title')
+            .setLabel(state.cfg.lblManageSetTitleField)
             .setStyle(TextInputStyle.Short)
             .setRequired(true)
             .setMaxLength(500)
             .setValue(state.title || '')
-            .setPlaceholder(state.cfg.txtManageSetTitlePlaceholder ?? 'Enter the new story title')
+            .setPlaceholder(state.cfg.txtManageSetTitlePlaceholder)
         ))
     );
 
@@ -516,7 +516,7 @@ async function handleReviewTags(connection, interaction, state) {
 
   if (rows.length === 0) {
     await interaction.reply({
-      content: state.cfg.txtTagNoPending ?? 'No pending tag suggestions.',
+      content: state.cfg.txtTagNoPending,
       flags: MessageFlags.Ephemeral
     });
     return;
@@ -526,18 +526,18 @@ async function handleReviewTags(connection, interaction, state) {
   const queueNote = rows.length > 1 ? ` (${rows.length - 1} more pending)` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(state.cfg.txtTagPendingTitle ?? '🏷️ Pending Tags — [story_title]', { story_title: state.title }))
+    .setTitle(replaceTemplateVariables(state.cfg.txtTagPendingTitle, { story_title: state.title }))
     .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}`)
     .setColor(0x5865f2);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`story_tag_approve_${firstTag.submission_id}_${state.storyId}`)
-      .setLabel(state.cfg.btnTagApprove ?? '✅ Approve')
+      .setLabel(state.cfg.btnTagApprove)
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`story_tag_reject_${firstTag.submission_id}_${state.storyId}`)
-      .setLabel(state.cfg.btnTagReject ?? '❌ Reject')
+      .setLabel(state.cfg.btnTagReject)
       .setStyle(ButtonStyle.Danger)
   );
 
@@ -835,7 +835,7 @@ async function handleManageModalSubmit(connection, interaction) {
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const stagedMsg = state.cfg.txtSelectionStaged ?? 'Selection saved — click **Save Settings** on the panel to apply.';
+    const stagedMsg = state.cfg.txtSelectionStaged;
     await interaction.editReply({ content: stagedMsg });
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
     await interaction.deleteReply();
@@ -869,7 +869,7 @@ async function handleManageSelectMenu(connection, interaction) {
     return;
   }
 
-  const stagedMsg = state.cfg.txtSelectionStaged ?? 'Selection saved — click **Save Settings** on the panel to apply.';
+  const stagedMsg = state.cfg.txtSelectionStaged;
   await interaction.update({ content: stagedMsg, components: [] });
   await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 }
