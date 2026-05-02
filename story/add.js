@@ -137,7 +137,7 @@ export function buildStoryAddMessage(cfg, state) {
       { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${showAuthorsDesc}`, inline: true },
       { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
       { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} hours / ${delayWriters} writers`, inline: true },
-      { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: true },
+      { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: false },
       { name: sectionLine, value: '\u0020', inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.btnSetMetadata, value: metadataSummaryLines, inline: false },
