@@ -142,7 +142,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
 }
 
 async function handleManage(connection, interaction, alreadyDeferred = false) {
-  log(`handleManage: entry user=${interaction.user.id} alreadyDeferred=${alreadyDeferred}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManage: entry user=${interaction.user.username} alreadyDeferred=${alreadyDeferred}`, { show: false, guildName: interaction?.guild?.name });
   if (!alreadyDeferred) await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));

@@ -104,12 +104,12 @@ export function buildMetadataPanel(cfg, state) {
 export async function handleMetadataButton(connection, interaction) {
   const customId = interaction.customId;
   const userId = interaction.user.id;
-  log(`handleMetadataButton: customId=${customId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleMetadataButton: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
     const addState = pendingStoryData.get(userId);
     if (!addState) {
-      log(`handleMetadataButton: no pendingStoryData for user=${userId} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleMetadataButton: no pendingStoryData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
       return;
     }
@@ -119,7 +119,7 @@ export async function handleMetadataButton(connection, interaction) {
     // Opening the metadata panel
     if (customId === 'story_add_open_metadata') {
       pendingMetaPanelData.set(userId, { metaState: { ...addState }, guildId: interaction.guild.id });
-      log(`handleMetadataButton: opened metadata panel for user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+      log(`handleMetadataButton: opened metadata panel for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       await interaction.reply(buildMetadataPanel(cfg, addState));
       return;
     }
@@ -127,7 +127,7 @@ export async function handleMetadataButton(connection, interaction) {
     // All other meta buttons require the panel to be open
     const metaEntry = pendingMetaPanelData.get(userId);
     if (!metaEntry) {
-      log(`handleMetadataButton: no pendingMetaPanelData for user=${userId} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleMetadataButton: no pendingMetaPanelData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
       return;
     }
@@ -274,7 +274,7 @@ export async function handleMetadataButton(connection, interaction) {
       summary: metaState.summary,
     });
     pendingMetaPanelData.delete(userId);
-    log(`handleMetadataButton: metadata saved for user=${userId}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
     await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
 
@@ -283,7 +283,7 @@ export async function handleMetadataButton(connection, interaction) {
     await interaction.update({ content: 'Metadata cancelled — no changes saved.', embeds: [], components: [] });
   }
   } catch (error) {
-    log(`handleMetadataButton failed: customId=${customId} user=${userId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleMetadataButton failed: customId=${customId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: await getConfigValue(connection, 'txtActionFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
     }
@@ -293,11 +293,11 @@ export async function handleMetadataButton(connection, interaction) {
 export async function handleMetadataModal(connection, interaction) {
   const customId = interaction.customId;
   const userId = interaction.user.id;
-  log(`handleMetadataModal: customId=${customId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleMetadataModal: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   const metaEntry = pendingMetaPanelData.get(userId);
   if (!metaEntry) {
-    log(`handleMetadataModal: no pendingMetaPanelData for user=${userId} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleMetadataModal: no pendingMetaPanelData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
     return;
   }
@@ -333,7 +333,7 @@ export async function handleMetadataModal(connection, interaction) {
 export async function handleMetadataSelectMenu(connection, interaction) {
   const customId = interaction.customId;
   const userId = interaction.user.id;
-  log(`handleMetadataSelectMenu: customId=${customId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleMetadataSelectMenu: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   const metaEntry = pendingMetaPanelData.get(userId);
   if (!metaEntry) {
@@ -346,7 +346,7 @@ export async function handleMetadataSelectMenu(connection, interaction) {
   if (customId === 'story_add_meta_warnings_select') {
     metaState.warnings = interaction.values;
     const cfg = await getMetaCfg(connection, interaction.guild.id);
-    log(`handleMetadataSelectMenu: warnings saved for user=${userId}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleMetadataSelectMenu: warnings saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update({ content: cfg.txtMetaSaveSuccess, components: [] });
   }
 }

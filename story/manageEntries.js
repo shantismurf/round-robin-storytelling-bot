@@ -125,7 +125,7 @@ export async function handleManageEntriesButton(connection, interaction, manageS
   const customId = interaction.customId;
   const userId = interaction.user.id;
   const storyId = manageState.storyId;
-  log(`handleManageEntriesButton: customId=${customId} storyId=${storyId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageEntriesButton: customId=${customId} storyId=${storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   const cfg = await getEntryCfg(connection, interaction.guild.id);
 
@@ -174,7 +174,7 @@ export async function handleManageEntriesButton(connection, interaction, manageS
 export async function handleManageEntriesModal(connection, interaction) {
   const customId = interaction.customId;
   const userId = interaction.user.id;
-  log(`handleManageEntriesModal: customId=${customId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageEntriesModal: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   const pending = pendingEntryData.get(userId);
   if (!pending) {
@@ -203,7 +203,7 @@ export async function handleManageEntriesModal(connection, interaction) {
 export async function handleManageEntriesSelectMenu(connection, interaction) {
   const customId = interaction.customId;
   const userId = interaction.user.id;
-  log(`handleManageEntriesSelectMenu: customId=${customId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageEntriesSelectMenu: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   const pending = pendingEntryData.get(userId);
   if (!pending) {
@@ -342,7 +342,7 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
 export async function handleManageEntriesActionButton(connection, interaction) {
   const customId = interaction.customId;
   const userId = interaction.user.id;
-  log(`handleManageEntriesActionButton: customId=${customId} user=${userId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageEntriesActionButton: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   const pending = pendingEntryData.get(userId);
   if (!pending) {

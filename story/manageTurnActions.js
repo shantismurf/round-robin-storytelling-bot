@@ -48,7 +48,7 @@ export async function handleTurnActionButton(connection, interaction, manageStat
   const adminId = interaction.user.id;
   const guildId = interaction.guild.id;
   const storyId = manageState.storyId;
-  log(`handleTurnActionButton: customId=${customId} storyId=${storyId} user=${adminId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTurnActionButton: customId=${customId} storyId=${storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
     if (customId === 'story_manage_ta_skip') {
@@ -196,7 +196,7 @@ export async function handleTurnActionConfirm(connection, interaction) {
   await interaction.deferUpdate();
   const adminId = interaction.user.id;
   const pending = pendingTurnActionData.get(adminId);
-  log(`handleTurnActionConfirm: action=${pending?.action} storyId=${pending?.storyId} user=${adminId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTurnActionConfirm: action=${pending?.action} storyId=${pending?.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!pending) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), components: [] });
@@ -240,7 +240,7 @@ export async function handleTurnActionConfirm(connection, interaction) {
 export async function handleTurnActionCancel(connection, interaction) {
   await interaction.deferUpdate();
   const adminId = interaction.user.id;
-  log(`handleTurnActionCancel: user=${adminId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTurnActionCancel: user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   pendingTurnActionData.delete(adminId);
   await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), components: [] });
 }
@@ -249,7 +249,7 @@ export async function handleTurnActionSelectMenu(connection, interaction) {
   const customId = interaction.customId;
   const adminId = interaction.user.id;
   const pending = pendingTurnActionData.get(adminId);
-  log(`handleTurnActionSelectMenu: customId=${customId} user=${adminId} hasPending=${!!pending}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTurnActionSelectMenu: customId=${customId} user=${interaction.user.username} hasPending=${!!pending}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!pending) {
     await interaction.deferUpdate();
@@ -328,7 +328,7 @@ export async function handleTurnActionModal(connection, interaction) {
   const customId = interaction.customId;
   const adminId = interaction.user.id;
   const pending = pendingTurnActionData.get(adminId);
-  log(`handleTurnActionModal: customId=${customId} user=${adminId} hasPending=${!!pending}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTurnActionModal: customId=${customId} user=${interaction.user.username} hasPending=${!!pending}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!pending) {
     return await interaction.reply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
