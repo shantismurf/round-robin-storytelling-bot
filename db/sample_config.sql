@@ -725,7 +725,7 @@ Words: ~[word_count]', 'en', 1),
 ('cfgFaqThreadAdminCmds', '', 'en', 1),
 
 -- Shared section break line (embed field name, reused across all panels)
-('txtSectionBreakLine', '═════════════════', 'en', 1),
+('txtSectionBreakLine', '═══════════════', 'en', 1),
 
 -- Story Add section break descriptors (embed field values, stacked under the line)
 ('txtStoryAddSectionBreakSettings', '**⚙️ Story Settings**', 'en', 1),

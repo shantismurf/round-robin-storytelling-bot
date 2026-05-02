@@ -136,7 +136,8 @@ export function buildStoryAddMessage(cfg, state) {
       { name: cfg.lblHideToggle, value: hideDesc, inline: true },
       { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${showAuthorsDesc}`, inline: true },
       { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
-      { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: false },
+      { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+      { name: '\u0020', value: '\u0020', inline: true }, // Spacer
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
