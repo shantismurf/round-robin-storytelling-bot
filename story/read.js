@@ -264,10 +264,12 @@ export async function handleRead(connection, interaction) {
       [storyId]
     );
 
-    const [btnSubmitTagRead, btnViewTags, btnEditTags] = await Promise.all([
+    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const [btnSubmitTagRead, btnViewTags, btnEditTags, ratingBadgeDisplay] = await Promise.all([
       getConfigValue(connection, 'btnSubmitTagRead', guildId),
       getConfigValue(connection, 'btnViewTags', guildId),
-      getConfigValue(connection, 'btnEditTags', guildId)
+      getConfigValue(connection, 'btnEditTags', guildId),
+      getConfigValue(connection, ratingBadgeCfgKey, guildId),
     ]);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
@@ -276,8 +278,7 @@ export async function handleRead(connection, interaction) {
     const savedPage = lastReadPage.get(`${interaction.user.id}_${storyId}`) ?? 0;
     const startPage = Math.min(savedPage, pages.length - 1);
 
-    const ratingBadgeKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
-    const titleWithRating = `${story.title} ${ratingBadgeKey}`;
+    const titleWithRating = `${story.title} ${ratingBadgeDisplay}`;
     const session = {
       pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id,
       title: titleWithRating, wordCount, guildId, userId: interaction.user.id,

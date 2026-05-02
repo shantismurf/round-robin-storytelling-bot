@@ -769,6 +769,7 @@ Words: ~[word_count]', 'en', 1),
 ('lblMetaTags', '🏷️ Tags', 'en', 1),
 ('lblMetaSummary', '📝 Summary', 'en', 1),
 ('txtMetaMainRelationshipPlaceholder', 'ex. Bilbo Baggins/Thorin Oakenshield', 'en', 1),
+('txtMetaFandomPlaceholder', 'ex. The Hobbit, Original Work', 'en', 1),
 ('txtMetaPanelTitle', '🗂️ Story Metadata', 'en', 1),
 ('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1),
 

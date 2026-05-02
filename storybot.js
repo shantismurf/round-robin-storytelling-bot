@@ -2,7 +2,7 @@ import { EventEmitter } from 'events';
 import { getConfigValue, getTurnNumber, log } from './utilities.js';
 import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
-import { resolveFeedChannelId, isRestricted } from './story/metadata.js';
+import { resolveFeedChannelId, isRestricted, ratingBadge } from './story/metadata.js';
 
 /**
  * StoryBot.js contains story engine logic and emits 'publish' events when it
@@ -801,14 +801,21 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       wordCount += textOnly.split(/\s+/).filter(w => w.length > 0).length;
     }
 
-    const [txtActive, txtPaused, txtClosed, txtOrderRandom, txtOrderRoundRobin, txtOrderFixed] = await Promise.all([
-      getConfigValue(connection, 'txtActive', story.guild_id),
-      getConfigValue(connection, 'txtPaused', story.guild_id),
-      getConfigValue(connection, 'txtClosed', story.guild_id),
-      getConfigValue(connection, 'txtOrderRandom', story.guild_id),
-      getConfigValue(connection, 'txtOrderRoundRobin', story.guild_id),
-      getConfigValue(connection, 'txtOrderFixed', story.guild_id),
-    ]);
+    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const { warningOptions } = await import('./story/metadata.js');
+    const cfg = await getConfigValue(connection, [
+      'txtActive', 'txtPaused', 'txtClosed',
+      'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
+      ratingBadgeCfgKey,
+      ...warningOptions,
+    ], story.guild_id);
+    const txtActive = cfg.txtActive;
+    const txtPaused = cfg.txtPaused;
+    const txtClosed = cfg.txtClosed;
+    const txtOrderRandom = cfg.txtOrderRandom;
+    const txtOrderRoundRobin = cfg.txtOrderRoundRobin;
+    const txtOrderFixed = cfg.txtOrderFixed;
+    const ratingBadgeDisplay = cfg[ratingBadgeCfgKey];
 
     const statusMap = { 1: `▶️ ${txtActive}`, 2: `⏸️ ${txtPaused}`, 3: `🔒 ${txtClosed}` };
     const orderMap = { 1: `🎲 ${txtOrderRandom}`, 2: `🔄 ${txtOrderRoundRobin}`, 3: `📋 ${txtOrderFixed}` };
@@ -881,13 +888,13 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       ? `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} · ~${wordCount.toLocaleString()} words${imagePart}`
       : 'No entries yet';
 
-    const { ratingBadge, formatWarnings } = await import('./story/metadata.js');
-    const ratingBadgeStr = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
-    const warningsDisplay = story.warnings ? formatWarnings(story.warnings) : null;
+    const { formatWarnings } = await import('./story/metadata.js');
+    const warningLabels = Object.fromEntries(warningOptions.map(k => [k, cfg[k] ?? k]));
+    const warningsDisplay = story.warnings ? formatWarnings(story.warnings, warningLabels) : null;
 
     const metadataFields = [];
     if (story.rating && story.rating !== 'NR') {
-      metadataFields.push({ name: 'Rating', value: `${ratingBadgeStr} ${story.rating}`, inline: true });
+      metadataFields.push({ name: 'Rating', value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
     }
     if (story.fandom)        metadataFields.push({ name: 'Fandom', value: story.fandom, inline: true });
     if (story.main_pairing)  metadataFields.push({ name: 'Main Pairing', value: story.main_pairing, inline: true });
@@ -896,7 +903,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     if (story.additional_tags) metadataFields.push({ name: 'Additional Tags', value: story.additional_tags.length > 500 ? story.additional_tags.slice(0, 497) + '...' : story.additional_tags, inline: false });
 
     const embed = new EmbedBuilder()
-      .setTitle(`📚 ${story.title} (#${story.guild_story_id}) ${ratingBadgeStr}`)
+      .setTitle(`📚 ${story.title} (#${story.guild_story_id}) ${ratingBadgeDisplay}`)
       .setColor(colorMap[story.story_status] ?? 0x5865f2)
       .addFields(
         ...(story.tags ? [{ name: 'Tags', value: story.tags, inline: false }] : []),

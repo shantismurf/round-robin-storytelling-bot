@@ -112,8 +112,9 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
       ...delayParts
     ];
 
-    const ratingBadgeKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
-    const message = `# 📚 New Story Created by ${creatorName}: "${story.title}" ${ratingBadgeKey}\n-# ${metaParts.join(' · ')}`;
+    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const ratingBadgeDisplay = await getConfigValue(connection, ratingBadgeCfgKey, guildId);
+    const message = `# 📚 New Story Created by ${creatorName}: "${story.title}" ${ratingBadgeDisplay}\n-# ${metaParts.join(' · ')}`;
 
     const targetChannelId = await resolveFeedChannelId(connection, guildId, story.rating ?? 'NR');
     const feedChannel = await interaction.guild.channels.fetch(targetChannelId);

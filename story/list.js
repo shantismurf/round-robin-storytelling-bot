@@ -78,6 +78,7 @@ export async function renderStoryListReply(connection, interaction, filter, page
       'txtTurnWaiting', 'txtTurnOverdue', 'txtTurnTimeLeft',
       'btnPrev', 'btnNext', 'btnFilter',
       'txtQuickJoinPlaceholder', 'txtQuickJoinDesc',
+      ...Object.values(ratingBadge),
     ], guildId),
   ]);
 
@@ -139,9 +140,9 @@ export async function renderStoryListReply(connection, interaction, filter, page
       }
     }
 
-    const ratingBadgeKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
     embed.addFields({
-      name: `${statusIcon} "${story.title}" (#${story.guild_story_id}) ${ratingBadgeKey}`,
+      name: `${statusIcon} "${story.title}" (#${story.guild_story_id}) ${cfg[ratingBadgeCfgKey] ?? story.rating ?? ''}`,
       value: `├ ${cfg.lblStoryStatus} ${statusText} • ${cfg.lblStoryTurn} ${currentTurn}
 ├ ${cfg.lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${cfg.lblStoryMode} ${modeText}
 └ ${cfg.lblStoryCreator} ${story.creator_name} • ${joinStatus}`,

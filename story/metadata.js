@@ -76,7 +76,7 @@ export function buildMetadataFields(story, cfg = {}) {
   fields.push({ name: cfg.lblRating, value: `${badge} ${label}`.trim(), inline: true });
 
   if (story.dynamic) {
-    fields.push({ name: cfg.lblDynamic, value: story.dynamic, inline: true });
+    fields.push({ name: cfg.lblDynamic, value: cfg[story.dynamic] ?? story.dynamic, inline: true });
   }
 
   if (story.warnings) {
