@@ -127,7 +127,7 @@ export function buildStoryAddMessage(cfg, state) {
     .addFields(
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakSettings, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-      { name: sectionLine, value: '\u0020', inline: true },
+     // { name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
       { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
       { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
@@ -140,11 +140,11 @@ export function buildStoryAddMessage(cfg, state) {
       { name: '\u0020', value: '\u0020', inline: true }, // Spacer
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-      { name: sectionLine, value: '\u0020', inline: true },
+    //  { name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.btnSetMetadata, value: metadataSummaryLines, inline: false },
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-      { name: sectionLine, value: '\u0020', inline: true },
+      { name: '\u0020', value: '\u0020', inline: false },
       { name: cfg.lblYourAO3Name, value: state.ao3Name, inline: true },
       { name: cfg.lblHideToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
       { name: cfg.lblMyNotifications, value: state.notifications ? cfg.txtOn : cfg.txtOff, inline: true },
