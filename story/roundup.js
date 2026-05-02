@@ -215,11 +215,11 @@ export async function scheduleAllRoundupJobs(connection) {
       );
       if (pending.length === 0) {
         const runAt = await scheduleNextRoundup(connection, guildId);
-        log(`Scheduled missing weeklyRoundup job for guild ${guildId}, next: ${runAt.toISOString()}`, { show: true });
+        log(`Registered weeklyRoundup job for guild ${guildId}, next run: ${runAt.toISOString()}`, { show: true });
       }
     }
   } catch (err) {
-    log(`scheduleAllRoundupJobs error: ${err}`, { show: true });
+    log(`scheduleAllRoundupJobs failed: ${err?.stack ?? err}`, { show: true });
   }
 }
 
