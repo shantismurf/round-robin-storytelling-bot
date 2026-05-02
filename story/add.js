@@ -24,6 +24,9 @@ export async function handleAddStory(connection, interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const cfg = await getConfigValue(connection, [
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate',
+      'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
+      'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
       'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',
       'txtNormalModeDesc', 'txtQuickModeDesc',
       'txtHideThreadsOffDesc', 'txtHideThreadsOnDesc',
@@ -89,13 +92,13 @@ export async function handleAddStory(connection, interaction) {
 
 export function buildStoryAddMessage(cfg, state) {
   const modeEmoji = state.quickMode ? '🟣' : '🟢';
-  const modeLabel = state.quickMode ? 'Quick' : 'Normal';
+  const modeLabel = state.quickMode ? cfg.txtQuickUC : cfg.txtNormalUC;
   const modeDesc = state.quickMode ? cfg.txtQuickModeDesc : cfg.txtNormalModeDesc;
   const hideDesc = state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc;
   const privateDesc = state.keepPrivate ? cfg.txtPrivateOnDesc : cfg.txtPrivateOffDesc;
-  const privateLabel = state.keepPrivate ? 'Yes' : 'No';
+  const privateLabel = state.keepPrivate ? cfg.txtYes : cfg.txtNo;
   const showAuthorsDesc = state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc;
-  const timeoutDisplay = state.timeoutReminder === 0 ? 'None (0%)' : `${state.timeoutReminder}%`;
+  const timeoutDisplay = state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}%`;
   const delayHours = state.delayHours ?? 0;
   const delayWriters = state.delayWriters ?? 0;
   const maxWritersDisplay = state.maxWriters ? String(state.maxWriters) : '∞';
@@ -107,13 +110,13 @@ export function buildStoryAddMessage(cfg, state) {
   const orderLabel = orderLabels[state.orderType];
   const orderDesc = orderDescs[state.orderType];
 
-  const ratingLabel = RATING_LABELS[state.rating] ?? '[NR] Not Rated';
-  const warningsDisplay = state.warnings?.length ? state.warnings.join(', ') : 'None set';
+  const ratingLabel = RATING_LABELS[state.rating];
+  const warningsDisplay = state.warnings?.length ? state.warnings.join(', ') : cfg.txtNone;
   const metadataSummaryLines = [
-    `**${cfg.lblMetaRating ?? 'Rating'}:** ${ratingLabel}`,
-    `**${cfg.lblMetaWarnings ?? 'Warnings'}:** ${warningsDisplay}`,
-    state.fandom ? `**${cfg.lblMetaFandom ?? 'Fandom'}:** ${state.fandom}` : null,
-    state.category ? `**${cfg.lblMetaCategory ?? 'Category'}:** ${state.category}` : null,
+    `**${cfg.lblMetaRating}:** ${ratingLabel}`,
+    `**${cfg.lblMetaWarnings}:** ${warningsDisplay}`,
+    state.fandom ? `**${cfg.lblMetaFandom}:** ${state.fandom}` : null,
+    state.category ? `**${cfg.lblMetaCategory}:** ${state.category}` : null,
   ].filter(Boolean).join('\n');
 
   const sectionLine = cfg.txtSectionBreakLine ?? '═══════════';
@@ -122,22 +125,28 @@ export function buildStoryAddMessage(cfg, state) {
     .setTitle(cfg.txtCreateStoryTitle)
     .setDescription(cfg.txtStoryAddIntro)
     .addFields(
-      { name: sectionLine, value: cfg.txtStoryAddSectionBreakSettings ?? '**⚙️ Story Settings**', inline: false },
+      { name: sectionLine, value: cfg.txtStoryAddSectionBreakSettings, inline: false },
+      { name: sectionLine, value: '\u0020', inline: false },
+      { name: sectionLine, value: '\u0020', inline: false },
       { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
       { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
       { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
       { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
       { name: cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
       { name: cfg.lblHideToggle, value: hideDesc, inline: true },
-      { name: cfg.lblShowAuthors, value: `${state.showAuthors ? 'Yes' : 'No'} — ${showAuthorsDesc}`, inline: true },
+      { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${showAuthorsDesc}`, inline: true },
       { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
       { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} hours / ${delayWriters} writers`, inline: true },
-      { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta ?? '**Story Metadata**', inline: false },
-      { name: cfg.btnSetMetadata ?? 'Story Metadata', value: metadataSummaryLines, inline: false },
-      { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin ?? '**My Join Settings**', inline: false },
-      { name: cfg.lblYourAO3Name, value: state.ao3Name || '*Not set*', inline: true },
+      { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: false },
+      { name: sectionLine, value: '\u0020', inline: false },
+      { name: sectionLine, value: '\u0020', inline: false },
+      { name: cfg.btnSetMetadata, value: metadataSummaryLines, inline: false },
+      { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin, inline: false },
+      { name: sectionLine, value: '\u0020', inline: false },
+      { name: sectionLine, value: '\u0020', inline: false },
+      { name: cfg.lblYourAO3Name, value: state.ao3Name, inline: true },
       { name: cfg.lblPrivateToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
-      { name: cfg.lblMyNotifications ?? 'Notifications', value: state.notifications ? 'On' : 'Off', inline: true },
+      { name: cfg.lblMyNotifications, value: state.notifications ? cfg.txtOn : cfg.txtOff, inline: true },
     )
     .setColor(state.quickMode ? 0xE040FB : 0x57F287);
 
@@ -169,11 +178,11 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_authors')
-      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? 'Yes' : 'No'}`)
+      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? cfg.txtYes : cfg.txtNo}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_hide')
-      .setLabel(`${cfg.btnAddHideToggle}: ${state.hideThreads ? 'On' : 'Off'}`)
+      .setLabel(`${cfg.btnAddHideToggle}: ${state.hideThreads ? cfg.txtOn : cfg.txtOff}`)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -193,7 +202,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_open_metadata')
-      .setLabel(cfg.btnSetMetadata ?? 'Metadata')
+      .setLabel(cfg.btnSetMetadata)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -209,7 +218,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_notifications')
-      .setLabel(`${cfg.lblMyNotifications ?? 'Notifications'}: ${state.notifications ? 'On' : 'Off'}`)
+      .setLabel(`${cfg.lblMyNotifications ?? 'Notifications'}: ${state.notifications ? cfg.txtOn : cfg.txtOff}`)
       .setStyle(ButtonStyle.Secondary)
   );
 

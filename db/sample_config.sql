@@ -2,6 +2,31 @@
 -- Insert default English config values for system (guild_id = 1)
 
 INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
+-- Common Values
+('txtYes', 'Yes', 'en', 1),
+('txtNo', 'No', 'en', 1),
+('txtOn', 'On', 'en', 1),
+('txtOff', 'Off', 'en', 1),
+('txtNone', 'None', 'en', 1),
+('txtPublic', 'Public', 'en', 1),
+('txtPrivate', 'Private', 'en', 1),
+('txtOpen', 'Open', 'en', 1),
+('txtClosed', 'Closed', 'en', 1),
+('txtActive', 'Active', 'en', 1),
+('txtPaused', 'Paused', 'en', 1),
+('txtDelayed', 'Delayed', 'en', 1),
+('txtNotSet', 'Not Set', 'en', 1),
+('txtPause', 'Pause', 'en', 1),
+('txtResume', 'Resume', 'en', 1),
+('txtHrs', 'hrs', 'en', 1),
+('txtHoursLC', 'hours', 'en', 1),
+('txtHoursUC', 'Hours', 'en', 1),
+('txtWritersLC', 'writers', 'en', 1),
+('txtWritersUC', 'Writers', 'en', 1),
+('txtQuickLC', 'quick', 'en', 1),
+('txtQuickUC', 'Quick', 'en', 1),
+('txtNormalLC', 'normal', 'en', 1),
+('txtNormalUC', 'Normal', 'en', 1),
 
 -- Field Labels
 ('lblStoryTitle', 'Story Title:', 'en', 1),
@@ -704,21 +729,21 @@ Words: ~[word_count]', 'en', 1),
 
 -- Story Add section break descriptors (embed field values, stacked under the line)
 ('txtStoryAddSectionBreakSettings', '**⚙️ Story Settings**', 'en', 1),
-('txtStoryAddSectionBreakMeta', '**📋 Story Metadata**', 'en', 1),
+('txtStoryAddSectionBreakMeta', '**🗂️ Story Metadata**', 'en', 1),
 ('txtStoryAddSectionBreakJoin', '**🖊️ My Join Settings**', 'en', 1),
 
 -- Metadata panel labels (emoji in embed fields, not buttons)
 ('lblMetaCategory', '📊 Category', 'en', 1),
-('lblMetaRating', '🔞 Rating', 'en', 1),
+('lblMetaRating', '🛡️ Rating', 'en', 1),
 ('lblMetaWarnings', '⚠️ Warnings', 'en', 1),
-('lblMetaFandom', '📖 Fandom', 'en', 1),
+('lblMetaFandom', '🌎 Fandom', 'en', 1),
 ('lblMetaMainRelationship', '💞 Main Relationship', 'en', 1),
 ('lblMetaOtherRelationships', '🫂 Other Relationships', 'en', 1),
 ('lblMetaCharacters', '🧑 Characters', 'en', 1),
 ('lblMetaTags', '🏷️ Tags', 'en', 1),
 ('lblMetaSummary', '📝 Summary', 'en', 1),
-('txtMetaMainRelationshipPlaceholder', 'Bilbo Baggins/Thorin Oakenshield', 'en', 1),
-('txtMetaPanelTitle', 'Story Metadata', 'en', 1),
+('txtMetaMainRelationshipPlaceholder', 'ex. Bilbo Baggins/Thorin Oakenshield', 'en', 1),
+('txtMetaPanelTitle', '🗂️ Story Metadata', 'en', 1),
 ('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1),
 
 -- Notifications toggle (story add join settings)

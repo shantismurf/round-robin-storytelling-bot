@@ -14,41 +14,41 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const orderLabel = orderLabels[state.orderType];
   const isPaused = state.targetStatus === 2;
 
-  const ratingLabel = RATING_LABELS[state.rating ?? 'NR'] ?? '[NR] Not Rated';
+  const ratingLabel = RATING_LABELS[state.rating ?? cfg.txtRatingNR];
   const warningsDisplay = state.warnings?.length
     ? (Array.isArray(state.warnings) ? state.warnings : state.warnings.split(',').map(w => w.trim())).join(', ')
-    : '*None set*';
+    : cfg.txtNone;
 
   const barrierWarning = state.pendingRating && crossesBarrier(state.originalRating ?? state.rating, state.pendingRating)
-    ? `\n\n${cfg.txtRatingChangeThreadWarning ?? '⚠️ Changing this rating will migrate the story to a new thread on the appropriate feed channel. The old thread will be archived and closed.'}`
+    ? `\n\n${cfg.txtRatingChangeThreadWarning}`
     : '';
 
   const sectionLine = cfg.txtSectionBreakLine ?? '═══════════';
   const statusDisplay = isPaused
-    ? (cfg.txtManageStoryStatusPaused ?? '⏸️ Paused')
-    : (cfg.txtManageStoryStatusActive ?? '▶️ Active');
+    ? (cfg.txtManageStoryStatusPaused ?? `⏸️ ${cfg.txtPaused}`)
+    : (cfg.txtManageStoryStatusActive ?? `▶️ ${cfg.Active}`);
   const joinDisplay = state.allowJoins
-    ? (cfg.txtManageJoinOpen ?? '\u{1F513} Open')
-    : (cfg.txtManageJoinClosed ?? '\u{1F512} Closed');
+    ? (cfg.txtManageJoinOpen ?? `\u{1F513} ${cfg.txtOpen}`)
+    : (cfg.txtManageJoinClosed ?? `\u{1F512} ${cfg.txtClosed}`);
 
   const embed = new EmbedBuilder()
-    .setTitle(cfg.txtManageEmbedTitle ?? 'Story Settings')
+    .setTitle(cfg.txtManageEmbedTitle)
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.lblManageStoryTitle ?? '\u{1F4D6} Story Title', value: state.title, inline: false },
-      { name: cfg.lblManageStoryStatus ?? 'Story Status', value: statusDisplay, inline: true },
-      { name: cfg.lblManageJoinStatus ?? 'Join Status', value: joinDisplay, inline: true },
+      { name: cfg.lblManageStoryTitle, value: state.title, inline: false },
+      { name: cfg.lblManageStoryStatus, value: statusDisplay, inline: true },
+      { name: cfg.lblManageJoinStatus, value: joinDisplay, inline: true },
       { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
       { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : '∞', inline: true },
       { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
       { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled', inline: true },
-      { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? 'Private' : 'Public', inline: true },
-      { name: cfg.lblShowAuthors, value: state.showAuthors ? 'Yes' : 'No', inline: true },
-      { name: sectionLine, value: cfg.txtManageSectionBreakMeta ?? '**\u{1F4CB} Story Metadata**', inline: false },
-      { name: cfg.lblRating ?? 'Rating', value: ratingLabel + barrierWarning, inline: true },
-      { name: cfg.lblCategory ?? 'Category', value: state.category || '*Not set*', inline: true },
-      { name: cfg.lblWarnings ?? 'Warnings', value: warningsDisplay, inline: false },
-      { name: cfg.lblTags, value: state.tags || '*Not set*', inline: false },
+      { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic, inline: true },
+      { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtYes : cfg.txtNo, inline: true },
+      { name: sectionLine, value: cfg.txtManageSectionBreakMeta, inline: false },
+      { name: cfg.lblRating, value: ratingLabel + barrierWarning, inline: true },
+      { name: cfg.lblCategory, value: state.category || '*Not set*', inline: true },
+      { name: cfg.lblWarnings, value: warningsDisplay, inline: false },
+      { name: cfg.lblTags, value: state.tags || cfg.txtNotSet, inline: false },
     );
 
   const currentRatingDisplay = state.pendingRating ? `${state.pendingRating} ⚠️` : (state.rating ?? 'NR');
@@ -57,7 +57,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_set_title')
-      .setLabel(cfg.txtManageSetTitleModalTitle ?? 'Set Title')
+      .setLabel(cfg.txtManageSetTitleModalTitle)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('story_manage_cycle_order')
@@ -65,11 +65,11 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_status')
-      .setLabel(`Status: ${isPaused ? 'Paused' : 'Active'}`)
+      .setLabel(`Status: ${isPaused ? cfg.txtPaused : cfg.txtActive}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_latejoins')
-      .setLabel(`Join: ${state.allowJoins ? 'Open' : 'Closed'}`)
+      .setLabel(`Join: ${state.allowJoins ? cfg.txtOpen : cfg.txtClosed}`)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -81,15 +81,15 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_turnlength')
-      .setLabel(replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} hrs` }))
+      .setLabel(replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} ${cfg.txtHrs}` }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_reminder')
-      .setLabel(replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled' }))
+      .setLabel(replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtNone }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_open_metadata')
-      .setLabel(cfg.btnSetMetadata ?? 'Metadata')
+      .setLabel(cfg.btnSetMetadata)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -97,15 +97,15 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_authors')
-      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? 'Yes' : 'No'}`)
+      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? cfg.txtYes : cfg.txtNo}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_privacy')
-      .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? 'Private' : 'Public'}`)
+      .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_turns_open')
-      .setLabel(cfg.btnManageTurns ?? 'Manage Turns')
+      .setLabel(cfg.btnManageTurns)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -113,14 +113,14 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const row4Components = [
     new ButtonBuilder()
       .setCustomId('story_manage_entries_open')
-      .setLabel(cfg.btnManageEntries ?? 'Manage Entries')
+      .setLabel(cfg.btnManageEntries)
       .setStyle(ButtonStyle.Secondary),
   ];
   if (state.pendingTagCount > 0) {
     row4Components.push(
       new ButtonBuilder()
         .setCustomId('story_manage_review_tags')
-        .setLabel(replaceTemplateVariables(cfg.btnReviewTags ?? 'Review Tags ([count])', { count: state.pendingTagCount }))
+        .setLabel(replaceTemplateVariables(cfg.btnReviewTags, { count: state.pendingTagCount }))
         .setStyle(ButtonStyle.Primary)
     );
   }
@@ -130,11 +130,11 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const row5 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_pauseresume')
-      .setLabel(isPaused ? 'Resume Story' : 'Pause Story')
+      .setLabel(isPaused ? cfg.txtResume : cfg.txtPause)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_save')
-      .setLabel(cfg.btnSaveSettings ?? cfg.btnAdminConfigSave ?? 'Save Settings')
+      .setLabel(cfg.btnSaveSettings ?? cfg.btnAdminConfigSave)
       .setStyle(ButtonStyle.Success)
   );
 
@@ -175,6 +175,11 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     }
 
     const cfg = await getConfigValue(connection, [
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate',
+      'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
+      'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
+      'txtOpen','txtClosed','txtActive','txtPaused','txtHrs',
+      'txtPause','txtResume','txtRatingNR','txtNotSet',
       'txtManageEmbedTitle', 'btnAdminConfigSave', 'btnSaveSettings', 'btnCancel',
       'lblTurnLength', 'btnSetTurnLength',
       'lblTimeoutReminder', 'btnSetTimeout',
