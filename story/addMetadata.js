@@ -21,6 +21,7 @@ async function getMetaCfg(connection, guildId) {
 }
 
 export function buildMetadataPanel(cfg, state) {
+  log(`buildMetadataPanel started: cfg=${cfg} \nstate=${state}`, { show: false, guildName: 'system' });
   const ratingKey = ratingLabels[state.rating] ?? 'txtRatingNR';
   const ratingLabel = cfg[ratingKey] ?? state.rating;
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
@@ -49,28 +50,54 @@ export function buildMetadataPanel(cfg, state) {
       { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
     );
 
-  // Row 1 (4): Dynamic | Fandom | Rating | Warnings
+  // Row 1: Dynamic select (single-select)
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_add_meta_set_dynamic')
-      .setLabel(`${cfg.lblMetaDynamic}: ${dynamicDisplay}`)
-      .setStyle(ButtonStyle.Secondary),
+    new StringSelectMenuBuilder()
+      .setCustomId('story_add_meta_dynamic_select')
+      .setPlaceholder(cfg.lblMetaDynamic)
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(dynamicOptions.map(k => ({
+        label: cfg[k] ?? k,
+        value: k,
+        default: state.dynamic === k,
+      })))
+  );
+
+  // Row 2: Rating select (single-select)
+  const row2 = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('story_add_meta_rating_select')
+      .setPlaceholder(cfg.lblMetaRating)
+      .setMinValues(1)
+      .setMaxValues(1)
+      .addOptions(Object.entries(ratingLabels).map(([key, cfgKey]) => ({
+        label: cfg[cfgKey] ?? key,
+        value: key,
+        default: (state.rating ?? 'NR') === key,
+      })))
+  );
+
+  // Row 3: Warnings multi-select
+  const row3 = new ActionRowBuilder().addComponents(
+    new StringSelectMenuBuilder()
+      .setCustomId('story_add_meta_warnings_select')
+      .setPlaceholder(cfg.lblMetaWarnings)
+      .setMinValues(1)
+      .setMaxValues(warningOptions.length)
+      .addOptions(warningOptions.map(k => ({
+        label: cfg[k] ?? k,
+        value: k,
+        default: (state.warnings ?? []).includes(k),
+      })))
+  );
+
+  // Row 4: Fandom | Main Relationship | Other Relationships | Characters | Tags
+  const row4 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_fandom')
       .setLabel(cfg.lblMetaFandom)
       .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_add_meta_set_rating')
-      .setLabel(`${cfg.lblMetaRating}: ${ratingLabel}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_add_meta_set_warnings')
-      .setLabel(cfg.lblMetaWarnings)
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  // Row 2 (2): Main Relationship | Other Relationships
-  const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_mainrel')
       .setLabel(cfg.lblMetaMainRelationship)
@@ -78,11 +105,7 @@ export function buildMetadataPanel(cfg, state) {
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_otherrel')
       .setLabel(cfg.lblMetaOtherRelationships)
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  // Row 3 (3): Characters | Tags | Summary
-  const row3 = new ActionRowBuilder().addComponents(
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_characters')
       .setLabel(cfg.lblMetaCharacters)
@@ -90,22 +113,22 @@ export function buildMetadataPanel(cfg, state) {
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_tags')
       .setLabel(cfg.lblMetaTags)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_add_meta_set_summary')
-      .setLabel(cfg.lblMetaSummary)
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 4 (1): Save Settings
-  const row4 = new ActionRowBuilder().addComponents(
+  // Row 5: Summary | Save Settings
+  const row5 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_add_meta_set_summary')
+      .setLabel(cfg.lblMetaSummary)
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_save')
       .setLabel(cfg.btnSaveSettings)
       .setStyle(ButtonStyle.Success)
   );
 
-  return { embeds: [embed], components: [row1, row2, row3, row4], flags: MessageFlags.Ephemeral };
+  return { embeds: [embed], components: [row1, row2, row3, row4, row5], flags: MessageFlags.Ephemeral };
 }
 
 export async function handleMetadataButton(connection, interaction) {
@@ -120,7 +143,7 @@ export async function handleMetadataButton(connection, interaction) {
       await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
       return;
     }
-
+    log(`handleMetadataButton: pendingStoryData retrieved for user=${interaction.user.username} customId=${customId}`, { show: false, guildName: interaction?.guild?.name });
     const cfg = await getMetaCfg(connection, interaction.guild.id);
 
     if (customId === 'story_add_open_metadata') {
@@ -138,58 +161,34 @@ export async function handleMetadataButton(connection, interaction) {
     }
     const metaState = metaEntry.metaState;
 
-    if (customId === 'story_add_meta_set_dynamic') {
-      await interaction.reply({
-        content: cfg.lblMetaDynamic,
-        components: [new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('story_add_meta_dynamic_select')
-            .setPlaceholder(cfg.lblMetaDynamic)
-            .setMinValues(1)
-            .setMaxValues(1)
-            .addOptions(dynamicOptions.map(k => ({
-              label: cfg[k] ?? k,
-              value: k,
-              default: metaState.dynamic === k,
-            })))
-        )],
-        flags: MessageFlags.Ephemeral,
-      });
+    if (customId === 'story_add_meta_cycle_dynamic') {
+      const idx = dynamicOptions.indexOf(metaState.dynamic);
+      metaState.dynamic = dynamicOptions[(idx + 1) % dynamicOptions.length];
+      log(`handleMetadataButton: dynamic changed to '${metaState.dynamic}' for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.update(buildMetadataPanel(cfg, metaState));
 
-    } else if (customId === 'story_add_meta_set_rating') {
-      await interaction.reply({
-        content: cfg.lblMetaRating,
-        components: [new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('story_add_meta_rating_select')
-            .setPlaceholder(cfg.lblMetaRating)
-            .setMinValues(1)
-            .setMaxValues(1)
-            .addOptions(Object.entries(ratingLabels).map(([key, cfgKey]) => ({
-              label: cfg[cfgKey] ?? key,
-              value: key,
-              default: (metaState.rating ?? 'NR') === key,
-            })))
-        )],
-        flags: MessageFlags.Ephemeral,
-      });
+    } else if (customId === 'story_add_meta_cycle_rating') {
+      const ratingKeys = Object.keys(ratingLabels);
+      const idx = ratingKeys.indexOf(metaState.rating ?? 'NR');
+      metaState.rating = ratingKeys[(idx + 1) % ratingKeys.length];
+      log(`handleMetadataButton: rating changed to '${metaState.rating}' for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.update(buildMetadataPanel(cfg, metaState));
 
     } else if (customId === 'story_add_meta_set_warnings') {
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('story_add_meta_warnings_select')
+        .setPlaceholder(cfg.lblMetaWarnings)
+        .setMinValues(1)
+        .setMaxValues(warningOptions.length)
+        .addOptions(warningOptions.map(k => ({
+          label: cfg[k] ?? k,
+          value: k,
+          default: (metaState.warnings ?? []).includes(k)
+        })));
       await interaction.reply({
         content: cfg.lblMetaWarnings,
-        components: [new ActionRowBuilder().addComponents(
-          new StringSelectMenuBuilder()
-            .setCustomId('story_add_meta_warnings_select')
-            .setPlaceholder(cfg.lblMetaWarnings)
-            .setMinValues(1)
-            .setMaxValues(warningOptions.length)
-            .addOptions(warningOptions.map(k => ({
-              label: cfg[k] ?? k,
-              value: k,
-              default: (metaState.warnings ?? []).includes(k),
-            })))
-        )],
-        flags: MessageFlags.Ephemeral,
+        components: [new ActionRowBuilder().addComponents(selectMenu)],
+        flags: MessageFlags.Ephemeral
       });
 
     } else if (customId === 'story_add_meta_set_fandom') {
@@ -205,7 +204,7 @@ export async function handleMetadataButton(connection, interaction) {
               .setRequired(false)
               .setMaxLength(100)
               .setValue(metaState.fandom ?? '')
-              .setPlaceholder(cfg.txtMetaFandomPlaceholder ?? '')
+              .setPlaceholder('e.g. The Hobbit, Original Work')
           ))
       );
 
@@ -366,27 +365,16 @@ export async function handleMetadataSelectMenu(connection, interaction) {
 
   const metaEntry = pendingMetaPanelData.get(userId);
   if (!metaEntry) {
-    log(`handleMetadataSelectMenu: no pendingMetaPanelData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), components: [] });
     return;
   }
 
   const metaState = metaEntry.metaState;
-  const cfg = await getMetaCfg(connection, interaction.guild.id);
 
-  if (customId === 'story_add_meta_dynamic_select') {
-    metaState.dynamic = interaction.values[0];
-    log(`handleMetadataSelectMenu: dynamic set to '${metaState.dynamic}' for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.update({ content: cfg.txtMetaSaveSuccess, components: [] });
-
-  } else if (customId === 'story_add_meta_rating_select') {
-    metaState.rating = interaction.values[0];
-    log(`handleMetadataSelectMenu: rating set to '${metaState.rating}' for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.update({ content: cfg.txtMetaSaveSuccess, components: [] });
-
-  } else if (customId === 'story_add_meta_warnings_select') {
+  if (customId === 'story_add_meta_warnings_select') {
     metaState.warnings = interaction.values;
-    log(`handleMetadataSelectMenu: warnings set for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+    const cfg = await getMetaCfg(connection, interaction.guild.id);
+    log(`handleMetadataSelectMenu: warnings saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update({ content: cfg.txtMetaSaveSuccess, components: [] });
   }
 }
