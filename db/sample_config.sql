@@ -16,7 +16,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtPaused', 'Paused', 'en', 1),
 ('txtDelayed', 'Delayed', 'en', 1),
 ('txtNotSet', 'Not Set', 'en', 1),
-('txtNoLimit', '∞', 'en', 1),
+('txtInfinity', '∞', 'en', 1),
 ('txtUnknownWriter', 'Unknown', 'en', 1),
 ('txtPause', 'Pause', 'en', 1),
 ('txtResume', 'Resume', 'en', 1),

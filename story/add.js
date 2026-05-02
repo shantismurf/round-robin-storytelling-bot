@@ -24,7 +24,7 @@ export async function handleAddStory(connection, interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const cfg = await getConfigValue(connection, [
-      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtNoLimit',
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtInfinity',
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
       'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
       'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',
@@ -101,7 +101,7 @@ export function buildStoryAddMessage(cfg, state) {
   const timeoutDisplay = state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}%`;
   const delayHours = state.delayHours ?? 0;
   const delayWriters = state.delayWriters ?? 0;
-  const maxWritersDisplay = state.maxWriters ? String(state.maxWriters) : cfg.txtNoLimit;
+  const maxWritersDisplay = state.maxWriters ? String(state.maxWriters) : cfg.txtInfinity;
   const titleDisplay = state.storyTitle || cfg.txtStoryTitlePrompt;
   const orderEmojis = { 1: '\u{1F3B2}', 2: '\u{1F504}', 3: '\u{1F4CB}' };
   const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };

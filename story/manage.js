@@ -39,7 +39,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblManageStoryStatus, value: statusDisplay, inline: true },
       { name: cfg.lblManageJoinStatus, value: joinDisplay, inline: true },
       { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
-      { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : cfg.txtNoLimit, inline: true },
+      { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : cfg.txtInfinity, inline: true },
       { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
       { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled', inline: true },
       { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic, inline: true },
@@ -77,7 +77,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_set_maxwriters')
-      .setLabel(replaceTemplateVariables(cfg.btnSetMaxWriters, { max_writers: state.maxWriters ?? cfg.txtNoLimit }))
+      .setLabel(replaceTemplateVariables(cfg.btnSetMaxWriters, { max_writers: state.maxWriters ?? cfg.txtInfinity }))
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_turnlength')
@@ -175,7 +175,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     }
 
     const cfg = await getConfigValue(connection, [
-      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtNoLimit',
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtInfinity',
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
       'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
       'txtOpen','txtClosed','txtActive','txtPaused','txtHrs',
