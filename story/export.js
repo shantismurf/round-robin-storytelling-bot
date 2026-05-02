@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log } from '../utilities.js';
 import { marked } from 'marked';
-import { RATING_LABELS, formatWarnings } from './metadata.js';
+import { ratingLabels, formatWarnings } from './metadata.js';
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
@@ -177,11 +177,11 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
-  const ratingLabel = RATING_LABELS[story.rating] ?? '[NR] Not Rated';
+  const ratingLabel = ratingLabels[story.rating] ?? story.rating;
   const warningsText = story.warnings ? formatWarnings(story.warnings) : 'Creator Chose Not To Warn';
   const ao3MetaLines = [
     story.fandom           ? `<div class="meta"><strong>Fandom:</strong> ${story.fandom}</div>` : '',
-    story.category         ? `<div class="meta"><strong>Category:</strong> ${story.category}</div>` : '',
+    story.dynamic          ? `<div class="meta"><strong>Dynamic:</strong> ${story.dynamic}</div>` : '',
     `<div class="meta"><strong>Rating:</strong> ${ratingLabel}</div>`,
     `<div class="meta"><strong>Warnings:</strong> ${warningsText}</div>`,
     story.main_pairing     ? `<div class="meta"><strong>Relationship:</strong> ${story.main_pairing}</div>` : '',

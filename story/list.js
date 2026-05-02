@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
-import { RATING_BADGE } from './metadata.js';
+import { ratingBadge } from './metadata.js';
 
 export async function handleListStories(connection, interaction) {
   const guildId = interaction.guild.id;
@@ -139,9 +139,9 @@ export async function renderStoryListReply(connection, interaction, filter, page
       }
     }
 
-    const ratingBadge = RATING_BADGE[story.rating] ?? '[NR]';
+    const ratingBadgeKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
     embed.addFields({
-      name: `${statusIcon} "${story.title}" (#${story.guild_story_id}) ${ratingBadge}`,
+      name: `${statusIcon} "${story.title}" (#${story.guild_story_id}) ${ratingBadgeKey}`,
       value: `├ ${cfg.lblStoryStatus} ${statusText} • ${cfg.lblStoryTurn} ${currentTurn}
 ├ ${cfg.lblStoryWriters} ${story.writer_count}/${story.max_writers || '∞'} • ${cfg.lblStoryMode} ${modeText}
 └ ${cfg.lblStoryCreator} ${story.creator_name} • ${joinStatus}`,

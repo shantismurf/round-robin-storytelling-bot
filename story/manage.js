@@ -1,7 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, getTurnNumber, checkIsAdmin, checkIsCreator } from '../utilities.js';
 import { PickNextWriter, NextTurn, updateStoryStatusMessage, migrateStoryThread } from '../storybot.js';
-import { RATING_LABELS, WARNING_OPTIONS, CATEGORY_OPTIONS, crossesBarrier, isRestricted } from './metadata.js';
+import { ratingLabels, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './metadata.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './manageEntries.js';
 
@@ -14,7 +14,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const orderLabel = orderLabels[state.orderType];
   const isPaused = state.targetStatus === 2;
 
-  const ratingLabel = RATING_LABELS[state.rating ?? cfg.txtRatingNR];
+  const ratingLabel = cfg[ratingLabels[state.rating ?? 'NR']] ?? state.rating;
   const warningsDisplay = state.warnings?.length
     ? (Array.isArray(state.warnings) ? state.warnings : state.warnings.split(',').map(w => w.trim())).join(', ')
     : cfg.txtNone;
@@ -46,7 +46,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtYes : cfg.txtNo, inline: true },
       { name: sectionLine, value: cfg.txtManageSectionBreakMeta, inline: false },
       { name: cfg.lblRating, value: ratingLabel + barrierWarning, inline: true },
-      { name: cfg.lblCategory, value: state.category || '*Not set*', inline: true },
+      { name: cfg.lblDynamic, value: state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet, inline: true },
       { name: cfg.lblWarnings, value: warningsDisplay, inline: false },
       { name: cfg.lblTags, value: state.tags || cfg.txtNotSet, inline: false },
     );
@@ -154,7 +154,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy,
-              rating, warnings, fandom, main_pairing, other_relationships, characters, category, additional_tags
+              rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic, additional_tags
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
@@ -188,7 +188,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
       'lblTags', 'btnSetTags',
       'lblPrivateToggle',
-      'lblRating', 'lblWarnings', 'lblCategory',
+      'lblRating', 'lblWarnings', 'lblDynamic',
       'txtRatingChangeThreadWarning',
       'btnSetMetadata', 'btnReviewTags',
       'txtSelectionStaged',
@@ -205,7 +205,10 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtTurnReassignConfirm', 'txtTurnExtendModalTitle', 'lblTurnExtendHours',
       'txtTurnExtendPlaceholder', 'txtTurnDeleteEntryModalTitle', 'lblTurnDeleteEntryTurn',
       'txtTurnDeleteEntryPlaceholder', 'txtTurnRestoreEntryModalTitle', 'lblTurnRestoreEntryId',
-      'txtTurnRestoreEntryPlaceholder', 'txtTurnNextSelectWrite'
+      'txtTurnRestoreEntryPlaceholder', 'txtTurnNextSelectWrite',
+      ...Object.values(ratingLabels),
+      ...dynamicOptions,
+      ...warningOptions
     ], guildId);
     log(`handleManage: cfg loaded`, { show: false, guildName: interaction?.guild?.name });
 
@@ -253,7 +256,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       mainPairing: story.main_pairing ?? '',
       otherRelationships: story.other_relationships ?? '',
       characters: story.characters ?? '',
-      category: story.category ?? '',
+      dynamic: story.dynamic ?? '',
       additionalTags: story.additional_tags ?? '',
       pendingTagCount: Number(pendingTagCount),
       isAdminOrCreator: isCreator || isAdmin,
@@ -342,7 +345,7 @@ async function handleManageButton(connection, interaction) {
     const { buildMetadataPanel } = await import('./addMetadata.js');
     const cfg2 = await getConfigValue(connection, [
       'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'btnSaveSettings', 'btnCancel',
-      'lblMetaCategory', 'lblMetaRating', 'lblMetaWarnings', 'lblMetaFandom',
+      'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings', 'lblMetaFandom',
       'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaCharacters', 'lblMetaTags',
       'txtMetaMainRelationshipPlaceholder',
     ], interaction.guild.id);
@@ -555,7 +558,7 @@ async function handleManageSave(connection, interaction, state) {
        allow_joins = ?, show_authors = ?, story_order_type = ?,
        story_turn_privacy = ?, summary = ?, tags = ?,
        rating = ?, warnings = ?, fandom = ?, main_pairing = ?,
-       other_relationships = ?, characters = ?, category = ?, additional_tags = ?
+       other_relationships = ?, characters = ?, dynamic = ?, additional_tags = ?
        WHERE story_id = ?`,
       [
         state.title,
@@ -565,7 +568,7 @@ async function handleManageSave(connection, interaction, state) {
         finalRating, warningsStr || null,
         state.fandom || null, state.mainPairing || null,
         state.otherRelationships || null, state.characters || null,
-        state.category || null, state.additionalTags || null,
+        state.dynamic || null, state.additionalTags || null,
         state.storyId
       ]
     );

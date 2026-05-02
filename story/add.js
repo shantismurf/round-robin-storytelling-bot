@@ -1,7 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
-import { RATING_LABELS } from './metadata.js';
+import { ratingLabels } from './metadata.js';
 import { buildMetadataPanel, handleMetadataButton, handleMetadataModal, handleMetadataSelectMenu } from './addMetadata.js';
 
 // Temporary storage for story add session state
@@ -42,7 +42,7 @@ export async function handleAddStory(connection, interaction) {
       'lblMaxWriters', 'btnSetMaxWriters',
       'txtSectionBreakLine', 'txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin',
       'btnSetMetadata', 'lblMyNotifications',
-      'lblMetaRating', 'lblMetaWarnings', 'lblMetaFandom', 'lblMetaCategory',
+      'lblMetaRating', 'lblMetaWarnings', 'lblMetaFandom', 'lblMetaDynamic',
     ], interaction.guild.id);
 
     const state = {
@@ -66,7 +66,7 @@ export async function handleAddStory(connection, interaction) {
       mainPairing: '',
       otherRelationships: '',
       characters: '',
-      category: '',
+      dynamic: '',
       additionalTags: '',
       summary: ''
     };
@@ -110,13 +110,13 @@ export function buildStoryAddMessage(cfg, state) {
   const orderLabel = orderLabels[state.orderType];
   const orderDesc = orderDescs[state.orderType];
 
-  const ratingLabel = RATING_LABELS[state.rating];
+  const ratingLabel = cfg[ratingLabels[state.rating]] ?? state.rating;
   const warningsDisplay = state.warnings?.length ? state.warnings.join(', ') : cfg.txtNone;
   const metadataSummaryLines = [
     `**${cfg.lblMetaRating}:** ${ratingLabel}`,
     `**${cfg.lblMetaWarnings}:** ${warningsDisplay}`,
     state.fandom ? `**${cfg.lblMetaFandom}:** ${state.fandom}` : null,
-    state.category ? `**${cfg.lblMetaCategory}:** ${state.category}` : null,
+    state.dynamic ? `**${cfg.lblMetaDynamic}:** ${cfg[state.dynamic] ?? state.dynamic}` : null,
   ].filter(Boolean).join('\n');
 
   const sectionLine = cfg.txtSectionBreakLine;
@@ -567,7 +567,7 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
       mainPairing: state.mainPairing || null,
       otherRelationships: state.otherRelationships || null,
       characters: state.characters || null,
-      category: state.category || null,
+      dynamic: state.dynamic || null,
       additionalTags: state.additionalTags || null,
       summary: state.summary || null
     };

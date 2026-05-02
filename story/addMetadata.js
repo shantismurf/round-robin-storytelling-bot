@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput } from '../utilities.js';
-import { RATING_LABELS, CATEGORY_OPTIONS, WARNING_OPTIONS } from './metadata.js';
+import { ratingLabels, dynamicOptions, warningOptions } from './metadata.js';
 import { pendingStoryData, buildStoryAddMessage } from './add.js';
 
 // Keyed by userId — tracks which interaction opened the metadata panel
@@ -9,29 +9,36 @@ const pendingMetaPanelData = new Map();
 async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [
     'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'btnSaveSettings', 'btnCancel',
-    'lblMetaCategory', 'lblMetaRating', 'lblMetaWarnings',
+    'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings',
     'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
-    'txtMetaMainRelationshipPlaceholder',
+    'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
+    'txtRatingNR',
+    ...Object.values(ratingLabels),
+    ...dynamicOptions,
+    ...warningOptions,
   ], guildId);
 }
 
 export function buildMetadataPanel(cfg, state) {
-  const ratingLabel = RATING_LABELS[state.rating] ?? cfg.txtRatingNR;
-  const categoryDisplay = state.category || '*Not set*';
-  const warningsDisplay = state.warnings?.length ? state.warnings.join(', ') : '*None set*';
-  const fandomDisplay = state.fandom || '*Not set*';
-  const mainRelDisplay = state.mainPairing || '*Not set*';
-  const otherRelDisplay = state.otherRelationships || '*Not set*';
-  const charsDisplay = state.characters || '*Not set*';
-  const tagsDisplay = state.additionalTags || '*Not set*';
-  const summaryDisplay = state.summary || '*Not set*';
+  const ratingKey = ratingLabels[state.rating] ?? 'txtRatingNR';
+  const ratingLabel = cfg[ratingKey] ?? state.rating;
+  const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
+  const warningsDisplay = state.warnings?.length
+    ? state.warnings.map(k => cfg[k] ?? k).join(', ')
+    : cfg.txtNotSet;
+  const fandomDisplay = state.fandom || cfg.txtNotSet;
+  const mainRelDisplay = state.mainPairing || cfg.txtNotSet;
+  const otherRelDisplay = state.otherRelationships || cfg.txtNotSet;
+  const charsDisplay = state.characters || cfg.txtNotSet;
+  const tagsDisplay = state.additionalTags || cfg.txtNotSet;
+  const summaryDisplay = state.summary || cfg.txtNotSet;
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtMetaPanelTitle)
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.lblMetaCategory, value: categoryDisplay, inline: true },
+      { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
       { name: cfg.lblMetaFandom, value: fandomDisplay, inline: true },
       { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
       { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
@@ -42,23 +49,25 @@ export function buildMetadataPanel(cfg, state) {
       { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
     );
 
-  // Row 1 (4): Category: <> | Fandom | Rating: <> | Set Warnings
+  const currentDynamicLabel = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
+
+  // Row 1 (4): Dynamic: <> | Fandom | Rating: <> | Set Warnings
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('story_add_meta_cycle_category')
-      .setLabel(`Category: ${state.category || 'Not set'}`)
+      .setCustomId('story_add_meta_cycle_dynamic')
+      .setLabel(`${cfg.lblMetaDynamic}: ${currentDynamicLabel}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_fandom')
-      .setLabel('Fandom')
+      .setLabel(cfg.lblMetaFandom)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_cycle_rating')
-      .setLabel(`Rating: ${state.rating ?? cfg.txtRatingNR}`)
+      .setLabel(`${cfg.lblMetaRating}: ${ratingLabel}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_warnings')
-      .setLabel('Set Warnings')
+      .setLabel(cfg.lblMetaWarnings)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -66,11 +75,11 @@ export function buildMetadataPanel(cfg, state) {
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_mainrel')
-      .setLabel('Main Relationship')
+      .setLabel(cfg.lblMetaMainRelationship)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_otherrel')
-      .setLabel('Other Relationships')
+      .setLabel(cfg.lblMetaOtherRelationships)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -78,15 +87,15 @@ export function buildMetadataPanel(cfg, state) {
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_characters')
-      .setLabel('Characters')
+      .setLabel(cfg.lblMetaCharacters)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_tags')
-      .setLabel('Tags')
+      .setLabel(cfg.lblMetaTags)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_summary')
-      .setLabel('Set Summary')
+      .setLabel(cfg.lblMetaSummary)
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -116,7 +125,6 @@ export async function handleMetadataButton(connection, interaction) {
 
     const cfg = await getMetaCfg(connection, interaction.guild.id);
 
-    // Opening the metadata panel
     if (customId === 'story_add_open_metadata') {
       pendingMetaPanelData.set(userId, { metaState: { ...addState }, guildId: interaction.guild.id });
       log(`handleMetadataButton: opened metadata panel for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
@@ -124,7 +132,6 @@ export async function handleMetadataButton(connection, interaction) {
       return;
     }
 
-    // All other meta buttons require the panel to be open
     const metaEntry = pendingMetaPanelData.get(userId);
     if (!metaEntry) {
       log(`handleMetadataButton: no pendingMetaPanelData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
@@ -133,155 +140,155 @@ export async function handleMetadataButton(connection, interaction) {
     }
     const metaState = metaEntry.metaState;
 
-  if (customId === 'story_add_meta_cycle_category') {
-    const idx = CATEGORY_OPTIONS.indexOf(metaState.category);
-    metaState.category = CATEGORY_OPTIONS[(idx + 1) % CATEGORY_OPTIONS.length] ?? CATEGORY_OPTIONS[0];
-    log(`handleMetadataButton: category changed to '${metaState.category}'`, { show: false, guildName: interaction?.guild?.name });
-    await interaction.update(buildMetadataPanel(cfg, metaState));
+    if (customId === 'story_add_meta_cycle_dynamic') {
+      const idx = dynamicOptions.indexOf(metaState.dynamic);
+      metaState.dynamic = dynamicOptions[(idx + 1) % dynamicOptions.length];
+      log(`handleMetadataButton: dynamic changed to '${metaState.dynamic}' for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.update(buildMetadataPanel(cfg, metaState));
 
-  } else if (customId === 'story_add_meta_cycle_rating') {
-    const ratingKeys = Object.keys(RATING_LABELS);
-    const idx = ratingKeys.indexOf(metaState.rating ?? 'NR');
-    metaState.rating = ratingKeys[(idx + 1) % ratingKeys.length];
-    log(`handleMetadataButton: rating changed to '${metaState.rating}'`, { show: false, guildName: interaction?.guild?.name });
-    await interaction.update(buildMetadataPanel(cfg, metaState));
+    } else if (customId === 'story_add_meta_cycle_rating') {
+      const ratingKeys = Object.keys(ratingLabels);
+      const idx = ratingKeys.indexOf(metaState.rating ?? 'NR');
+      metaState.rating = ratingKeys[(idx + 1) % ratingKeys.length];
+      log(`handleMetadataButton: rating changed to '${metaState.rating}' for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.update(buildMetadataPanel(cfg, metaState));
 
-  } else if (customId === 'story_add_meta_set_warnings') {
-    const selectMenu = new StringSelectMenuBuilder()
-      .setCustomId('story_add_meta_warnings_select')
-      .setPlaceholder('Select all that apply...')
-      .setMinValues(1)
-      .setMaxValues(WARNING_OPTIONS.length)
-      .addOptions(WARNING_OPTIONS.map(w => ({ label: w, value: w, default: (metaState.warnings ?? []).includes(w) })));
-    await interaction.reply({
-      content: 'Select content warnings:',
-      components: [new ActionRowBuilder().addComponents(selectMenu)],
-      flags: MessageFlags.Ephemeral
-    });
+    } else if (customId === 'story_add_meta_set_warnings') {
+      const selectMenu = new StringSelectMenuBuilder()
+        .setCustomId('story_add_meta_warnings_select')
+        .setPlaceholder(cfg.lblMetaWarnings)
+        .setMinValues(1)
+        .setMaxValues(warningOptions.length)
+        .addOptions(warningOptions.map(k => ({
+          label: cfg[k] ?? k,
+          value: k,
+          default: (metaState.warnings ?? []).includes(k)
+        })));
+      await interaction.reply({
+        content: cfg.lblMetaWarnings,
+        components: [new ActionRowBuilder().addComponents(selectMenu)],
+        flags: MessageFlags.Ephemeral
+      });
 
-  } else if (customId === 'story_add_meta_set_fandom') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_add_meta_fandom_modal')
-        .setTitle(cfg.lblMetaFandom)
-        .addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('fandom')
-            .setLabel(cfg.lblMetaFandom)
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(100)
-            .setValue(metaState.fandom ?? '')
-            .setPlaceholder('e.g. The Hobbit, Original Work')
-        ))
-    );
+    } else if (customId === 'story_add_meta_set_fandom') {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_add_meta_fandom_modal')
+          .setTitle(cfg.lblMetaFandom)
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('fandom')
+              .setLabel(cfg.lblMetaFandom)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(false)
+              .setMaxLength(100)
+              .setValue(metaState.fandom ?? '')
+              .setPlaceholder('e.g. The Hobbit, Original Work')
+          ))
+      );
 
-  } else if (customId === 'story_add_meta_set_mainrel') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_add_meta_mainrel_modal')
-        .setTitle(cfg.lblMetaMainRelationship)
-        .addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('main_relationship')
-            .setLabel(cfg.lblMetaMainRelationship)
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(200)
-            .setValue(metaState.mainPairing ?? '')
-            .setPlaceholder(cfg.txtMetaMainRelationshipPlaceholder)
-        ))
-    );
+    } else if (customId === 'story_add_meta_set_mainrel') {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_add_meta_mainrel_modal')
+          .setTitle(cfg.lblMetaMainRelationship)
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('main_relationship')
+              .setLabel(cfg.lblMetaMainRelationship)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(false)
+              .setMaxLength(200)
+              .setValue(metaState.mainPairing ?? '')
+              .setPlaceholder(cfg.txtMetaMainRelationshipPlaceholder)
+          ))
+      );
 
-  } else if (customId === 'story_add_meta_set_otherrel') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_add_meta_otherrel_modal')
-        .setTitle(cfg.lblMetaOtherRelationships)
-        .addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('other_relationships')
-            .setLabel(cfg.lblMetaOtherRelationships)
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(false)
-            .setMaxLength(1000)
-            .setValue(metaState.otherRelationships ?? '')
-            .setPlaceholder('Additional pairings, comma-separated')
-        ))
-    );
+    } else if (customId === 'story_add_meta_set_otherrel') {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_add_meta_otherrel_modal')
+          .setTitle(cfg.lblMetaOtherRelationships)
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('other_relationships')
+              .setLabel(cfg.lblMetaOtherRelationships)
+              .setStyle(TextInputStyle.Paragraph)
+              .setRequired(false)
+              .setMaxLength(1000)
+              .setValue(metaState.otherRelationships ?? '')
+          ))
+      );
 
-  } else if (customId === 'story_add_meta_set_characters') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_add_meta_characters_modal')
-        .setTitle(cfg.lblMetaCharacters)
-        .addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('characters')
-            .setLabel(cfg.lblMetaCharacters)
-            .setStyle(TextInputStyle.Short)
-            .setRequired(false)
-            .setMaxLength(500)
-            .setValue(metaState.characters ?? '')
-            .setPlaceholder('Comma-separated character names')
-        ))
-    );
+    } else if (customId === 'story_add_meta_set_characters') {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_add_meta_characters_modal')
+          .setTitle(cfg.lblMetaCharacters)
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('characters')
+              .setLabel(cfg.lblMetaCharacters)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(false)
+              .setMaxLength(500)
+              .setValue(metaState.characters ?? '')
+          ))
+      );
 
-  } else if (customId === 'story_add_meta_set_tags') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_add_meta_tags_modal')
-        .setTitle(cfg.lblMetaTags)
-        .addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('additional_tags')
-            .setLabel(cfg.lblMetaTags)
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(false)
-            .setMaxLength(1000)
-            .setValue(metaState.additionalTags ?? '')
-            .setPlaceholder('Comma-separated tags, e.g. slow burn, hurt/comfort, AU')
-        ))
-    );
+    } else if (customId === 'story_add_meta_set_tags') {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_add_meta_tags_modal')
+          .setTitle(cfg.lblMetaTags)
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('additional_tags')
+              .setLabel(cfg.lblMetaTags)
+              .setStyle(TextInputStyle.Paragraph)
+              .setRequired(false)
+              .setMaxLength(1000)
+              .setValue(metaState.additionalTags ?? '')
+          ))
+      );
 
-  } else if (customId === 'story_add_meta_set_summary') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_add_meta_summary_modal')
-        .setTitle(cfg.lblMetaSummary)
-        .addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('summary')
-            .setLabel(cfg.lblMetaSummary)
-            .setStyle(TextInputStyle.Paragraph)
-            .setRequired(false)
-            .setMaxLength(4000)
-            .setValue(metaState.summary ?? '')
-            .setPlaceholder('A brief description of the story (optional)')
-        ))
-    );
+    } else if (customId === 'story_add_meta_set_summary') {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_add_meta_summary_modal')
+          .setTitle(cfg.lblMetaSummary)
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('summary')
+              .setLabel(cfg.lblMetaSummary)
+              .setStyle(TextInputStyle.Paragraph)
+              .setRequired(false)
+              .setMaxLength(4000)
+              .setValue(metaState.summary ?? '')
+          ))
+      );
 
-  } else if (customId === 'story_add_meta_save') {
-    Object.assign(addState, {
-      rating: metaState.rating,
-      warnings: metaState.warnings,
-      fandom: metaState.fandom,
-      mainPairing: metaState.mainPairing,
-      otherRelationships: metaState.otherRelationships,
-      characters: metaState.characters,
-      category: metaState.category,
-      additionalTags: metaState.additionalTags,
-      summary: metaState.summary,
-    });
-    pendingMetaPanelData.delete(userId);
-    log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
-    await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
+    } else if (customId === 'story_add_meta_save') {
+      Object.assign(addState, {
+        rating: metaState.rating,
+        warnings: metaState.warnings,
+        fandom: metaState.fandom,
+        mainPairing: metaState.mainPairing,
+        otherRelationships: metaState.otherRelationships,
+        characters: metaState.characters,
+        dynamic: metaState.dynamic,
+        additionalTags: metaState.additionalTags,
+        summary: metaState.summary,
+      });
+      pendingMetaPanelData.delete(userId);
+      log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+      await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
 
-  } else if (customId === 'story_add_meta_cancel') {
-    pendingMetaPanelData.delete(userId);
-    await interaction.update({ content: 'Metadata cancelled — no changes saved.', embeds: [], components: [] });
-  }
+    } else if (customId === 'story_add_meta_cancel') {
+      pendingMetaPanelData.delete(userId);
+      await interaction.update({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
+    }
   } catch (error) {
     log(`handleMetadataButton failed: customId=${customId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     if (!interaction.replied && !interaction.deferred) {

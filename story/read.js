@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, checkIsCreator, discordTimestamp } from '../utilities.js';
 import { generateStoryExport } from './export.js';
-import { isRestricted, RATING_BADGE } from './metadata.js';
+import { isRestricted, ratingBadge } from './metadata.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './state.js';
 import { buildEditMessage } from './edit.js';
 import { buildEntryEmbed, buildEntryPages } from './entryRenderer.js';
@@ -276,8 +276,8 @@ export async function handleRead(connection, interaction) {
     const savedPage = lastReadPage.get(`${interaction.user.id}_${storyId}`) ?? 0;
     const startPage = Math.min(savedPage, pages.length - 1);
 
-    const ratingBadge = RATING_BADGE[story.rating] ?? '[NR]';
-    const titleWithRating = `${story.title} ${ratingBadge}`;
+    const ratingBadgeKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const titleWithRating = `${story.title} ${ratingBadgeKey}`;
     const session = {
       pages, contentMap, currentPage: startPage, storyId, guildStoryId: story.guild_story_id,
       title: titleWithRating, wordCount, guildId, userId: interaction.user.id,

@@ -57,7 +57,7 @@ export async function CreateStory(connection, interaction, storyInput) {
     const [storyResult] = await txn.execute(
       `INSERT INTO story (guild_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
        timeout_reminder_percent, story_turn_privacy, show_authors, story_delay_hours, story_delay_users, story_order_type, max_writers,
-       rating, warnings, fandom, main_pairing, other_relationships, characters, category, additional_tags)
+       rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic, additional_tags)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         guild_id,
@@ -79,7 +79,7 @@ export async function CreateStory(connection, interaction, storyInput) {
         storyInput.mainPairing ?? null,
         storyInput.otherRelationships ?? null,
         storyInput.characters ?? null,
-        storyInput.category ?? null,
+        storyInput.dynamic ?? null,
         storyInput.additionalTags ?? null
       ]
     );
@@ -759,7 +759,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
               timeout_reminder_percent, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, status_message_id, guild_id,
               next_writer_id, closed_at, rating, warnings, fandom, main_pairing,
-              other_relationships, characters, category, additional_tags
+              other_relationships, characters, dynamic, additional_tags
        FROM story WHERE story_id = ?`,
       [storyId]
     );
@@ -881,8 +881,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       ? `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} · ~${wordCount.toLocaleString()} words${imagePart}`
       : 'No entries yet';
 
-    const { RATING_BADGE: ratingBadge, formatWarnings } = await import('./story/metadata.js');
-    const ratingBadgeStr = ratingBadge[story.rating] ?? '[NR]';
+    const { ratingBadge, formatWarnings } = await import('./story/metadata.js');
+    const ratingBadgeStr = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
     const warningsDisplay = story.warnings ? formatWarnings(story.warnings) : null;
 
     const metadataFields = [];

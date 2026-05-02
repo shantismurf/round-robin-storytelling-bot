@@ -614,16 +614,40 @@ Words: ~[word_count]', 'en', 1),
 ('lblMainPairing', 'Main Pairing', 'en', 1),
 ('lblOtherRelationships', 'Other Relationships', 'en', 1),
 ('lblCharacters', 'Characters', 'en', 1),
-('lblCategory', 'Category', 'en', 1),
+('lblDynamic', 'Dynamic', 'en', 1),
 ('lblAdditionalTags', 'Additional Tags', 'en', 1),
 ('btnSetMetadata', 'Story Metadata', 'en', 1),
 
--- Rating labels
+-- Rating badge codes (shown in compact contexts like list embeds)
+('txtRatingBadgeNR', '[NR]', 'en', 1),
+('txtRatingBadgeG', '[G]', 'en', 1),
+('txtRatingBadgeT', '[T]', 'en', 1),
+('txtRatingBadgeM', '[M]', 'en', 1),
+('txtRatingBadgeE', '[E]', 'en', 1),
+
+-- Rating labels (full display names)
 ('txtRatingNR', '[NR] Not Rated', 'en', 1),
 ('txtRatingG', '[G] General', 'en', 1),
 ('txtRatingT', '[T] Teen', 'en', 1),
 ('txtRatingM', '[M] Mature', 'en', 1),
 ('txtRatingE', '[E] Explicit', 'en', 1),
+
+-- Warning options (select menu values)
+('optWarnAllClear', 'All Clear: No Content Warnings', 'en', 1),
+('optWarnViolence', 'Extreme or Visceral Violence', 'en', 1),
+('optWarnCharacterDeath', 'Main Character Fatality', 'en', 1),
+('optWarnOther', 'Other: See Tags', 'en', 1),
+('optWarnNonCon', 'Rape/Lack of Sexual Consent', 'en', 1),
+('optWarnMinors', 'Sex Involving a Minor', 'en', 1),
+('optWarnUnspecified', 'Unspecified: Warnings May Apply', 'en', 1),
+
+-- Dynamic options (relationship dynamic select menu values)
+('optDynamicGeneral', 'General', 'en', 1),
+('optDynamicFF', 'F/F', 'en', 1),
+('optDynamicFM', 'F/M', 'en', 1),
+('optDynamicMM', 'M/M', 'en', 1),
+('optDynamicPoly', 'Polyamory', 'en', 1),
+('optDynamicOther', 'Other', 'en', 1),
 
 -- Rating change warning (shown in manage panel when rating crosses the M/E barrier)
 ('txtRatingChangeThreadWarning', '⚠️ **Rating change alert:** Changing the rating across the Mature/Explicit barrier (between G/T/NR and M/E) will start a **new story thread** on the appropriate feed channel when you save. The old thread will be archived and closed. This cannot be undone.', 'en', 1),
@@ -735,7 +759,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtStoryAddSectionBreakJoin', '**🖊️ My Join Settings**', 'en', 1),
 
 -- Metadata panel labels (emoji in embed fields, not buttons)
-('lblMetaCategory', '📊 Category', 'en', 1),
+('lblMetaDynamic', '📊 Dynamic', 'en', 1),
 ('lblMetaRating', '🛡️ Rating', 'en', 1),
 ('lblMetaWarnings', '⚠️ Warnings', 'en', 1),
 ('lblMetaFandom', '🌎 Fandom', 'en', 1),
@@ -793,4 +817,4 @@ Words: ~[word_count]', 'en', 1),
 
 -- Help Page 2 — metadata section
 ('lblHelp2Metadata', '📋 Story Metadata', 'en', 1),
-('txtHelp2Metadata', 'Optional AO3-style metadata set via the **Metadata** button in the story create form:\n- 🔞 **Rating** — G, T, M, E, or Not Rated. Affects which feed channel the story posts to.\n- ⚠️ **Warnings** — Select all that apply (violence, major character death, etc.).\n- 📊 **Category** — Gen, F/F, F/M, M/M, Multi, or Other.\n- 📖 **Fandom** — The source material(s) for the story.\n- 💞 **Main Relationship** — Primary ship or pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships.\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags (e.g. slow burn, hurt/comfort, AU).', 'en', 1);
+('txtHelp2Metadata', 'Optional AO3-style metadata set via the **Metadata** button in the story create form:\n- 🔞 **Rating** — G, T, M, E, or Not Rated. Affects which feed channel the story posts to.\n- ⚠️ **Warnings** — Select all that apply.\n- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other.\n- 📖 **Fandom** — The source material(s) for the story.\n- 💞 **Main Relationship** — Primary ship or pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships.\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags (e.g. slow burn, hurt/comfort, AU).', 'en', 1);
