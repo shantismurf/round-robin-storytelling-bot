@@ -127,7 +127,7 @@ export function buildStoryAddMessage(cfg, state) {
     .addFields(
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakSettings, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-      { name: sectionLine, value: '\u0020', inline: true },
+      //{ name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
       { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
       { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
@@ -137,14 +137,15 @@ export function buildStoryAddMessage(cfg, state) {
       { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${showAuthorsDesc}`, inline: true },
       { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
       { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
-      { name: '\u0020', value: '\u0020', inline: true }, // Spacer
+      { name: '\u0020', value: '\u0020', inline: false }, // Spacer
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-      { name: sectionLine, value: '\u0020', inline: true },
+      //{ name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.btnSetMetadata, value: metadataSummaryLines, inline: false },
+      { name: '\u0020', value: '\u0020', inline: false }, // Spacer
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
-      { name: sectionLine, value: '\u0020', inline: true },
+      //{ name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.lblYourAO3Name, value: state.ao3Name, inline: true },
       { name: cfg.lblHideToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
       { name: cfg.lblMyNotifications, value: state.notifications ? cfg.txtOn : cfg.txtOff, inline: true },
