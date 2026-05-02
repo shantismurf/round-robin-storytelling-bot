@@ -136,7 +136,7 @@ export function buildStoryAddMessage(cfg, state) {
       { name: cfg.lblHideToggle, value: hideDesc, inline: true },
       { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${showAuthorsDesc}`, inline: true },
       { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
-      { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} hours / ${delayWriters} writers`, inline: false },
+      { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: false },
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
@@ -145,7 +145,7 @@ export function buildStoryAddMessage(cfg, state) {
       { name: sectionLine, value: '\u0020', inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
       { name: cfg.lblYourAO3Name, value: state.ao3Name, inline: true },
-      { name: cfg.lblPrivateToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
+      { name: cfg.lblHideToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
       { name: cfg.lblMyNotifications, value: state.notifications ? cfg.txtOn : cfg.txtOff, inline: true },
     )
     .setColor(state.quickMode ? 0xE040FB : 0x57F287);

@@ -725,7 +725,7 @@ Words: ~[word_count]', 'en', 1),
 ('cfgFaqThreadAdminCmds', '', 'en', 1),
 
 -- Shared section break line (embed field name, reused across all panels)
-('txtSectionBreakLine', '═══════════', 'en', 1),
+('txtSectionBreakLine', '═════════════════', 'en', 1),
 
 -- Story Add section break descriptors (embed field values, stacked under the line)
 ('txtStoryAddSectionBreakSettings', '**⚙️ Story Settings**', 'en', 1),
@@ -746,8 +746,8 @@ Words: ~[word_count]', 'en', 1),
 ('txtMetaPanelTitle', '🗂️ Story Metadata', 'en', 1),
 ('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1),
 
--- Notifications toggle (story add join settings)
-('lblMyNotifications', 'Notifications', 'en', 1),
+-- DM Notifications toggle (story add join settings)
+('lblMyNotifications', 'DM Notifications', 'en', 1),
 
 -- Story manage embed
 ('txtManageEmbedTitle', 'Story Settings', 'en', 1),
