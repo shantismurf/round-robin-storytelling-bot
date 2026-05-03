@@ -290,7 +290,7 @@ export async function handleMetadataButton(connection, interaction) {
       );
 
     } else if (customId === 'story_add_meta_save') {
-      Object.assign(addState, {
+      const metaFields = {
         rating: metaState.rating,
         warnings: metaState.warnings,
         fandom: metaState.fandom,
@@ -300,11 +300,17 @@ export async function handleMetadataButton(connection, interaction) {
         dynamic: metaState.dynamic,
         additionalTags: metaState.additionalTags,
         summary: metaState.summary,
-      });
+      };
+      const { onSave } = pendingMetaPanelData.get(userId) ?? {};
       pendingMetaPanelData.delete(userId);
       log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-      await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
-      await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
+      if (onSave) {
+        await onSave(interaction, metaFields, cfg);
+      } else {
+        Object.assign(addState, metaFields);
+        await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+        await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
+      }
 
     } else if (customId === 'story_add_meta_cancel') {
       pendingMetaPanelData.delete(userId);
@@ -358,8 +364,8 @@ export async function handleMetadataModal(connection, interaction) {
   }
 }
 
-export function registerMetaSession(userId, metaState, guildId) {
-  pendingMetaPanelData.set(userId, { metaState, guildId });
+export function registerMetaSession(userId, metaState, guildId, onSave = null) {
+  pendingMetaPanelData.set(userId, { metaState, guildId, onSave });
 }
 
 export async function handleMetadataSelectMenu(connection, interaction) {

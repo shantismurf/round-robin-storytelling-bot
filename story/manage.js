@@ -344,7 +344,11 @@ async function handleManageButton(connection, interaction) {
   } else if (customId === 'story_manage_open_metadata') {
     const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./addMetadata.js');
     const cfg2 = await getMetaCfg(connection, interaction.guild.id);
-    registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id);
+    registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id, async (interaction, metaFields, cfg) => {
+      Object.assign(state, metaFields);
+      await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+    });
     await interaction.reply({ ...buildMetadataPanel(cfg2, state), flags: MessageFlags.Ephemeral });
 
   } else if (customId === 'story_manage_set_turnlength') {
