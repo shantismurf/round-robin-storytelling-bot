@@ -36,6 +36,18 @@ export class StoryBot extends EventEmitter {
 }
 
 /**
+ * Returns the currently active story thread ID.
+ * story_thread_id is the permanent unrestricted thread (set at creation, never overwritten).
+ * restricted_thread_id is the permanent restricted thread (set on first NR->M migration).
+ * For restricted-rated stories that have a dedicated restricted thread, that is the active one.
+ */
+export function getActiveThreadId(story) {
+  return (isRestricted(story.rating) && story.restricted_thread_id)
+    ? story.restricted_thread_id
+    : story.story_thread_id;
+}
+
+/**
  * CreateStory function with explicit transaction handling
  */
 export async function CreateStory(connection, interaction, storyInput) {
@@ -385,9 +397,6 @@ export async function PickNextWriter(connection, storyId) {
   
   if (story_order_type === 2) {
     // Round-robin: cycle-based selection.
-    // Find who has already had a turn since the current writer's previous turn.
-    // Writers in that window have already "gone this cycle" and are excluded.
-    // If everyone has gone (pool empty), reset — pick from all active writers except current.
     const [allWriters] = await connection.execute(
       `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = 1`,
       [storyId]
@@ -463,7 +472,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     // Get story and writer info
     const [writerInfo] = await connection.execute(
       `SELECT sw.story_id, sw.discord_user_id, sw.discord_display_name, sw.turn_privacy, sw.notification_prefs,
-              s.quick_mode, s.turn_length_hours, s.story_thread_id, s.story_turn_privacy, s.title,
+              s.quick_mode, s.turn_length_hours, s.story_thread_id, s.restricted_thread_id, s.story_turn_privacy, s.title,
               s.timeout_reminder_percent, s.guild_id, s.guild_story_id, s.show_authors, s.rating
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
@@ -614,8 +623,8 @@ async function handleQuickModeNotification(connection, interaction, writer, guil
   const turnEndTime = turnEndTimeFunction(writer.turn_length_hours);
   const discordTimestamp = `<t:${Math.floor(turnEndTime.getTime() / 1000)}:F>`;
   
-  // Send notification to writer
-  await handleWriterNotification(connection, interaction, writer, writer.story_thread_id, guild_id);
+  // Send notification to writer using the active story thread as the link
+  await handleWriterNotification(connection, interaction, writer, getActiveThreadId(writer), guild_id);
   
   // Post feed announcement to the appropriate channel (restricted if M/E rated)
   const txtQuickModeTurnStart = await getConfigValue(connection,'txtQuickModeTurnStart', guild_id);
@@ -732,15 +741,17 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
 
 
 /**
- * Post a short activity message to the story's main thread. Safe to fire-and-forget.
+ * Post a short activity message to the story's active thread. Safe to fire-and-forget.
  */
 export async function postStoryThreadActivity(connection, guild, storyId, message) {
   try {
     const [rows] = await connection.execute(
-      `SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]
+      `SELECT story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]
     );
-    if (!rows[0]?.story_thread_id) return;
-    const thread = await guild.channels.fetch(rows[0].story_thread_id).catch(() => null);
+    if (!rows[0]) return;
+    const activeThreadId = getActiveThreadId(rows[0]);
+    if (!activeThreadId) return;
+    const thread = await guild.channels.fetch(activeThreadId).catch(() => null);
     if (thread) await thread.send(message);
   } catch (err) {
     log(`Could not post activity to story thread ${storyId}: ${err}`, { show: true, guildName: guild?.name });
@@ -748,7 +759,7 @@ export async function postStoryThreadActivity(connection, guild, storyId, messag
 }
 
 /**
- * Build and post (or update) the persistent status embed in the story thread.
+ * Build and post (or update) the persistent status embed in the story's active thread.
  * Stores the message ID in story.status_message_id so it can be edited in place.
  * If the message has been deleted, a new one is posted automatically.
  */
@@ -757,13 +768,13 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
               timeout_reminder_percent, max_writers, allow_joins, show_authors,
-              story_order_type, summary, tags, story_thread_id, status_message_id, guild_id,
+              story_order_type, summary, tags, story_thread_id, restricted_thread_id, status_message_id, guild_id,
               next_writer_id, closed_at, rating, warnings, fandom, main_pairing,
               other_relationships, characters, dynamic, additional_tags
        FROM story WHERE story_id = ?`,
       [storyId]
     );
-    if (storyRows.length === 0 || !storyRows[0].story_thread_id) return;
+    if (storyRows.length === 0 || !getActiveThreadId(storyRows[0])) return;
     const story = storyRows[0];
 
     const [writers] = await connection.execute(
@@ -927,7 +938,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       embed.addFields({ name: 'Closed', value: closedTimestamp, inline: true });
     }
 
-    const storyThread = await guild.channels.fetch(story.story_thread_id).catch(() => null);
+    const activeThreadId = getActiveThreadId(story);
+    const storyThread = await guild.channels.fetch(activeThreadId).catch(() => null);
     if (!storyThread) return;
 
     // Keep story thread title in sync with current status
@@ -1054,63 +1066,141 @@ export function turnEndTimeFunction(turnLengthHours) {
 }
 
 /**
- * Migrate a story's main thread to a different feed channel when its rating crosses
- * the M/E barrier. Archives/closes the old thread and creates a new one on the
- * target channel. Updates story.story_thread_id and clears status_message_id so
- * updateStoryStatusMessage will post a fresh embed in the new thread.
+ * Build thread title string from config templates.
+ */
+async function buildThreadTitle(connection, story) {
+  const [txtActive, txtPaused, txtClosed, titleTemplate] = await Promise.all([
+    getConfigValue(connection, 'txtActive', story.guild_id),
+    getConfigValue(connection, 'txtPaused', story.guild_id),
+    getConfigValue(connection, 'txtClosed', story.guild_id),
+    getConfigValue(connection, 'txtStoryThreadTitle', story.guild_id),
+  ]);
+  const statusLabel = { 1: txtActive, 2: txtPaused, 3: txtClosed }[story.story_status] ?? txtActive;
+  return titleTemplate
+    .replace('[story_id]', story.guild_story_id)
+    .replace('[inputStoryTitle]', story.title)
+    .replace('[story_status]', statusLabel);
+}
+
+/**
+ * Migrate a story's thread when its rating crosses the M/E barrier.
+ *
+ * Two permanent thread IDs are stored in the DB:
+ *   story_thread_id     — the unrestricted (main) feed channel thread; never changed after creation
+ *   restricted_thread_id — the M/E restricted feed channel thread; set on first NR→M migration
+ *
+ * The "active" thread is whichever one matches the current rating (see getActiveThreadId).
+ * Migration posts a cross-link message in the old thread, archives/locks it, posts a
+ * continuation message in the new thread, and updates the DB accordingly.
  *
  * Returns { success, newThreadId } or { success: false, error }.
  */
 export async function migrateStoryThread(connection, guild, storyId, newRating) {
   try {
     const [rows] = await connection.execute(
-      `SELECT guild_story_id, title, story_status, story_thread_id, guild_id FROM story WHERE story_id = ?`,
+      `SELECT guild_story_id, title, story_status, story_thread_id, restricted_thread_id, guild_id
+       FROM story WHERE story_id = ?`,
       [storyId]
     );
     if (rows.length === 0) return { success: false, error: 'Story not found' };
     const story = rows[0];
+    const movingToRestricted = isRestricted(newRating);
 
     const newFeedChannelId = await resolveFeedChannelId(connection, story.guild_id, newRating);
     const newFeedChannel = await guild.channels.fetch(newFeedChannelId).catch(() => null);
     if (!newFeedChannel) return { success: false, error: 'Target feed channel not found' };
 
-    // Archive the old thread
-    if (story.story_thread_id) {
-      const oldThread = await guild.channels.fetch(story.story_thread_id).catch(() => null);
-      if (oldThread) {
-        try {
-          await oldThread.setArchived(true);
-          await oldThread.setLocked(true);
-        } catch {}
+    let oldThreadId, newThread;
+    const dbUpdates = {};
+
+    if (movingToRestricted) {
+      // Unrestricted → Restricted
+      // story_thread_id is the permanent NR thread; it stays as-is for future M→NR migration
+      oldThreadId = story.story_thread_id;
+
+      if (story.restricted_thread_id) {
+        const existing = await guild.channels.fetch(story.restricted_thread_id).catch(() => null);
+        if (existing) {
+          if (existing.archived) await existing.setArchived(false).catch(() => {});
+          if (existing.locked)   await existing.setLocked(false).catch(() => {});
+          newThread = existing;
+        }
+      }
+      if (!newThread) {
+        newThread = await newFeedChannel.threads.create({
+          name: await buildThreadTitle(connection, story),
+          type: ChannelType.PublicThread,
+          reason: `Story thread migrated to restricted channel (rating: ${newRating})`,
+        });
+      }
+      dbUpdates.restricted_thread_id = newThread.id;
+      // story_thread_id intentionally NOT updated — stays as the permanent NR thread
+
+    } else {
+      // Restricted → Unrestricted
+      if (story.restricted_thread_id) {
+        // Standard path: a dedicated restricted thread exists; story_thread_id is the archived NR thread
+        oldThreadId = story.restricted_thread_id;
+        const existing = await guild.channels.fetch(story.story_thread_id).catch(() => null);
+        if (existing) {
+          if (existing.archived) await existing.setArchived(false).catch(() => {});
+          if (existing.locked)   await existing.setLocked(false).catch(() => {});
+          newThread = existing;
+        }
+        if (!newThread) {
+          // Original NR thread was deleted; create a new one
+          newThread = await newFeedChannel.threads.create({
+            name: await buildThreadTitle(connection, story),
+            type: ChannelType.PublicThread,
+            reason: `Story thread migrated to main channel`,
+          });
+          dbUpdates.story_thread_id = newThread.id;
+        }
+        // If we successfully reopened the existing NR thread, no column updates needed
+
+      } else {
+        // Story was originally created at M/E with no prior NR thread
+        oldThreadId = story.story_thread_id;
+        newThread = await newFeedChannel.threads.create({
+          name: await buildThreadTitle(connection, story),
+          type: ChannelType.PublicThread,
+          reason: `Story thread migrated to main channel`,
+        });
+        dbUpdates.story_thread_id = newThread.id;
+        dbUpdates.restricted_thread_id = oldThreadId; // preserve old M thread for future NR→M
       }
     }
 
-    // Build thread title for the new thread
-    const [txtActive, txtPaused, txtClosed, titleTemplate] = await Promise.all([
-      getConfigValue(connection, 'txtActive', story.guild_id),
-      getConfigValue(connection, 'txtPaused', story.guild_id),
-      getConfigValue(connection, 'txtClosed', story.guild_id),
-      getConfigValue(connection, 'txtStoryThreadTitle', story.guild_id),
-    ]);
-    const statusLabel = { 1: txtActive, 2: txtPaused, 3: txtClosed }[story.story_status] ?? txtActive;
-    const threadTitle = titleTemplate
-      .replace('[story_id]', story.guild_story_id)
-      .replace('[inputStoryTitle]', story.title)
-      .replace('[story_status]', statusLabel);
+    const oldThreadLink = oldThreadId
+      ? `https://discord.com/channels/${story.guild_id}/${oldThreadId}` : null;
+    const newThreadLink = `https://discord.com/channels/${story.guild_id}/${newThread.id}`;
 
-    const newThread = await newFeedChannel.threads.create({
-      name: threadTitle,
-      type: ChannelType.PublicThread,
-      reason: `Story thread migrated to new rating channel (rating changed to ${newRating})`
-    });
+    // Post migration notice in old thread, then archive/lock it
+    const oldThread = oldThreadId ? await guild.channels.fetch(oldThreadId).catch(() => null) : null;
+    if (oldThread) {
+      const txtOut = await getConfigValue(connection, 'txtStoryThreadMigratedOut', story.guild_id);
+      const outMsg = (txtOut ?? 'This story has moved. Continue reading here: [new_thread_link]')
+        .replace('[new_thread_link]', newThreadLink);
+      await oldThread.send(outMsg).catch(() => {});
+      await oldThread.setArchived(true).catch(() => {});
+      await oldThread.setLocked(true).catch(() => {});
+    }
 
-    // Update DB — clear status_message_id so updateStoryStatusMessage posts a fresh embed
+    // Post continuation message in new/reopened thread
+    const txtIn = await getConfigValue(connection, 'txtStoryThreadMigratedIn', story.guild_id);
+    const inMsg = (txtIn ?? 'This story continues from a previous thread: [old_thread_link]')
+      .replace('[old_thread_link]', oldThreadLink ?? 'a previous thread');
+    await newThread.send(inMsg).catch(() => {});
+
+    // DB update — always clear status_message_id so a fresh embed is posted
+    dbUpdates.status_message_id = null;
+    const setClauses = Object.keys(dbUpdates).map(k => `${k} = ?`).join(', ');
     await connection.execute(
-      `UPDATE story SET story_thread_id = ?, status_message_id = NULL WHERE story_id = ?`,
-      [newThread.id, storyId]
+      `UPDATE story SET ${setClauses} WHERE story_id = ?`,
+      [...Object.values(dbUpdates), storyId]
     );
 
-    log(`Migrated story ${storyId} thread to channel ${newFeedChannelId} (new thread ${newThread.id})`, { show: true, guildName: guild?.name });
+    log(`Migrated story ${storyId} to ${newRating} (newThread: ${newThread.id})`, { show: true, guildName: guild?.name });
     return { success: true, newThreadId: newThread.id };
   } catch (err) {
     log(`migrateStoryThread failed for story ${storyId}: ${err}`, { show: true, guildName: guild?.name });
