@@ -353,7 +353,7 @@ async function handleManageButton(connection, interaction) {
       Object.assign(state, metaFields);
       log(`manage onSave: state after assign — rating=${state.rating} dynamic=${state.dynamic} fandom=${state.fandom}`, { show: false, guildName: interaction?.guild?.name });
       log(`manage onSave: calling interaction.update`, { show: false, guildName: interaction?.guild?.name });
-      await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+      await interaction.update({ content: cfg.txtMetaApplied ?? cfg.txtMetaSaveSuccess, embeds: [], components: [] });
       log(`manage onSave: calling editReply to rebuild manage panel`, { show: false, guildName: interaction?.guild?.name });
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
       log(`manage onSave: complete`, { show: false, guildName: interaction?.guild?.name });
