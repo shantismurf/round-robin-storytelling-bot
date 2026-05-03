@@ -344,10 +344,17 @@ async function handleManageButton(connection, interaction) {
   } else if (customId === 'story_manage_open_metadata') {
     const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./addMetadata.js');
     const cfg2 = await getMetaCfg(connection, interaction.guild.id);
+    log(`handleManageButton: registering meta session storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
     registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id, async (interaction, metaFields, cfg) => {
+      log(`manage onSave: entered for user=${interaction.user.username} storyId=${state.storyId}`, { show: false, guildName: interaction?.guild?.name });
+      log(`manage onSave: metaFields=${JSON.stringify(metaFields)}`, { show: false, guildName: interaction?.guild?.name });
       Object.assign(state, metaFields);
+      log(`manage onSave: state after assign — rating=${state.rating} dynamic=${state.dynamic} fandom=${state.fandom}`, { show: false, guildName: interaction?.guild?.name });
+      log(`manage onSave: calling interaction.update`, { show: false, guildName: interaction?.guild?.name });
       await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+      log(`manage onSave: calling editReply to rebuild manage panel`, { show: false, guildName: interaction?.guild?.name });
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+      log(`manage onSave: complete`, { show: false, guildName: interaction?.guild?.name });
     });
     await interaction.reply({ ...buildMetadataPanel(cfg2, state), flags: MessageFlags.Ephemeral });
 
@@ -552,6 +559,7 @@ async function handleManageSave(connection, interaction, state) {
   try {
     const finalRating = state.pendingRating ?? state.rating;
     const warningsStr = Array.isArray(state.warnings) ? state.warnings.join(', ') : (state.warnings || null);
+    log(`handleManageSave: storyId=${state.storyId} finalRating=${finalRating} dynamic=${state.dynamic} fandom=${state.fandom} warnings=${warningsStr}`, { show: false, guildName: state.guildName });
 
     await connection.execute(
       `UPDATE story SET title = ?, turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,

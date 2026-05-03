@@ -21,7 +21,7 @@ export async function getMetaCfg(connection, guildId) {
 }
 
 export function buildMetadataPanel(cfg, state) {
-  log(`buildMetadataPanel started`, { show: false, guildName: 'system' }); //: cfg=${console.table(cfg)} \nstate=${console.table(state)}
+  log(`buildMetadataPanel started`, { show: false, guildName: 'system' });
   const ratingKey = ratingLabels[state.rating] ?? 'txtRatingNR';
   const ratingLabel = cfg[ratingKey] ?? state.rating;
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
@@ -302,15 +302,27 @@ export async function handleMetadataButton(connection, interaction) {
         additionalTags: metaState.additionalTags,
         summary: metaState.summary,
       };
+      log(`handleMetadataButton: save metaFields=${JSON.stringify(metaFields)} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       const { onSave } = metaEntry;
+      log(`handleMetadataButton: hasOnSave=${!!onSave} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       pendingMetaPanelData.delete(userId);
       log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
       if (onSave) {
+        log(`handleMetadataButton: invoking onSave for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await onSave(interaction, metaFields, cfg);
+        log(`handleMetadataButton: onSave resolved for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       } else {
         const addState = pendingStoryData.get(userId);
+        if (!addState) {
+          log(`handleMetadataButton: no addState in save fallback for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+          await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          return;
+        }
+        log(`handleMetadataButton: applying metaFields to addState for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         Object.assign(addState, metaFields);
+        log(`handleMetadataButton: calling interaction.update (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+        log(`handleMetadataButton: calling editReply (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
       }
 
