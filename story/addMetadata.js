@@ -6,7 +6,7 @@ import { pendingStoryData, buildStoryAddMessage } from './add.js';
 // Keyed by userId — tracks which interaction opened the metadata panel
 const pendingMetaPanelData = new Map();
 
-async function getMetaCfg(connection, guildId) {
+export async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [
     'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'btnSaveSettings', 'btnCancel',
     'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings',
