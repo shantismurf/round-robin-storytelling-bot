@@ -21,7 +21,7 @@ async function getMetaCfg(connection, guildId) {
 }
 
 export function buildMetadataPanel(cfg, state) {
-  log(`buildMetadataPanel started: cfg=${JSON.stringify(cfg)} \nstate=${JSON.stringify(state)}`, { show: false, guildName: 'system' });
+  log(`buildMetadataPanel started: cfg=${console.table(cfg)} \nstate=${console.table(state)}`, { show: false, guildName: 'system' });
   const ratingKey = ratingLabels[state.rating] ?? 'txtRatingNR';
   const ratingLabel = cfg[ratingKey] ?? state.rating;
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
