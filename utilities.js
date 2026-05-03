@@ -126,10 +126,43 @@ export function sanitizeModalInput(input, maxLength = 1024, multiline = false) {
 
 let _testMode = false;
 export function setTestMode(value) { _testMode = !!value; }
+
 export function log(message, { show = false, guildName = null } = {}) {
   if (!_testMode && !show) return;
   const guildTag = guildName ? ` (${guildName})` : '';
   console.log(`${formattedDate()}${guildTag}: ${message}`);
+}
+export function logArray(message, { show = false, guildName = null } = {}) {
+// Passes the array or objects to display in tables 
+// Example: log(['--- Config Values ---', cfg, '--- State ---', state], { show: false, guildName: guildName });
+  if (!_testMode && !show) return;
+  const guildTag = guildName ? ` (${guildName})` : '';
+  const prefix = `${formattedDate()}${guildTag}:`;
+
+  // Helper to handle the array/object printing logic
+  const printData = (data) => {
+    if (Array.isArray(data)) {
+      const activeKeys = [...new Set(data.flatMap(obj => 
+        Object.keys(obj || {}).filter(key => 
+          obj[key] !== null && obj[key] !== undefined && obj[key] !== ''
+        )
+      ))];
+      console.table(data, activeKeys);
+    } else if (typeof data === 'object' && data !== null) {
+      console.dir(data, { depth: null, colors: true });
+    } else {
+      process.stdout.write(String(data) + '\n');
+    }
+  };
+
+  console.log(prefix);
+
+  // If message is an array (passed via log([label, data])), loop through
+  if (Array.isArray(message)) {
+    message.forEach(printData);
+  } else {
+    printData(message);
+  }
 }
 
 /**
