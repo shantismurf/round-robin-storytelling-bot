@@ -19,9 +19,10 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     ? (Array.isArray(state.warnings) ? state.warnings : state.warnings.split(',').map(w => w.trim())).join(', ')
     : cfg.txtNone;
 
-  const barrierWarning = state.pendingRating && crossesBarrier(state.originalRating ?? state.rating, state.pendingRating)
-    ? `\n\n${cfg.txtRatingChangeThreadWarning}`
-    : '';
+  const effectiveRating = state.pendingRating ?? state.rating;
+  const originalRating = state.originalRating ?? state.rating;
+  const barrierWarning = effectiveRating !== originalRating && crossesBarrier(originalRating, effectiveRating)
+    ? `\n\n${cfg.txtRatingChangeThreadWarning}` : '';
 
   const sectionLine = cfg.txtSectionBreakLine;
   const statusDisplay = isPaused
@@ -190,6 +191,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'lblPrivateToggle',
       'lblRating', 'lblWarnings', 'lblDynamic',
       'txtRatingChangeThreadWarning',
+      'txtMetaApplied',
       'btnSetMetadata', 'btnReviewTags',
       'txtSelectionStaged',
       'txtSectionBreakLine', 'txtManageSectionBreakMeta',
@@ -344,10 +346,17 @@ async function handleManageButton(connection, interaction) {
   } else if (customId === 'story_manage_open_metadata') {
     const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./addMetadata.js');
     const cfg2 = await getMetaCfg(connection, interaction.guild.id);
+    log(`handleManageButton: registering meta session storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
     registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id, async (interaction, metaFields, cfg) => {
+      log(`manage onSave: entered for user=${interaction.user.username} storyId=${state.storyId}`, { show: false, guildName: interaction?.guild?.name });
+      log(`manage onSave: metaFields=${JSON.stringify(metaFields)}`, { show: false, guildName: interaction?.guild?.name });
       Object.assign(state, metaFields);
-      await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+      log(`manage onSave: state after assign — rating=${state.rating} dynamic=${state.dynamic} fandom=${state.fandom}`, { show: false, guildName: interaction?.guild?.name });
+      log(`manage onSave: calling interaction.update`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.update({ content: cfg.txtMetaApplied ?? cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+      log(`manage onSave: calling editReply to rebuild manage panel`, { show: false, guildName: interaction?.guild?.name });
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+      log(`manage onSave: complete`, { show: false, guildName: interaction?.guild?.name });
     });
     await interaction.reply({ ...buildMetadataPanel(cfg2, state), flags: MessageFlags.Ephemeral });
 
@@ -552,6 +561,7 @@ async function handleManageSave(connection, interaction, state) {
   try {
     const finalRating = state.pendingRating ?? state.rating;
     const warningsStr = Array.isArray(state.warnings) ? state.warnings.join(', ') : (state.warnings || null);
+    log(`handleManageSave: storyId=${state.storyId} finalRating=${finalRating} dynamic=${state.dynamic} fandom=${state.fandom} warnings=${warningsStr}`, { show: false, guildName: state.guildName });
 
     await connection.execute(
       `UPDATE story SET title = ?, turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,
@@ -574,8 +584,8 @@ async function handleManageSave(connection, interaction, state) {
     );
 
     // Migrate story thread if rating crossed the M/E barrier
-    if (state.pendingRating && crossesBarrier(state.originalRating, state.pendingRating)) {
-      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, state.pendingRating);
+    if (finalRating !== state.originalRating && crossesBarrier(state.originalRating, finalRating)) {
+      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, finalRating);
       if (!migResult.success) {
         log(`Thread migration failed for story ${state.storyId}: ${migResult.error}`, { show: true, guildName: interaction?.guild?.name });
       }
@@ -652,18 +662,22 @@ async function applyPauseActions(connection, interaction, state) {
   // Update story thread title to show PAUSED
   try {
     const [storyInfo] = await connection.execute(
-      `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
+      `SELECT story_thread_id, restricted_thread_id FROM story WHERE story_id = ?`, [state.storyId]
     );
-    if (storyInfo[0]?.story_thread_id) {
-      const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
-      if (storyThread) {
-        const [txtPaused, titleTemplate] = await Promise.all([
-          getConfigValue(connection, 'txtPaused', state.guildId),
-          getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
-        ]);
-        await storyThread.setName(
-          titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtPaused)
-        );
+    if (storyInfo[0]) {
+      const activeThreadId = (isRestricted(state.rating) && storyInfo[0].restricted_thread_id)
+        ? storyInfo[0].restricted_thread_id : storyInfo[0].story_thread_id;
+      if (activeThreadId) {
+        const storyThread = await interaction.guild.channels.fetch(activeThreadId).catch(() => null);
+        if (storyThread) {
+          const [txtPaused, titleTemplate] = await Promise.all([
+            getConfigValue(connection, 'txtPaused', state.guildId),
+            getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
+          ]);
+          await storyThread.setName(
+            titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtPaused)
+          );
+        }
       }
     }
   } catch (err) {
@@ -683,18 +697,22 @@ async function applyResumeActions(connection, interaction, state) {
   // Update story thread title back to Active regardless of turn state
   try {
     const [storyInfo] = await connection.execute(
-      `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
+      `SELECT story_thread_id, restricted_thread_id FROM story WHERE story_id = ?`, [state.storyId]
     );
-    if (storyInfo[0]?.story_thread_id) {
-      const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
-      if (storyThread) {
-        const [txtActive, titleTemplate] = await Promise.all([
-          getConfigValue(connection, 'txtActive', state.guildId),
-          getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
-        ]);
-        await storyThread.setName(
-          titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
-        );
+    if (storyInfo[0]) {
+      const activeThreadId = (isRestricted(state.rating) && storyInfo[0].restricted_thread_id)
+        ? storyInfo[0].restricted_thread_id : storyInfo[0].story_thread_id;
+      if (activeThreadId) {
+        const storyThread = await interaction.guild.channels.fetch(activeThreadId).catch(() => null);
+        if (storyThread) {
+          const [txtActive, titleTemplate] = await Promise.all([
+            getConfigValue(connection, 'txtActive', state.guildId),
+            getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
+          ]);
+          await storyThread.setName(
+            titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
+          );
+        }
       }
     }
   } catch (err) {
