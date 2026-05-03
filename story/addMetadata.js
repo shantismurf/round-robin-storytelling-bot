@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput } from '../utilities.js';
-import { ratingLabels, dynamicOptions, warningOptions } from './metadata.js';
+import { ratingLabels, dynamicOptions, warningOptions, crossesBarrier } from './metadata.js';
 import { pendingStoryData, buildStoryAddMessage } from './add.js';
 
 // Keyed by userId — tracks which interaction opened the metadata panel
@@ -8,12 +8,12 @@ const pendingMetaPanelData = new Map();
 
 export async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [
-    'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'btnSaveSettings', 'btnCancel',
+    'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'txtMetaApplied', 'btnSaveSettings', 'btnCancel',
     'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings',
     'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
-    'txtRatingNR',
+    'txtRatingNR', 'txtRatingChangeThreadWarning',
     ...Object.values(ratingLabels),
     ...dynamicOptions,
     ...warningOptions,
@@ -49,6 +49,15 @@ export function buildMetadataPanel(cfg, state) {
       { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
       { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
     );
+
+  if (state.originalRating && state.rating !== state.originalRating
+      && crossesBarrier(state.originalRating, state.rating)) {
+    embed.addFields({
+      name: '⚠️ Rating Change',
+      value: cfg.txtRatingChangeThreadWarning ?? 'This rating change will move the story to a different feed channel.',
+      inline: false,
+    });
+  }
 
   // Row 1: Dynamic select (single-select)
   const row1 = new ActionRowBuilder().addComponents(
