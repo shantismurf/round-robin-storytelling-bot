@@ -137,22 +137,22 @@ export async function handleMetadataButton(connection, interaction) {
   log(`handleMetadataButton: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
-    const addState = pendingStoryData.get(userId);
-    if (!addState) {
-      log(`handleMetadataButton: no pendingStoryData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
-      await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
-      return;
-    }
-    log(`handleMetadataButton: pendingStoryData retrieved for user=${interaction.user.username} customId=${customId}`, { show: false, guildName: interaction?.guild?.name });
-    const cfg = await getMetaCfg(connection, interaction.guild.id);
-
+    // Opening the panel from the story-add flow requires a pending add session
     if (customId === 'story_add_open_metadata') {
+      const addState = pendingStoryData.get(userId);
+      if (!addState) {
+        log(`handleMetadataButton: no pendingStoryData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
+        await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const cfg = await getMetaCfg(connection, interaction.guild.id);
       pendingMetaPanelData.set(userId, { metaState: { ...addState }, guildId: interaction.guild.id });
       log(`handleMetadataButton: opened metadata panel for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       await interaction.reply(buildMetadataPanel(cfg, addState));
       return;
     }
 
+    // All other metadata buttons require a pending meta panel session
     const metaEntry = pendingMetaPanelData.get(userId);
     if (!metaEntry) {
       log(`handleMetadataButton: no pendingMetaPanelData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
@@ -160,6 +160,7 @@ export async function handleMetadataButton(connection, interaction) {
       return;
     }
     const metaState = metaEntry.metaState;
+    const cfg = await getMetaCfg(connection, interaction.guild.id);
 
     if (customId === 'story_add_meta_cycle_dynamic') {
       const idx = dynamicOptions.indexOf(metaState.dynamic);
@@ -301,12 +302,13 @@ export async function handleMetadataButton(connection, interaction) {
         additionalTags: metaState.additionalTags,
         summary: metaState.summary,
       };
-      const { onSave } = pendingMetaPanelData.get(userId) ?? {};
+      const { onSave } = metaEntry;
       pendingMetaPanelData.delete(userId);
       log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
       if (onSave) {
         await onSave(interaction, metaFields, cfg);
       } else {
+        const addState = pendingStoryData.get(userId);
         Object.assign(addState, metaFields);
         await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
         await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
