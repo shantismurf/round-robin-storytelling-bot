@@ -342,8 +342,9 @@ async function handleManageButton(connection, interaction) {
     await handleManageEntriesButton(connection, interaction, state);
 
   } else if (customId === 'story_manage_open_metadata') {
-    const { buildMetadataPanel, getMetaCfg } = await import('./addMetadata.js');
+    const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./addMetadata.js');
     const cfg2 = await getMetaCfg(connection, interaction.guild.id);
+    registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id);
     await interaction.reply({ ...buildMetadataPanel(cfg2, state), flags: MessageFlags.Ephemeral });
 
   } else if (customId === 'story_manage_set_turnlength') {

@@ -21,7 +21,7 @@ export async function getMetaCfg(connection, guildId) {
 }
 
 export function buildMetadataPanel(cfg, state) {
-  log(`buildMetadataPanel started: cfg=${console.table(cfg)} \nstate=${console.table(state)}`, { show: false, guildName: 'system' });
+  log(`buildMetadataPanel started`, { show: false, guildName: 'system' }); //: cfg=${console.table(cfg)} \nstate=${console.table(state)}
   const ratingKey = ratingLabels[state.rating] ?? 'txtRatingNR';
   const ratingLabel = cfg[ratingKey] ?? state.rating;
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
@@ -358,6 +358,10 @@ export async function handleMetadataModal(connection, interaction) {
   }
 }
 
+export function registerMetaSession(userId, metaState, guildId) {
+  pendingMetaPanelData.set(userId, { metaState, guildId });
+}
+
 export async function handleMetadataSelectMenu(connection, interaction) {
   const customId = interaction.customId;
   const userId = interaction.user.id;
@@ -365,16 +369,27 @@ export async function handleMetadataSelectMenu(connection, interaction) {
 
   const metaEntry = pendingMetaPanelData.get(userId);
   if (!metaEntry) {
+    log(`handleMetadataSelectMenu: no pendingMetaPanelData for user=${interaction.user.username} customId=${customId}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), components: [] });
     return;
   }
 
   const metaState = metaEntry.metaState;
+  const cfg = await getMetaCfg(connection, interaction.guild.id);
 
-  if (customId === 'story_add_meta_warnings_select') {
+  if (customId === 'story_add_meta_dynamic_select') {
+    metaState.dynamic = interaction.values[0];
+    log(`handleMetadataSelectMenu: dynamic set to '${metaState.dynamic}' for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.update(buildMetadataPanel(cfg, metaState));
+
+  } else if (customId === 'story_add_meta_rating_select') {
+    metaState.rating = interaction.values[0];
+    log(`handleMetadataSelectMenu: rating set to '${metaState.rating}' for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.update(buildMetadataPanel(cfg, metaState));
+
+  } else if (customId === 'story_add_meta_warnings_select') {
     metaState.warnings = interaction.values;
-    const cfg = await getMetaCfg(connection, interaction.guild.id);
     log(`handleMetadataSelectMenu: warnings saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.update({ content: cfg.txtMetaSaveSuccess, components: [] });
+    await interaction.update(buildMetadataPanel(cfg, metaState));
   }
 }
