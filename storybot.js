@@ -1179,18 +1179,14 @@ export async function migrateStoryThread(connection, guild, storyId, newRating) 
     const oldThread = oldThreadId ? await guild.channels.fetch(oldThreadId).catch(() => null) : null;
     if (oldThread) {
       const txtOut = await getConfigValue(connection, 'txtStoryThreadMigratedOut', story.guild_id);
-      const outMsg = (txtOut ?? 'This story has moved. Continue reading here: [new_thread_link]')
-        .replace('[new_thread_link]', newThreadLink);
-      await oldThread.send(outMsg).catch(() => {});
+      await oldThread.send(txtOut.replace('[new_thread_link]', newThreadLink)).catch(() => {});
       await oldThread.setArchived(true).catch(() => {});
       await oldThread.setLocked(true).catch(() => {});
     }
 
-    // Post continuation message in new/reopened thread
+    // Build continuation message — caller posts it after updateStoryStatusMessage for correct ordering
     const txtIn = await getConfigValue(connection, 'txtStoryThreadMigratedIn', story.guild_id);
-    const inMsg = (txtIn ?? 'This story continues from a previous thread: [old_thread_link]')
-      .replace('[old_thread_link]', oldThreadLink ?? 'a previous thread');
-    await newThread.send(inMsg).catch(() => {});
+    const migratedInMsg = txtIn.replace('[old_thread_link]', oldThreadLink ?? '');
 
     // DB update — always clear status_message_id so a fresh embed is posted
     dbUpdates.status_message_id = null;
@@ -1201,7 +1197,7 @@ export async function migrateStoryThread(connection, guild, storyId, newRating) 
     );
 
     log(`Migrated story ${storyId} to ${newRating} (newThread: ${newThread.id})`, { show: true, guildName: guild?.name });
-    return { success: true, newThreadId: newThread.id };
+    return { success: true, newThreadId: newThread.id, migratedInMsg };
   } catch (err) {
     log(`migrateStoryThread failed for story ${storyId}: ${err}`, { show: true, guildName: guild?.name });
     return { success: false, error: String(err) };

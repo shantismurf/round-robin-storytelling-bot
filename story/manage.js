@@ -353,7 +353,7 @@ async function handleManageButton(connection, interaction) {
       Object.assign(state, metaFields);
       log(`manage onSave: state after assign — rating=${state.rating} dynamic=${state.dynamic} fandom=${state.fandom}`, { show: false, guildName: interaction?.guild?.name });
       log(`manage onSave: calling interaction.update`, { show: false, guildName: interaction?.guild?.name });
-      await interaction.update({ content: cfg.txtMetaApplied ?? cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+      await interaction.update({ content: cfg.txtMetaApplied, embeds: [], components: [] });
       log(`manage onSave: calling editReply to rebuild manage panel`, { show: false, guildName: interaction?.guild?.name });
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
       log(`manage onSave: complete`, { show: false, guildName: interaction?.guild?.name });
@@ -456,67 +456,6 @@ async function handleManageButton(connection, interaction) {
   }
 }
 
-async function showManageMetaModal(interaction, state) {
-  const modal = new ModalBuilder()
-    .setCustomId('story_manage_meta_modal')
-    .setTitle('Story Metadata');
-
-  modal.addComponents(
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('fandom')
-        .setLabel('Fandom (up to 100 characters)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(100)
-        .setValue(state.fandom ?? '')
-        .setPlaceholder('e.g. My Hero Academia, Original Work')
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('main_pairing')
-        .setLabel('Main Pairing (up to 200 characters)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(200)
-        .setValue(state.mainPairing ?? '')
-        .setPlaceholder('Full character names, e.g. Midoriya Izuku/Bakugou Katsuki')
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('characters')
-        .setLabel('Characters (up to 500 characters)')
-        .setStyle(TextInputStyle.Short)
-        .setRequired(false)
-        .setMaxLength(500)
-        .setValue(state.characters ?? '')
-        .setPlaceholder('Comma-separated character names')
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('other_relationships')
-        .setLabel('Other Relationships (up to 1000 characters)')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false)
-        .setMaxLength(1000)
-        .setValue(state.otherRelationships ?? '')
-        .setPlaceholder('Additional pairings or relationships, comma-separated')
-    ),
-    new ActionRowBuilder().addComponents(
-      new TextInputBuilder()
-        .setCustomId('additional_tags')
-        .setLabel('Additional Tags (up to 1000 characters)')
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false)
-        .setMaxLength(1000)
-        .setValue(state.additionalTags ?? '')
-        .setPlaceholder('Comma-separated tags, e.g. slow burn, hurt/comfort, AU')
-    )
-  );
-
-  await interaction.showModal(modal);
-}
-
 async function handleReviewTags(connection, interaction, state) {
   const [rows] = await connection.execute(
     `SELECT submission_id, submitter_display_name, tag_text
@@ -584,10 +523,15 @@ async function handleManageSave(connection, interaction, state) {
     );
 
     // Migrate story thread if rating crossed the M/E barrier
+    let migrationNewThreadId = null;
+    let migrationInMsg = null;
     if (finalRating !== state.originalRating && crossesBarrier(state.originalRating, finalRating)) {
       const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, finalRating);
       if (!migResult.success) {
         log(`Thread migration failed for story ${state.storyId}: ${migResult.error}`, { show: true, guildName: interaction?.guild?.name });
+      } else {
+        migrationNewThreadId = migResult.newThreadId;
+        migrationInMsg = migResult.migratedInMsg;
       }
     }
 
@@ -603,7 +547,16 @@ async function handleManageSave(connection, interaction, state) {
     }
 
     pendingManageData.delete(interaction.user.id);
-    updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
+
+    // When migration happened, await status update so welcome messages precede the migration note
+    if (migrationNewThreadId) {
+      await updateStoryStatusMessage(connection, interaction.guild, state.storyId);
+      const migratedThread = await interaction.guild.channels.fetch(migrationNewThreadId).catch(() => null);
+      if (migratedThread && migrationInMsg) await migratedThread.send(migrationInMsg).catch(() => {});
+    } else {
+      updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
+    }
+
     await state.originalInteraction.editReply({
       content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
       embeds: [],
@@ -966,3 +919,5 @@ export {
   handleTurnActionSelectMenu,
   handleTurnActionModal,
 };
+
+export default handleManage;

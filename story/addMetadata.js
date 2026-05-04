@@ -13,7 +13,7 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
-    'txtRatingNR', 'txtRatingChangeThreadWarning',
+    'txtRatingNR', 'txtRatingChangeThreadWarning', 'lblRatingChangeThreadWarning',
     ...Object.values(ratingLabels),
     ...dynamicOptions,
     ...warningOptions,
@@ -53,8 +53,8 @@ export function buildMetadataPanel(cfg, state) {
   if (state.originalRating && state.rating !== state.originalRating
       && crossesBarrier(state.originalRating, state.rating)) {
     embed.addFields({
-      name: '⚠️ Rating Change',
-      value: cfg.txtRatingChangeThreadWarning ?? 'This rating change will move the story to a different feed channel.',
+      name: cfg.lblRatingChangeThreadWarning,
+      value: cfg.txtRatingChangeThreadWarning,
       inline: false,
     });
   }
@@ -312,10 +312,29 @@ export async function handleMetadataButton(connection, interaction) {
         summary: metaState.summary,
       };
       log(`handleMetadataButton: save metaFields=${JSON.stringify(metaFields)} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+
+      if (metaState.originalRating && metaState.rating !== metaState.originalRating
+          && crossesBarrier(metaState.originalRating, metaState.rating)) {
+        metaEntry.pendingMetaFields = metaFields;
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId('story_add_meta_save_confirm')
+            .setLabel(cfg.btnSaveSettings)
+            .setStyle(ButtonStyle.Danger),
+          new ButtonBuilder()
+            .setCustomId('story_add_meta_cancel')
+            .setLabel(cfg.btnCancel)
+            .setStyle(ButtonStyle.Secondary)
+        );
+        log(`handleMetadataButton: barrier crossing detected, showing confirmation for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+        await interaction.update({ content: cfg.txtRatingChangeThreadWarning, embeds: [], components: [confirmRow] });
+        return;
+      }
+
       const { onSave } = metaEntry;
       log(`handleMetadataButton: hasOnSave=${!!onSave} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       pendingMetaPanelData.delete(userId);
-      log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       if (onSave) {
         log(`handleMetadataButton: invoking onSave for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await onSave(interaction, metaFields, cfg);
@@ -332,6 +351,25 @@ export async function handleMetadataButton(connection, interaction) {
         log(`handleMetadataButton: calling interaction.update (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
         log(`handleMetadataButton: calling editReply (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+        await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
+      }
+
+    } else if (customId === 'story_add_meta_save_confirm') {
+      const metaFields = metaEntry.pendingMetaFields;
+      const { onSave } = metaEntry;
+      pendingMetaPanelData.delete(userId);
+      log(`handleMetadataButton: barrier-crossing save confirmed for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      if (onSave) {
+        await onSave(interaction, metaFields, cfg);
+      } else {
+        const addState = pendingStoryData.get(userId);
+        if (!addState) {
+          log(`handleMetadataButton: no addState in save_confirm fallback for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+          await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          return;
+        }
+        Object.assign(addState, metaFields);
+        await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
         await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
       }
 

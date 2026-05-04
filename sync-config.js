@@ -29,14 +29,23 @@ function parseConfigEntries(sql) {
 }
 export async function syncConfig(connection) {
   try {
-    const sql = fs.readFileSync('./db/sample_config.sql', 'utf8');
+    // Point to the folder where the config files live
+    const configDir = './db/config_files'; 
+    const files = fs.readdirSync(configDir).filter(f => f.endsWith('.sql'));
+    let sql = "";
+    // Loop through and combine the files into one massive string
+    for (const file of files) {
+      const content = fs.readFileSync(path.join(configDir, file), 'utf8');
+      sql += content + "\n\n";
+    }
+    // Parse the aggregated string
     const fileEntries = parseConfigEntries(sql);
 
     if (fileEntries.length === 0) {
-      console.log('No entries parsed from sample_config.sql — check the file format.');
+      console.log(`No entries parsed from ${configDir} — check the file formats.`);
       return;
     }
-    console.log(`${formattedDate()}: Parsed ${fileEntries.length} entries from sample_config.sql`);
+    console.log(`${formattedDate()}: Parsed ${fileEntries.length} total entries from ${files.length} context files`);
 
     // Get all entries currently in the DB, exclude guild-specific setup keys that are
     // written by /storyadmin setup and vary per server (not managed by sample_config.sql).
@@ -53,12 +62,14 @@ export async function syncConfig(connection) {
       `SELECT config_key, config_value, guild_id FROM config WHERE config_key NOT IN (${placeholders})`,
       setupOnlyKeys
     );
+    
     const dbMap = new Map(dbRows.map(r => [`${r.guild_id}:${r.config_key}`, r.config_value]));
     console.log(`${formattedDate()}: Found ${dbRows.length} entries in the database\n`);
 
     const missing = [];
     const changed = [];
 
+    // Compare File entries vs Database entries
     for (const entry of fileEntries) {
       const dbKey = `${entry.guild_id}:${entry.config_key}`;
       if (!dbMap.has(dbKey)) {
@@ -102,7 +113,7 @@ export async function syncConfig(connection) {
     const fileKeys = new Set(fileEntries.map(e => `${e.guild_id}:${e.config_key}`));
     const extras = dbRows.filter(r => !fileKeys.has(`${r.guild_id}:${r.config_key}`));
     if (extras.length > 0) {
-      console.log(`\nNote: ${extras.length} key(s) in DB not found in sample_config.sql (custom or manually added — will not be touched):`);
+      console.log(`\nNote: ${extras.length} key(s) in DB not found in the config files (will not be touched):`);
       extras.forEach(r => console.log(`  ? ${r.config_key} (guild ${r.guild_id})`));
     }
 
