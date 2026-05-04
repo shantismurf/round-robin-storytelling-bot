@@ -753,7 +753,12 @@ async function applyResumeActions(connection, interaction, state) {
 }
 
 async function handleManageModalSubmit(connection, interaction) {
+  log(`handleManageModalSubmit started with customId=${interaction.customId}`, { show: true, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
+  // divert turn actions
+  if (interaction.customId.startsWith('story_manage_ta_')) {
+    return await handleTurnActionModal(connection, interaction);
+  }
   const state = pendingManageData.get(userId);
 
   if (!state) {
