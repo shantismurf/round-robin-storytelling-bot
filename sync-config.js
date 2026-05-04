@@ -10,6 +10,7 @@
 
 import fs from 'fs';
 import { formattedDate } from './utilities.js';
+import path from 'path';
 
 function parseConfigEntries(sql) {
   const entries = [];
