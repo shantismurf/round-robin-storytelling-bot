@@ -68,9 +68,14 @@ export async function syncConfig(connection) {
 
     const missing = [];
     const changed = [];
-
+    // Convert the array to a Set for faster lookup
+    const setupKeysSet = new Set(setupOnlyKeys);
     // Compare File entries vs Database entries
     for (const entry of fileEntries) {
+      // Skip this entry if it's a setup-only key
+      if (setupKeysSet.has(entry.config_key)) {
+        continue; 
+      }
       const dbKey = `${entry.guild_id}:${entry.config_key}`;
       if (!dbMap.has(dbKey)) {
         missing.push(entry);
