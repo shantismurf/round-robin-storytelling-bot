@@ -184,7 +184,7 @@ log(`generateStoryExport: entries built`, { show: false, guildName: 'system' });
     story.fandom           ? `<div class="meta"><strong>Fandom:</strong> ${story.fandom}</div>` : '',
     story.dynamic          ? `<div class="meta"><strong>Dynamic:</strong> ${story.dynamic}</div>` : '',
     `<div class="meta"><strong>Rating:</strong> ${ratingLabel}</div>`,
-    `<div class="meta"><strong>Warnings:</strong> ${warningsText}</div>` : '',
+    `<div class="meta"><strong>Warnings:</strong> ${warningsText}</div>`,
     story.main_pairing     ? `<div class="meta"><strong>Main Relationship:</strong> ${story.main_pairing}</div>` : '',
     story.other_relationships ? `<div class="meta"><strong>Other Relationships:</strong> ${story.other_relationships}</div>` : '',
     story.characters       ? `<div class="meta"><strong>Characters:</strong> ${story.characters}</div>` : '',
@@ -229,7 +229,7 @@ log(`generateStoryExport: metadata compiled`, { show: false, guildName: 'system'
   </div>
 </body>
 </html>`;
-log(`generateStoryExport; html built`, { show: false, guildName: 'system' });
+log(`generateStoryExport: html built`, { show: false, guildName: 'system' });
   const buffer = Buffer.from(html, 'utf8');
   const filename = `storybot${storyId}_${story.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
   return { hasEntries: true, title: story.title, turnCount, wordCount, writerCount, buffer, filename };
