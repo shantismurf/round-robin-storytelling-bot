@@ -42,7 +42,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
       { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : cfg.txtInfinity, inline: true },
       { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
-      { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled', inline: true },
+      { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtOff, inline: true },
       { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic, inline: true },
       { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtYes : cfg.txtNo, inline: true },
       { name: sectionLine, value: cfg.txtManageSectionBreakMeta, inline: false },
@@ -277,6 +277,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
 }
 
 async function handleManageButton(connection, interaction) {
+  log(`handleManageButton entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingManageData.get(userId);
 
@@ -457,6 +458,7 @@ async function handleManageButton(connection, interaction) {
 }
 
 async function handleReviewTags(connection, interaction, state) {
+  log(`handleReviewTags entry storyId=${state.storyId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const [rows] = await connection.execute(
     `SELECT submission_id, submitter_display_name, tag_text
      FROM story_tag_submission
@@ -753,7 +755,7 @@ async function applyResumeActions(connection, interaction, state) {
 }
 
 async function handleManageModalSubmit(connection, interaction) {
-  log(`handleManageModalSubmit started with customId=${interaction.customId}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleManageModalSubmit entry customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   // divert turn actions
   if (interaction.customId.startsWith('story_manage_ta_')) {
@@ -829,6 +831,7 @@ async function handleManageModalSubmit(connection, interaction) {
  * Handle select menu interactions from the manage panel (rating/warnings/category).
  */
 async function handleManageSelectMenu(connection, interaction) {
+  log(`handleManageSelectMenu entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingManageData.get(userId);
 
@@ -857,6 +860,7 @@ async function handleManageSelectMenu(connection, interaction) {
  * Handle tag approval/rejection buttons (story_tag_approve_* / story_tag_reject_*).
  */
 async function handleTagReviewButton(connection, interaction) {
+  log(`handleTagReviewButton entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const parts = interaction.customId.split('_');
   // story_tag_approve_<submissionId>_<storyId>
   const action = parts[2]; // 'approve' or 'reject'
@@ -885,6 +889,7 @@ async function handleTagReviewButton(connection, interaction) {
   await interaction.deferUpdate();
 
   if (action === 'approve') {
+    log(`handleTagReviewButton: approving tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
     await connection.execute(
       `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW() WHERE submission_id = ?`,
       [submissionId]
@@ -894,10 +899,11 @@ async function handleTagReviewButton(connection, interaction) {
     const existing = storyRows[0]?.additional_tags?.trim() || '';
     const newTags = existing ? `${existing}, ${tagText}` : tagText;
     await connection.execute(`UPDATE story SET additional_tags = ? WHERE story_id = ?`, [newTags, storyId]);
-    updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
+    updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`updateStoryStatusMessage failed for story ${storyId} after tag approve: ${err}`, { show: true, guildName: interaction?.guild?.name }));
     const txt = replaceTemplateVariables(await getConfigValue(connection, 'txtTagApproved', guildId), { tag_text: tagText });
     await interaction.editReply({ content: txt, embeds: [], components: [] });
   } else {
+    log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
     await connection.execute(
       `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW() WHERE submission_id = ?`,
       [submissionId]

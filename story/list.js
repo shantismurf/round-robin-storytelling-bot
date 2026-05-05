@@ -32,31 +32,29 @@ export async function handleListNavigation(connection, interaction) {
 export async function handleFilterButton(connection, interaction) {
   await interaction.deferUpdate();
   const guildId = interaction.guild.id;
-  const [txtAll, txtJoinable, txtMine, txtActive, txtPaused] = await Promise.all([
-    getConfigValue(connection, 'txtAllStories', guildId),
-    getConfigValue(connection, 'txtJoinableStories', guildId),
-    getConfigValue(connection, 'txtMyStories', guildId),
-    getConfigValue(connection, 'txtActiveStories', guildId),
-    getConfigValue(connection, 'txtPausedStories', guildId),
-  ]);
+  const cfg = await getConfigValue(connection, [
+    'txtAllStories', 'txtJoinableStories', 'txtMyStories', 'txtActiveStories', 'txtPausedStories',
+    'txtRatingG', 'txtRatingT', 'txtRatingM', 'txtRatingE', 'txtRatingNR',
+    'txtListFilterPrompt',
+  ], guildId);
   const row = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
       .setCustomId('story_filter_select')
       .setPlaceholder('Choose a filter...')
       .addOptions([
-        { label: txtAll, value: 'all' },
-        { label: txtJoinable, value: 'joinable' },
-        { label: txtMine, value: 'mine' },
-        { label: txtActive, value: 'active' },
-        { label: txtPaused, value: 'paused' },
-        { label: '[G] General', value: 'rating_G' },
-        { label: '[T] Teen', value: 'rating_T' },
-        { label: '[M] Mature', value: 'rating_M' },
-        { label: '[E] Explicit', value: 'rating_E' },
-        { label: '[NR] Not Rated', value: 'rating_NR' },
+        { label: cfg.txtAllStories, value: 'all' },
+        { label: cfg.txtJoinableStories, value: 'joinable' },
+        { label: cfg.txtMyStories, value: 'mine' },
+        { label: cfg.txtActiveStories, value: 'active' },
+        { label: cfg.txtPausedStories, value: 'paused' },
+        { label: cfg.txtRatingG, value: 'rating_G' },
+        { label: cfg.txtRatingT, value: 'rating_T' },
+        { label: cfg.txtRatingM, value: 'rating_M' },
+        { label: cfg.txtRatingE, value: 'rating_E' },
+        { label: cfg.txtRatingNR, value: 'rating_NR' },
       ])
   );
-  await interaction.editReply({ content: await getConfigValue(connection, 'txtListFilterPrompt', interaction.guild.id), embeds: [], components: [row] });
+  await interaction.editReply({ content: cfg.txtListFilterPrompt, embeds: [], components: [row] });
 }
 
 /**
@@ -292,8 +290,9 @@ export async function getStoriesPaginated(connection, guildId, filter, page, ite
 export async function getFilterTitle(connection, filter, guildId) {
   if (filter.startsWith('rating_')) {
     const ratingValue = filter.slice(7);
-    const ratingLabels = { G: '[G] General', T: '[T] Teen', M: '[M] Mature', E: '[E] Explicit', NR: '[NR] Not Rated' };
-    return ratingLabels[ratingValue] ?? 'Stories';
+    const ratingKeyMap = { G: 'txtRatingG', T: 'txtRatingT', M: 'txtRatingM', E: 'txtRatingE', NR: 'txtRatingNR' };
+    const key = ratingKeyMap[ratingValue] ?? 'txtAllStories';
+    return await getConfigValue(connection, key, guildId);
   }
 
   const configKeys = {
@@ -305,7 +304,7 @@ export async function getFilterTitle(connection, filter, guildId) {
   };
 
   const configKey = configKeys[filter] || 'txtAllStories';
-  return await getConfigValue(connection,configKey, guildId);
+  return await getConfigValue(connection, configKey, guildId);
 }
 
 export function getStatusIcon(status) {

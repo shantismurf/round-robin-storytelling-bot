@@ -2,6 +2,7 @@ import { MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
 
 export async function handlePing(connection, interaction) {
+  log(`handlePing entry user=${interaction.user.id} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -16,6 +17,7 @@ export async function handlePing(connection, interaction) {
   ]);
 
   if (!isCreator && !isAdmin) {
+    log(`handlePing: unauthorized user=${interaction.user.id} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
     return interaction.editReply({ content: await getConfigValue(connection, 'txtManageNotAuthorized', guildId) });
   }
 

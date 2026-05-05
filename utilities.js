@@ -324,6 +324,7 @@ export function chunkEntryContent(content, maxChunkSize = 3800) {
  * Grace period: author edits within 1 hour of entry creation suppress the read-view footnote.
  */
 export async function getEntryEditInfo(connection, entryId, originalAuthorId, createdAt) {
+  log(`getEntryEditInfo entry for entry ${entryId}`, { show: false });
   const [rows] = await connection.execute(
     `SELECT edited_by, edited_by_name, edited_at FROM story_entry_edit
      WHERE entry_id = ? ORDER BY edited_at DESC LIMIT 1`,
@@ -347,6 +348,7 @@ export async function getEntryEditInfo(connection, entryId, originalAuthorId, cr
  * the turn that is just beginning.
  */
 export async function getTurnNumber(connection, storyId) {
+  log(`getTurnNumber entry for story ${storyId}`, { show: false });
   const [result] = await connection.execute(
     `SELECT COUNT(DISTINCT t.turn_id) + 1 AS turn_number
      FROM turn t
@@ -355,6 +357,7 @@ export async function getTurnNumber(connection, storyId) {
      WHERE sw.story_id = ?`,
     [storyId]
   );
+  log(`getTurnNumber result: ${result[0].turn_number} for story ${storyId}`, { show: false });
   return result[0].turn_number;
 }
 
@@ -371,9 +374,12 @@ export function replaceTemplateVariables(template, keyValueMap) {
  * Requires interaction.member (guild context).
  */
 export async function checkIsAdmin(connection, interaction, guildId) {
+  log(`checkIsAdmin entry for user ${interaction.user?.id} guild ${guildId}`, { show: false });
   const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
-  return interaction.member.permissions.has('Administrator') ||
+  const result = interaction.member.permissions.has('Administrator') ||
     (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
+  log(`checkIsAdmin result: ${result} for user ${interaction.user?.id}`, { show: false });
+  return result;
 }
 
 /**
@@ -389,6 +395,7 @@ export async function checkIsAdmin(connection, interaction, guildId) {
  * @returns {Object} Created Discord thread
  */
 export async function createThread(interaction, guildID, keyValueMap) {
+  log(`createThread entry for guild ${guildID} type ${keyValueMap.threadType} target ${keyValueMap.targetUserId ?? 'none'}`, { show: false });
   // Set up thread configuration
   const { titleTemplateKey, threadType, reason, targetUserId } = keyValueMap;
   const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guildID);
@@ -411,11 +418,13 @@ export async function createThread(interaction, guildID, keyValueMap) {
   const threadTitle = replaceTemplateVariables(titleTemplate, keyValueMap);
   
   // Create thread
+  log(`createThread creating "${threadTitle}" in channel ${storyFeedChannelId}`, { show: false });
   const thread = await channel.threads.create({
     name: threadTitle,
     type: threadType,
     reason: reason
   });
+  log(`createThread created thread ${thread.id}`, { show: false });
   
   // Set permissions if needed
   if (threadType === ChannelType.PublicThread && targetUserId) {
@@ -461,28 +470,34 @@ export async function createThread(interaction, guildID, keyValueMap) {
  * Used by write, manage, close, timeleft handlers.
  */
 export async function validateStoryAccess(connection, storyId, guildId) {
+  log(`validateStoryAccess entry for story ${storyId} guild ${guildId}`, { show: false });
   try {
     const [storyInfo] = await connection.execute(`
       SELECT * FROM story WHERE story_id = ?
     `, [storyId]);
 
     if (storyInfo.length === 0) {
+      log(`validateStoryAccess: story ${storyId} not found`, { show: false });
       return { success: false, error: await getConfigValue(connection,'txtStoryNotFound', guildId) };
     }
 
     const story = storyInfo[0];
 
     if (story.guild_id !== guildId) {
+      log(`validateStoryAccess: story ${storyId} guild mismatch`, { show: false });
       return { success: false, error: await getConfigValue(connection,'txtStoryWrongGuild', guildId) };
     }
 
     if (story.story_status !== 1) {
+      log(`validateStoryAccess: story ${storyId} not active (status=${story.story_status})`, { show: false });
       return { success: false, error: await getConfigValue(connection,'txtStoryNotActive', guildId) };
     }
 
+    log(`validateStoryAccess: story ${storyId} valid`, { show: false });
     return { success: true, story };
   } catch (error) {
     log(`validateStoryAccess failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true });
+    return { success: false, error: 'internal' };
   }
 }
 
@@ -491,6 +506,7 @@ export async function validateStoryAccess(connection, storyId, guildId) {
  * Used by write and edit handlers.
  */
 export async function validateActiveWriter(connection, userId, storyId) {
+  log(`validateActiveWriter entry for user ${userId} story ${storyId}`, { show: false });
   try {
     const [writerInfo] = await connection.execute(`
       SELECT sw.discord_user_id as current_writer
@@ -501,6 +517,7 @@ export async function validateActiveWriter(connection, userId, storyId) {
     `, [storyId]);
 
     if (writerInfo.length === 0 || writerInfo[0].current_writer !== userId) {
+      log(`validateActiveWriter: user ${userId} is not the active writer for story ${storyId}`, { show: false });
       const [storyInfo] = await connection.execute(`
         SELECT guild_id FROM story WHERE story_id = ?
       `, [storyId]);
@@ -509,9 +526,11 @@ export async function validateActiveWriter(connection, userId, storyId) {
       return { success: false, error: await getConfigValue(connection,'txtNotYourTurn', guildId) };
     }
 
+    log(`validateActiveWriter: user ${userId} confirmed as active writer for story ${storyId}`, { show: false });
     return { success: true };
   } catch (error) {
     log(`validateActiveWriter failed for user ${userId} story ${storyId}: ${error?.stack ?? error}`, { show: true });
+    return { success: false, error: 'internal' };
   }
 }
 

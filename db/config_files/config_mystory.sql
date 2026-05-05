@@ -34,4 +34,17 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtMyPauseConfirm', '⏸️ **Pause your participation in [story_title]?** You will be removed from the turn rotation. If it is currently your turn, it will be passed automatically. Use Resume to rejoin.', 'en', 1),
 ('txtMyResumeSuccess', '▶️ You have rejoined the rotation for **[story_title]**.', 'en', 1),
 ('txtMyPauseSuccess', '⏸️ You have been paused in **[story_title]**.', 'en', 1),
-('txtMyPassSuccess', '✅ Your turn has been passed.', 'en', 1);
+('txtMyPassSuccess', '✅ Your turn has been passed.', 'en', 1),
+-- Moved from config_other: mystory-specific keys
+('btnLeaveStory', 'Leave Story', 'en', 1),
+('txtMyHelpTitle', '📋 Writer Command Reference', 'en', 1),
+('txtMyHelpFooter', 'For story creation, modes, and settings — use /story help', 'en', 1),
+('lblMyHelpDashboard', '📊 Your Dashboard', 'en', 1),
+('txtMyHelpDashboard', '- `/mystory active` — Your active stories and whose turn it is\n- `/mystory history` — All stories you''ve ever been in\n- `/mystory catchup [id]` — Read entries written since your last turn', 'en', 1),
+('lblMyHelpPause', '⏸️ Pausing', 'en', 1),
+('txtMyHelpPause', '- `/mystory pause [id]` — Step out of the turn rotation temporarily. Omit the ID to pause all of your active stories at once. If it''s your turn when you pause, it will be passed automatically. To leave the story permanently, use `/mystory leave [id]`.\n- `/mystory resume [id]` — Rejoin the rotation. You''ll re-enter the order of writers as before, depending on story settings.', 'en', 1),
+('btnMyPassConfirm', 'Yes, Pass My Turn', 'en', 1),
+('btnMyPauseConfirm', 'Yes, Pause', 'en', 1),
+('lblMyNotifications', 'DM Notifications', 'en', 1),
+('lblMyHelpTurn', '✍️ Your Turn', 'en', 1),
+('txtMyHelpTurn', '- `/story write [id]` — Submit your entry *(quick mode)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id]` — Edit one of your finalized entries\n- `/mystory pass [id]` — Skip your current turn\n- `/mystory leave [id]` — Leave a story', 'en', 1);

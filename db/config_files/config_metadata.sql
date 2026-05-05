@@ -72,4 +72,6 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtMetaMainRelationshipPlaceholder', 'ex. Bilbo Baggins/Thorin Oakenshield', 'en', 1),
 ('txtMetaFandomPlaceholder', 'ex. The Hobbit, Original Work', 'en', 1),
 ('txtMetaPanelTitle', '🗂️ Story Metadata', 'en', 1),
-('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1);
+('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1),
+-- Moved from config_other: tag submission key
+('lblTagSubmitText', 'Tag to suggest', 'en', 1);

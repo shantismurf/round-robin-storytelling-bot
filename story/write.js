@@ -8,6 +8,7 @@ import { pendingPreviewData, pendingViewData } from './state.js';
 export const pendingReminderTimeouts = new Map();
 
 async function handleWrite(connection, interaction) {
+  log(`handleWrite entry user=${interaction.user.id} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const guildId = interaction.guild.id;
     const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -42,7 +43,7 @@ async function handleWrite(connection, interaction) {
     // Create modal
     const modal = new ModalBuilder()
       .setCustomId(`story_write_${storyId}`)
-      .setTitle(`✍️ ${storyInfo.story.title}`);
+      .setTitle(storyInfo.story.title);
 
     modal.addComponents(
       new ActionRowBuilder().addComponents(
@@ -72,6 +73,7 @@ async function handleWrite(connection, interaction) {
  * Handle write modal submission
  */
 async function handleWriteModalSubmit(connection, interaction) {
+    log(`handleWriteModalSubmit entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
     const guildId = interaction.guild.id;
     const storyId = interaction.customId.split('_')[2];
     const content = interaction.fields.getTextInputValue('entry_content')
@@ -131,7 +133,7 @@ async function handleWriteModalSubmit(connection, interaction) {
       pendingReminderTimeouts.delete(entryId);
       try {
         const user = await interaction.client.users.fetch(interaction.user.id);
-        await user.send(`${await getConfigValue(connection,'txtDMReminder', guildId)}\n\n${await getConfigValue(connection,'txtRecoveryInstructions', guildId)}\n\n⏰ Expires: ${discordTimestamp}`);
+        await user.send(`${await getConfigValue(connection,'txtDMReminder', guildId)}\n\n${await getConfigValue(connection,'txtRecoveryInstructions', guildId)}\n\n⏰ Expires: ${expiryTimestamp}`);
       } catch (error) {
         log(`Could not send DM reminder to user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
       }
@@ -221,6 +223,7 @@ async function createPreviewEmbed(connection, content, guildId, discordTimestamp
  * Handle entry confirmation/discard
  */
 async function handleEntryConfirmation(connection, interaction) {
+  log(`handleEntryConfirmation entry action=${interaction.customId.split('_')[0]} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const [action, , entryIdStr] = interaction.customId.split('_');
   const entryId = entryIdStr;
 
@@ -246,6 +249,7 @@ async function handleEntryConfirmation(connection, interaction) {
  * Confirm and finalize entry
  */
 async function confirmEntry(connection, entryId, interaction) {
+  log(`confirmEntry entry entryId=${entryId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   if (pendingReminderTimeouts.has(entryId)) {
     clearTimeout(pendingReminderTimeouts.get(entryId));
     pendingReminderTimeouts.delete(entryId);
@@ -278,7 +282,7 @@ async function confirmEntry(connection, entryId, interaction) {
     `, [entryId]);
 
     if (entryInfo.length === 0) {
-      throw new Error(`${formattedDate()}: Entry not found for ID ${entryId}`);
+      throw new Error(`Entry not found for ID ${entryId}`);
     }
 
     const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, turn_number } = entryInfo[0];
@@ -336,6 +340,7 @@ async function confirmEntry(connection, entryId, interaction) {
  * Discard pending entry
  */
 async function discardEntry(connection, entryId, interaction) {
+  log(`discardEntry entry entryId=${entryId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   if (pendingReminderTimeouts.has(entryId)) {
     clearTimeout(pendingReminderTimeouts.get(entryId));
     pendingReminderTimeouts.delete(entryId);
@@ -364,6 +369,7 @@ async function discardEntry(connection, entryId, interaction) {
  * Handle view last entry button — posts the previous confirmed entry as a permanent embed in the thread
  */
 async function handleViewLastEntry(connection, interaction) {
+  log(`handleViewLastEntry entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_')[3]);
   const guildId = interaction.guild.id;
@@ -421,7 +427,7 @@ async function handleFinalizeEntry(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const isAdmin = await checkIsAdmin(connection, interaction, guildId);
-  log(`handleFinalizeEntry: user ${interaction.user.id} story ${storyId}${isAdmin ? ' (admin)' : ''}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleFinalizeEntry entry user=${interaction.user.id} story=${storyId}${isAdmin ? ' (admin)' : ''}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
     // Admins can finalize from inside the turn thread on behalf of the current writer.
@@ -450,21 +456,21 @@ async function handleFinalizeEntry(connection, interaction) {
     }
 
     if (turnInfo.length === 0) {
-      log(`handleFinalizeEntry: no active turn found — story ${storyId} channel ${interaction.channel.id} user ${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleFinalizeEntry: no active turn — story ${storyId} channel ${interaction.channel.id} user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId) });
       return;
     }
-    log(`handleFinalizeEntry: found turn ${turnInfo[0].turn_id} for writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: found turn ${turnInfo[0].turn_id} for writer ${writerId}`, { show: false, guildName: interaction?.guild?.name });
 
     const thread = await interaction.guild.channels.fetch(turnInfo[0].thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
       .filter(msg => msg.author.id === String(writerId))
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`handleFinalizeEntry: fetched ${userMessages.size} messages from writer ${writerId} in thread ${turnInfo[0].thread_id}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: fetched ${userMessages.size} messages from writer ${writerId} in thread ${turnInfo[0].thread_id}`, { show: false, guildName: interaction?.guild?.name });
 
     if (userMessages.size === 0) {
-      log(`handleFinalizeEntry: no messages found, rejecting`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleFinalizeEntry: no messages found, rejecting`, { show: false, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', guildId) });
       return;
     }
@@ -743,7 +749,7 @@ async function handleFinalizeConfirm(connection, interaction) {
   const storyId = interaction.customId.split('_')[3];
   const session = pendingPreviewData.get(interaction.user.id);
   const writerId = session?.writerId ?? interaction.user.id;
-  log(`handleFinalizeConfirm: user ${interaction.user.id} confirming finalize for writer ${writerId} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleFinalizeConfirm entry user=${interaction.user.id} writer=${writerId} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
 
   try {
@@ -754,19 +760,19 @@ async function handleFinalizeConfirm(connection, interaction) {
       [storyId, writerId]
     );
     if (turnInfo.length === 0) {
-      log(`handleFinalizeConfirm: no active turn for writer ${writerId} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleFinalizeConfirm: no active turn for writer ${writerId} story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', interaction.guild.id), components: [] });
       return;
     }
-    log(`handleFinalizeConfirm: turn ${turnInfo[0].turn_id} found, fetching thread messages`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeConfirm: turn ${turnInfo[0].turn_id} found, fetching thread messages`, { show: false, guildName: interaction?.guild?.name });
     const thread = await interaction.guild.channels.fetch(turnInfo[0].thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
       .filter(msg => msg.author.id === String(writerId))
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`handleFinalizeConfirm: ${userMessages.size} messages from writer ${writerId} fetched`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeConfirm: ${userMessages.size} messages from writer ${writerId} fetched`, { show: false, guildName: interaction?.guild?.name });
     if (userMessages.size === 0) {
-      log(`handleFinalizeConfirm: no messages found, aborting`, { show: true, guildName: interaction?.guild?.name });
+      log(`handleFinalizeConfirm: no messages found, aborting`, { show: false, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtEmptyEntry', interaction.guild.id), components: [] });
       return;
     }
@@ -812,7 +818,7 @@ async function handleFinalizeConfirm(connection, interaction) {
       return;
     }
 
-    log(`handleFinalizeConfirm: no images or no media channel — proceeding directly to finalize`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeConfirm: no images or no media channel — proceeding directly to finalize`, { show: false, guildName: interaction?.guild?.name });
     await doFinalizeEntry(connection, interaction, storyId, writerId);
 
   } catch (error) {
@@ -830,7 +836,7 @@ async function handleFinalizeImageConfirm(connection, interaction) {
   const storyId = interaction.customId.split('_').at(-1);
   const session = pendingPreviewData.get(interaction.user.id);
   const writerId = session?.writerId ?? interaction.user.id;
-  log(`handleFinalizeImageConfirm: user ${interaction.user.id} confirmed image review for story ${storyId}, writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleFinalizeImageConfirm entry user=${interaction.user.id} story=${storyId} writer=${writerId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   await doFinalizeEntry(connection, interaction, storyId, writerId);
 }
@@ -839,6 +845,7 @@ async function handleFinalizeImageConfirm(connection, interaction) {
  * Handle skip turn button click
  */
 async function handleSkipTurn(connection, interaction) {
+  log(`handleSkipTurn entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const storyId = interaction.customId.split('_')[2];
   const guildId = interaction.guild.id;
 
@@ -898,6 +905,7 @@ async function handleSkipTurn(connection, interaction) {
 }
 
 async function handleSkipConfirm(connection, interaction) {
+  log(`handleSkipConfirm entry user=${interaction.user.id} story=${interaction.customId.split('_')[3]}`, { show: false, guildName: interaction?.guild?.name });
   const storyId = interaction.customId.split('_')[3];
   const guildId = interaction.guild.id;
 

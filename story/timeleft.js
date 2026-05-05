@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlag
 import { getConfigValue, log, resolveStoryId } from '../utilities.js';
 
 export async function handleTimeleft(connection, interaction) {
+  log(`handleTimeleft entry user=${interaction.user.id} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (!storyId) {
@@ -35,14 +36,18 @@ export async function handleTimeleft(connection, interaction) {
   const nextWriter = nextRows[0]?.discord_display_name ?? null;
 
   const unixTs = Math.floor(new Date(turn.turn_ends_at).getTime() / 1000);
+  const timeleftCfg = await getConfigValue(connection, [
+    'lblTimeleftStory', 'lblTimeleftCurrentWriter', 'lblTimeleftTurnEnds', 'lblTimeleftUpNext', 'txtTimeleftAuthorsHidden'
+  ], guildId);
+
   const embed = new EmbedBuilder()
     .setTitle(turn.title)
     .addFields(
-      { name: 'Story', value: `#${turn.guild_story_id}`, inline: true },
-      { name: 'Current Writer', value: turn.show_authors ? turn.writer_name : '*(hidden)*', inline: true },
-      { name: 'Turn Ends', value: `<t:${unixTs}:F> (<t:${unixTs}:R>)`, inline: false }
+      { name: timeleftCfg.lblTimeleftStory, value: `#${turn.guild_story_id}`, inline: true },
+      { name: timeleftCfg.lblTimeleftCurrentWriter, value: turn.show_authors ? turn.writer_name : timeleftCfg.txtTimeleftAuthorsHidden, inline: true },
+      { name: timeleftCfg.lblTimeleftTurnEnds, value: `<t:${unixTs}:F> (<t:${unixTs}:R>)`, inline: false }
     );
-  if (nextWriter) embed.addFields({ name: 'Up Next', value: nextWriter, inline: true });
+  if (nextWriter) embed.addFields({ name: timeleftCfg.lblTimeleftUpNext, value: nextWriter, inline: true });
 
   const isCurrentWriter = interaction.user.id === String(turn.discord_user_id);
   const btnLabel = await getConfigValue(connection, 'btnRequestMoreTime', guildId);
@@ -62,6 +67,7 @@ export async function handleTimeleft(connection, interaction) {
 }
 
 export async function handleRequestMoreTime(connection, interaction) {
+  log(`handleRequestMoreTime entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
@@ -82,6 +88,7 @@ export async function handleRequestMoreTime(connection, interaction) {
   const turn = rows[0];
 
   if (interaction.user.id !== String(turn.discord_user_id)) {
+    log(`handleRequestMoreTime: not current writer user=${interaction.user.id} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
     return interaction.editReply({ content: await getConfigValue(connection, 'txtRequestMoreTimeNotYourTurn', guildId) });
   }
   if (turn.more_time_requested) {
@@ -120,7 +127,9 @@ export async function handleRequestMoreTime(connection, interaction) {
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(true);
     await interaction.message.edit({ components: [new ActionRowBuilder().addComponents(disabledBtn)] });
-  } catch { /* timeleft message may have expired or been deleted — non-fatal */ }
+  } catch (err) {
+    log(`handleRequestMoreTime: could not disable button (message likely expired): ${err}`, { show: false, guildName: interaction?.guild?.name });
+  }
 
   await interaction.editReply({ content: await getConfigValue(connection, 'txtRequestMoreTimeUsed', guildId) });
 }

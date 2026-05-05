@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue } from '../utilities.js';
+import { getConfigValue, log } from '../utilities.js';
 
 export async function buildHelpPage1(connection, guildId) {
   const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guildId);
@@ -119,16 +119,26 @@ export async function buildHelpPage3(connection, guildId) {
 }
 
 export async function handleHelp(connection, interaction) {
-  await interaction.reply({ ...await buildHelpPage1(connection, interaction.guild.id), flags: MessageFlags.Ephemeral });
+  log(`handleHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  try {
+    await interaction.reply({ ...await buildHelpPage1(connection, interaction.guild.id), flags: MessageFlags.Ephemeral });
+  } catch (error) {
+    log(`Error in handleHelp: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+  }
 }
 
 export async function handleHelpNavigation(connection, interaction) {
+  log(`handleHelpNavigation entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
-  if (interaction.customId === 'story_help_page_2') {
-    await interaction.editReply(await buildHelpPage2(connection, interaction.guild.id));
-  } else if (interaction.customId === 'story_help_page_3') {
-    await interaction.editReply(await buildHelpPage3(connection, interaction.guild.id));
-  } else {
-    await interaction.editReply(await buildHelpPage1(connection, interaction.guild.id));
+  try {
+    if (interaction.customId === 'story_help_page_2') {
+      await interaction.editReply(await buildHelpPage2(connection, interaction.guild.id));
+    } else if (interaction.customId === 'story_help_page_3') {
+      await interaction.editReply(await buildHelpPage3(connection, interaction.guild.id));
+    } else {
+      await interaction.editReply(await buildHelpPage1(connection, interaction.guild.id));
+    }
+  } catch (error) {
+    log(`Error in handleHelpNavigation: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
   }
 }

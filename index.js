@@ -181,6 +181,7 @@ async function main() {
 
         const dedupKey = `${interaction.user.id}:${interaction.customId}`;
         if (processingButtons.has(dedupKey)) {
+          log(`Duplicate button suppressed: ${interaction.customId} from ${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
           await interaction.deferUpdate().catch(() => {});
         } else {
           processingButtons.add(dedupKey);

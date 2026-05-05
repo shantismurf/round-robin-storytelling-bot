@@ -108,12 +108,24 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
     originalInteraction: interaction
   });
 
-  await interaction.editReply(buildEditMessage(chunks, 0, hasHistory, resolvedTurnNumber, storyTitle, entry.guild_story_id));
+  const editCfg = await getConfigValue(connection, [
+    'lblEditPageSplitNotice', 'txtEditPageSplitInstructions',
+    'btnEditPrev', 'btnEditNext', 'btnEditOpen', 'btnEditHistory', 'lblEditEntryContent',
+    'txtEditRestoreWarningMulti', 'txtEditRestoreWarningSingle',
+    'btnEditHistNewer', 'btnEditHistPrevPage', 'btnEditRestore',
+    'btnEditHistNextPage', 'btnEditHistOlder', 'btnEditBackToEntry',
+    'txtEditRestoreConfirmSingle', 'txtEditRestoreConfirmMulti',
+    'txtEditRestoreConfirmTitle', 'btnEditRestoreConfirm', 'btnEditRestoreCancel'
+  ], guildId);
+
+  const state = pendingEditData.get(interaction.user.id);
+  if (state) state.editCfg = editCfg;
+
+  await interaction.editReply(buildEditMessage(chunks, 0, hasHistory, resolvedTurnNumber, storyTitle, entry.guild_story_id, editCfg));
 }
 
-function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle, guildStoryId) {
+function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle, guildStoryId, editCfg) {
   const chunk = chunks[chunkPage];
-  const isFirstPage = chunkPage === 0;
   const isMultiPage = chunks.length > 1;
   const pageLabel = isMultiPage ? ` · Page ${chunkPage + 1} of ${chunks.length}` : '';
 
@@ -125,8 +137,8 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
 
   if (isMultiPage) {
     embed.addFields({
-      name: '📄 Entry split across pages',
-      value: `Edits on this page do not affect other pages in the entry.\nUse ← Prev / Next → to navigate the full entry.`
+      name: editCfg.lblEditPageSplitNotice,
+      value: editCfg.txtEditPageSplitInstructions
     });
   }
 
@@ -138,12 +150,12 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
     buttons.push(
       new ButtonBuilder()
         .setCustomId('story_edit_prev')
-        .setLabel('← Prev')
+        .setLabel(editCfg.btnEditPrev)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(chunkPage === 0),
       new ButtonBuilder()
         .setCustomId('story_edit_next')
-        .setLabel('Next →')
+        .setLabel(editCfg.btnEditNext)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(chunkPage === chunks.length - 1)
     );
@@ -152,7 +164,7 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
   buttons.push(
     new ButtonBuilder()
       .setCustomId('story_edit_open_modal')
-      .setLabel('Edit')
+      .setLabel(editCfg.btnEditOpen)
       .setStyle(ButtonStyle.Primary)
       .setDisabled(false)
   );
@@ -161,7 +173,7 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
     buttons.push(
       new ButtonBuilder()
         .setCustomId('story_edit_browse_history')
-        .setLabel('History')
+        .setLabel(editCfg.btnEditHistory)
         .setStyle(ButtonStyle.Secondary)
         .setDisabled(false)
     );
@@ -173,7 +185,7 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
 async function handleEditButton(connection, interaction) {
   const userId = interaction.user.id;
   const state = pendingEditData.get(userId);
-  log(`handleEditButton: customId=${interaction.customId} userId=${userId} hasState=${!!state}`, { show: true, guildName: interaction?.guild?.name });
+  log(`handleEditButton entry customId=${interaction.customId} userId=${userId} hasState=${!!state}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!state) {
     await interaction.deferUpdate();
@@ -186,14 +198,14 @@ async function handleEditButton(connection, interaction) {
     await interaction.deferUpdate();
     state.chunkPage = Math.max(0, state.chunkPage - 1);
     await state.originalInteraction.editReply(
-      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId)
+      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {})
     );
 
   } else if (customId === 'story_edit_next') {
     await interaction.deferUpdate();
     state.chunkPage = Math.min(state.chunks.length - 1, state.chunkPage + 1);
     await state.originalInteraction.editReply(
-      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId)
+      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {})
     );
 
   } else if (customId === 'story_edit_open_modal') {
@@ -208,7 +220,7 @@ async function handleEditButton(connection, interaction) {
       .setTitle(modalTitle);
     const input = new TextInputBuilder()
       .setCustomId('entry_content')
-      .setLabel('Entry content')
+      .setLabel(state.editCfg?.lblEditEntryContent ?? 'Entry content')
       .setStyle(TextInputStyle.Paragraph)
       .setMaxLength(4000)
       .setValue(state.chunks[state.chunkPage].text.slice(0, 4000))
@@ -292,8 +304,10 @@ async function renderHistoryPage(connection, interaction, state, histPage, histC
   );
   const total = countRow[0].cnt;
 
+  const editCfg = state.editCfg ?? {};
+
   if (rows.length === 0) {
-    return buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId);
+    return buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, editCfg);
   }
 
   const histRow = rows[0];
@@ -319,24 +333,24 @@ async function renderHistoryPage(connection, interaction, state, histPage, histC
   const buttons = [];
 
   if (histPage > 0) {
-    buttons.push(new ButtonBuilder().setCustomId('story_edit_history_prev').setLabel('← Newer').setStyle(ButtonStyle.Secondary));
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_history_prev').setLabel(editCfg.btnEditHistNewer ?? '← Newer').setStyle(ButtonStyle.Secondary));
   }
   if (histChunkPage > 0) {
-    buttons.push(new ButtonBuilder().setCustomId('story_edit_hist_chunk_prev').setLabel('← Prev Page').setStyle(ButtonStyle.Secondary));
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_hist_chunk_prev').setLabel(editCfg.btnEditHistPrevPage ?? '← Prev Page').setStyle(ButtonStyle.Secondary));
   }
   if (histChunkPage === 0) {
     buttons.push(new ButtonBuilder()
       .setCustomId(`story_edit_restore_${histRow.edit_id}`)
-      .setLabel('Restore This Version')
+      .setLabel(editCfg.btnEditRestore ?? 'Restore This Version')
       .setStyle(ButtonStyle.Primary));
   }
   if (histChunkPage < histChunks.length - 1) {
-    buttons.push(new ButtonBuilder().setCustomId('story_edit_hist_chunk_next').setLabel('Next Page →').setStyle(ButtonStyle.Secondary));
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_hist_chunk_next').setLabel(editCfg.btnEditHistNextPage ?? 'Next Page →').setStyle(ButtonStyle.Secondary));
   }
   if (histPage < total - 1) {
-    buttons.push(new ButtonBuilder().setCustomId('story_edit_history_next').setLabel('Older →').setStyle(ButtonStyle.Secondary));
+    buttons.push(new ButtonBuilder().setCustomId('story_edit_history_next').setLabel(editCfg.btnEditHistOlder ?? 'Older →').setStyle(ButtonStyle.Secondary));
   }
-  buttons.push(new ButtonBuilder().setCustomId('story_edit_back').setLabel('← Back to Entry').setStyle(ButtonStyle.Secondary));
+  buttons.push(new ButtonBuilder().setCustomId('story_edit_back').setLabel(editCfg.btnEditBackToEntry ?? '← Back to Entry').setStyle(ButtonStyle.Secondary));
 
   const components = [];
   for (let i = 0; i < buttons.length; i += 5) {
@@ -351,23 +365,24 @@ async function handleRestoreConfirm(connection, interaction, editId) {
   const state = pendingEditData.get(interaction.user.id);
   if (!state) return;
 
+  const editCfg = state.editCfg ?? {};
   const confirmText = state.entryStatus === 'deleted'
-    ? 'Restore this entry to the story? It will reappear in `/story read` and exports, and will alter the story\'s turn count.'
-    : 'Restore this version? This will replace your entire current entry, including content not shown on this page, and will alter the story\'s turn count.';
+    ? (editCfg.txtEditRestoreConfirmSingle ?? 'Restore this entry to the story? It will reappear in `/story read` and exports, and will alter the story\'s turn count.')
+    : (editCfg.txtEditRestoreConfirmMulti ?? 'Restore this version? This will replace your entire current entry, including content not shown on this page, and will alter the story\'s turn count.');
 
   const embed = new EmbedBuilder()
-    .setTitle('Confirm Restore')
+    .setTitle(editCfg.txtEditRestoreConfirmTitle ?? 'Confirm Restore')
     .setDescription(confirmText)
     .setColor(0xff6b6b);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`story_edit_restore_confirm_${editId}`)
-      .setLabel('Confirm Restore')
+      .setLabel(editCfg.btnEditRestoreConfirm ?? 'Confirm Restore')
       .setStyle(ButtonStyle.Danger),
     new ButtonBuilder()
       .setCustomId('story_edit_restore_cancel')
-      .setLabel('Cancel')
+      .setLabel(editCfg.btnEditRestoreCancel ?? 'Cancel')
       .setStyle(ButtonStyle.Secondary)
   );
 

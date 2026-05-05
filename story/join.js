@@ -174,12 +174,12 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
  */
 export async function handleJoinSetAO3Button(connection, interaction) {
   const storyId = interaction.customId.split('_').at(-1);
-  const cfg = await getConfigValue(connection, ['lblJoinAO3Name', 'txtJoinAO3Placeholder'], interaction.guild.id);
+  const cfg = await getConfigValue(connection, ['lblJoinAO3Name', 'txtJoinAO3Placeholder', 'lblJoinSetAO3ModalTitle'], interaction.guild.id);
   const state = pendingJoinData.get(interaction.user.id);
 
   const modal = new ModalBuilder()
     .setCustomId(`story_join_ao3_${storyId}`)
-    .setTitle('Set AO3 Username');
+    .setTitle(cfg.lblJoinSetAO3ModalTitle);
 
   const input = new TextInputBuilder()
     .setCustomId('ao3_name')

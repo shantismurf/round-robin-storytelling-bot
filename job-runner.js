@@ -26,6 +26,7 @@ async function runDueJobs(connection, client) {
 }
 
 async function processJob(connection, client, job) {
+  log(`processJob claiming job ${job.job_id} (type=${job.job_type})`, { show: false });
   // Claim the job atomically and increment attempt counter
   const [claimed] = await connection.execute(
     `UPDATE job SET job_status = 1, attempts = attempts + 1 WHERE job_id = ? AND job_status = 0`,
@@ -84,6 +85,7 @@ async function buildSyntheticContext(client, guildId) {
 // ---------------------------------------------------------------------------
 async function handleCheckStoryDelay(connection, client, payload) {
   const { storyId } = payload;
+  log(`handleCheckStoryDelay entry for story ${storyId}`, { show: false });
 
   const [storyRows] = await connection.execute(
     `SELECT story_status, guild_id, title FROM story WHERE story_id = ?`,
@@ -113,6 +115,7 @@ async function handleCheckStoryDelay(connection, client, payload) {
 // ---------------------------------------------------------------------------
 async function handleTurnTimeout(connection, client, payload) {
   const { turnId, storyId, guildId } = payload;
+  log(`handleTurnTimeout entry for turn ${turnId} story ${storyId}`, { show: false });
 
   // Verify turn is still active
   const [turnRows] = await connection.execute(
@@ -151,6 +154,7 @@ async function handleTurnTimeout(connection, client, payload) {
 
   // Delete turn thread if one exists
   if (activeTurn.thread_id) {
+    log(`handleTurnTimeout deleting thread ${activeTurn.thread_id} for turn ${turnId}`, { show: false });
     try {
       const thread = await ctx.guild.channels.fetch(activeTurn.thread_id);
       if (thread) await deleteThreadAndAnnouncement(thread);
@@ -173,6 +177,7 @@ async function handleTurnTimeout(connection, client, payload) {
 // ---------------------------------------------------------------------------
 async function handleTurnReminder(connection, client, payload) {
   const { turnId, storyId, guildId, writerUserId } = payload;
+  log(`handleTurnReminder entry for turn ${turnId} story ${storyId} writer ${writerUserId}`, { show: false });
 
   // Verify turn is still active
   const [turnRows] = await connection.execute(
@@ -227,7 +232,7 @@ async function handleTurnReminder(connection, client, payload) {
       const txt = await getConfigValue(connection, dmKey, guildId);
       await user.send(applyReminderTokens(txt));
     } catch (dmErr) {
-      // DM failed — fall back to channel mention
+      log(`handleTurnReminder DM failed for user ${writerUserId}, falling back to mention: ${dmErr}`, { show: true, guildName: ctx.guild?.name });
       await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyReminderTokens);
     }
   }
