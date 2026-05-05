@@ -118,7 +118,7 @@ export async function discordMarkdownToHtml(text, guild = null) {
 export async function generateStoryExport(connection, storyId, guildId, guild = null) {
   const [storyRows] = await connection.execute(
     `SELECT story_id, guild_story_id, title, created_at, story_status, quick_mode, closed_at, show_authors,
-            summary, tags, rating, warnings, fandom, main_pairing, other_relationships, characters, category, additional_tags
+            summary, tags, rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic, additional_tags
      FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
   );
