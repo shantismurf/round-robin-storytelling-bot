@@ -127,41 +127,46 @@ export function sanitizeModalInput(input, maxLength = 1024, multiline = false) {
 let _testMode = false;
 export function setTestMode(value) { _testMode = !!value; }
 
-export function log(message, { show = false, guildName = null } = {}) {
+/**
+ * Unified Dynamic Logger
+ * Detects content type and renders strings, tables, or deep objects.
+ * Usage: 
+ *   log("Simple message"); 
+ *   log(["Label", dataArray, { detail: 'obj' }], { show: true });
+ */
+export function log(content, { show = false, guildName = null } = {}) {
   if (!_testMode && !show) return;
-  const guildTag = guildName ? ` (${guildName})` : '';
-  console.log(`${formattedDate()}${guildTag}: ${message}`);
-}
-export function logArray(message, { show = false, guildName = null } = {}) {
-// Passes the array or objects to display in tables 
-// Example: log(['--- Config Values ---', cfg, '--- State ---', state], { show: false, guildName: guildName });
-  if (!_testMode && !show) return;
-  const guildTag = guildName ? ` (${guildName})` : '';
-  const prefix = `${formattedDate()}${guildTag}:`;
 
-  // Helper to handle the array/object printing logic
-  const printData = (data) => {
-    if (Array.isArray(data)) {
-      const activeKeys = [...new Set(data.flatMap(obj => 
+  const guildTag = guildName ? ` (${guildName})` : '';
+  const timestamp = `${formattedDate()}${guildTag}: `;
+
+  // Helper to handle specific data type rendering
+  const renderItem = (item) => {
+    if (Array.isArray(item)) {
+      // Your logic: Filter columns to only show keys with actual values
+      const activeKeys = [...new Set(item.flatMap(obj => 
         Object.keys(obj || {}).filter(key => 
           obj[key] !== null && obj[key] !== undefined && obj[key] !== ''
         )
       ))];
-      console.table(data, activeKeys);
-    } else if (typeof data === 'object' && data !== null) {
-      console.dir(data, { depth: null, colors: true });
+      console.table(item, activeKeys);
+    } else if (typeof item === 'object' && item !== null) {
+      // Use console.dir for deep object inspection with colors
+      console.dir(item, { depth: null, colors: true });
     } else {
-      process.stdout.write(String(data) + '\n');
+      // Plain text/labels
+      process.stdout.write(String(item) + '\n');
     }
   };
 
-  console.log(prefix);
-
-  // If message is an array (passed via log([label, data])), loop through
-  if (Array.isArray(message)) {
-    message.forEach(printData);
+  // If content is an array, we assume it's a "Bundle" (Label + Data)
+  if (Array.isArray(content) && content.some(i => typeof i === 'object')) {
+    console.log(timestamp);
+    content.forEach(renderItem);
   } else {
-    printData(message);
+    // Standard string logging or single-item logging
+    process.stdout.write(timestamp);
+    renderItem(content);
   }
 }
 
