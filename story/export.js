@@ -116,7 +116,6 @@ export async function discordMarkdownToHtml(text, guild = null) {
  * Returns null if story not found, or an object with { hasEntries, buffer, filename, title, turnCount, wordCount, writerCount }.
  */
 export async function generateStoryExport(connection, storyId, guildId, guild = null) {
-  log(`generateStoryExport started`, { show: false, guildName: 'system' });
   const [storyRows] = await connection.execute(
     `SELECT story_id, guild_story_id, title, created_at, story_status, quick_mode, closed_at, show_authors,
             summary, tags, rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic, additional_tags
@@ -125,7 +124,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   );
   if (storyRows.length === 0) return null;
   const story = storyRows[0];
-log(`generateStoryExport: story info retrieved`, { show: false, guildName: 'system' });
+
   const [writers] = await connection.execute(
     `SELECT discord_display_name, AO3_name FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC`,
     [storyId]
@@ -149,7 +148,7 @@ log(`generateStoryExport: story info retrieved`, { show: false, guildName: 'syst
   if (entries.length === 0) {
     return { hasEntries: false, title: story.title, turnCount: 0, wordCount: 0, writerCount, buffer: null, filename: null };
   }
-log(`generateStoryExport: writer info retrieved`, { show: false, guildName: 'system' });
+
   const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
   const turnCount = entries[entries.length - 1].turn_number;
 
@@ -177,20 +176,21 @@ log(`generateStoryExport: writer info retrieved`, { show: false, guildName: 'sys
     entriesHtml += await discordMarkdownToHtml(entry.content, guild);
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
-log(`generateStoryExport: entries built`, { show: false, guildName: 'system' });
+
   const ratingLabel = ratingLabels[story.rating] ?? story.rating;
-  const warningsText = story.warnings ? formatWarnings(story.warnings);
+  const warningsText = story.warnings ? formatWarnings(story.warnings) : 'Creator Chose Not To Warn';
   const ao3MetaLines = [
     story.fandom           ? `<div class="meta"><strong>Fandom:</strong> ${story.fandom}</div>` : '',
     story.dynamic          ? `<div class="meta"><strong>Dynamic:</strong> ${story.dynamic}</div>` : '',
     `<div class="meta"><strong>Rating:</strong> ${ratingLabel}</div>`,
     `<div class="meta"><strong>Warnings:</strong> ${warningsText}</div>`,
-    story.main_pairing     ? `<div class="meta"><strong>Main Relationship:</strong> ${story.main_pairing}</div>` : '',
-    story.other_relationships ? `<div class="meta"><strong>Other Relationships:</strong> ${story.other_relationships}</div>` : '',
+    story.main_pairing     ? `<div class="meta"><strong>Relationship:</strong> ${story.main_pairing}</div>` : '',
+    story.other_relationships ? `<div class="meta"><strong>Additional Relationships:</strong> ${story.other_relationships}</div>` : '',
     story.characters       ? `<div class="meta"><strong>Characters:</strong> ${story.characters}</div>` : '',
     story.tags             ? `<div class="meta"><strong>Tags:</strong> ${story.tags}</div>` : '',
+    story.additional_tags  ? `<div class="meta"><strong>Additional Tags:</strong> ${story.additional_tags}</div>` : '',
   ].filter(Boolean).join('\n    ');
-log(`generateStoryExport: metadata compiled`, { show: false, guildName: 'system' });
+
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -229,14 +229,13 @@ log(`generateStoryExport: metadata compiled`, { show: false, guildName: 'system'
   </div>
 </body>
 </html>`;
-log(`generateStoryExport: html built`, { show: false, guildName: 'system' });
+
   const buffer = Buffer.from(html, 'utf8');
   const filename = `storybot${storyId}_${story.title.replace(/[^a-z0-9]/gi, '_').toLowerCase()}.html`;
   return { hasEntries: true, title: story.title, turnCount, wordCount, writerCount, buffer, filename };
 }
 
 export async function handleExportPostPublic(connection, interaction) {
-log(`handleExportPostPublic started`, { show: false, guildName: 'system' });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
