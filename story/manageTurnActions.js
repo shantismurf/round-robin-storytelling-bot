@@ -124,7 +124,7 @@ export async function handleTurnActionButton(connection, interaction, manageStat
       [storyId]
     );
     const [activeTurnRows] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id, sw.discord_display_name as current_writer_name
+      `SELECT t.turn_id, t.thread_id, sw.story_writer_id, sw.discord_display_name as current_writer_name
        FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1`,
       [storyId]
