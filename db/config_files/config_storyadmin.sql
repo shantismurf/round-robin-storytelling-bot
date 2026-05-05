@@ -208,4 +208,37 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageEntryDeleteSuccess', '✅ Entry deleted. Entry ID: **[entry_id]** (use Restore Entry to undo).', 'en', 1),
 ('txtManageEntryRestoreSuccess', '✅ Entry restored for **[writer_name]**.', 'en', 1),
 ('txtManageEntryAlreadyDeleted', '❌ This entry is already deleted.', 'en', 1),
-('txtManageEntryAlreadyConfirmed', '❌ This entry is not deleted.', 'en', 1);
+('txtManageEntryAlreadyConfirmed', '❌ This entry is not deleted.', 'en', 1),
+-- Added Silo 3: manageUser.js
+('txtManageUserPanelDesc', '-# Changes are staged — click **Save Settings** to apply notifications/privacy. Status actions (Pause/Restore/Remove) apply immediately.', 'en', 1),
+('txtNotifDM', 'DM', 'en', 1),
+('txtNotifMention', 'Mention in channel', 'en', 1),
+('btnManageUserSwitchMention', 'Switch to: Mention', 'en', 1),
+('btnManageUserSwitchDM', 'Switch to: DM', 'en', 1),
+('btnManageUserMakePublic', 'Make Public', 'en', 1),
+('btnManageUserMakePrivate', 'Make Private', 'en', 1),
+('txtAdminMUPauseConfirmTitle', '⏸️ Pause Writer?', 'en', 1),
+('txtAdminMUUnpauseConfirmTitle', '▶️ Restore to Rotation?', 'en', 1),
+('txtAdminMURemoveConfirmTitle', '⚠️ Remove Writer?', 'en', 1),
+('txtAdminRemoveAutoClose', '⚠️ Story auto-closed — no writers remain.', 'en', 1),
+('txtAdminMUAO3Placeholder', 'Leave blank to clear', 'en', 1),
+-- Added Silo 3: manageTurnActions.js
+('txtTurnExtendInvalidHours', '❌ Hours must be a positive number.', 'en', 1),
+('txtTurnDeleteEntryInvalidNumber', '❌ Turn number must be a positive integer.', 'en', 1),
+('txtTurnRestoreEntryInvalidId', '❌ Entry ID must be a positive integer.', 'en', 1),
+('txtTurnNextSelectPlaceholder', 'Select the next writer...', 'en', 1),
+('txtTurnDeleteEntryConfirmTitle', 'Delete Turn [turn_number] — [writer_name]?', 'en', 1),
+('txtTurnDeleteEntryConfirmNote', 'This entry will be hidden from `/story read` and exports. The entry ID shown after deletion can be used to restore it.', 'en', 1),
+('btnTurnDeleteEntryConfirm', 'Delete Entry', 'en', 1),
+-- Added Silo 3: manageEntries.js
+('txtManageEntriesMoreWriters', 'More writers ([offset]+)...', 'en', 1),
+('txtManageEntriesWriterPlaceholder', 'Select a writer...', 'en', 1),
+('txtManageEntriesMoreEntries', 'More entries ([offset]+)...', 'en', 1),
+('txtManageEntriesEntryPlaceholder', 'Select an entry...', 'en', 1),
+('txtManageEntriesDeletedFlag', '[DELETED]', 'en', 1),
+('txtManageEntriesContinued', '*...entry continues*', 'en', 1),
+-- Added Silo 3: storyadmin.js setup
+('txtSetupAgeRestrictNote', '*(Age-restrict this channel if the server is not already 18+)*', 'en', 1),
+('txtSetupNoMediaNote', 'ℹ️ No media channel set — images will not be processed.', 'en', 1),
+('txtSetupNoRoleNote', 'ℹ️ No admin role set — only Discord Administrators can use admin commands.', 'en', 1),
+('txtSetupRoundupDisabledNote', 'ℹ️ Weekly roundup disabled.', 'en', 1);

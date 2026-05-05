@@ -21,9 +21,9 @@ function buildManageUserPanel(state) {
   log(`buildManageUserPanel: storyId=${state.storyId} targetUser=${state.targetUserId} writerStatus=${state.writerStatus}`, { show: false, guildName: state.guildName });
   const cfg = state.cfg;
 
-  const statusLabel    = state.writerStatus === 1 ? cfg.txtMyStoryManageActiveStatus ?? 'Active' : cfg.txtMyStoryManagePausedStatus ?? 'Paused';
-  const notifLabel     = state.notificationPrefs === 'dm' ? 'DM' : 'Mention in channel';
-  const privacyLabel   = state.turnPrivacy ? 'Private' : 'Public';
+  const statusLabel    = state.writerStatus === 1 ? cfg.txtMyStoryManageActiveStatus : cfg.txtMyStoryManagePausedStatus;
+  const notifLabel     = state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention;
+  const privacyLabel   = state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic;
 
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(cfg.txtManageUserPanelTitle, {
@@ -32,30 +32,30 @@ function buildManageUserPanel(state) {
     }))
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.lblManageUserStatus  ?? 'Status',         value: statusLabel,              inline: true },
-      { name: cfg.lblManageUserAO3     ?? 'AO3 Name',       value: state.ao3Name || '*Not set*', inline: true },
-      { name: cfg.lblAdminMUNotif      ?? 'Notifications',  value: notifLabel,               inline: true },
-      { name: cfg.lblAdminMUPrivacy    ?? 'Turn Privacy',   value: privacyLabel,             inline: true }
+      { name: cfg.lblManageUserStatus, value: statusLabel,                   inline: true },
+      { name: cfg.lblManageUserAO3,    value: state.ao3Name || cfg.txtNotSet, inline: true },
+      { name: cfg.lblAdminMUNotif,     value: notifLabel,                    inline: true },
+      { name: cfg.lblAdminMUPrivacy,   value: privacyLabel,                  inline: true }
     )
-    .setDescription('-# Changes are staged — click **Save Settings** to apply notifications/privacy. Status actions (Pause/Restore/Remove) apply immediately.');
+    .setDescription(cfg.txtManageUserPanelDesc);
 
-  const notifToggleLabel   = state.notificationPrefs === 'dm' ? 'Switch to: Mention' : 'Switch to: DM';
-  const privacyToggleLabel = state.turnPrivacy ? 'Make Public' : 'Make Private';
+  const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
+  const privacyToggleLabel = state.turnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
 
   const row1 = new ActionRowBuilder().addComponents(
     state.writerStatus === 1
-      ? new ButtonBuilder().setCustomId('storyadmin_mu_pause').setLabel(cfg.btnAdminMUPause ?? '⏸️ Pause').setStyle(ButtonStyle.Danger)
-      : new ButtonBuilder().setCustomId('storyadmin_mu_unpause').setLabel(cfg.btnAdminMUUnpause ?? '▶️ Restore').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('storyadmin_mu_remove').setLabel(cfg.btnAdminMURemove ?? 'Remove').setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('storyadmin_mu_ao3name').setLabel(cfg.btnAdminMUAO3Name ?? 'Update Name').setStyle(ButtonStyle.Secondary)
+      ? new ButtonBuilder().setCustomId('storyadmin_mu_pause').setLabel(cfg.btnAdminMUPause).setStyle(ButtonStyle.Danger)
+      : new ButtonBuilder().setCustomId('storyadmin_mu_unpause').setLabel(cfg.btnAdminMUUnpause).setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('storyadmin_mu_remove').setLabel(cfg.btnAdminMURemove).setStyle(ButtonStyle.Danger),
+    new ButtonBuilder().setCustomId('storyadmin_mu_ao3name').setLabel(cfg.btnAdminMUAO3Name).setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('storyadmin_mu_toggle_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('storyadmin_mu_toggle_privacy').setLabel(privacyToggleLabel).setStyle(ButtonStyle.Secondary)
   );
   const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_mu_save').setLabel(cfg.btnAdminMUSave ?? '✅ Save Settings').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('storyadmin_mu_close').setLabel(cfg.btnManageUserClose ?? 'Close').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('storyadmin_mu_save').setLabel(cfg.btnAdminMUSave).setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('storyadmin_mu_close').setLabel(cfg.btnManageUserClose).setStyle(ButtonStyle.Secondary)
   );
 
   return { embeds: [embed], components: [row1, row2, row3] };
@@ -115,7 +115,8 @@ export async function handleManageUser(connection, interaction) {
     log(`handleManageUser: activeTurn=${activeTurnRows.length > 0} remainingWriters=${remainingRows[0].count}`, { show: false, guildName: interaction?.guild?.name });
 
     const cfg = await getConfigValue(connection, [
-      'txtManageUserPanelTitle', 'lblManageUserStatus', 'lblManageUserAO3',
+      'txtManageUserPanelTitle', 'txtManageUserPanelDesc',
+      'lblManageUserStatus', 'lblManageUserAO3',
       'lblAdminMUNotif', 'lblAdminMUPrivacy', 'btnManageUserClose',
       'btnAdminMUPause', 'btnAdminMUUnpause', 'btnAdminMURemove', 'btnAdminMUAO3Name',
       'btnAdminMUToggleNotif', 'btnAdminMUTogglePrivacy',
@@ -124,7 +125,14 @@ export async function handleManageUser(connection, interaction) {
       'txtAdminMUUnpauseConfirmDesc', 'txtAdminMURemoveConfirmDesc',
       'txtAdminMULastWriterWarning', 'btnCancel',
       'txtMyStoryManageActiveStatus', 'txtMyStoryManagePausedStatus',
-      'txtSelectionStaged'
+      'txtSelectionStaged',
+      'txtNotifDM', 'txtNotifMention',
+      'txtPrivate', 'txtPublic', 'txtNotSet',
+      'btnManageUserSwitchMention', 'btnManageUserSwitchDM',
+      'btnManageUserMakePublic', 'btnManageUserMakePrivate',
+      'txtAdminMUPauseConfirmTitle', 'txtAdminMUUnpauseConfirmTitle',
+      'txtAdminMURemoveConfirmTitle', 'txtAdminRemoveAutoClose',
+      'lblJoinSetAO3ModalTitle', 'txtAdminMUAO3Placeholder',
     ], guildId);
 
     const isActiveTurn = activeTurnRows.length > 0;
@@ -221,11 +229,11 @@ export async function handleManageUserButton(connection, interaction) {
     await interaction.deferUpdate();
     log(`handleManageUserButton: showing pause confirm for ${pending.writerName}`, { show: false, guildName: interaction?.guild?.name });
     const description = replaceTemplateVariables(pending.cfg.txtAdminMUPauseConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle });
-    const embed = new EmbedBuilder().setTitle('⏸️ Pause Writer?').setDescription(description).setColor(0xfee75c);
+    const embed = new EmbedBuilder().setTitle(pending.cfg.txtAdminMUPauseConfirmTitle).setDescription(description).setColor(0xfee75c);
     if (pending.isActiveTurn) embed.addFields({ name: '​', value: replaceTemplateVariables(pending.cfg.txtAdminMUActiveTurnWarning, { user_name: pending.writerName }) });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMUPause ?? '⏸️ Pause').setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMUPause).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
     await interaction.editReply({ embeds: [embed], components: [row] });
 
@@ -234,10 +242,10 @@ export async function handleManageUserButton(connection, interaction) {
     await interaction.deferUpdate();
     log(`handleManageUserButton: showing unpause confirm for ${pending.writerName}`, { show: false, guildName: interaction?.guild?.name });
     const description = replaceTemplateVariables(pending.cfg.txtAdminMUUnpauseConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle });
-    const embed = new EmbedBuilder().setTitle('▶️ Restore to Rotation?').setDescription(description).setColor(0x57f287);
+    const embed = new EmbedBuilder().setTitle(pending.cfg.txtAdminMUUnpauseConfirmTitle).setDescription(description).setColor(0x57f287);
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMUUnpause ?? '▶️ Restore').setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMUUnpause).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
     await interaction.editReply({ embeds: [embed], components: [row] });
 
@@ -246,12 +254,12 @@ export async function handleManageUserButton(connection, interaction) {
     await interaction.deferUpdate();
     log(`handleManageUserButton: showing remove confirm for ${pending.writerName}`, { show: false, guildName: interaction?.guild?.name });
     const description = replaceTemplateVariables(pending.cfg.txtAdminMURemoveConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle });
-    const embed = new EmbedBuilder().setTitle('⚠️ Remove Writer?').setDescription(description).setColor(0xed4245);
+    const embed = new EmbedBuilder().setTitle(pending.cfg.txtAdminMURemoveConfirmTitle).setDescription(description).setColor(0xed4245);
     if (pending.isActiveTurn) embed.addFields({ name: '​', value: replaceTemplateVariables(pending.cfg.txtAdminMUActiveTurnWarning, { user_name: pending.writerName }) });
     if (pending.isLastWriter) embed.addFields({ name: '​', value: replaceTemplateVariables(pending.cfg.txtAdminMULastWriterWarning, { user_name: pending.writerName }) });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMURemove ?? 'Remove').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMURemove).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
     await interaction.editReply({ embeds: [embed], components: [row] });
 
@@ -259,15 +267,15 @@ export async function handleManageUserButton(connection, interaction) {
     log(`handleManageUserButton: showing AO3 name modal`, { show: false, guildName: interaction?.guild?.name });
     const modal = new ModalBuilder()
       .setCustomId('storyadmin_mu_ao3name_modal')
-      .setTitle('Set AO3 Name')
+      .setTitle(pending.cfg.lblJoinSetAO3ModalTitle)
       .addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('ao3_name_input')
-            .setLabel('AO3 Name')
+            .setLabel(pending.cfg.lblManageUserAO3)
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('Leave blank to clear')
+            .setPlaceholder(pending.cfg.txtAdminMUAO3Placeholder)
             .setValue(pending.ao3Name ?? '')
         )
       );
@@ -359,12 +367,12 @@ async function handleManageUserConfirm(connection, interaction) {
         await getConfigValue(connection, 'txtAdminKickSuccess', guildId),
         { user_name: writerName, story_title: storyTitle }
       );
-      const closeNote = isLastWriter ? '\n⚠️ Story auto-closed — no writers remain.' : '';
+      const closeNote = isLastWriter ? '\n' + await getConfigValue(connection, 'txtAdminRemoveAutoClose', guildId) : '';
       await interaction.editReply({ content: successMsg + closeNote, embeds: [], components: [] });
 
       getConfigValue(connection, 'txtStoryThreadWriterRemove', guildId).then(template =>
         postStoryThreadActivity(connection, interaction.guild, storyId, template.replace('[writer_name]', writerName))
-      ).catch(() => {});
+      ).catch(err => log(`postStoryThreadActivity failed after remove for story ${storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name }));
     }
 
   } catch (error) {

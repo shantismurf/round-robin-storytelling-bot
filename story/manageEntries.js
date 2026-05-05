@@ -17,6 +17,9 @@ async function getEntryCfg(connection, guildId) {
     'txtManageEntryDeleteSuccess', 'txtManageEntryRestoreSuccess',
     'txtManageEntryAlreadyDeleted', 'txtManageEntryAlreadyConfirmed',
     'txtActionSessionExpired', 'errProcessingRequest', 'txtUnknownWriter',
+    'txtManageEntriesMoreWriters', 'txtManageEntriesWriterPlaceholder',
+    'txtManageEntriesMoreEntries', 'txtManageEntriesEntryPlaceholder',
+    'txtManageEntriesDeletedFlag', 'txtManageEntriesContinued',
   ], guildId);
 }
 
@@ -73,14 +76,14 @@ function buildWriterSelectMessage(cfg, writers, hasMore, prompt, filterFragment 
     const nextOffset = writerOffset + WRITER_PAGE_SIZE;
     const fragment = filterFragment ? filterFragment : '';
     options.push({
-      label: `More writers (${nextOffset + 1}+)...`,
+      label: replaceTemplateVariables(cfg.txtManageEntriesMoreWriters, { offset: nextOffset + 1 }),
       value: `__page__${nextOffset}__${fragment}`
     });
   }
 
   const select = new StringSelectMenuBuilder()
     .setCustomId('story_manage_entries_writer_select')
-    .setPlaceholder('Select a writer...')
+    .setPlaceholder(cfg.txtManageEntriesWriterPlaceholder)
     .addOptions(options);
 
   return {
@@ -95,7 +98,7 @@ function buildEntrySelectMessage(cfg, entries, writerName, hasMore, entryOffset 
   const options = pageEntries.map(e => {
     const preview = e.preview ? e.preview.replace(/\n/g, ' ') : '';
     const label = `Turn ${e.turn_number} — ${e.word_count} words — ${preview}`.slice(0, 100);
-    const statusFlag = e.entry_status === 'deleted' ? ' [DELETED]' : '';
+    const statusFlag = e.entry_status === 'deleted' ? ` ${cfg.txtManageEntriesDeletedFlag}` : '';
     return {
       label: (label + statusFlag).slice(0, 100),
       value: String(e.story_entry_id)
@@ -104,14 +107,14 @@ function buildEntrySelectMessage(cfg, entries, writerName, hasMore, entryOffset 
 
   if (hasMore) {
     options.push({
-      label: `More entries (${entryOffset + ENTRY_PAGE_SIZE + 1}+)...`,
+      label: replaceTemplateVariables(cfg.txtManageEntriesMoreEntries, { offset: entryOffset + ENTRY_PAGE_SIZE + 1 }),
       value: `__entrypage__${entryOffset + ENTRY_PAGE_SIZE}`
     });
   }
 
   const select = new StringSelectMenuBuilder()
     .setCustomId('story_manage_entries_entry_select')
-    .setPlaceholder('Select an entry...')
+    .setPlaceholder(cfg.txtManageEntriesEntryPlaceholder)
     .addOptions(options);
 
   return {
@@ -301,7 +304,7 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
     pending.selectedEntryStatus = entry.entry_status;
 
     const contentPreview = entry.content.length > 800
-      ? entry.content.slice(0, 800) + '\n\n*...entry continues*'
+      ? entry.content.slice(0, 800) + '\n\n' + cfg.txtManageEntriesContinued
       : entry.content;
 
     const footerText = replaceTemplateVariables(

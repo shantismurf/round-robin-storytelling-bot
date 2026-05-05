@@ -46,6 +46,7 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(connection, interaction) {
+  log(`execute entry subcommand=${interaction.options.getSubcommand()} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   if (!interaction.guild) {
     await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
     return;
@@ -72,6 +73,7 @@ async function execute(connection, interaction) {
 // /storyadmin help
 // ---------------------------------------------------------------------------
 async function handleHelp(connection, interaction, guildId) {
+  log(`handleHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const cfg = await getConfigValue(connection, [
     'txtAdminHelpTitle', 'txtAdminHelpFooter',
     'lblAdminHelpSkip', 'txtAdminHelpSkip',
@@ -106,8 +108,8 @@ async function handleHelp(connection, interaction, guildId) {
 
 function buildSetupPanel(state, cfg) {
   log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: 'system' });
-  const fieldVal = (id, fallback = 'Not set') => id ? `<#${id}>` : `\`${fallback}\``;
-  const strVal   = (v,  fallback = 'Not set') => v  ? `\`${v}\``  : `\`${fallback}\``;
+  const fieldVal = (id) => id ? `<#${id}>` : `\`${cfg.txtNotSet}\``;
+  const strVal   = (v)  => v  ? `\`${v}\``  : `\`${cfg.txtNotSet}\``;
   const desc     = (key) => `*${cfg[key]}*\n`;
 
   const embed = new EmbedBuilder()
@@ -119,7 +121,7 @@ function buildSetupPanel(state, cfg) {
       { name: cfg.txtSetupModalTitleRole,           value: desc('txtSetupEmbedDescAdminRole')       + strVal(state.adminRoleName),                     inline: false },
       { name: cfg.txtSetupModalTitleRestrictedFeed, value: desc('txtSetupEmbedDescRestrictedFeed')  + fieldVal(state.restrictedFeedChannelId),         inline: true },
       { name: cfg.txtSetupModalTitleRestrictedMedia,value: desc('txtSetupEmbedDescRestrictedMedia') + fieldVal(state.restrictedMediaChannelId),        inline: true },
-      { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + fieldVal(state.roundupChannelId, 'Disabled'),    inline: false },
+      { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + (state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``), inline: false },
       { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + strVal(state.roundupDay),                        inline: true  },
       { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + strVal(state.roundupHour),                       inline: true  },
       { name: '\u200b',                             value: cfg.txtSetupModalSaveWarning,                                                               inline: false }
@@ -172,6 +174,8 @@ async function handleSetup(connection, interaction) {
     'btnSetupRoundupChannel', 'btnSetupRoundupDay', 'btnSetupRoundupHour',
     'btnSetupSave', 'btnCancel',
     'txtSetupRoundupDayInvalid', 'txtSetupRoundupHourInvalid',
+    'txtNotSet', 'txtOff',
+    'txtSetupAgeRestrictNote', 'txtSetupNoMediaNote', 'txtSetupNoRoleNote', 'txtSetupRoundupDisabledNote',
   ], guildId);
 
   // Load current guild-specific config values without falling back to guild_id=1
@@ -201,9 +205,8 @@ async function handleSetup(connection, interaction) {
   };
 
   pendingSetupData.set(interaction.user.id, state);
-  log(`handleSetup: begin opening panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
+  log(`handleSetup: opening panel for ${interaction.user.tag} in guild ${guildId}`, { show: false, guildName: interaction.guild.name });
   const panel = buildSetupPanel(state, cfg);
-  log(`handleSetup: finished opening panel for ${interaction.user.tag} in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
   await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
 }
 
@@ -560,15 +563,15 @@ async function handleSetupSave(connection, interaction) {
   const saved = [`${feedPermsOk ? '✅' : '⚠️'} Story feed channel: <#${state.feedChannelId}>`];
   if (state.mediaChannelId)           saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${state.mediaChannelId}>`);
   if (state.restrictedFeedChannelId) {
-    const rfNote = restrictedFeedChannel?.nsfw ? '' : ' *(Age-restrict this channel if the server is not already 18+)*';
+    const rfNote = restrictedFeedChannel?.nsfw ? '' : ' ' + state.cfg.txtSetupAgeRestrictNote;
     saved.push(`✅ Restricted feed channel: <#${state.restrictedFeedChannelId}>${rfNote}`);
   }
   if (state.restrictedMediaChannelId) saved.push(`✅ Restricted media channel: <#${state.restrictedMediaChannelId}>`);
   if (state.adminRoleName)            saved.push(`✅ Admin role: **${state.adminRoleName}**${threadPermissionNote}`);
-  if (!state.mediaChannelId)          saved.push(`ℹ️ No media channel set — images will not be processed.`);
-  if (!state.adminRoleName)           saved.push(`ℹ️ No admin role set — only Discord Administrators can use admin commands.`);
+  if (!state.mediaChannelId)          saved.push(state.cfg.txtSetupNoMediaNote);
+  if (!state.adminRoleName)           saved.push(state.cfg.txtSetupNoRoleNote);
   if (state.roundupChannelId)         saved.push(`✅ Weekly roundup: <#${state.roundupChannelId}>, ${dayNames[`txtRoundupDay${state.roundupDay ?? 1}`]}s at ${state.roundupHour ?? 9}:00 UTC`);
-  else                                saved.push(`ℹ️ Weekly roundup disabled.`);
+  else                                saved.push(state.cfg.txtSetupRoundupDisabledNote);
   if (permWarnings.length) {
     const botRoleName = botRole?.name ?? botMember?.displayName ?? 'the bot role';
     const fixMsg = replaceTemplateVariables(
@@ -613,8 +616,9 @@ async function handleAdminManage(connection, interaction) {
 
 
 async function handleDelete(connection, interaction) {
+  log(`handleDelete entry user=${interaction.user.id} story_id=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getInteger('story_id'));
+  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }
@@ -660,6 +664,7 @@ async function handleDelete(connection, interaction) {
 async function handleDeleteConfirm(connection, interaction) {
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_')[3]);
+  log(`handleDeleteConfirm entry storyId=${storyId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
 
   try {

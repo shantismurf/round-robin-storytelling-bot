@@ -102,10 +102,10 @@ export async function handleTurnActionButton(connection, interaction, manageStat
       return await interaction.reply({ content: await getConfigValue(connection, 'txtAdminKickNotWriter', guildId), flags: MessageFlags.Ephemeral });
     }
     log(`handleTurnActionButton: next — ${writers.length} active writers found`, { show: false, guildName: interaction?.guild?.name });
-    const cfg = await getConfigValue(connection, ['txtTurnNextSelectWrite', 'btnCancel'], guildId);
+    const cfg = await getConfigValue(connection, ['txtTurnNextSelectWrite', 'txtTurnNextSelectPlaceholder', 'btnCancel'], guildId);
     const select = new StringSelectMenuBuilder()
       .setCustomId('story_manage_ta_next_select')
-      .setPlaceholder('Select the next writer...')
+      .setPlaceholder(cfg.txtTurnNextSelectPlaceholder)
       .addOptions(writers.map(w => ({ label: w.discord_display_name.slice(0, 100), value: String(w.story_writer_id) })));
     pendingTurnActionData.set(adminId, { action: 'next', storyId, guildId, writers });
     await interaction.reply({
@@ -343,7 +343,7 @@ export async function handleTurnActionModal(connection, interaction) {
 
     if (isNaN(hours) || hours < 1) {
       pendingTurnActionData.delete(adminId);
-      return await interaction.reply({ content: '❌ Hours must be a positive number.', flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: await getConfigValue(connection, 'txtTurnExtendInvalidHours', guildId), flags: MessageFlags.Ephemeral });
     }
 
     try {
@@ -401,7 +401,7 @@ export async function handleTurnActionModal(connection, interaction) {
 
     if (isNaN(turnNumber) || turnNumber < 1) {
       pendingTurnActionData.delete(adminId);
-      return await interaction.reply({ content: '❌ Turn number must be a positive integer.', flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: await getConfigValue(connection, 'txtTurnDeleteEntryInvalidNumber', guildId), flags: MessageFlags.Ephemeral });
     }
 
     try {
@@ -427,20 +427,23 @@ export async function handleTurnActionModal(connection, interaction) {
       const entry = entryRows[0];
       const preview = entry.content.length > 300 ? entry.content.slice(0, 300) + '…' : entry.content;
 
+      const [deleteCfg] = await Promise.all([
+        getConfigValue(connection, ['txtTurnDeleteEntryConfirmTitle', 'txtTurnDeleteEntryConfirmNote', 'btnTurnDeleteEntryConfirm', 'btnCancel'], guildId)
+      ]);
       const embed = new EmbedBuilder()
-        .setTitle(`Delete Turn ${turnNumber} — ${entry.discord_display_name}?`)
+        .setTitle(replaceTemplateVariables(deleteCfg.txtTurnDeleteEntryConfirmTitle, { turn_number: turnNumber, writer_name: entry.discord_display_name }))
         .setDescription(preview)
-        .addFields({ name: '​', value: 'This entry will be hidden from `/story read` and exports. The entry ID shown after deletion can be used to restore it.' })
+        .addFields({ name: '​', value: deleteCfg.txtTurnDeleteEntryConfirmNote })
         .setColor(0xff6b6b);
 
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId(`storyadmin_deleteentry_confirm_${entry.story_entry_id}`)
-          .setLabel('Delete Entry')
+          .setLabel(deleteCfg.btnTurnDeleteEntryConfirm)
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
           .setCustomId('storyadmin_deleteentry_cancel')
-          .setLabel('Cancel')
+          .setLabel(deleteCfg.btnCancel)
           .setStyle(ButtonStyle.Secondary)
       );
 
@@ -460,7 +463,7 @@ export async function handleTurnActionModal(connection, interaction) {
 
     if (isNaN(entryId) || entryId < 1) {
       pendingTurnActionData.delete(adminId);
-      return await interaction.reply({ content: '❌ Entry ID must be a positive integer.', flags: MessageFlags.Ephemeral });
+      return await interaction.reply({ content: await getConfigValue(connection, 'txtTurnRestoreEntryInvalidId', guildId), flags: MessageFlags.Ephemeral });
     }
 
     try {
