@@ -292,19 +292,6 @@ export async function handleTurnActionSelectMenu(connection, interaction) {
         return;
       }
 
-      const currentWriterId = activeTurnRows[0].current_writer_id;
-      if (String(currentWriterId) === String(selectedWriter.discord_user_id)) {
-        await interaction.update({
-          content: replaceTemplateVariables(
-            await getConfigValue(connection, 'txtAdminNextAlreadyCurrent', guildId),
-            { user_name: selectedWriter.discord_display_name }
-          ),
-          components: []
-        });
-        pendingTurnActionData.delete(adminId);
-        return;
-      }
-
       log(`handleTurnActionSelectMenu: next — setting next_writer_id=${selectedWriterId}`, { show: false, guildName: interaction?.guild?.name });
       await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [selectedWriterId, storyId]);
       await logAdminAction(connection, adminId, 'next', storyId, selectedWriter.discord_user_id);
