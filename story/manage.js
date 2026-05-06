@@ -84,7 +84,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   );
 
   // Row 3 (3): Show Names: <> | Hide Threads: <> | Pause/Resume
-  const pauseResumeLabel = cfg.txtStory + ' ' + isPaused ? cfg.txtResume : cfg.txtPause;
+  const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_authors')
