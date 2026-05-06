@@ -35,6 +35,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('optDynamicMM', 'M/M', 'en', 1),
 ('optDynamicPoly', 'Polyamory', 'en', 1),
 ('optDynamicOther', 'Other', 'en', 1),
+('lblRatingChangeThreadWarning', '**Rating Change**', 'en', 1),
+('txtMetaApplied', '✅ Changes staged. Click **Save Settings** to apply.', '', 'en', 1),
 ('txtRatingChangeThreadWarning', '⚠️ **Rating change alert:** Changing the rating across the Mature/Explicit barrier (between G/T/NR and M/E) will start a **new story thread** on the appropriate feed channel when you save. The old thread will be archived and closed. This cannot be undone.', 'en', 1),
 ('txtRestrictedStoryNotHere', '🔞 This story is rated **[rating]** and can only be read in the age-restricted story channel.', 'en', 1),
 ('txtTagSubmitModalTitle', 'Suggest a Tag', 'en', 1),
