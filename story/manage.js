@@ -83,7 +83,8 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  // Row 3 (4): Show Names: <> | Hide Threads: <> | Manage Entries |  Manage Turns
+  // Row 3 (3): Show Names: <> | Hide Threads: <> | Pause/Resume
+  const pauseResumeLabel = cfg.txtStory + ' ' + isPaused ? cfg.txtResume : cfg.txtPause;
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_authors')
@@ -94,25 +95,24 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId('story_manage_entries_open')
-      .setLabel(cfg.btnManageEntries)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_turns_open')
-      .setLabel(cfg.btnManageTurns)
+      .setCustomId('story_manage_toggle_pauseresume')
+      .setLabel(pauseResumeLabel)
       .setStyle(ButtonStyle.Secondary)
     );
 
-  // Row 4 (2-3): Metadata | Pause/Resume | [Review Tags if pending]
-  const pauseResumeLabel = cfg.txtStory + ' ' + isPaused ? cfg.txtResume : cfg.txtPause;
+  // Row 4 (3-4): Metadata | Manage Entries |  Manage Turns | [Review Tags if pending]
   const row4Components = [
     new ButtonBuilder()
       .setCustomId('story_manage_open_metadata')
       .setLabel(cfg.btnSetMetadata)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('story_manage_toggle_pauseresume')
-      .setLabel(pauseResumeLabel)
+      .setCustomId('story_manage_entries_open')
+      .setLabel(cfg.btnManageEntries)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_turns_open')
+      .setLabel(cfg.btnManageTurns)
       .setStyle(ButtonStyle.Secondary)
     ];
   if (state.pendingTagCount > 0) {
@@ -174,7 +174,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
       'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
       'txtOpen','txtClosed','txtActive','txtPaused','txtHrs',
-      'txtPause','txtResume','txtStory','txtRatingNR','txtNotSet',
+      'txtStory','txtPause','txtResume','txtRatingNR','txtNotSet',
       'txtManageEmbedTitle', 'btnAdminConfigSave', 'btnSaveSettings', 'btnCancel',
       'lblTurnLength', 'btnSetTurnLength',
       'lblTimeoutReminder', 'btnSetTimeout',
