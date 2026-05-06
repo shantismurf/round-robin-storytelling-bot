@@ -199,6 +199,8 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtManageStoryStatusActive', 'txtManageStoryStatusPaused',
       'txtManageJoinOpen', 'txtManageJoinClosed',
       'txtManageSetTitleModalTitle', 'lblManageSetTitleField', 'txtManageSetTitlePlaceholder',
+      'txtTurnLengthPlaceholder', 'txtTimeoutReminderPlaceholder',
+      'txtManageMaxWritersPlaceholder', 'txtManageTagsPlaceholder',
       'btnManageTurns', 'btnManageEntries',
       'txtManageTurnsPanelTitle', 'txtManageTurnsNoTurn', 'txtManageTurnsActiveTurn',
       // Turn action cfg keys
@@ -374,7 +376,7 @@ async function handleManageButton(connection, interaction) {
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
               .setValue(String(state.turnLength))
-              .setPlaceholder('Enter number of hours')
+              .setPlaceholder(state.cfg.txtTurnLengthPlaceholder)
           )
         )
     );
@@ -392,7 +394,7 @@ async function handleManageButton(connection, interaction) {
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
               .setValue(String(state.timeoutReminder))
-              .setPlaceholder('Enter: 0, 25, 50, or 75')
+              .setPlaceholder(state.cfg.txtTimeoutReminderPlaceholder)
           )
         )
     );
@@ -410,7 +412,7 @@ async function handleManageButton(connection, interaction) {
               .setStyle(TextInputStyle.Short)
               .setRequired(false)
               .setValue(state.maxWriters != null ? String(state.maxWriters) : '')
-              .setPlaceholder('Enter a number, or leave blank for no limit')
+              .setPlaceholder(state.cfg.txtManageMaxWritersPlaceholder)
           )
         )
     );
@@ -428,7 +430,7 @@ async function handleManageButton(connection, interaction) {
               .setStyle(TextInputStyle.Short)
               .setRequired(false)
               .setValue(state.tags)
-              .setPlaceholder('Comma-separated tags (e.g. fluff, AU, slow burn)')
+              .setPlaceholder(state.cfg.txtManageTagsPlaceholder)
           )
         )
     );

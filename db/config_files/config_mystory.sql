@@ -47,4 +47,17 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnMyPauseConfirm', 'Yes, Pause', 'en', 1),
 ('lblMyNotifications', 'DM Notifications', 'en', 1),
 ('lblMyHelpTurn', '✍️ Your Turn', 'en', 1),
-('txtMyHelpTurn', '- `/story write [id]` — Submit your entry *(quick mode)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id]` — Edit one of your finalized entries\n- `/mystory pass [id]` — Skip your current turn\n- `/mystory leave [id]` — Leave a story', 'en', 1);
+('txtMyHelpTurn', '- `/story write [id]` — Submit your entry *(quick mode)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id]` — Edit one of your finalized entries\n- `/mystory pass [id]` — Skip your current turn\n- `/mystory leave [id]` — Leave a story', 'en', 1),
+-- Silo 4: list embed stat strings
+('txtMyListJoined', 'Joined [date]', 'en', 1),
+('txtMyListMyStats', 'Your turns: [turn_count] · ~[word_count] words', 'en', 1),
+('txtMyListNoTurns', 'No turns yet', 'en', 1),
+('txtMyListStoryTotal', 'Story total: [turn_count] turn(s)', 'en', 1),
+('txtMyListPausedSuffix', '⏸ You are paused', 'en', 1),
+-- Silo 4: catchup embed strings
+('txtCatchupTurnHeader', 'Turn [turn_number] — [writer_name]', 'en', 1),
+('txtCatchupIntro', '📖 **[story_title]** — [turn_count] turn(s) since your last turn.', 'en', 1),
+('txtCatchupIntroNoTurns', '📖 **[story_title]** — [turn_count] turn(s) so far (you haven''t had a turn yet).', 'en', 1),
+('txtCatchupNavHeader', '📖 **[story_title]** — (Page [page]/[total])', 'en', 1),
+-- Silo 4: manage panel description
+('txtMyStoryManagePanelDesc', '-# Notifications and Privacy are staged — click **Save Settings** to apply.', 'en', 1);

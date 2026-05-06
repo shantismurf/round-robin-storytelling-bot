@@ -44,6 +44,8 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(connection, interaction) {
+  log(`execute: entry subcommand=${interaction.options.getSubcommand()} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+
   if (!interaction.guild) {
     await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
     return;
@@ -78,6 +80,7 @@ async function handleButtonInteraction(connection, interaction) {
  * /mystory help — quick reference for all writer-facing commands
  */
 async function handleHelp(connection, interaction) {
+  log(`handleHelp: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
 
@@ -149,17 +152,19 @@ async function handleList(connection, interaction) {
     const pageStart = (clampedPage - 1) * LIST_PAGE_SIZE;
     const pageStories = stories.slice(pageStart, pageStart + LIST_PAGE_SIZE);
 
-    const [txtModeQuick, txtModeNormal, txtMyListTitle] = await Promise.all([
-      getConfigValue(connection, 'txtModeQuick', guildId),
-      getConfigValue(connection, 'txtModeNormal', guildId),
-      getConfigValue(connection, 'txtMyListTitle', guildId)
-    ]);
+    const listCfg = await getConfigValue(connection, [
+      'txtModeQuick', 'txtModeNormal', 'txtMyListTitle',
+      'txtActive', 'txtPaused', 'txtDelayed', 'txtClosed',
+      'txtMyListJoined', 'txtMyListMyStats', 'txtMyListNoTurns',
+      'txtMyListStoryTotal', 'txtMyListPausedSuffix',
+      'btnPrev', 'btnNext',
+    ], guildId);
 
-    const embed = buildListEmbed(pageStories, clampedPage, totalPages, txtModeQuick, txtModeNormal, txtMyListTitle);
+    const embed = buildListEmbed(pageStories, clampedPage, totalPages, listCfg);
     const components = [];
     if (totalPages > 1) {
-      components.push(buildListNavRow(clampedPage, totalPages));
-      pendingCatchUpData.set(`list_${userId}`, { stories, txtModeQuick, txtModeNormal, txtMyListTitle });
+      components.push(buildListNavRow(clampedPage, totalPages, listCfg));
+      pendingCatchUpData.set(`list_${userId}`, { stories, listCfg });
     }
 
     await interaction.editReply({ embeds: [embed], components });
@@ -170,26 +175,29 @@ async function handleList(connection, interaction) {
   }
 }
 
-function buildListEmbed(pageStories, clampedPage, totalPages, txtModeQuick, txtModeNormal, txtMyListTitle) {
+function buildListEmbed(pageStories, clampedPage, totalPages, listCfg) {
   const fmt = unix => unix ? `<t:${unix}:d>` : null;
   const statusIcon = s => s === 1 ? '🟢' : s === 2 ? '⏸️' : s === 0 ? '⏳' : '🏁';
-  const statusText = s => s === 1 ? 'Active' : s === 2 ? 'Paused' : s === 0 ? 'Delayed' : 'Closed';
+  const statusText = s => {
+    if (s === 1) return listCfg.txtActive;
+    if (s === 2) return listCfg.txtPaused;
+    if (s === 0) return listCfg.txtDelayed;
+    return listCfg.txtClosed;
+  };
 
-  const title = replaceTemplateVariables(txtMyListTitle, { page: clampedPage, total: totalPages });
+  const title = replaceTemplateVariables(listCfg.txtMyListTitle, { page: clampedPage, total: totalPages });
   const embed = new EmbedBuilder().setTitle(title).setColor(0x5865f2).setTimestamp();
 
   for (const story of pageStories) {
-    const modeLabel = story.quick_mode ? txtModeQuick : txtModeNormal;
+    const modeLabel = story.quick_mode ? listCfg.txtModeQuick : listCfg.txtModeNormal;
     const dateRange = story.my_first_turn_unix
       ? `${fmt(story.my_first_turn_unix)} – ${fmt(story.my_last_turn_unix ?? story.my_first_turn_unix)}`
-      : `Joined ${fmt(story.created_at_unix)}`;
+      : replaceTemplateVariables(listCfg.txtMyListJoined, { date: fmt(story.created_at_unix) });
     const myStats = story.my_turn_count > 0
-      ? `Your turns: ${story.my_turn_count} · ~${Number(story.my_word_count).toLocaleString()} words`
-      : 'No turns yet';
-    const totalTurns = story.total_turn_count > 0
-      ? `Story total: ${story.total_turn_count} turn(s)`
-      : 'Story total: 0 turns';
-    const writerPaused = story.writer_status === 2 ? ' · ⏸ You are paused' : '';
+      ? replaceTemplateVariables(listCfg.txtMyListMyStats, { turn_count: story.my_turn_count, word_count: Number(story.my_word_count).toLocaleString() })
+      : listCfg.txtMyListNoTurns;
+    const totalTurns = replaceTemplateVariables(listCfg.txtMyListStoryTotal, { turn_count: story.total_turn_count });
+    const writerPaused = story.writer_status === 2 ? ` · ${listCfg.txtMyListPausedSuffix}` : '';
 
     embed.addFields({
       name: `${statusIcon(story.story_status)} ${story.title} (#${story.guild_story_id}) · ${modeLabel} · ${statusText(story.story_status)}${writerPaused}`,
@@ -200,16 +208,16 @@ function buildListEmbed(pageStories, clampedPage, totalPages, txtModeQuick, txtM
   return embed;
 }
 
-function buildListNavRow(clampedPage, totalPages) {
+function buildListNavRow(clampedPage, totalPages, listCfg) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`mystory_list_prev_${clampedPage}`)
-      .setLabel('◀️ Prev')
+      .setLabel(listCfg.btnPrev)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(clampedPage === 1),
     new ButtonBuilder()
       .setCustomId(`mystory_list_next_${clampedPage}`)
-      .setLabel('Next ▶️')
+      .setLabel(listCfg.btnNext)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(clampedPage === totalPages)
   );
@@ -229,14 +237,14 @@ async function handleListNavigation(connection, interaction) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtCatchupSessionExpired', guildId), embeds: [], components: [] });
   }
 
-  const { stories, txtModeQuick, txtModeNormal, txtMyListTitle } = cached;
+  const { stories, listCfg } = cached;
   const totalPages = Math.ceil(stories.length / LIST_PAGE_SIZE);
   const clampedPage = Math.min(Math.max(newPage, 1), totalPages);
   const pageStart = (clampedPage - 1) * LIST_PAGE_SIZE;
   const pageStories = stories.slice(pageStart, pageStart + LIST_PAGE_SIZE);
 
-  const embed = buildListEmbed(pageStories, clampedPage, totalPages, txtModeQuick, txtModeNormal, txtMyListTitle);
-  const navRow = buildListNavRow(clampedPage, totalPages);
+  const embed = buildListEmbed(pageStories, clampedPage, totalPages, listCfg);
+  const navRow = buildListNavRow(clampedPage, totalPages, listCfg);
   await interaction.editReply({ embeds: [embed], components: [navRow] });
 }
 
@@ -244,6 +252,7 @@ async function handleListNavigation(connection, interaction) {
  * /mystory catchup — paginated view of entries since user's last turn
  */
 async function handleCatchUp(connection, interaction) {
+  log(`handleCatchUp: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -292,6 +301,11 @@ async function handleCatchUp(connection, interaction) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtCatchupNoEntries', guildId) });
     }
 
+    const catchupCfg = await getConfigValue(connection, [
+      'txtCatchupIntro', 'txtCatchupIntroNoTurns', 'txtCatchupNavHeader',
+      'txtCatchupTurnHeader', 'btnPrev', 'btnNext',
+    ], guildId);
+
     // Build one embed per turn
     const pages = [];
     let currentTurn = null;
@@ -307,7 +321,7 @@ async function handleCatchUp(connection, interaction) {
         currentTurn = entry.turn_number;
         currentText = '';
         currentEmbed = new EmbedBuilder()
-          .setAuthor({ name: `Turn ${entry.turn_number} — ${entry.discord_display_name}` });
+          .setAuthor({ name: replaceTemplateVariables(catchupCfg.txtCatchupTurnHeader, { turn_number: entry.turn_number, writer_name: entry.discord_display_name }) });
       }
       currentText += entry.content + '\n\n';
     }
@@ -318,27 +332,28 @@ async function handleCatchUp(connection, interaction) {
 
     const totalPages = pages.length;
     const storyTitle = storyRows[0].title;
-    const intro = lastTurnRows.length > 0
-      ? `📖 **${storyTitle}** — ${totalPages} turn(s) since your last turn.`
-      : `📖 **${storyTitle}** — ${totalPages} turn(s) so far (you haven't had a turn yet).`;
+    const introKey = lastTurnRows.length > 0 ? 'txtCatchupIntro' : 'txtCatchupIntroNoTurns';
+    const intro = replaceTemplateVariables(catchupCfg[introKey], { story_title: storyTitle, turn_count: totalPages });
 
     if (totalPages === 1) {
       return await interaction.editReply({ content: intro, embeds: [pages[0]] });
     }
 
-    const navRow = buildCatchUpNavRow(0, totalPages);
+    const navRow = buildCatchUpNavRow(0, totalPages, catchupCfg);
     const catchUpKey = `catchup_${userId}_${storyId}`;
-    pendingCatchUpData.set(catchUpKey, { pages, storyTitle });
+    pendingCatchUpData.set(catchUpKey, { pages, storyTitle, catchupCfg });
 
-    await interaction.editReply({ content: `${intro} (Page 1/${totalPages})`, embeds: [pages[0]], components: [navRow] });
+    const firstPageContent = replaceTemplateVariables(catchupCfg.txtCatchupNavHeader, { story_title: storyTitle, page: 1, total: totalPages });
+    await interaction.editReply({ content: `${intro}\n${firstPageContent}`, embeds: [pages[0]], components: [navRow] });
 
   } catch (error) {
-    log(`Error in handleCatchUp: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleCatchUp failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
 
 async function handleCatchUpNavigation(connection, interaction) {
+  log(`handleCatchUpNavigation: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const [, action, currentPageStr] = interaction.customId.split('_');
   const currentPage = parseInt(currentPageStr);
@@ -350,27 +365,28 @@ async function handleCatchUpNavigation(connection, interaction) {
     return await interaction.editReply({ content: msg, embeds: [], components: [] });
   }
 
-  const { pages, storyTitle } = pendingCatchUpData.get(catchUpKey);
+  const { pages, storyTitle, catchupCfg } = pendingCatchUpData.get(catchUpKey);
   const totalPages = pages.length;
-  const navRow = buildCatchUpNavRow(newPage, totalPages);
+  const navRow = buildCatchUpNavRow(newPage, totalPages, catchupCfg);
+  const navHeader = replaceTemplateVariables(catchupCfg.txtCatchupNavHeader, { story_title: storyTitle, page: newPage + 1, total: totalPages });
 
   await interaction.editReply({
-    content: `📖 **${storyTitle}** — (Page ${newPage + 1}/${totalPages})`,
+    content: navHeader,
     embeds: [pages[newPage]],
     components: [navRow]
   });
 }
 
-function buildCatchUpNavRow(currentPage, totalPages) {
+function buildCatchUpNavRow(currentPage, totalPages, catchupCfg) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`catchup_prev_${currentPage}`)
-      .setLabel('◀️ Prev')
+      .setLabel(catchupCfg.btnPrev)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(currentPage === 0),
     new ButtonBuilder()
       .setCustomId(`catchup_next_${currentPage}`)
-      .setLabel('Next ▶️')
+      .setLabel(catchupCfg.btnNext)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(currentPage === totalPages - 1)
   );
@@ -382,41 +398,38 @@ function buildCatchUpNavRow(currentPage, totalPages) {
 
 function buildMyStoryManagePanel(state, cfg) {
   const statusLabel = state.writerStatus === 1
-    ? (cfg.txtMyStoryManageActiveStatus ?? 'Active')
-    : (cfg.txtMyStoryManagePausedStatus ?? 'Paused');
+    ? cfg.txtMyStoryManageActiveStatus
+    : cfg.txtMyStoryManagePausedStatus;
 
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(cfg.txtMyStoryManageTitle, { story_title: state.storyTitle }))
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.lblMyStoryManageStatus ?? 'Status',   value: statusLabel,                                            inline: true },
-      { name: cfg.lblMyStoryManageAO3,                   value: state.ao3Name || '*Not set*',                          inline: true },
-      { name: cfg.lblMyStoryManageNotif,                 value: state.notificationPrefs === 'dm' ? 'DM' : 'Mention',   inline: true },
-      { name: cfg.lblMyStoryManagePrivacy,               value: state.turnPrivacy ? 'Private' : 'Public',              inline: true }
+      { name: cfg.lblMyStoryManageStatus,  value: statusLabel,                                                      inline: true },
+      { name: cfg.lblMyStoryManageAO3,     value: state.ao3Name || cfg.txtNotSet,                                   inline: true },
+      { name: cfg.lblMyStoryManageNotif,   value: state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention, inline: true },
+      { name: cfg.lblMyStoryManagePrivacy, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic,               inline: true }
     )
-    .setDescription('-# Notifications and Privacy are staged — click **Save Settings** to apply.');
+    .setDescription(cfg.txtMyStoryManagePanelDesc);
 
-  const notifToggleLabel   = state.notificationPrefs === 'dm' ? 'Switch to: Mention' : 'Switch to: DM';
-  const privacyToggleLabel = state.turnPrivacy ? 'Make Public' : 'Make Private';
+  const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
+  const privacyToggleLabel = state.turnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
 
   const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mystory_manage_ao3').setLabel(cfg.btnAdminMUAO3Name ?? 'Update Name').setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('mystory_manage_ao3').setLabel(cfg.btnAdminMUAO3Name).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('mystory_manage_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('mystory_manage_privacy').setLabel(privacyToggleLabel).setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave ?? '✅ Save Changes').setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success),
+    new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
   );
 
-  // Action row: Pass (disabled if no active turn), Pause/Resume toggle, Leave
-  const pauseResumeLabel = state.writerStatus === 1
-    ? (cfg.btnMyStoryManagePause ?? '⏸️ Pause')
-    : (cfg.btnMyStoryManageResume ?? '▶️ Resume');
+  const pauseResumeLabel = state.writerStatus === 1 ? cfg.btnMyStoryManagePause : cfg.btnMyStoryManageResume;
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('mystory_manage_pass')
-      .setLabel(cfg.btnMyStoryManagePass ?? '⏭️ Pass My Turn')
+      .setLabel(cfg.btnMyStoryManagePass)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!state.hasActiveTurn),
     new ButtonBuilder()
@@ -425,7 +438,7 @@ function buildMyStoryManagePanel(state, cfg) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('mystory_manage_leave')
-      .setLabel(cfg.btnMyStoryManageLeave ?? '🚪 Leave Story')
+      .setLabel(cfg.btnMyStoryManageLeave)
       .setStyle(ButtonStyle.Danger)
   );
 
@@ -461,7 +474,6 @@ async function handleMyStoryManage(connection, interaction) {
     }
     const writer = writerRows[0];
 
-    // Check if it's currently the user's active turn
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
@@ -474,7 +486,12 @@ async function handleMyStoryManage(connection, interaction) {
       'txtMyStoryManageTitle', 'lblMyStoryManageStatus', 'lblMyStoryManageAO3', 'lblMyStoryManageNotif',
       'lblMyStoryManagePrivacy', 'btnMyStoryManageSave', 'btnCancel', 'btnAdminMUAO3Name',
       'btnMyStoryManagePause', 'btnMyStoryManageResume', 'btnMyStoryManagePass', 'btnMyStoryManageLeave',
-      'txtMyStoryManageActiveStatus', 'txtMyStoryManagePausedStatus'
+      'txtMyStoryManageActiveStatus', 'txtMyStoryManagePausedStatus',
+      'txtNotSet', 'txtNotifDM', 'txtNotifMention', 'txtPrivate', 'txtPublic',
+      'txtMyStoryManagePanelDesc',
+      'btnManageUserSwitchMention', 'btnManageUserSwitchDM',
+      'btnManageUserMakePublic', 'btnManageUserMakePrivate',
+      'lblJoinSetAO3ModalTitle', 'lblMyStoryManageAO3', 'txtAdminMUAO3Placeholder',
     ], guildId);
 
     const state = {
@@ -524,15 +541,15 @@ async function handleMyStoryManageButton(connection, interaction) {
   } else if (customId === 'mystory_manage_ao3') {
     const modal = new ModalBuilder()
       .setCustomId('mystory_manage_ao3_modal')
-      .setTitle('Set AO3 Name')
+      .setTitle(state.cfg.lblJoinSetAO3ModalTitle)
       .addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
             .setCustomId('ao3_name_input')
-            .setLabel('AO3 Name')
+            .setLabel(state.cfg.lblMyStoryManageAO3)
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder('Leave blank to clear')
+            .setPlaceholder(state.cfg.txtAdminMUAO3Placeholder)
             .setValue(state.ao3Name ?? '')
         )
       );
@@ -561,20 +578,20 @@ async function handleMyStoryManageButton(connection, interaction) {
   } else if (customId === 'mystory_manage_pass') {
     await interaction.deferUpdate();
     const cfg = state.cfg;
-    const confirmMsg = replaceTemplateVariables(cfg.txtMyPassConfirm ?? '⏭️ **Pass your turn in [story_title]?** This cannot be undone.', { story_title: state.storyTitle });
+    const confirmMsg = replaceTemplateVariables(cfg.txtMyPassConfirm, { story_title: state.storyTitle });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mystory_manage_pass_confirm_${state.storyId}`).setLabel(cfg.btnMyPassConfirm ?? 'Yes, Pass My Turn').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`mystory_manage_pass_cancel_${state.storyId}`).setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`mystory_manage_pass_confirm_${state.storyId}`).setLabel(cfg.btnMyPassConfirm).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`mystory_manage_pass_cancel_${state.storyId}`).setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
     await interaction.editReply({ content: confirmMsg, embeds: [], components: [row] });
 
   } else if (customId === 'mystory_manage_pause') {
     await interaction.deferUpdate();
     const cfg = state.cfg;
-    const confirmMsg = replaceTemplateVariables(cfg.txtMyPauseConfirm ?? '⏸️ **Pause your participation in [story_title]?**', { story_title: state.storyTitle });
+    const confirmMsg = replaceTemplateVariables(cfg.txtMyPauseConfirm, { story_title: state.storyTitle });
     const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId(`mystory_manage_pause_confirm_${state.storyId}`).setLabel(cfg.btnMyPauseConfirm ?? 'Yes, Pause').setStyle(ButtonStyle.Danger),
-      new ButtonBuilder().setCustomId(`mystory_manage_pause_cancel_${state.storyId}`).setLabel(cfg.btnCancel ?? 'Cancel').setStyle(ButtonStyle.Secondary)
+      new ButtonBuilder().setCustomId(`mystory_manage_pause_confirm_${state.storyId}`).setLabel(cfg.btnMyPauseConfirm).setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`mystory_manage_pause_cancel_${state.storyId}`).setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
     await interaction.editReply({ content: confirmMsg, embeds: [], components: [row] });
 
@@ -588,7 +605,7 @@ async function handleMyStoryManageButton(connection, interaction) {
       log(`${interaction.user.username} resumed in story ${state.storyId}`, { show: true, guildName: interaction?.guild?.name });
       state.writerStatus = 1;
       pendingMyStoryManageData.delete(userId);
-      const successMsg = replaceTemplateVariables(state.cfg.txtMyResumeSuccess ?? '▶️ You have rejoined the rotation for **[story_title]**.', { story_title: state.storyTitle });
+      const successMsg = replaceTemplateVariables(state.cfg.txtMyResumeSuccess, { story_title: state.storyTitle });
       await interaction.editReply({ content: successMsg, embeds: [], components: [] });
     } catch (error) {
       log(`mystory manage resume failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
@@ -598,7 +615,6 @@ async function handleMyStoryManageButton(connection, interaction) {
   } else if (customId === 'mystory_manage_leave') {
     await interaction.deferUpdate();
     const cfg = state.cfg;
-    // Check if it's the user's turn and if they're the last writer
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
@@ -689,7 +705,6 @@ async function handlePanelPauseConfirm(connection, interaction) {
     }
     const story = writerRows[0];
 
-    // Check for active turn before pausing
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
@@ -797,6 +812,7 @@ async function handlePanelLeaveConfirm(connection, interaction) {
 }
 
 async function handlePanelActionCancel(connection, interaction) {
+  log(`handlePanelActionCancel: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const userId = interaction.user.id;
   const state = pendingMyStoryManageData.get(userId);
@@ -808,6 +824,7 @@ async function handlePanelActionCancel(connection, interaction) {
 }
 
 async function handleMyStoryManageModal(connection, interaction) {
+  log(`handleMyStoryManageModal: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingMyStoryManageData.get(userId);
   if (!state) {
@@ -824,7 +841,7 @@ async function handleMyStoryManageModal(connection, interaction) {
     await state.originalInteraction.editReply(buildMyStoryManagePanel(state, state.cfg));
     await interaction.deleteReply();
   } catch (error) {
-    log(`Error in handleMyStoryManageModal: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleMyStoryManageModal failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
 }
@@ -849,7 +866,6 @@ async function handleAutocomplete(connection, interaction) {
   let rows;
 
   if (subcommand === 'catchup') {
-    // Non-closed stories the user is in that have at least one confirmed entry
     [rows] = await connection.execute(
       `SELECT s.guild_story_id, s.title FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
@@ -866,7 +882,6 @@ async function handleAutocomplete(connection, interaction) {
     );
 
   } else {
-    // manage: active or paused writers in non-closed stories
     [rows] = await connection.execute(
       `SELECT s.guild_story_id, s.title FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id

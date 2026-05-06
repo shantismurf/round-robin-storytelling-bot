@@ -133,5 +133,5 @@ turnReminder job
 | 1 — Gateway & Utilities | index.js, utilities.js, deploy.js, job-runner.js | Routing verified, logging added, bug fixed | ✅ Complete |
 | 2 — Story Management | /story flows, config_story.sql, config_metadata.sql | Hardcoded text, logging gaps | ✅ Complete (Tier B status icons deferred) |
 | 3 — Admin & Overrides | /storyadmin flows, config_storyadmin.sql | Staged vs. immediate action clarity, unwired modals | ✅ Complete |
-| 4 — User Experience | /mystory flows, config_mystory.sql | Dashboard accuracy, help files | ⬜ Pending |
+| 4 — User Experience | /mystory flows, config_mystory.sql | Dashboard accuracy, help files | ✅ Complete (Tier B status icons deferred) |
 | 5 — The Engine | storybot.js, config_turn.sql | Performance, documentation | ⬜ Pending |

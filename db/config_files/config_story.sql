@@ -131,4 +131,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageJoinOpen', '🔓 Open', 'en', 1),
 ('txtManageJoinClosed', '🔒 Closed', 'en', 1),
 ('lblManageSetTitleField', 'New Title', 'en', 1),
-('lblManageEntriesFilterField', 'Name fragment (partial match)', 'en', 1);
+('lblManageEntriesFilterField', 'Name fragment (partial match)', 'en', 1),
+-- Silo 4: manage modal placeholders
+('txtManageMaxWritersPlaceholder', 'Enter a number, or leave blank for no limit', 'en', 1),
+('txtManageTagsPlaceholder', 'Comma-separated tags (e.g. fluff, AU, slow burn)', 'en', 1);
