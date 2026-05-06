@@ -463,6 +463,14 @@ async function handleManageButton(connection, interaction) {
     await handleReviewTags(connection, interaction, state);
     return;
 
+  } else if (customId === 'story_manage_ta_confirm') {
+    await handleTurnActionConfirm(connection, interaction);
+    return;
+
+  } else if (customId === 'story_manage_ta_confirmcancel') {
+    await handleTurnActionCancel(connection, interaction);
+    return;
+
   } else if (customId.startsWith('story_manage_ta_')) {
     // Turn action buttons — delegate to manageTurnActions
     await handleTurnActionButton(connection, interaction, state);
@@ -755,7 +763,7 @@ async function handleManageModalSubmit(connection, interaction) {
   const userId = interaction.user.id;
   // divert turn actions
   if (interaction.customId.startsWith('story_manage_ta_')) {
-    return await handleTurnActionModal(connection, interaction);
+    return await handleTurnActionModal(connection, interaction, pendingManageData.get(userId));
   }
   const state = pendingManageData.get(userId);
 

@@ -324,7 +324,7 @@ export async function handleTurnActionSelectMenu(connection, interaction) {
   }
 }
 
-export async function handleTurnActionModal(connection, interaction) {
+export async function handleTurnActionModal(connection, interaction, manageState = null) {
   const customId = interaction.customId;
   const adminId = interaction.user.id;
   const pending = pendingTurnActionData.get(adminId);
@@ -387,6 +387,12 @@ export async function handleTurnActionModal(connection, interaction) {
         new_end_time: `<t:${newEndUnix}:f>`
       });
       await interaction.reply({ content: msg, flags: MessageFlags.Ephemeral });
+
+      if (manageState?.activeTurn) {
+        manageState.activeTurn.turn_ends_unix = newEndUnix;
+        const { buildManageMessage } = await import('./manage.js');
+        await manageState.originalInteraction.editReply(buildManageMessage(manageState.cfg, manageState, manageState.activeTurn));
+      }
 
     } catch (error) {
       log(`handleTurnActionModal extend failed for story ${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
