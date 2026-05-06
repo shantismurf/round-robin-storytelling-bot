@@ -103,16 +103,17 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary)
     );
 
-  // Row 4 (2-3): Pause/Resume | Metadata | [Review Tags if pending]
+  // Row 4 (2-3): Metadata | Pause/Resume | [Review Tags if pending]
+  const pauseResumeLabel = cfg.txtStory + ' ' + isPaused ? cfg.txtResume : cfg.txtPause;
   const row4Components = [
-    new ButtonBuilder()
-      .setCustomId('story_manage_toggle_pauseresume')
-      .setLabel(isPaused ? cfg.txtResume : cfg.txtPause)
-      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_open_metadata')
       .setLabel(cfg.btnSetMetadata)
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_pauseresume')
+      .setLabel(pauseResumeLabel)
+      .setStyle(ButtonStyle.Secondary)
     ];
   if (state.pendingTagCount > 0) {
     row4Components.push(
@@ -173,7 +174,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
       'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
       'txtOpen','txtClosed','txtActive','txtPaused','txtHrs',
-      'txtPause','txtResume','txtRatingNR','txtNotSet',
+      'txtPause','txtResume','txtStory','txtRatingNR','txtNotSet',
       'txtManageEmbedTitle', 'btnAdminConfigSave', 'btnSaveSettings', 'btnCancel',
       'lblTurnLength', 'btnSetTurnLength',
       'lblTimeoutReminder', 'btnSetTimeout',

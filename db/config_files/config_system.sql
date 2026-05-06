@@ -17,6 +17,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtUnknownWriter', 'Unknown', 'en', 1),
 ('txtPause', 'Pause', 'en', 1),
 ('txtResume', 'Resume', 'en', 1),
+('txtStory', 'Story', 'en', 1),
 ('txtHrs', 'hrs', 'en', 1),
 ('txtHoursLC', 'hours', 'en', 1),
 ('txtHoursUC', 'Hours', 'en', 1),
