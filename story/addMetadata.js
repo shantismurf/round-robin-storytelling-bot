@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput } from '../utilities.js';
-import { ratingLabels, dynamicOptions, warningOptions } from './metadata.js';
+import { ratingLabels, dynamicOptions, warningOptions, crossesBarrier } from './metadata.js';
 import { pendingStoryData, buildStoryAddMessage } from './add.js';
 
 // Keyed by userId — tracks which interaction opened the metadata panel
@@ -8,12 +8,14 @@ const pendingMetaPanelData = new Map();
 
 export async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [
-    'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'txtMetaApplied', 'btnSaveSettings', 'btnCancel',
+    'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'txtMetaApplied', 'txtSelectionStaged', 'btnSaveSettings', 'btnCancel',
     'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings',
     'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
     'txtRatingNR',
+    'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
+    'btnRatingChangeConfirm', 'btnRatingChangeRevert',
     ...Object.values(ratingLabels),
     ...dynamicOptions,
     ...warningOptions,
@@ -290,9 +292,23 @@ export async function handleMetadataButton(connection, interaction) {
           ))
       );
 
+    } else if (customId.startsWith('story_add_meta_rating_confirm_')) {
+      const newRating = customId.replace('story_add_meta_rating_confirm_', '');
+      const oldRating = metaState.originalRating ?? metaState.rating;
+      metaState.rating = newRating;
+      metaEntry.oldRating = oldRating;
+      log(`handleMetadataButton: barrier rating confirmed ${oldRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.update({ embeds: [], components: [], content: cfg.txtSelectionStaged });
+      await interaction.editReply(buildMetadataPanel(cfg, metaState));
+
+    } else if (customId === 'story_add_meta_rating_revert') {
+      log(`handleMetadataButton: barrier rating reverted for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.update({ embeds: [], components: [], content: cfg.btnRatingChangeRevert });
+
     } else if (customId === 'story_add_meta_save') {
       const metaFields = {
         rating: metaState.rating,
+        oldRating: metaEntry.oldRating,
         warnings: metaState.warnings,
         fandom: metaState.fandom,
         mainPairing: metaState.mainPairing,
@@ -404,7 +420,35 @@ export async function handleMetadataSelectMenu(connection, interaction) {
     await interaction.update(buildMetadataPanel(cfg, metaState));
 
   } else if (customId === 'story_add_meta_rating_select') {
-    metaState.rating = interaction.values[0];
+    const newRating = interaction.values[0];
+    const currentRating = metaState.originalRating ?? metaState.rating;
+
+    if (metaEntry.onSave && crossesBarrier(currentRating, newRating)) {
+      const oldLabel = cfg[ratingLabels[currentRating]] ?? currentRating;
+      const newLabel = cfg[ratingLabels[newRating]] ?? newRating;
+      const body = cfg.txtRatingChangeConfirmBody
+        .replace('[old_rating]', oldLabel)
+        .replace('[new_rating]', newLabel);
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle(cfg.txtRatingChangeConfirmTitle)
+        .setDescription(body)
+        .setColor(0xffa500);
+      const confirmRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_add_meta_rating_confirm_${newRating}`)
+          .setLabel(cfg.btnRatingChangeConfirm)
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId('story_add_meta_rating_revert')
+          .setLabel(cfg.btnRatingChangeRevert)
+          .setStyle(ButtonStyle.Secondary)
+      );
+      log(`handleMetadataSelectMenu: barrier crossing ${currentRating}→${newRating}, showing confirm for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.reply({ embeds: [confirmEmbed], components: [confirmRow], flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    metaState.rating = newRating;
     log(`handleMetadataSelectMenu: rating set to '${metaState.rating}' for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update(buildMetadataPanel(cfg, metaState));
 

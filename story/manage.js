@@ -183,8 +183,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'lblTags', 'btnSetTags',
       'lblPrivateToggle',
       'lblRating', 'lblWarnings', 'lblDynamic',
-      'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
-      'btnRatingChangeConfirm', 'btnRatingChangeRevert',
       'txtMetaApplied',
       'btnSetMetadata', 'btnReviewTags',
       'txtSelectionStaged',
@@ -436,19 +434,6 @@ async function handleManageButton(connection, interaction) {
     // Turn action buttons — delegate to manageTurnActions
     await handleTurnActionButton(connection, interaction, state);
     return;
-
-  } else if (customId.startsWith('story_manage_rating_confirm_')) {
-    const newRating = customId.replace('story_manage_rating_confirm_', '');
-    const oldRating = state.rating;
-    state.rating = newRating;
-    state.oldRating = oldRating;
-    log(`handleManageButton: barrier rating confirmed ${oldRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.update({ embeds: [], components: [], content: state.cfg.txtSelectionStaged });
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-
-  } else if (customId === 'story_manage_rating_revert') {
-    log(`handleManageButton: barrier rating reverted for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-    await interaction.update({ embeds: [], components: [], content: state.cfg.btnRatingChangeRevert });
 
   } else if (customId === 'story_manage_save') {
     await interaction.deferUpdate();
@@ -855,32 +840,6 @@ async function handleManageSelectMenu(connection, interaction) {
   if (customId === 'story_manage_rating_select') {
     const newRating = interaction.values[0];
     const currentRating = state.rating;
-
-    if (crossesBarrier(currentRating, newRating)) {
-      const oldLabel = state.cfg[ratingLabels[currentRating]] ?? currentRating;
-      const newLabel = state.cfg[ratingLabels[newRating]] ?? newRating;
-      const body = state.cfg.txtRatingChangeConfirmBody
-        .replace('[old_rating]', oldLabel)
-        .replace('[new_rating]', newLabel);
-      const confirmEmbed = new EmbedBuilder()
-        .setTitle(state.cfg.txtRatingChangeConfirmTitle)
-        .setDescription(body)
-        .setColor(0xffa500);
-      const confirmRow = new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`story_manage_rating_confirm_${newRating}`)
-          .setLabel(state.cfg.btnRatingChangeConfirm)
-          .setStyle(ButtonStyle.Danger),
-        new ButtonBuilder()
-          .setCustomId('story_manage_rating_revert')
-          .setLabel(state.cfg.btnRatingChangeRevert)
-          .setStyle(ButtonStyle.Secondary)
-      );
-      log(`handleManageSelectMenu: barrier crossing ${currentRating}→${newRating}, showing confirm for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-      await interaction.reply({ embeds: [confirmEmbed], components: [confirmRow], flags: MessageFlags.Ephemeral });
-      return;
-    }
-
     state.rating = newRating;
     log(`handleManageSelectMenu: rating staged ${currentRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
   } else if (customId === 'story_manage_warnings_select') {
