@@ -1,5 +1,5 @@
 import { EventEmitter } from 'events';
-import { getConfigValue, getTurnNumber, log } from './utilities.js';
+import { getConfigValue, getTurnNumber, log, replaceTemplateVariables } from './utilities.js';
 import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement  } from './announcements.js';
 import { resolveFeedChannelId, isRestricted, ratingBadge } from './story/metadata.js';
@@ -51,6 +51,7 @@ export function getActiveThreadId(story) {
  * CreateStory function with explicit transaction handling
  */
 export async function CreateStory(connection, interaction, storyInput) {
+  log(`CreateStory: entry guildId=${interaction.guild.id} title="${storyInput.storyTitle}"`, { show: false, guildName: interaction?.guild?.name });
   const guild_id = interaction.guild.id;
   const txn = await connection.getConnection();
   await txn.beginTransaction();
@@ -163,14 +164,15 @@ export async function CreateStory(connection, interaction, storyInput) {
     // Post initial status message (NextTurn already posted one if story is active;
     // this covers delayed stories where no turn has started yet)
     if (storyStatus !== 1) {
-      updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
+      updateStoryStatusMessage(connection, interaction.guild, storyId)
+        .catch(err => log(`CreateStory: updateStoryStatusMessage failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
     }
 
     // Post creator tip to story thread (fire-and-forget — lands after status embed and turn log)
     getConfigValue(connection, 'txtStoryThreadCreatorTip', guild_id).then(template => {
       const msg = template.replace('[story_id]', guildStoryId);
       return postStoryThreadActivity(connection, interaction.guild, storyId, msg);
-    }).catch(() => {});
+    }).catch(err => log(`CreateStory: creator tip failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
 
     return {
       success: true,
@@ -195,6 +197,7 @@ export async function CreateStory(connection, interaction, storyInput) {
  * StoryJoin function - adds a writer to a story
  */
 export async function StoryJoin(connection, interaction, storyInput, storyId) {
+  log(`StoryJoin: entry storyId=${storyId} userId=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const guild_id = interaction.guild.id;
     const userId = interaction.user.id;
@@ -284,6 +287,7 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
  * checkStoryDelay function - checks if story should be activated
  */
 export async function checkStoryDelay(connection, storyId) {
+  log(`checkStoryDelay: entry storyId=${storyId}`, { show: false });
   try {
     // Get story details
     const [storyRows] = await connection.execute(
@@ -364,6 +368,7 @@ export async function checkStoryDelay(connection, storyId) {
  * PickNextWriter function - selects next writer based on story order type
  */
 export async function PickNextWriter(connection, storyId) {
+  log(`PickNextWriter: entry storyId=${storyId}`, { show: false });
   // Check for admin-designated next writer override
   const [overrideRows] = await connection.execute(
     `SELECT next_writer_id FROM story WHERE story_id = ?`,
@@ -466,6 +471,7 @@ export async function PickNextWriter(connection, storyId) {
  * NextTurn function - creates a new turn for a story
  */
 export async function NextTurn(connection, interaction, storyWriterId) {
+  log(`NextTurn: entry storyWriterId=${storyWriterId}`, { show: false, guildName: interaction?.guild?.name });
   const guild_id = interaction.guild.id;
   try {
     
@@ -542,15 +548,12 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       const storyFeedChannelId = await resolveFeedChannelId(connection, guild_id, writer.rating ?? 'NR');
       const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
 
-      const formattedEndTime = turnEndTime.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
-
-      // Create thread title (plain date — Discord doesn't render timestamps in thread names)
+      // Create thread title — turn number first for channel visibility
       const threadTitleTemplate = await getConfigValue(connection,'txtTurnThreadTitle', guild_id);
       const threadTitle = threadTitleTemplate
         .replace('[story_id]', writer.guild_story_id)
         .replace('[storyTurnNumber]', turnNumber)
-        .replace('[user display name]', writer.discord_display_name)
-        .replace('[turnEndTime]', formattedEndTime);
+        .replace('[user display name]', writer.discord_display_name);
       
       // Determine privacy: story-level privacy overrides writer preference
       const isPrivateThread = writer.story_turn_privacy || writer.turn_privacy;
@@ -598,7 +601,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
           .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
         return postStoryThreadActivity(connection, interaction.guild, writer.story_id, msg);
       })
-      .catch(() => {});
+      .catch(err => log(`NextTurn: status/activity post failed for story ${writer.story_id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
 
     return {
       success: true,
@@ -620,6 +623,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
  * Handle quick mode notification and feed announcement
  */
 async function handleQuickModeNotification(connection, interaction, writer, guild_id) {
+  log(`handleQuickModeNotification: entry storyId=${writer.story_id} writerId=${writer.discord_user_id}`, { show: false, guildName: interaction?.guild?.name });
   const turnEndTime = turnEndTimeFunction(writer.turn_length_hours);
   const discordTimestamp = `<t:${Math.floor(turnEndTime.getTime() / 1000)}:F>`;
   
@@ -643,6 +647,7 @@ async function handleQuickModeNotification(connection, interaction, writer, guil
  * Handle writer notification based on their preference
  */
 async function handleWriterNotification(connection, interaction, writer, linkToThreadId, guild_id) {
+  log(`handleWriterNotification: entry writerId=${writer.discord_user_id} prefs=${writer.notification_prefs}`, { show: false, guildName: interaction?.guild?.name });
   const linkToUse = linkToThreadId || writer.story_thread_id;
   const threadUrl = `https://discord.com/channels/${guild_id}/${linkToUse}`;
   const modeKey = writer.quick_mode ? 'Quick' : 'Normal';
@@ -666,7 +671,7 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
       const user = await interaction.client.users.fetch(writer.discord_user_id);
       await user.send(txt);
     } catch (dmError) {
-      // DM failed — fall back to mention in feed channel
+      log(`handleWriterNotification: DM failed for user ${writer.discord_user_id}, falling back to mention: ${dmError?.message}`, { show: true, guildName: interaction?.guild?.name });
       const mentionKey = `txtMentionTurnStart${modeKey}`;
       const mentionTxt = applyTokens(await getConfigValue(connection, mentionKey, guild_id));
       const feedChannelId = await resolveFeedChannelId(connection, guild_id, writer.rating ?? 'NR');
@@ -680,6 +685,7 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
  * Post welcome message with buttons to normal mode thread
  */
 async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime) {
+  log(`postWelcomeMessage: entry storyId=${writer.story_id} writerId=${writer.discord_user_id}`, { show: false });
   const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guild_id);
   const mediaConfigured = mediaChannelId && mediaChannelId !== 'cfgMediaChannelId';
   const welcomeKey = mediaConfigured ? 'txtNormalModeWelcome' : 'txtNormalModeWelcomeNoMedia';
@@ -764,6 +770,7 @@ export async function postStoryThreadActivity(connection, guild, storyId, messag
  * If the message has been deleted, a new one is posted automatically.
  */
 export async function updateStoryStatusMessage(connection, guild, storyId) {
+  log(`updateStoryStatusMessage: entry storyId=${storyId}`, { show: false, guildName: guild?.name });
   try {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
@@ -817,6 +824,16 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const cfg = await getConfigValue(connection, [
       'txtActive', 'txtPaused', 'txtClosed',
       'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
+      'txtModeQuick', 'txtModeNormal',
+      'txtYes', 'txtNo', 'txtOpen',
+      'txtStatusLegendCreator', 'txtStatusLegendCurrentTurn', 'txtStatusLegendNextUp', 'txtStatusLegendPaused',
+      'txtStatusNoActiveTurn',
+      'txtStatusNextManual', 'txtStatusNextFixed', 'txtStatusNextRoundRobin', 'txtStatusNextRandom',
+      'txtStatusReminderSuffix', 'txtStatusNoEntries', 'txtStatusEntryStats',
+      'lblStatusTags', 'lblStatusStatus', 'lblStatusMode', 'lblStatusWriterOrder',
+      'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
+      'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusClosed',
+      'lblMetaRating', 'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
       ratingBadgeCfgKey,
       ...warningOptions,
     ], story.guild_id);
@@ -839,8 +856,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     // Creator = first writer to join (first in joined_at ASC order among active writers)
     const creatorId = activeWriters[0]?.story_writer_id ?? null;
 
-    const legendParts = ['⭐ Creator', '✍️ Current turn', '📌 Next up'];
-    if (pausedWriters.length > 0) legendParts.push('⏸️ Paused');
+    const legendParts = [cfg.txtStatusLegendCreator, cfg.txtStatusLegendCurrentTurn, cfg.txtStatusLegendNextUp];
+    if (pausedWriters.length > 0) legendParts.push(cfg.txtStatusLegendPaused);
 
     const writerLines = [
       ...activeWriters.map(w => {
@@ -866,38 +883,36 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       const endTimestamp = `<t:${Math.floor(new Date(activeTurn.turn_ends_at).getTime() / 1000)}:R>`;
       turnValue = `**${activeTurn.discord_display_name}** — ends ${endTimestamp}`;
     } else {
-      turnValue = story.story_status === 1 ? 'No active turn' : '—';
+      turnValue = story.story_status === 1 ? cfg.txtStatusNoActiveTurn : '—';
     }
 
     // Next writer — only deterministic for Fixed order; Random and Round Robin are selected at turn change
     let nextWriterValue = '—';
     if (story.story_status === 1) {
       if (story.next_writer_id) {
-        // Manually pinned via /storyadmin next
         const nw = writers.find(w => w.story_writer_id === story.next_writer_id);
-        nextWriterValue = nw ? `📌 **${nw.discord_display_name}** *(manually set)*` : '📌 *(manually set)*';
+        nextWriterValue = nw ? `📌 **${nw.discord_display_name}** ${cfg.txtStatusNextManual}` : `📌 ${cfg.txtStatusNextManual}`;
       } else if (story.story_order_type === 3 && activeTurn) {
-        // Fixed order — deterministic, safe to predict
         const sorted = [...activeWriters].sort((a, b) => (a.writer_order ?? 999) - (b.writer_order ?? 999));
         const currentIdx = sorted.findIndex(w => w.story_writer_id === activeTurn.story_writer_id);
         if (currentIdx >= 0) {
           const nextWriter = sorted[(currentIdx + 1) % sorted.length];
-          nextWriterValue = `**${nextWriter.discord_display_name}** *(next in order)*`;
+          nextWriterValue = `**${nextWriter.discord_display_name}** ${cfg.txtStatusNextFixed}`;
         }
       } else if (story.story_order_type === 2) {
-        nextWriterValue = '*Round Robin selection*';
+        nextWriterValue = cfg.txtStatusNextRoundRobin;
       } else {
-        nextWriterValue = '*Random selection*';
+        nextWriterValue = cfg.txtStatusNextRandom;
       }
     }
 
     const reminderText = story.timeout_reminder_percent > 0
-      ? ` · reminder at ${story.timeout_reminder_percent}%` : '';
+      ? replaceTemplateVariables(cfg.txtStatusReminderSuffix, { percent: story.timeout_reminder_percent }) : '';
 
-    const imagePart = imageCount > 0 ? ` · ${imageCount} ${imageCount === 1 ? 'image' : 'images'}` : '';
+    const imagePart = imageCount > 0 ? ` · ${imageCount} images` : '';
     const statsValue = entryCount > 0
-      ? `${entryCount} ${entryCount === 1 ? 'entry' : 'entries'} · ~${wordCount.toLocaleString()} words${imagePart}`
-      : 'No entries yet';
+      ? replaceTemplateVariables(cfg.txtStatusEntryStats, { entry_count: entryCount, word_count: wordCount.toLocaleString(), image_part: imagePart })
+      : cfg.txtStatusNoEntries;
 
     const { formatWarnings } = await import('./story/metadata.js');
     const warningLabels = Object.fromEntries(warningOptions.map(k => [k, cfg[k] ?? k]));
@@ -905,37 +920,39 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     const metadataFields = [];
     if (story.rating && story.rating !== 'NR') {
-      metadataFields.push({ name: 'Rating', value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
+      metadataFields.push({ name: cfg.lblMetaRating, value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
     }
-    if (story.fandom)        metadataFields.push({ name: 'Fandom', value: story.fandom, inline: true });
-    if (story.main_pairing)  metadataFields.push({ name: 'Main Pairing', value: story.main_pairing, inline: true });
-    if (warningsDisplay)     metadataFields.push({ name: 'Warnings', value: warningsDisplay, inline: false });
-    if (story.characters)    metadataFields.push({ name: 'Characters', value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
-    if (story.additional_tags) metadataFields.push({ name: 'Additional Tags', value: story.additional_tags.length > 500 ? story.additional_tags.slice(0, 497) + '...' : story.additional_tags, inline: false });
+    if (story.fandom)        metadataFields.push({ name: cfg.lblMetaFandom, value: story.fandom, inline: true });
+    if (story.main_pairing)  metadataFields.push({ name: cfg.lblMetaMainRelationship, value: story.main_pairing, inline: true });
+    if (warningsDisplay)     metadataFields.push({ name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false });
+    if (story.characters)    metadataFields.push({ name: cfg.lblMetaCharacters, value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
+    if (story.additional_tags) metadataFields.push({ name: cfg.lblMetaTags, value: story.additional_tags.length > 500 ? story.additional_tags.slice(0, 497) + '...' : story.additional_tags, inline: false });
+
+    const joinStatus = story.allow_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? cfg.txtOpen : cfg.txtClosed;
 
     const embed = new EmbedBuilder()
       .setTitle(`📚 ${story.title} (#${story.guild_story_id}) ${ratingBadgeDisplay}`)
       .setColor(colorMap[story.story_status] ?? 0x5865f2)
       .addFields(
-        ...(story.tags ? [{ name: 'Tags', value: story.tags, inline: false }] : []),
-        { name: 'Status', value: statusMap[story.story_status] ?? '—', inline: true },
-        { name: 'Mode', value: story.quick_mode ? 'Quick' : 'Normal', inline: true },
-        { name: 'Writer Order', value: orderMap[story.story_order_type] ?? '—', inline: true },
-        { name: 'Turn Length', value: `${story.turn_length_hours}h${reminderText}`, inline: true },
-        { name: 'Writers', value: `${activeWriters.length}/${story.max_writers || '∞'} · ${story.allow_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? 'Open' : 'Closed'}`, inline: true },
-        { name: 'Show Authors', value: story.show_authors ? 'Yes' : 'No', inline: true },
-        { name: 'Current Turn', value: turnValue, inline: true },
-        { name: 'Next Writer', value: nextWriterValue, inline: true },
-        { name: 'Entries', value: statsValue, inline: true },
+        ...(story.tags ? [{ name: cfg.lblStatusTags, value: story.tags, inline: false }] : []),
+        { name: cfg.lblStatusStatus,      value: statusMap[story.story_status] ?? '—',                                         inline: true },
+        { name: cfg.lblStatusMode,        value: story.quick_mode ? cfg.txtModeQuick : cfg.txtModeNormal,                      inline: true },
+        { name: cfg.lblStatusWriterOrder, value: orderMap[story.story_order_type] ?? '—',                                      inline: true },
+        { name: cfg.lblStatusTurnLength,  value: `${story.turn_length_hours}h${reminderText}`,                                 inline: true },
+        { name: cfg.lblStatusWriters,     value: `${activeWriters.length}/${story.max_writers || '∞'} · ${joinStatus}`,        inline: true },
+        { name: cfg.lblStatusShowAuthors, value: story.show_authors ? cfg.txtYes : cfg.txtNo,                                  inline: true },
+        { name: cfg.lblStatusCurrentTurn, value: turnValue,                                                                    inline: true },
+        { name: cfg.lblStatusNextWriter,  value: nextWriterValue,                                                              inline: true },
+        { name: cfg.lblStatusEntries,     value: statsValue,                                                                   inline: true },
         ...metadataFields,
-        { name: 'Writer List', value: writerLines.join('\n') || 'None', inline: false }
+        { name: cfg.lblStatusWriterList,  value: writerLines.join('\n') || '—',                                                inline: false }
       )
       .setTimestamp();
 
     if (story.summary) embed.setDescription(story.summary);
     if (story.story_status === 3 && story.closed_at) {
       const closedTimestamp = `<t:${Math.floor(new Date(story.closed_at).getTime() / 1000)}:D>`;
-      embed.addFields({ name: 'Closed', value: closedTimestamp, inline: true });
+      embed.addFields({ name: cfg.lblStatusClosed, value: closedTimestamp, inline: true });
     }
 
     const activeThreadId = getActiveThreadId(story);
@@ -1007,7 +1024,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       const creatorTip = await getConfigValue(connection, 'txtStoryThreadCreatorTip', story.guild_id).catch(() => null);
       if (creatorTip) {
         const tipMsg = creatorTip.replace('[story_id]', story.guild_story_id);
-        await storyThread.send(tipMsg).catch(() => {});
+        await storyThread.send(tipMsg).catch(err => log(`updateStoryStatusMessage: creator tip post failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: guild?.name }));
       }
     }
   } catch (err) {
@@ -1022,6 +1039,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
  * so the thread deletion always proceeds.
  */
 export async function deleteThreadAndAnnouncement(thread) {
+  log(`deleteThreadAndAnnouncement: entry threadId=${thread.id}`, { show: false, guildName: thread?.guild?.name });
   try {
     const parent = thread.parent ?? await thread.guild.channels.fetch(thread.parentId).catch(() => null);
     if (parent) {
@@ -1040,6 +1058,7 @@ export async function deleteThreadAndAnnouncement(thread) {
  * Shared by handleSkip and handleReassign so the skip logic lives in one place.
  */
 export async function skipActiveTurn(connection, guild, turnId, threadId) {
+  log(`skipActiveTurn: entry turnId=${turnId} threadId=${threadId}`, { show: false, guildName: guild?.name });
   await connection.execute(
     `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
     [turnId]
@@ -1096,6 +1115,7 @@ async function buildThreadTitle(connection, story) {
  * Returns { success, newThreadId } or { success: false, error }.
  */
 export async function migrateStoryThread(connection, guild, storyId, newRating) {
+  log(`migrateStoryThread: entry storyId=${storyId} newRating=${newRating}`, { show: false, guildName: guild?.name });
   try {
     const [rows] = await connection.execute(
       `SELECT guild_story_id, title, story_status, story_thread_id, restricted_thread_id, guild_id
