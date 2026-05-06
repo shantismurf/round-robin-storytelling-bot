@@ -351,7 +351,7 @@ async function handleManageButton(connection, interaction) {
       log(`manage onSave: calling editReply to rebuild manage panel`, { show: false, guildName: interaction?.guild?.name });
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
       log(`manage onSave: complete`, { show: false, guildName: interaction?.guild?.name });
-    });
+    }, interaction);
     await interaction.reply({ ...buildMetadataPanel(cfg2, state), flags: MessageFlags.Ephemeral });
 
   } else if (customId === 'story_manage_set_turnlength') {

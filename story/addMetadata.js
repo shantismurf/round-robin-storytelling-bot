@@ -298,8 +298,7 @@ export async function handleMetadataButton(connection, interaction) {
       metaState.rating = newRating;
       metaEntry.oldRating = oldRating;
       log(`handleMetadataButton: barrier rating confirmed ${oldRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-      await interaction.update({ embeds: [], components: [], content: cfg.txtSelectionStaged });
-      await interaction.editReply(buildMetadataPanel(cfg, metaState));
+      await interaction.update(buildMetadataPanel(cfg, metaState));
 
     } else if (customId === 'story_add_meta_rating_revert') {
       log(`handleMetadataButton: barrier rating reverted for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
@@ -320,7 +319,7 @@ export async function handleMetadataButton(connection, interaction) {
       };
       log(`handleMetadataButton: save metaFields=${JSON.stringify(metaFields)} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
-      const { onSave } = metaEntry;
+      const { onSave, panelInteraction } = metaEntry;
       log(`handleMetadataButton: hasOnSave=${!!onSave} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       pendingMetaPanelData.delete(userId);
       log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
@@ -328,6 +327,9 @@ export async function handleMetadataButton(connection, interaction) {
         log(`handleMetadataButton: invoking onSave for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await onSave(interaction, metaFields, cfg);
         log(`handleMetadataButton: onSave resolved for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+        if (panelInteraction && panelInteraction !== interaction) {
+          await panelInteraction.editReply({ content: cfg.txtMetaApplied, embeds: [], components: [] }).catch(() => {});
+        }
       } else {
         const addState = pendingStoryData.get(userId);
         if (!addState) {
@@ -395,8 +397,8 @@ export async function handleMetadataModal(connection, interaction) {
   }
 }
 
-export function registerMetaSession(userId, metaState, guildId, onSave = null) {
-  pendingMetaPanelData.set(userId, { metaState, guildId, onSave });
+export function registerMetaSession(userId, metaState, guildId, onSave = null, panelInteraction = null) {
+  pendingMetaPanelData.set(userId, { metaState, guildId, onSave, panelInteraction });
 }
 
 export async function handleMetadataSelectMenu(connection, interaction) {
