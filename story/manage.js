@@ -67,7 +67,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 2 (4): Max Writers: <> | Turn Length: <> | Reminder: <> | Metadata
+  // Row 2 (3): Max Writers: <> | Turn Length: <> | Reminder: <> |
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_set_maxwriters')
@@ -81,13 +81,9 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setCustomId('story_manage_set_reminder')
       .setLabel(replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtNone }))
       .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_metadata')
-      .setLabel(cfg.btnSetMetadata)
-      .setStyle(ButtonStyle.Primary)
   );
 
-  // Row 3 (3): Show Names: <> | Hide Threads: <> | Manage Turns
+  // Row 3 (4): Show Names: <> | Hide Threads: <> | Manage Entries |  Manage Turns
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_authors')
@@ -98,18 +94,26 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId('story_manage_turns_open')
-      .setLabel(cfg.btnManageTurns)
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  // Row 4 (2-3): Manage Entries | [Review Tags if pending]
-  const row4Components = [
-    new ButtonBuilder()
       .setCustomId('story_manage_entries_open')
       .setLabel(cfg.btnManageEntries)
       .setStyle(ButtonStyle.Secondary),
-  ];
+    new ButtonBuilder()
+      .setCustomId('story_manage_turns_open')
+      .setLabel(cfg.btnManageTurns)
+      .setStyle(ButtonStyle.Secondary)
+    );
+
+  // Row 4 (2-3): Pause/Resume | Metadata | [Review Tags if pending]
+  const row4Components = [
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_pauseresume')
+      .setLabel(isPaused ? cfg.txtResume : cfg.txtPause)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_open_metadata')
+      .setLabel(cfg.btnSetMetadata)
+      .setStyle(ButtonStyle.Primary)
+    ];
   if (state.pendingTagCount > 0) {
     row4Components.push(
       new ButtonBuilder()
@@ -120,12 +124,8 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   }
   const row4 = new ActionRowBuilder().addComponents(...row4Components);
 
-  // Row 5 (2): Pause/Resume | Save Settings
+  // Row 5 (1): Save Settings
   const row5 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_toggle_pauseresume')
-      .setLabel(isPaused ? cfg.txtResume : cfg.txtPause)
-      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_save')
       .setLabel(cfg.btnSaveSettings)
