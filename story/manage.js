@@ -84,7 +84,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     new ButtonBuilder()
       .setCustomId('story_manage_open_metadata')
       .setLabel(cfg.btnSetMetadata)
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Primary)
   );
 
   // Row 3 (3): Show Names: <> | Hide Threads: <> | Manage Turns
@@ -183,7 +183,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'lblTags', 'btnSetTags',
       'lblPrivateToggle',
       'lblRating', 'lblWarnings', 'lblDynamic',
-      'txtMetaApplied',
       'btnSetMetadata', 'btnReviewTags',
       'txtSelectionStaged',
       'txtSectionBreakLine', 'txtManageSectionBreakMeta',
@@ -341,16 +340,49 @@ async function handleManageButton(connection, interaction) {
     const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./addMetadata.js');
     const cfg2 = await getMetaCfg(connection, interaction.guild.id);
     log(`handleManageButton: registering meta session storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-    registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id, async (interaction, metaFields, cfg) => {
-      log(`manage onSave: entered for user=${interaction.user.username} storyId=${state.storyId}`, { show: false, guildName: interaction?.guild?.name });
-      log(`manage onSave: metaFields=${JSON.stringify(metaFields)}`, { show: false, guildName: interaction?.guild?.name });
-      Object.assign(state, metaFields);
-      log(`manage onSave: state after assign — rating=${state.rating} dynamic=${state.dynamic} fandom=${state.fandom}`, { show: false, guildName: interaction?.guild?.name });
-      log(`manage onSave: calling interaction.update`, { show: false, guildName: interaction?.guild?.name });
-      await interaction.update({ content: cfg.txtMetaApplied, embeds: [], components: [] });
-      log(`manage onSave: calling editReply to rebuild manage panel`, { show: false, guildName: interaction?.guild?.name });
-      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-      log(`manage onSave: complete`, { show: false, guildName: interaction?.guild?.name });
+    registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id, async (saveInteraction, metaFields, cfg) => {
+      log(`manage onSave: entered for user=${saveInteraction.user.username} storyId=${state.storyId}`, { show: false, guildName: state.guildName });
+      log(`manage onSave: metaFields=${JSON.stringify(metaFields)}`, { show: false, guildName: state.guildName });
+      const warningsStr = Array.isArray(metaFields.warnings) ? metaFields.warnings.join(', ') : (metaFields.warnings || null);
+      try {
+        await connection.execute(
+          `UPDATE story SET rating = ?, warnings = ?, fandom = ?, main_pairing = ?,
+           other_relationships = ?, characters = ?, dynamic = ?, additional_tags = ?, summary = ?
+           WHERE story_id = ?`,
+          [
+            metaFields.rating, warningsStr || null,
+            metaFields.fandom || null, metaFields.mainPairing || null,
+            metaFields.otherRelationships || null, metaFields.characters || null,
+            metaFields.dynamic || null, metaFields.additionalTags || null,
+            metaFields.summary || null,
+            state.storyId
+          ]
+        );
+        log(`manage onSave: metadata written to DB for storyId=${state.storyId}`, { show: true, guildName: state.guildName });
+
+        if (metaFields.oldRating && crossesBarrier(metaFields.oldRating, metaFields.rating)) {
+          const migResult = await migrateStoryThread(connection, saveInteraction.guild, state.storyId, metaFields.rating, metaFields.oldRating);
+          if (!migResult.success) {
+            log(`manage onSave: thread migration failed for storyId=${state.storyId}: ${migResult.error}`, { show: true, guildName: state.guildName });
+          } else {
+            await updateStoryStatusMessage(connection, saveInteraction.guild, state.storyId);
+            const migratedThread = await saveInteraction.guild.channels.fetch(migResult.newThreadId).catch(() => null);
+            if (migratedThread) await migratedThread.send({ embeds: [migResult.migratedInEmbed] }).catch(() => {});
+          }
+        } else {
+          updateStoryStatusMessage(connection, saveInteraction.guild, state.storyId).catch(() => {});
+        }
+
+        Object.assign(state, metaFields);
+        state.originalRating = metaFields.rating;
+
+        await saveInteraction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
+        await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+        log(`manage onSave: complete for storyId=${state.storyId}`, { show: false, guildName: state.guildName });
+      } catch (error) {
+        log(`manage onSave: failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
+        await saveInteraction.update({ content: await getConfigValue(connection, 'errProcessingRequest', saveInteraction.guild.id), embeds: [], components: [] }).catch(() => {});
+      }
     }, interaction);
     await interaction.reply({ ...buildMetadataPanel(cfg2, state), flags: MessageFlags.Ephemeral });
 
@@ -493,43 +525,20 @@ async function handleReviewTags(connection, interaction, state) {
 async function handleManageSave(connection, interaction, state) {
   const guildId = interaction.guild.id;
   try {
-    const finalRating = state.rating;
-    const oldRating = state.oldRating;
-    const warningsStr = Array.isArray(state.warnings) ? state.warnings.join(', ') : (state.warnings || null);
-    log(`handleManageSave: storyId=${state.storyId} finalRating=${finalRating} dynamic=${state.dynamic} warnings=${warningsStr}`, { show: false, guildName: state.guildName });
+    log(`handleManageSave: storyId=${state.storyId} title=${state.title} turnLength=${state.turnLength}`, { show: false, guildName: state.guildName });
 
     await connection.execute(
       `UPDATE story SET title = ?, turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,
-       allow_joins = ?, show_authors = ?, story_order_type = ?,
-       story_turn_privacy = ?, summary = ?, tags = ?,
-       rating = ?, warnings = ?, fandom = ?, main_pairing = ?,
-       other_relationships = ?, characters = ?, dynamic = ?, additional_tags = ?
+       allow_joins = ?, show_authors = ?, story_order_type = ?, story_turn_privacy = ?, tags = ?
        WHERE story_id = ?`,
       [
         state.title,
         state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
         state.allowJoins, state.showAuthors, state.orderType,
-        state.turnPrivacy, state.summary || null, state.tags || null,
-        finalRating, warningsStr || null,
-        state.fandom || null, state.mainPairing || null,
-        state.otherRelationships || null, state.characters || null,
-        state.dynamic || null, state.additionalTags || null,
+        state.turnPrivacy, state.tags || null,
         state.storyId
       ]
     );
-
-    // Migrate story thread if rating crossed the M/E barrier
-    let migrationNewThreadId = null;
-    let migrationInEmbed = null;
-    if (finalRating !== state.originalRating && crossesBarrier(state.originalRating, finalRating)) {
-      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, finalRating, oldRating);
-      if (!migResult.success) {
-        log(`Thread migration failed for story ${state.storyId}: ${migResult.error}`, { show: true, guildName: interaction?.guild?.name });
-      } else {
-        migrationNewThreadId = migResult.newThreadId;
-        migrationInEmbed = migResult.migratedInEmbed;
-      }
-    }
 
     // Handle pause/resume if status changed
     if (state.targetStatus !== state.originalStatus) {
@@ -543,15 +552,7 @@ async function handleManageSave(connection, interaction, state) {
     }
 
     pendingManageData.delete(interaction.user.id);
-
-    // When migration happened, await status update so welcome messages precede the migration note
-    if (migrationNewThreadId) {
-      await updateStoryStatusMessage(connection, interaction.guild, state.storyId);
-      const migratedThread = await interaction.guild.channels.fetch(migrationNewThreadId).catch(() => null);
-      if (migratedThread && migrationInEmbed) await migratedThread.send({ embeds: [migrationInEmbed] }).catch(() => {});
-    } else {
-      updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
-    }
+    updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
 
     await state.originalInteraction.editReply({
       content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
