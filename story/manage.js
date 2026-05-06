@@ -537,7 +537,7 @@ async function handleManageSave(connection, interaction, state) {
     let migrationNewThreadId = null;
     let migrationInEmbed = null;
     if (finalRating !== state.originalRating && crossesBarrier(state.originalRating, finalRating)) {
-      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, oldRating);
+      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, finalRating, oldRating);
       if (!migResult.success) {
         log(`Thread migration failed for story ${state.storyId}: ${migResult.error}`, { show: true, guildName: interaction?.guild?.name });
       } else {
