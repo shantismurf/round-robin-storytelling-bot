@@ -441,6 +441,7 @@ async function handleManageButton(connection, interaction) {
     const newRating = customId.replace('story_manage_rating_confirm_', '');
     const oldRating = state.rating;
     state.rating = newRating;
+    state.oldRating = oldRating;
     log(`handleManageButton: barrier rating confirmed ${oldRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update({ embeds: [], components: [], content: state.cfg.txtSelectionStaged });
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
@@ -508,8 +509,9 @@ async function handleManageSave(connection, interaction, state) {
   const guildId = interaction.guild.id;
   try {
     const finalRating = state.rating;
+    const oldRating = state.oldRating;
     const warningsStr = Array.isArray(state.warnings) ? state.warnings.join(', ') : (state.warnings || null);
-    log(`handleManageSave: storyId=${state.storyId} finalRating=${finalRating} dynamic=${state.dynamic} fandom=${state.fandom} warnings=${warningsStr}`, { show: false, guildName: state.guildName });
+    log(`handleManageSave: storyId=${state.storyId} finalRating=${finalRating} dynamic=${state.dynamic} warnings=${warningsStr}`, { show: false, guildName: state.guildName });
 
     await connection.execute(
       `UPDATE story SET title = ?, turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,
@@ -535,7 +537,7 @@ async function handleManageSave(connection, interaction, state) {
     let migrationNewThreadId = null;
     let migrationInEmbed = null;
     if (finalRating !== state.originalRating && crossesBarrier(state.originalRating, finalRating)) {
-      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, finalRating);
+      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, oldRating);
       if (!migResult.success) {
         log(`Thread migration failed for story ${state.storyId}: ${migResult.error}`, { show: true, guildName: interaction?.guild?.name });
       } else {

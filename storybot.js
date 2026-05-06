@@ -1114,8 +1114,8 @@ async function buildThreadTitle(connection, story) {
  *
  * Returns { success, newThreadId } or { success: false, error }.
  */
-export async function migrateStoryThread(connection, guild, storyId, newRating) {
-  log(`migrateStoryThread: entry storyId=${storyId} newRating=${newRating}`, { show: false, guildName: guild?.name });
+export async function migrateStoryThread(connection, guild, storyId, oldRating) {
+  log(`migrateStoryThread: entry storyId=${storyId} oldRating=${oldRating}`, { show: false, guildName: guild?.name });
   try {
     const [rows] = await connection.execute(
       `SELECT guild_story_id, title, story_status, story_thread_id, restricted_thread_id, guild_id, rating
@@ -1125,7 +1125,7 @@ export async function migrateStoryThread(connection, guild, storyId, newRating) 
     if (rows.length === 0) return { success: false, error: 'Story not found' };
     const story = rows[0];
     const movingToRestricted = isRestricted(newRating);
-
+    const newRating = story.rating;
     const newFeedChannelId = await resolveFeedChannelId(connection, story.guild_id, newRating);
     const newFeedChannel = await guild.channels.fetch(newFeedChannelId).catch(() => null);
     if (!newFeedChannel) return { success: false, error: 'Target feed channel not found' };
@@ -1201,7 +1201,7 @@ export async function migrateStoryThread(connection, guild, storyId, newRating) 
       getConfigValue(connection, 'lblRatingChangeThreadWarning', story.guild_id),
     ]);
     const fieldName = lblRatingChanged
-      .replace('[old_rating]', story.rating ?? 'NR')
+      .replace('[old_rating]', oldRating)
       .replace('[new_rating]', newRating);
 
     // Post migration notice in old thread, then archive/lock it
