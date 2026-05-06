@@ -357,7 +357,7 @@ export async function handleTurnActionModal(connection, interaction, manageState
         return await interaction.reply({ content: await getConfigValue(connection, 'txtAdminNoActiveTurn', guildId), flags: MessageFlags.Ephemeral });
       }
 
-      const turnId = activeTurnRows[0].turn_id;
+      const turnId = Number(activeTurnRows[0].turn_id);
       log(`handleTurnActionModal: extend — turnId=${turnId} adding ${hours}h`, { show: false, guildName: interaction?.guild?.name });
       await connection.execute(
         `UPDATE turn SET turn_ends_at = DATE_ADD(COALESCE(turn_ends_at, NOW()), INTERVAL ? HOUR) WHERE turn_id = ?`,
