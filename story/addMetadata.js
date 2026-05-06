@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput } from '../utilities.js';
-import { ratingLabels, dynamicOptions, warningOptions, crossesBarrier } from './metadata.js';
+import { ratingLabels, dynamicOptions, warningOptions } from './metadata.js';
 import { pendingStoryData, buildStoryAddMessage } from './add.js';
 
 // Keyed by userId — tracks which interaction opened the metadata panel
@@ -13,7 +13,7 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
-    'txtRatingNR', 'txtRatingChangeThreadWarning', 'lblRatingChangeThreadWarning',
+    'txtRatingNR',
     ...Object.values(ratingLabels),
     ...dynamicOptions,
     ...warningOptions,
@@ -49,15 +49,6 @@ export function buildMetadataPanel(cfg, state) {
       { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
       { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
     );
-
-  if (state.originalRating && state.rating !== state.originalRating
-      && crossesBarrier(state.originalRating, state.rating)) {
-    embed.addFields({
-      name: cfg.lblRatingChangeThreadWarning,
-      value: cfg.txtRatingChangeThreadWarning,
-      inline: false,
-    });
-  }
 
   // Row 1: Dynamic select (single-select)
   const row1 = new ActionRowBuilder().addComponents(
@@ -313,24 +304,6 @@ export async function handleMetadataButton(connection, interaction) {
       };
       log(`handleMetadataButton: save metaFields=${JSON.stringify(metaFields)} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
-      if (metaState.originalRating && metaState.rating !== metaState.originalRating
-          && crossesBarrier(metaState.originalRating, metaState.rating)) {
-        metaEntry.pendingMetaFields = metaFields;
-        const confirmRow = new ActionRowBuilder().addComponents(
-          new ButtonBuilder()
-            .setCustomId('story_add_meta_save_confirm')
-            .setLabel(cfg.btnSaveSettings)
-            .setStyle(ButtonStyle.Danger),
-          new ButtonBuilder()
-            .setCustomId('story_add_meta_cancel')
-            .setLabel(cfg.btnCancel)
-            .setStyle(ButtonStyle.Secondary)
-        );
-        log(`handleMetadataButton: barrier crossing detected, showing confirmation for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-        await interaction.update({ content: cfg.txtRatingChangeThreadWarning, embeds: [], components: [confirmRow] });
-        return;
-      }
-
       const { onSave } = metaEntry;
       log(`handleMetadataButton: hasOnSave=${!!onSave} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       pendingMetaPanelData.delete(userId);
@@ -351,25 +324,6 @@ export async function handleMetadataButton(connection, interaction) {
         log(`handleMetadataButton: calling interaction.update (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
         log(`handleMetadataButton: calling editReply (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-        await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
-      }
-
-    } else if (customId === 'story_add_meta_save_confirm') {
-      const metaFields = metaEntry.pendingMetaFields;
-      const { onSave } = metaEntry;
-      pendingMetaPanelData.delete(userId);
-      log(`handleMetadataButton: barrier-crossing save confirmed for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-      if (onSave) {
-        await onSave(interaction, metaFields, cfg);
-      } else {
-        const addState = pendingStoryData.get(userId);
-        if (!addState) {
-          log(`handleMetadataButton: no addState in save_confirm fallback for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-          await interaction.reply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
-          return;
-        }
-        Object.assign(addState, metaFields);
-        await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
         await addState.originalInteraction.editReply(buildStoryAddMessage(addState.cfg, addState));
       }
 

@@ -1118,7 +1118,7 @@ export async function migrateStoryThread(connection, guild, storyId, newRating) 
   log(`migrateStoryThread: entry storyId=${storyId} newRating=${newRating}`, { show: false, guildName: guild?.name });
   try {
     const [rows] = await connection.execute(
-      `SELECT guild_story_id, title, story_status, story_thread_id, restricted_thread_id, guild_id
+      `SELECT guild_story_id, title, story_status, story_thread_id, restricted_thread_id, guild_id, rating
        FROM story WHERE story_id = ?`,
       [storyId]
     );
@@ -1195,18 +1195,30 @@ export async function migrateStoryThread(connection, guild, storyId, newRating) 
       ? `https://discord.com/channels/${story.guild_id}/${oldThreadId}` : null;
     const newThreadLink = `https://discord.com/channels/${story.guild_id}/${newThread.id}`;
 
+    const [txtOut, txtIn, lblRatingChanged] = await Promise.all([
+      getConfigValue(connection, 'txtStoryThreadMigratedOut', story.guild_id),
+      getConfigValue(connection, 'txtStoryThreadMigratedIn', story.guild_id),
+      getConfigValue(connection, 'lblRatingChangeThreadWarning', story.guild_id),
+    ]);
+    const fieldName = lblRatingChanged
+      .replace('[old_rating]', story.rating ?? 'NR')
+      .replace('[new_rating]', newRating);
+
     // Post migration notice in old thread, then archive/lock it
     const oldThread = oldThreadId ? await guild.channels.fetch(oldThreadId).catch(() => null) : null;
     if (oldThread) {
-      const txtOut = await getConfigValue(connection, 'txtStoryThreadMigratedOut', story.guild_id);
-      await oldThread.send(txtOut.replace('[new_thread_link]', newThreadLink)).catch(() => {});
+      const outEmbed = new EmbedBuilder()
+        .setColor(0xffa500)
+        .addFields({ name: fieldName, value: txtOut.replace('[new_thread_link]', newThreadLink), inline: false });
+      await oldThread.send({ embeds: [outEmbed] }).catch(() => {});
       await oldThread.setArchived(true).catch(() => {});
       await oldThread.setLocked(true).catch(() => {});
     }
 
-    // Build continuation message — caller posts it after updateStoryStatusMessage for correct ordering
-    const txtIn = await getConfigValue(connection, 'txtStoryThreadMigratedIn', story.guild_id);
-    const migratedInMsg = txtIn.replace('[old_thread_link]', oldThreadLink ?? '');
+    // Build continuation message embed — caller posts it after updateStoryStatusMessage for correct ordering
+    const migratedInEmbed = new EmbedBuilder()
+      .setColor(0xffa500)
+      .addFields({ name: fieldName, value: txtIn.replace('[old_thread_link]', oldThreadLink ?? ''), inline: false });
 
     // DB update — always clear status_message_id so a fresh embed is posted
     dbUpdates.status_message_id = null;
@@ -1217,7 +1229,7 @@ export async function migrateStoryThread(connection, guild, storyId, newRating) 
     );
 
     log(`Migrated story ${storyId} to ${newRating} (newThread: ${newThread.id})`, { show: true, guildName: guild?.name });
-    return { success: true, newThreadId: newThread.id, migratedInMsg };
+    return { success: true, newThreadId: newThread.id, migratedInEmbed };
   } catch (err) {
     log(`migrateStoryThread failed for story ${storyId}: ${err}`, { show: true, guildName: guild?.name });
     return { success: false, error: String(err) };

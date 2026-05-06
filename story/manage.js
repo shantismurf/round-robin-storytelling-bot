@@ -19,11 +19,6 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     ? (Array.isArray(state.warnings) ? state.warnings : state.warnings.split(',').map(w => w.trim())).join(', ')
     : cfg.txtNone;
 
-  const effectiveRating = state.pendingRating ?? state.rating;
-  const originalRating = state.originalRating ?? state.rating;
-  const barrierWarning = effectiveRating !== originalRating && crossesBarrier(originalRating, effectiveRating)
-    ? `\n\n${cfg.txtRatingChangeThreadWarning}` : '';
-
   const sectionLine = cfg.txtSectionBreakLine;
   const statusDisplay = isPaused
     ? (cfg.txtManageStoryStatusPaused ?? `⏸️ ${cfg.txtPaused}`)
@@ -46,13 +41,11 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic, inline: true },
       { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtYes : cfg.txtNo, inline: true },
       { name: sectionLine, value: cfg.txtManageSectionBreakMeta, inline: false },
-      { name: cfg.lblRating, value: ratingLabel + barrierWarning, inline: true },
+      { name: cfg.lblRating, value: ratingLabel, inline: true },
       { name: cfg.lblDynamic, value: state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet, inline: true },
       { name: cfg.lblWarnings, value: warningsDisplay, inline: false },
       { name: cfg.lblTags, value: state.tags || cfg.txtNotSet, inline: false },
     );
-
-  const currentRatingDisplay = state.pendingRating ? `${state.pendingRating} ⚠️` : (state.rating ?? state.cfg.txtRatingNR);
 
   // Row 1 (4): Set Title | Writer Order: <> | Status: <> | Join Status: <>
   const row1 = new ActionRowBuilder().addComponents(
@@ -190,7 +183,8 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'lblTags', 'btnSetTags',
       'lblPrivateToggle',
       'lblRating', 'lblWarnings', 'lblDynamic',
-      'txtRatingChangeThreadWarning',
+      'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
+      'btnRatingChangeConfirm', 'btnRatingChangeRevert',
       'txtMetaApplied',
       'btnSetMetadata', 'btnReviewTags',
       'txtSelectionStaged',
@@ -254,7 +248,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       // AO3 metadata
       rating: story.rating ?? 'NR',
       originalRating: story.rating ?? 'NR',
-      pendingRating: null,
       warnings: story.warnings ? story.warnings.split(',').map(w => w.trim()).filter(Boolean) : [],
       fandom: story.fandom ?? '',
       mainPairing: story.main_pairing ?? '',
@@ -444,6 +437,18 @@ async function handleManageButton(connection, interaction) {
     await handleTurnActionButton(connection, interaction, state);
     return;
 
+  } else if (customId.startsWith('story_manage_rating_confirm_')) {
+    const newRating = customId.replace('story_manage_rating_confirm_', '');
+    const oldRating = state.rating;
+    state.rating = newRating;
+    log(`handleManageButton: barrier rating confirmed ${oldRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.update({ embeds: [], components: [], content: state.cfg.txtSelectionStaged });
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+  } else if (customId === 'story_manage_rating_revert') {
+    log(`handleManageButton: barrier rating reverted for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+    await interaction.update({ embeds: [], components: [], content: state.cfg.btnRatingChangeRevert });
+
   } else if (customId === 'story_manage_save') {
     await interaction.deferUpdate();
     await handleManageSave(connection, interaction, state);
@@ -502,7 +507,7 @@ async function handleReviewTags(connection, interaction, state) {
 async function handleManageSave(connection, interaction, state) {
   const guildId = interaction.guild.id;
   try {
-    const finalRating = state.pendingRating ?? state.rating;
+    const finalRating = state.rating;
     const warningsStr = Array.isArray(state.warnings) ? state.warnings.join(', ') : (state.warnings || null);
     log(`handleManageSave: storyId=${state.storyId} finalRating=${finalRating} dynamic=${state.dynamic} fandom=${state.fandom} warnings=${warningsStr}`, { show: false, guildName: state.guildName });
 
@@ -528,14 +533,14 @@ async function handleManageSave(connection, interaction, state) {
 
     // Migrate story thread if rating crossed the M/E barrier
     let migrationNewThreadId = null;
-    let migrationInMsg = null;
+    let migrationInEmbed = null;
     if (finalRating !== state.originalRating && crossesBarrier(state.originalRating, finalRating)) {
       const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, finalRating);
       if (!migResult.success) {
         log(`Thread migration failed for story ${state.storyId}: ${migResult.error}`, { show: true, guildName: interaction?.guild?.name });
       } else {
         migrationNewThreadId = migResult.newThreadId;
-        migrationInMsg = migResult.migratedInMsg;
+        migrationInEmbed = migResult.migratedInEmbed;
       }
     }
 
@@ -556,7 +561,7 @@ async function handleManageSave(connection, interaction, state) {
     if (migrationNewThreadId) {
       await updateStoryStatusMessage(connection, interaction.guild, state.storyId);
       const migratedThread = await interaction.guild.channels.fetch(migrationNewThreadId).catch(() => null);
-      if (migratedThread && migrationInMsg) await migratedThread.send(migrationInMsg).catch(() => {});
+      if (migratedThread && migrationInEmbed) await migratedThread.send({ embeds: [migrationInEmbed] }).catch(() => {});
     } else {
       updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
     }
@@ -846,15 +851,44 @@ async function handleManageSelectMenu(connection, interaction) {
   const customId = interaction.customId;
 
   if (customId === 'story_manage_rating_select') {
-    state.pendingRating = interaction.values[0];
+    const newRating = interaction.values[0];
+    const currentRating = state.rating;
+
+    if (crossesBarrier(currentRating, newRating)) {
+      const oldLabel = state.cfg[ratingLabels[currentRating]] ?? currentRating;
+      const newLabel = state.cfg[ratingLabels[newRating]] ?? newRating;
+      const body = state.cfg.txtRatingChangeConfirmBody
+        .replace('[old_rating]', oldLabel)
+        .replace('[new_rating]', newLabel);
+      const confirmEmbed = new EmbedBuilder()
+        .setTitle(state.cfg.txtRatingChangeConfirmTitle)
+        .setDescription(body)
+        .setColor(0xffa500);
+      const confirmRow = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_manage_rating_confirm_${newRating}`)
+          .setLabel(state.cfg.btnRatingChangeConfirm)
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId('story_manage_rating_revert')
+          .setLabel(state.cfg.btnRatingChangeRevert)
+          .setStyle(ButtonStyle.Secondary)
+      );
+      log(`handleManageSelectMenu: barrier crossing ${currentRating}→${newRating}, showing confirm for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.reply({ embeds: [confirmEmbed], components: [confirmRow], flags: MessageFlags.Ephemeral });
+      return;
+    }
+
+    state.rating = newRating;
+    log(`handleManageSelectMenu: rating staged ${currentRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
   } else if (customId === 'story_manage_warnings_select') {
     state.warnings = interaction.values;
+    log(`handleManageSelectMenu: warnings staged for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
   } else {
     return;
   }
 
-  const stagedMsg = state.cfg.txtSelectionStaged;
-  await interaction.update({ content: stagedMsg, components: [] });
+  await interaction.deferUpdate();
   await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 }
 
