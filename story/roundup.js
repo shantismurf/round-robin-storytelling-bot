@@ -186,17 +186,25 @@ export async function scheduleNextRoundup(connection, guildId) {
   const day = parseInt(cfg.cfgWeeklyRoundupDay) || 1;
   const hour = parseInt(cfg.cfgWeeklyRoundupHour) || 9;
   const runAt = calcNextRoundupTime(day, hour);
+  // Cancel any existing pending jobs before inserting to prevent duplicates
+  await connection.execute(
+    `UPDATE job SET job_status = 3
+     WHERE job_type = 'weeklyRoundup' AND job_status = 0
+     AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    [String(guildId)]
+  );
   await connection.execute(
     `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
     ['weeklyRoundup', JSON.stringify({ guildId: String(guildId) }), runAt]
   );
+  log(`Scheduled next weeklyRoundup for guild ${guildId} at ${runAt.toISOString()}`, { show: true });
   return runAt;
 }
 
 export async function cancelPendingRoundupJobs(connection, guildId) {
   await connection.execute(
-    `UPDATE job SET job_status = 2
-     WHERE job_type = 'weeklyRoundup' AND job_status = 0
+    `UPDATE job SET job_status = 3
+     WHERE job_type = 'weeklyRoundup' AND job_status IN (0, 2)
      AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
     [String(guildId)]
   );
@@ -208,6 +216,13 @@ export async function scheduleAllRoundupJobs(connection) {
       `SELECT guild_id FROM config WHERE config_key = 'cfgWeeklyRoundupEnabled' AND config_value = '1' AND guild_id != 1`
     );
     for (const { guild_id: guildId } of enabledRows) {
+      // Cancel any stale failed or duplicate pending jobs before checking
+      await connection.execute(
+        `UPDATE job SET job_status = 3
+         WHERE job_type = 'weeklyRoundup' AND job_status = 2
+         AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+        [String(guildId)]
+      );
       const [pending] = await connection.execute(
         `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 0
          AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
@@ -216,6 +231,8 @@ export async function scheduleAllRoundupJobs(connection) {
       if (pending.length === 0) {
         const runAt = await scheduleNextRoundup(connection, guildId);
         log(`Registered weeklyRoundup job for guild ${guildId}, next run: ${runAt.toISOString()}`, { show: true });
+      } else {
+        log(`weeklyRoundup job already pending for guild ${guildId} (${pending.length} job(s)), skipping`, { show: true });
       }
     }
   } catch (err) {
@@ -254,5 +271,6 @@ export async function handleWeeklyRoundup(connection, client, payload) {
     throw err;
   }
 
+  await cancelPendingRoundupJobs(connection, guildId);
   await scheduleNextRoundup(connection, guildId);
 }
