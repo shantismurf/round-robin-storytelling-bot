@@ -906,38 +906,68 @@ async function handleTagReviewButton(connection, interaction) {
   }
 
   const [rows] = await connection.execute(
-    `SELECT tag_text FROM story_tag_submission WHERE submission_id = ? AND submission_status = 'pending'`,
+    `SELECT tag_text, thread_message_id FROM story_tag_submission WHERE submission_id = ? AND submission_status = 'pending'`,
     [submissionId]
   );
   if (rows.length === 0) {
     await interaction.reply({ content: await getConfigValue(connection, 'txtTagReviewSessionExpired', guildId), flags: MessageFlags.Ephemeral });
     return;
   }
-  const { tag_text: tagText } = rows[0];
+  const { tag_text: tagText, thread_message_id: threadMessageId } = rows[0];
+  const reviewerName = interaction.member?.displayName ?? interaction.user.username;
+  const reviewedAt = Date.now();
 
   await interaction.deferUpdate();
 
-  if (action === 'approve') {
+  const cfg = await getConfigValue(connection, ['txtTagApproved', 'txtTagRejected', 'txtTagStatus', 'txtApproved', 'txtRejected'], guildId);
+
+  const isApprove = action === 'approve';
+  const emojiStatus = isApprove ? `✅ ${cfg.txtApproved}` : `❌ ${cfg.txtRejected}`;
+  const statusLine = replaceTemplateVariables(cfg.txtTagStatus, {
+    emoji_status: emojiStatus,
+    reviewed_by: reviewerName,
+    reviewed_at: `<t:${Math.floor(reviewedAt / 1000)}:d> <t:${Math.floor(reviewedAt / 1000)}:T>`
+  });
+
+  // Edit the thread voting post to append the status line
+  const [storyThreadRows] = await connection.execute(`SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const storyThreadId = storyThreadRows[0]?.story_thread_id ?? null;
+  if (threadMessageId && storyThreadId) {
+    try {
+      const thread = await interaction.guild.channels.fetch(storyThreadId).catch(() => null);
+      if (thread) {
+        const msg = await thread.messages.fetch(threadMessageId).catch(() => null);
+        if (msg) {
+          await msg.edit(`${msg.content}\n${statusLine}`).catch(err =>
+            log(`handleTagReviewButton: failed to edit thread post ${threadMessageId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name })
+          );
+        }
+      }
+    } catch (err) {
+      log(`handleTagReviewButton: error editing thread post: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    }
+  }
+
+  if (isApprove) {
     log(`handleTagReviewButton: approving tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
     await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW() WHERE submission_id = ?`,
-      [submissionId]
+      `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
+      [reviewerName, submissionId]
     );
-    // Append tag to story.tags (the manually-editable field)
     const [storyRows] = await connection.execute(`SELECT tags FROM story WHERE story_id = ?`, [storyId]);
     const existing = storyRows[0]?.tags?.trim() || '';
     const newTags = existing ? `${existing}, ${tagText}` : tagText;
     await connection.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [newTags, storyId]);
     updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`updateStoryStatusMessage failed for story ${storyId} after tag approve: ${err}`, { show: true, guildName: interaction?.guild?.name }));
-    const txt = replaceTemplateVariables(await getConfigValue(connection, 'txtTagApproved', guildId), { tag_text: tagText });
+    const txt = replaceTemplateVariables(cfg.txtTagApproved, { tag_text: tagText });
     await interaction.editReply({ content: txt, embeds: [], components: [] });
   } else {
     log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
     await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW() WHERE submission_id = ?`,
-      [submissionId]
+      `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
+      [reviewerName, submissionId]
     );
-    const txt = replaceTemplateVariables(await getConfigValue(connection, 'txtTagRejected', guildId), { tag_text: tagText });
+    const txt = replaceTemplateVariables(cfg.txtTagRejected, { tag_text: tagText });
     await interaction.editReply({ content: txt, embeds: [], components: [] });
   }
 }

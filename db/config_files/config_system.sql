@@ -39,6 +39,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtNoActiveTurn','You do not have an active turn in this story.', 'en', 1),
 ('btnCancel', 'Cancel', 'en', 1),
 ('txtDelete', 'Delete', 'en', 1),
+('txtApproved', 'Approved', 'en', 1),
+('txtRejected', 'Rejected', 'en', 1),
 ('txtActionCancelled', 'Cancelled.', 'en', 1),
 ('txtActionSessionExpired', 'Your session has expired. Please try again.', 'en', 1),
 ('txtNotActiveWriter', 'You are not an active writer in this story.', 'en', 1),

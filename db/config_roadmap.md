@@ -12,12 +12,12 @@ This project uses context-specific SQL files to manage all user-facing strings.
 ### 📂 SQL Context Roadmap
 
 **Total Unique Entries: ~844** (updated collaborative tagging — counts are approximate pending sync-config run)
-1. **config_system.sql** (~133 keys): Core UI, Statuses, Help Menus, /story help page labels. Added: txtDelete.
+1. **config_system.sql** (~135 keys): Core UI, Statuses, Help Menus, /story help page labels. Added: txtDelete, txtApproved, txtRejected.
 2. **config_story.sql** (~117 keys): /story add, /story list, /story join, /story manage display, /story edit UI, /story close/timeleft.
 3. **config_turn.sql** (~123 keys): Writing entries, Reminders, Thread titles, finalize/skip confirmations, story status embed labels.
 4. **config_mystory.sql** (~58 keys): /mystory dashboard, Pause/Leave logic, /mystory help, catchup display, list embed stats, manage panel.
 5. **config_storyadmin.sql** (~243 keys): Server setup, Admin skips/overrides, manage-user actions, turn admin actions.
-6. **config_metadata.sql** (~93 keys): AO3 Ratings, Tags, Warnings, tag submission. Added: txtTagDeleteConfirmTitle, txtTagDeleteConfirmBody, btnTagDeleteConfirm, txtTagDeleteSuccess, txtTagNotSubmitter, txtTagDeleteNotFound, btnManageTags, btnViewProposedTags, txtTagPendingTitlePublic, txtTagNoPendingPublic, lblTagViewNameTag, lblTagViewNameVotes, btnTagDelete (uses txtDelete).
+6. **config_metadata.sql** (~94 keys): AO3 Ratings, Tags, Warnings, tag submission. Added: txtTagDeleteConfirmTitle, txtTagDeleteConfirmBody, btnTagDeleteConfirm, txtTagDeleteSuccess, txtTagNotSubmitter, txtTagDeleteNotFound, btnManageTags, btnViewProposedTags, txtTagPendingTitlePublic, txtTagNoPendingPublic, lblTagViewNameTag, lblTagViewNameVotes, btnTagDelete (uses txtDelete), txtTagStatus.
 7. **config_other.sql** (9 keys): Residual cross-cutting error messages and placeholders.
 
 ---
