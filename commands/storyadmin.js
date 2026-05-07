@@ -1,8 +1,8 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
 import { handleManage } from '../story/manage.js';
-import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/manageUser.js';
-import { deleteThreadAndAnnouncement } from '../storybot.js';
+import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
+import { deleteThreadAndAnnouncement } from '../story/_turn.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 
 async function logAdminAction(connection, adminUserId, actionType, storyId, targetUserId = null, reason = null) {

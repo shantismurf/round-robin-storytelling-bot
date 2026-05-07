@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput } from '../utilities.js';
-import { ratingLabels, dynamicOptions, warningOptions, crossesBarrier } from './metadata.js';
+import { ratingLabels, dynamicOptions, warningOptions, crossesBarrier } from './_metadata.js';
 import { pendingStoryData, buildStoryAddMessage } from './add.js';
 
 // Keyed by userId — tracks which interaction opened the metadata panel

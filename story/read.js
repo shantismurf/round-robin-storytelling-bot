@@ -1,10 +1,10 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, checkIsCreator, discordTimestamp } from '../utilities.js';
 import { generateStoryExport } from './export.js';
-import { isRestricted, ratingBadge } from './metadata.js';
-import { pendingReadData, lastReadPage, pendingEditData } from './state.js';
+import { isRestricted, ratingBadge } from './_metadata.js';
+import { pendingReadData, lastReadPage, pendingEditData } from './_state.js';
 import { buildEditMessage } from './edit.js';
-import { buildEntryEmbed, buildEntryPages } from './entryRenderer.js';
+import { buildEntryEmbed, buildEntryPages } from './_entryRenderer.js';
 
 export { pendingReadData, lastReadPage };
 

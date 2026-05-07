@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin } from '../utilities.js';
-import { postThreadEntry } from './entryRenderer.js';
-import { pendingReadData, pendingEditData } from './state.js';
+import { postThreadEntry } from './_entryRenderer.js';
+import { pendingReadData, pendingEditData } from './_state.js';
 import { buildReadEmbed } from './read.js';
 
 export { pendingEditData };

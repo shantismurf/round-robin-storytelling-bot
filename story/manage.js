@@ -1,9 +1,11 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, getTurnNumber, checkIsAdmin, checkIsCreator } from '../utilities.js';
-import { PickNextWriter, NextTurn, updateStoryStatusMessage, migrateStoryThread } from '../storybot.js';
-import { ratingLabels, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './metadata.js';
-import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './manageTurnActions.js';
-import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './manageEntries.js';
+import { PickNextWriter, NextTurn } from './_turn.js';
+import { updateStoryStatusMessage } from './_storyStatus.js';
+import { migrateStoryThread } from './_migration.js';
+import { ratingLabels, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
+import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
+import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 
 const pendingManageData = new Map();
 
@@ -832,7 +834,7 @@ async function handleManageModalSubmit(connection, interaction) {
 }
 
 /**
- * Handle select menu interactions from the manage panel (rating/warnings/category).
+ * Handle select menu interactions from the manage panel (rating/warnings/dynamic).
  */
 async function handleManageSelectMenu(connection, interaction) {
   log(`handleManageSelectMenu entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });

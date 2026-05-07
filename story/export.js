@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log } from '../utilities.js';
 import { marked } from 'marked';
-import { ratingLabels, formatWarnings } from './metadata.js';
+import { ratingLabels, formatWarnings } from './_metadata.js';
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles

@@ -1,6 +1,8 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
-import { StoryJoin, updateStoryStatusMessage, postStoryThreadActivity } from '../storybot.js';
+import { StoryJoin } from '../storybot.js';
+import { updateStoryStatusMessage } from './_storyStatus.js';
+import { postStoryThreadActivity } from './_turn.js';
 import { postStoryFeedJoinAnnouncement } from '../announcements.js';
 
 // Pending join sessions keyed by userId

@@ -1,5 +1,5 @@
 import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
-import { resolveFeedChannelId, ratingBadge } from './story/metadata.js';
+import { resolveFeedChannelId, ratingBadge } from './story/_metadata.js';
 /**
  * All announcements sent to story feed channel are handled here
  * Join is called from commands/story.js

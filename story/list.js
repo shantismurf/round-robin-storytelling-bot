@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
-import { ratingBadge } from './metadata.js';
+import { ratingBadge } from './_metadata.js';
 
 export async function handleListStories(connection, interaction) {
   const guildId = interaction.guild.id;

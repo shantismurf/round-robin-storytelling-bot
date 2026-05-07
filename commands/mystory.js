@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
-import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from '../storybot.js';
+import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from '../story/_turn.js';
 
 // Cached catchup pages keyed by "catchup_<userId>_<storyId>"
 const pendingCatchUpData = new Map();

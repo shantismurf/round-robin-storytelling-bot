@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
-import { PickNextWriter, NextTurn, skipActiveTurn } from '../storybot.js';
+import { PickNextWriter, NextTurn, skipActiveTurn } from './_turn.js';
 
 // Keyed by admin user ID — holds context for the pending turn action
 const pendingTurnActionData = new Map();

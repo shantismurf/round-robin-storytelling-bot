@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
-import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, postStoryThreadActivity } from '../storybot.js';
+import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, postStoryThreadActivity } from './_turn.js';
 
 // Keyed by admin user ID
 const pendingManageUserData = new Map();

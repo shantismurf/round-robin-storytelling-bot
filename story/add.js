@@ -1,8 +1,8 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
-import { ratingLabels } from './metadata.js';
-import { buildMetadataPanel, handleMetadataButton, handleMetadataModal, handleMetadataSelectMenu } from './addMetadata.js';
+import { ratingLabels } from './_metadata.js';
+import { buildMetadataPanel, handleMetadataButton, handleMetadataModal, handleMetadataSelectMenu } from './_addMetadata.js';
 
 // Temporary storage for story add session state
 export const pendingStoryData = new Map();

@@ -1,5 +1,6 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
-import { StoryBot, updateStoryStatusMessage } from './storybot.js';
+import { StoryBot } from './storybot.js';
+import { updateStoryStatusMessage } from './story/_storyStatus.js';
 import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log } from './utilities.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';

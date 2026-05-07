@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator } from '../utilities.js';
-import { updateStoryStatusMessage, deleteThreadAndAnnouncement } from '../storybot.js';
+import { updateStoryStatusMessage } from './_storyStatus.js';
+import { deleteThreadAndAnnouncement } from './_turn.js';
 import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
 
