@@ -151,7 +151,8 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy,
-              rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic, additional_tags
+              rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic, additional_tags,
+              story_thread_id
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
@@ -196,7 +197,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtTurnLengthPlaceholder', 'txtTimeoutReminderPlaceholder',
       'txtManageMaxWritersPlaceholder', 'txtManageTagsPlaceholder',
       'btnManageTurns', 'btnManageEntries',
-      'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject',
+      'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount',
       'txtManageTurnsPanelTitle', 'txtManageTurnsNoTurn', 'txtManageTurnsActiveTurn',
       // Turn action cfg keys
       'btnTurnSkip', 'btnTurnExtend', 'btnTurnNext', 'btnTurnReassign',
@@ -257,6 +258,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       dynamic: story.dynamic ?? '',
       additionalTags: story.additional_tags ?? '',
       pendingTagCount: Number(pendingTagCount),
+      storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
       guildName: interaction.guild.name,
       activeTurn
@@ -497,7 +499,7 @@ async function handleManageButton(connection, interaction) {
 async function handleReviewTags(connection, interaction, state) {
   log(`handleReviewTags entry storyId=${state.storyId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const [rows] = await connection.execute(
-    `SELECT submission_id, submitter_display_name, tag_text
+    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
      FROM story_tag_submission
      WHERE story_id = ? AND submission_status = 'pending'
      ORDER BY submitted_at ASC`,
@@ -515,9 +517,28 @@ async function handleReviewTags(connection, interaction, state) {
   const firstTag = rows[0];
   const queueNote = rows.length > 1 ? ` (${rows.length - 1} more pending)` : '';
 
+  let upVotes = 0;
+  let downVotes = 0;
+  if (firstTag.thread_message_id && state.storyThreadId) {
+    try {
+      const thread = await interaction.guild.channels.fetch(state.storyThreadId).catch(() => null);
+      if (thread) {
+        const msg = await thread.messages.fetch(firstTag.thread_message_id).catch(() => null);
+        if (msg) {
+          upVotes = msg.reactions.cache.get('👍')?.count ?? 0;
+          downVotes = msg.reactions.cache.get('👎')?.count ?? 0;
+        }
+      }
+    } catch (err) {
+      log(`handleReviewTags: reaction fetch failed for submission ${firstTag.submission_id}: ${err?.stack ?? err}`, { show: false, guildName: interaction?.guild?.name });
+    }
+  }
+
+  const voteText = replaceTemplateVariables(state.cfg.txtTagVoteCount, { up: upVotes, down: downVotes });
+
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(state.cfg.txtTagPendingTitle, { story_title: state.title }))
-    .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}`)
+    .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}\n${voteText}`)
     .setColor(0x5865f2);
 
   const row = new ActionRowBuilder().addComponents(

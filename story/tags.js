@@ -467,16 +467,17 @@ export async function handleEditTagsButton(connection, interaction) {
   }
 
   const [rows] = await connection.execute(
-    `SELECT submission_id, submitter_display_name, tag_text
+    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
      FROM story_tag_submission WHERE story_id = ? AND submission_status = 'pending'
      ORDER BY submitted_at ASC`,
     [storyId]
   );
-  const [storyRows] = await connection.execute(`SELECT title FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
   const storyTitle = storyRows[0]?.title ?? '';
+  const threadId = storyRows[0]?.story_thread_id ?? null;
 
   const cfg = await getConfigValue(connection, [
-    'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject'
+    'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount'
   ], guildId);
 
   if (rows.length === 0) {
@@ -488,9 +489,28 @@ export async function handleEditTagsButton(connection, interaction) {
   const firstTag = rows[0];
   const queueNote = rows.length > 1 ? ` (${rows.length - 1} more pending)` : '';
 
+  let upVotes = 0;
+  let downVotes = 0;
+  if (firstTag.thread_message_id && threadId) {
+    try {
+      const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
+      if (thread) {
+        const msg = await thread.messages.fetch(firstTag.thread_message_id).catch(() => null);
+        if (msg) {
+          upVotes = msg.reactions.cache.get('👍')?.count ?? 0;
+          downVotes = msg.reactions.cache.get('👎')?.count ?? 0;
+        }
+      }
+    } catch (err) {
+      log(`handleEditTagsButton: reaction fetch failed for submission ${firstTag.submission_id}: ${err?.stack ?? err}`, { show: false, guildName: interaction?.guild?.name });
+    }
+  }
+
+  const voteText = replaceTemplateVariables(cfg.txtTagVoteCount, { up: upVotes, down: downVotes });
+
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(cfg.txtTagPendingTitle, { story_title: storyTitle }))
-    .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}`)
+    .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}\n${voteText}`)
     .setColor(0x5865f2);
 
   const row = new ActionRowBuilder().addComponents(
