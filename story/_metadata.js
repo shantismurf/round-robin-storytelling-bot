@@ -103,8 +103,8 @@ export function buildMetadataFields(story, cfg = {}) {
     fields.push({ name: cfg.lblCharacters, value: story.characters, inline: false });
   }
 
-  if (story.additional_tags) {
-    fields.push({ name: cfg.lblAdditionalTags, value: story.additional_tags, inline: false });
+  if (story.tags) {
+    fields.push({ name: cfg.lblMetaTags, value: story.tags, inline: false });
   }
 
   return fields;

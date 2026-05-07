@@ -67,7 +67,7 @@ export async function handleAddStory(connection, interaction) {
       otherRelationships: '',
       characters: '',
       dynamic: '',
-      additionalTags: '',
+      tags: '',
       summary: ''
     };
 
@@ -569,7 +569,7 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
       otherRelationships: state.otherRelationships || null,
       characters: state.characters || null,
       dynamic: state.dynamic || null,
-      additionalTags: state.additionalTags || null,
+      tags: state.tags || null,
       summary: state.summary || null
     };
 

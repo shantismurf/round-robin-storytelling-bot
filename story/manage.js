@@ -151,7 +151,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy,
-              rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic, additional_tags,
+              rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic,
               story_thread_id
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
@@ -256,7 +256,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       otherRelationships: story.other_relationships ?? '',
       characters: story.characters ?? '',
       dynamic: story.dynamic ?? '',
-      additionalTags: story.additional_tags ?? '',
+      tags: story.tags ?? '',
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
@@ -353,13 +353,13 @@ async function handleManageButton(connection, interaction) {
       try {
         await connection.execute(
           `UPDATE story SET rating = ?, warnings = ?, fandom = ?, main_pairing = ?,
-           other_relationships = ?, characters = ?, dynamic = ?, additional_tags = ?, summary = ?
+           other_relationships = ?, characters = ?, dynamic = ?, tags = ?, summary = ?
            WHERE story_id = ?`,
           [
             metaFields.rating, warningsStr || null,
             metaFields.fandom || null, metaFields.mainPairing || null,
             metaFields.otherRelationships || null, metaFields.characters || null,
-            metaFields.dynamic || null, metaFields.additionalTags || null,
+            metaFields.dynamic || null, metaFields.tags || null,
             metaFields.summary || null,
             state.storyId
           ]
@@ -840,7 +840,7 @@ async function handleManageModalSubmit(connection, interaction) {
       state.mainPairing        = sanitizeModalInput(interaction.fields.getTextInputValue('main_pairing'), 200) || '';
       state.characters         = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
       state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
-      state.additionalTags     = sanitizeModalInput(interaction.fields.getTextInputValue('additional_tags'), 1000, true) || '';
+      state.tags               = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -925,11 +925,11 @@ async function handleTagReviewButton(connection, interaction) {
       `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW() WHERE submission_id = ?`,
       [submissionId]
     );
-    // Append tag to story's additional_tags
-    const [storyRows] = await connection.execute(`SELECT additional_tags FROM story WHERE story_id = ?`, [storyId]);
-    const existing = storyRows[0]?.additional_tags?.trim() || '';
+    // Append tag to story.tags (the manually-editable field)
+    const [storyRows] = await connection.execute(`SELECT tags FROM story WHERE story_id = ?`, [storyId]);
+    const existing = storyRows[0]?.tags?.trim() || '';
     const newTags = existing ? `${existing}, ${tagText}` : tagText;
-    await connection.execute(`UPDATE story SET additional_tags = ? WHERE story_id = ?`, [newTags, storyId]);
+    await connection.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [newTags, storyId]);
     updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`updateStoryStatusMessage failed for story ${storyId} after tag approve: ${err}`, { show: true, guildName: interaction?.guild?.name }));
     const txt = replaceTemplateVariables(await getConfigValue(connection, 'txtTagApproved', guildId), { tag_text: tagText });
     await interaction.editReply({ content: txt, embeds: [], components: [] });

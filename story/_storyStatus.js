@@ -35,7 +35,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
               timeout_reminder_percent, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, restricted_thread_id, status_message_id, guild_id,
               next_writer_id, closed_at, rating, warnings, fandom, main_pairing,
-              other_relationships, characters, dynamic, additional_tags
+              other_relationships, characters, dynamic
        FROM story WHERE story_id = ?`,
       [storyId]
     );
@@ -183,7 +183,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     if (story.main_pairing)  metadataFields.push({ name: cfg.lblMetaMainRelationship, value: story.main_pairing, inline: true });
     if (warningsDisplay)     metadataFields.push({ name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false });
     if (story.characters)    metadataFields.push({ name: cfg.lblMetaCharacters, value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
-    if (story.additional_tags) metadataFields.push({ name: cfg.lblMetaTags, value: story.additional_tags.length > 500 ? story.additional_tags.slice(0, 497) + '...' : story.additional_tags, inline: false });
+    if (story.tags) metadataFields.push({ name: cfg.lblMetaTags, value: story.tags.length > 500 ? story.tags.slice(0, 497) + '...' : story.tags, inline: false });
 
     const joinStatus = story.allow_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? cfg.txtOpen : cfg.txtClosed;
 

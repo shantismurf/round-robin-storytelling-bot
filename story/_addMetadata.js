@@ -34,7 +34,7 @@ export function buildMetadataPanel(cfg, state) {
   const mainRelDisplay = state.mainPairing || cfg.txtNotSet;
   const otherRelDisplay = state.otherRelationships || cfg.txtNotSet;
   const charsDisplay = state.characters || cfg.txtNotSet;
-  const tagsDisplay = state.additionalTags || cfg.txtNotSet;
+  const tagsDisplay = state.tags || cfg.txtNotSet;
   const summaryDisplay = state.summary || cfg.txtNotSet;
 
   const embed = new EmbedBuilder()
@@ -267,12 +267,12 @@ export async function handleMetadataButton(connection, interaction) {
           .setTitle(cfg.lblMetaTags)
           .addComponents(new ActionRowBuilder().addComponents(
             new TextInputBuilder()
-              .setCustomId('additional_tags')
+              .setCustomId('tags')
               .setLabel(cfg.lblMetaTags)
               .setStyle(TextInputStyle.Paragraph)
               .setRequired(false)
               .setMaxLength(1000)
-              .setValue(metaState.additionalTags ?? '')
+              .setValue(metaState.tags ?? '')
           ))
       );
 
@@ -314,7 +314,7 @@ export async function handleMetadataButton(connection, interaction) {
         otherRelationships: metaState.otherRelationships,
         characters: metaState.characters,
         dynamic: metaState.dynamic,
-        additionalTags: metaState.additionalTags,
+        tags: metaState.tags,
         summary: metaState.summary,
       };
       log(`handleMetadataButton: save metaFields=${JSON.stringify(metaFields)} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
@@ -382,7 +382,7 @@ export async function handleMetadataModal(connection, interaction) {
     } else if (customId === 'story_add_meta_characters_modal') {
       metaState.characters = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
     } else if (customId === 'story_add_meta_tags_modal') {
-      metaState.additionalTags = sanitizeModalInput(interaction.fields.getTextInputValue('additional_tags'), 1000, true) || '';
+      metaState.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
     } else if (customId === 'story_add_meta_summary_modal') {
       metaState.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 4000, true) || '';
     }
