@@ -151,7 +151,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy,
-              rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic,
+              rating, warnings, main_pairing, other_relationships, characters, dynamic,
               story_thread_id
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
@@ -251,7 +251,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       rating: story.rating ?? 'NR',
       originalRating: story.rating ?? 'NR',
       warnings: story.warnings ? story.warnings.split(',').map(w => w.trim()).filter(Boolean) : [],
-      fandom: story.fandom ?? '',
       mainPairing: story.main_pairing ?? '',
       otherRelationships: story.other_relationships ?? '',
       characters: story.characters ?? '',
@@ -352,12 +351,12 @@ async function handleManageButton(connection, interaction) {
       const warningsStr = Array.isArray(metaFields.warnings) ? metaFields.warnings.join(', ') : (metaFields.warnings || null);
       try {
         await connection.execute(
-          `UPDATE story SET rating = ?, warnings = ?, fandom = ?, main_pairing = ?,
+          `UPDATE story SET rating = ?, warnings = ?, main_pairing = ?,
            other_relationships = ?, characters = ?, dynamic = ?, tags = ?, summary = ?
            WHERE story_id = ?`,
           [
             metaFields.rating, warningsStr || null,
-            metaFields.fandom || null, metaFields.mainPairing || null,
+            metaFields.mainPairing || null,
             metaFields.otherRelationships || null, metaFields.characters || null,
             metaFields.dynamic || null, metaFields.tags || null,
             metaFields.summary || null,
@@ -836,7 +835,6 @@ async function handleManageModalSubmit(connection, interaction) {
       state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 500) ?? '';
 
     } else if (interaction.customId === 'story_manage_meta_modal') {
-      state.fandom             = sanitizeModalInput(interaction.fields.getTextInputValue('fandom'), 100) || '';
       state.mainPairing        = sanitizeModalInput(interaction.fields.getTextInputValue('main_pairing'), 200) || '';
       state.characters         = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
       state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';

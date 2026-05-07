@@ -42,7 +42,7 @@ export async function handleAddStory(connection, interaction) {
       'lblMaxWriters', 'btnSetMaxWriters',
       'txtSectionBreakLine', 'txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin',
       'btnSetMetadata', 'lblMyNotifications',
-      'lblMetaRating', 'lblMetaWarnings', 'lblMetaFandom', 'lblMetaDynamic',
+      'lblMetaRating', 'lblMetaWarnings', 'lblMetaDynamic',
     ], interaction.guild.id);
 
     const state = {
@@ -62,7 +62,6 @@ export async function handleAddStory(connection, interaction) {
       maxWriters: null,
       rating: 'NR',
       warnings: [],
-      fandom: '',
       mainPairing: '',
       otherRelationships: '',
       characters: '',
@@ -115,7 +114,6 @@ export function buildStoryAddMessage(cfg, state) {
   const metadataSummaryLines = [
     `**${cfg.lblMetaRating}:** ${ratingLabel}`,
     `**${cfg.lblMetaWarnings}:** ${warningsDisplay}`,
-    state.fandom ? `**${cfg.lblMetaFandom}:** ${state.fandom}` : null,
     state.dynamic ? `**${cfg.lblMetaDynamic}:** ${cfg[state.dynamic] ?? state.dynamic}` : null,
   ].filter(Boolean).join('\n');
 
@@ -564,7 +562,6 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
       maxWriters: state.maxWriters,
       rating: state.rating ?? 'NR',
       warnings: state.warnings?.length ? state.warnings.join(', ') : null,
-      fandom: state.fandom || null,
       mainPairing: state.mainPairing || null,
       otherRelationships: state.otherRelationships || null,
       characters: state.characters || null,

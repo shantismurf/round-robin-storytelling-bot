@@ -87,10 +87,6 @@ export function buildMetadataFields(story, cfg = {}) {
     if (formatted) fields.push({ name: cfg.lblWarnings, value: formatted, inline: false });
   }
 
-  if (story.fandom) {
-    fields.push({ name: cfg.lblFandom, value: story.fandom, inline: true });
-  }
-
   if (story.main_pairing) {
     fields.push({ name: cfg.lblMainPairing, value: story.main_pairing, inline: true });
   }

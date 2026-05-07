@@ -118,7 +118,7 @@ export async function discordMarkdownToHtml(text, guild = null) {
 export async function generateStoryExport(connection, storyId, guildId, guild = null) {
   const [storyRows] = await connection.execute(
     `SELECT story_id, guild_story_id, title, created_at, story_status, quick_mode, closed_at, show_authors,
-            summary, tags, rating, warnings, fandom, main_pairing, other_relationships, characters, dynamic
+            summary, tags, rating, warnings, main_pairing, other_relationships, characters, dynamic
      FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
   );
@@ -180,7 +180,6 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   const ratingLabel = ratingLabels[story.rating] ?? story.rating;
   const warningsText = story.warnings ? formatWarnings(story.warnings) : 'Creator Chose Not To Warn';
   const ao3MetaLines = [
-    story.fandom           ? `<div class="meta"><strong>Fandom:</strong> ${story.fandom}</div>` : '',
     story.dynamic          ? `<div class="meta"><strong>Dynamic:</strong> ${story.dynamic}</div>` : '',
     `<div class="meta"><strong>Rating:</strong> ${ratingLabel}</div>`,
     `<div class="meta"><strong>Warnings:</strong> ${warningsText}</div>`,

@@ -34,7 +34,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       `SELECT story_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
               timeout_reminder_percent, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, restricted_thread_id, status_message_id, guild_id,
-              next_writer_id, closed_at, rating, warnings, fandom, main_pairing,
+              next_writer_id, closed_at, rating, warnings, main_pairing,
               other_relationships, characters, dynamic
        FROM story WHERE story_id = ?`,
       [storyId]
@@ -90,7 +90,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'lblStatusTags', 'lblStatusStatus', 'lblStatusMode', 'lblStatusWriterOrder',
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusClosed',
-      'lblMetaRating', 'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
+      'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
       ratingBadgeCfgKey,
       ...warningOptions,
     ], story.guild_id);
@@ -179,7 +179,6 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     if (story.rating && story.rating !== 'NR') {
       metadataFields.push({ name: cfg.lblMetaRating, value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
     }
-    if (story.fandom)        metadataFields.push({ name: cfg.lblMetaFandom, value: story.fandom, inline: true });
     if (story.main_pairing)  metadataFields.push({ name: cfg.lblMetaMainRelationship, value: story.main_pairing, inline: true });
     if (warningsDisplay)     metadataFields.push({ name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false });
     if (story.characters)    metadataFields.push({ name: cfg.lblMetaCharacters, value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });

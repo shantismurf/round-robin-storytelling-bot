@@ -10,7 +10,7 @@ export async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [
     'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'txtMetaApplied', 'txtSelectionStaged', 'btnSaveSettings', 'btnCancel',
     'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings',
-    'lblMetaFandom', 'lblMetaMainRelationship', 'lblMetaOtherRelationships',
+    'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
     'txtRatingNR',
@@ -30,7 +30,6 @@ export function buildMetadataPanel(cfg, state) {
   const warningsDisplay = state.warnings?.length
     ? state.warnings.map(k => cfg[k] ?? k).join(', ')
     : cfg.txtNotSet;
-  const fandomDisplay = state.fandom || cfg.txtNotSet;
   const mainRelDisplay = state.mainPairing || cfg.txtNotSet;
   const otherRelDisplay = state.otherRelationships || cfg.txtNotSet;
   const charsDisplay = state.characters || cfg.txtNotSet;
@@ -42,7 +41,6 @@ export function buildMetadataPanel(cfg, state) {
     .setColor(0x5865f2)
     .addFields(
       { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
-      { name: cfg.lblMetaFandom, value: fandomDisplay, inline: true },
       { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
       { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
       { name: cfg.lblMetaMainRelationship, value: mainRelDisplay, inline: true },
@@ -94,12 +92,8 @@ export function buildMetadataPanel(cfg, state) {
       })))
   );
 
-  // Row 4: Fandom | Main Relationship | Other Relationships | Characters | Tags
+  // Row 4: Main Relationship | Other Relationships | Characters | Tags
   const row4 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_add_meta_set_fandom')
-      .setLabel(cfg.lblMetaFandom)
-      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_mainrel')
       .setLabel(cfg.lblMetaMainRelationship)
@@ -193,23 +187,6 @@ export async function handleMetadataButton(connection, interaction) {
         components: [new ActionRowBuilder().addComponents(selectMenu)],
         flags: MessageFlags.Ephemeral
       });
-
-    } else if (customId === 'story_add_meta_set_fandom') {
-      await interaction.showModal(
-        new ModalBuilder()
-          .setCustomId('story_add_meta_fandom_modal')
-          .setTitle(cfg.lblMetaFandom)
-          .addComponents(new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('fandom')
-              .setLabel(cfg.lblMetaFandom)
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setMaxLength(100)
-              .setValue(metaState.fandom ?? '')
-              .setPlaceholder('e.g. The Hobbit, Original Work')
-          ))
-      );
 
     } else if (customId === 'story_add_meta_set_mainrel') {
       await interaction.showModal(
@@ -309,7 +286,6 @@ export async function handleMetadataButton(connection, interaction) {
         rating: metaState.rating,
         oldRating: metaEntry.oldRating,
         warnings: metaState.warnings,
-        fandom: metaState.fandom,
         mainPairing: metaState.mainPairing,
         otherRelationships: metaState.otherRelationships,
         characters: metaState.characters,
@@ -373,9 +349,7 @@ export async function handleMetadataModal(connection, interaction) {
   const cfg = await getMetaCfg(connection, interaction.guild.id);
 
   try {
-    if (customId === 'story_add_meta_fandom_modal') {
-      metaState.fandom = sanitizeModalInput(interaction.fields.getTextInputValue('fandom'), 100) || '';
-    } else if (customId === 'story_add_meta_mainrel_modal') {
+    if (customId === 'story_add_meta_mainrel_modal') {
       metaState.mainPairing = sanitizeModalInput(interaction.fields.getTextInputValue('main_relationship'), 200) || '';
     } else if (customId === 'story_add_meta_otherrel_modal') {
       metaState.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
