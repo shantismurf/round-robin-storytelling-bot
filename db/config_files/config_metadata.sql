@@ -82,4 +82,19 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtMetaPanelTitle', '🗂️ Story Metadata', 'en', 1),
 ('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1),
 -- Moved from config_other: tag submission key
-('lblTagSubmitText', 'Tag to suggest', 'en', 1);
+('lblTagSubmitText', 'Tag to suggest', 'en', 1),
+-- Tag delete flow
+('txtTagDeleteConfirmTitle', 'Delete Tag Suggestion', 'en', 1),
+('txtTagDeleteConfirmBody', 'Are you sure you want to delete your suggestion: **"[tag_text]"**? This cannot be undone.', 'en', 1),
+('btnTagDeleteConfirm', 'Yes, Delete It', 'en', 1),
+('txtTagDeleteSuccess', '"[tag_text]" has been removed. To submit a new tag, click the button on the [story info post]([thread_link]), or type `/story tag story_id:[story_id]`.', 'en', 1),
+('txtTagNotSubmitter', '❌ Only the submitter, story creator, or a server admin can delete this tag suggestion.', 'en', 1),
+('txtTagDeleteNotFound', '❌ That tag suggestion was not found, or it has already been reviewed or removed.', 'en', 1),
+-- Tag panel buttons (thread post + read view)
+('btnManageTags', 'Manage Tags', 'en', 1),
+('btnViewProposedTags', 'View Proposed Tags', 'en', 1),
+-- View Proposed Tags embed
+('txtTagPendingTitlePublic', '🏷️ Proposed Tags for [story_title]', 'en', 1),
+('txtTagNoPendingPublic', 'There are no pending tag suggestions for this story right now.', 'en', 1),
+('lblTagViewNameTag', 'Tag', 'en', 1),
+('lblTagViewNameVotes', 'Votes', 'en', 1);

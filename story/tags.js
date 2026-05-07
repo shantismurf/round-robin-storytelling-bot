@@ -1,17 +1,46 @@
-import { ModalBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
 
-/**
- * Button: "Suggest a Tag" — opens a modal for active writers to submit a tag.
- * customId: story_submit_tag (must carry story ID in a separate location —
- * stored in the button's customId as story_submit_tag_<storyId>).
- */
-export async function handleTagSubmit(connection, interaction) {
-  const storyId = interaction.customId.split('_').at(-1);
-  const guildId = interaction.guild.id;
-  const userId  = interaction.user.id;
+// ─── Helpers ────────────────────────────────────────────────────────────────
 
-  // Only active writers in this story can submit
+/**
+ * Build the action row appended to every tag voting post in the story thread.
+ * Two entry points: handleTagSubmitModalSubmit (new post) and public thread message buttons.
+ * customIds:
+ *   story_tag_delete_<submissionId>   — submitter / creator / admin only
+ *   story_tag_view_proposed_<storyId> — all server members
+ *   story_tag_manage_<storyId>        — creator / admin only (hidden from others via auth check on click)
+ */
+function buildThreadPostButtons(submissionId, storyId, btnDelete, btnViewProposed, btnManageTags) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`story_tag_delete_${submissionId}`)
+      .setLabel(btnDelete)
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`story_tag_view_proposed_${storyId}`)
+      .setLabel(btnViewProposed)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId(`story_tag_manage_${storyId}`)
+      .setLabel(btnManageTags)
+      .setStyle(ButtonStyle.Secondary)
+  );
+}
+
+// ─── /story tag subcommand ───────────────────────────────────────────────────
+
+/**
+ * Slash command entry point: /story tag story_id:<id>
+ * Opens the tag submission modal directly. Same modal as the read-view button.
+ * customId: story_tag_submit_modal_<storyId>
+ */
+export async function handleTagCommand(connection, interaction) {
+  log(`handleTagCommand: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  const storyId = interaction.options.getString('story_id');
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
   const [writerRows] = await connection.execute(
     `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
     [storyId, userId]
@@ -21,30 +50,66 @@ export async function handleTagSubmit(connection, interaction) {
     return;
   }
 
+  const modal = buildTagSubmitModal(storyId, {
+    title: await getConfigValue(connection, 'txtTagSubmitModalTitle', guildId),
+    label: await getConfigValue(connection, 'lblTagSubmitText', guildId),
+    placeholder: await getConfigValue(connection, 'txtTagSubmitPlaceholder', guildId),
+  });
+  await interaction.showModal(modal);
+}
+
+// ─── Button: "Submit Tag" from read view ────────────────────────────────────
+
+/**
+ * Button: "Submit Tag" — opens a modal for active writers to suggest a tag.
+ * customId: story_submit_tag_<storyId>
+ */
+export async function handleTagSubmit(connection, interaction) {
+  const storyId = interaction.customId.split('_').at(-1);
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  const [writerRows] = await connection.execute(
+    `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
+    [storyId, userId]
+  );
+  if (writerRows.length === 0) {
+    await interaction.reply({ content: await getConfigValue(connection, 'txtTagSubmitNotWriter', guildId), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const modal = buildTagSubmitModal(storyId, {
+    title: await getConfigValue(connection, 'txtTagSubmitModalTitle', guildId),
+    label: await getConfigValue(connection, 'lblTagSubmitText', guildId),
+    placeholder: await getConfigValue(connection, 'txtTagSubmitPlaceholder', guildId),
+  });
+  await interaction.showModal(modal);
+}
+
+function buildTagSubmitModal(storyId, { title, label, placeholder }) {
   const modal = new ModalBuilder()
     .setCustomId(`story_tag_submit_modal_${storyId}`)
-    .setTitle(await getConfigValue(connection, 'txtTagSubmitModalTitle', guildId));
-
+    .setTitle(title);
   modal.addComponents(
     new ActionRowBuilder().addComponents(
       new TextInputBuilder()
         .setCustomId('tag_text')
-        .setLabel(await getConfigValue(connection, 'lblTagSubmitText', guildId))
+        .setLabel(label)
         .setStyle(TextInputStyle.Short)
         .setRequired(true)
         .setMaxLength(200)
-        .setPlaceholder(await getConfigValue(connection, 'txtTagSubmitPlaceholder', guildId))
+        .setPlaceholder(placeholder)
     )
   );
-
-  await interaction.showModal(modal);
+  return modal;
 }
 
+// ─── Modal submit ────────────────────────────────────────────────────────────
+
 export async function handleTagSubmitModalSubmit(connection, interaction) {
-  // customId: story_tag_submit_modal_<storyId>
   const storyId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
-  const userId  = interaction.user.id;
+  const userId = interaction.user.id;
   const displayName = interaction.member?.displayName ?? interaction.user.username;
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -55,7 +120,6 @@ export async function handleTagSubmitModalSubmit(connection, interaction) {
     return;
   }
 
-  // Check for duplicate pending submission
   const [existing] = await connection.execute(
     `SELECT submission_id FROM story_tag_submission
      WHERE story_id = ? AND tag_text = ? AND submission_status = 'pending'`,
@@ -72,27 +136,36 @@ export async function handleTagSubmitModalSubmit(connection, interaction) {
     [storyId, userId, displayName, tagText]
   );
   const submissionId = insertResult.insertId;
-  log(`Tag "${tagText}" submitted for story ${storyId} by ${displayName} (submission_id=${submissionId})`, { show: false });
+  log(`Tag "${tagText}" submitted for story ${storyId} by ${displayName} (submission_id=${submissionId})`, { show: true, guildName: interaction?.guild?.name });
 
-  // Post to story thread for reaction voting if thread exists
+  // Post to story thread for reaction voting
   let threadMessageId = null;
   try {
     const [storyRows] = await connection.execute(
       `SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]
     );
-    log(`handleTagSubmitModalSubmit: story_thread_id=${storyRows[0]?.story_thread_id}`, { show: false });
+    log(`handleTagSubmitModalSubmit: story_thread_id=${storyRows[0]?.story_thread_id}`, { show: false, guildName: interaction?.guild?.name });
     const threadId = storyRows[0]?.story_thread_id;
     if (threadId) {
       const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
       if (thread) {
-        const txtTagSubmitPosted = await getConfigValue(connection, 'txtTagSubmitPosted', guildId);
-        const postContent = replaceTemplateVariables(txtTagSubmitPosted, {
+        const cfg = await getConfigValue(connection, [
+          'txtTagSubmitPosted', 'txtDelete', 'btnViewProposedTags', 'btnManageTags'
+        ], guildId);
+
+        const postContent = replaceTemplateVariables(cfg.txtTagSubmitPosted, {
           submitter_name: displayName,
           tag_text: tagText
         });
-        const threadMsg = await thread.send(postContent);
+        const threadRow = buildThreadPostButtons(submissionId, storyId, cfg.txtDelete, cfg.btnViewProposedTags, cfg.btnManageTags);
+        const threadMsg = await thread.send({ content: postContent, components: [threadRow] });
         threadMessageId = threadMsg.id;
-        log(`handleTagSubmitModalSubmit: posted to thread ${threadId} message_id=${threadMessageId}`, { show: false });
+        log(`handleTagSubmitModalSubmit: posted to thread ${threadId} message_id=${threadMessageId}`, { show: false, guildName: interaction?.guild?.name });
+
+        // Add reaction votes
+        await threadMsg.react('👍').catch(err => log(`handleTagSubmitModalSubmit: 👍 react failed: ${err?.stack ?? err}`, { show: true }));
+        await threadMsg.react('👎').catch(err => log(`handleTagSubmitModalSubmit: 👎 react failed: ${err?.stack ?? err}`, { show: true }));
+
         await connection.execute(
           `UPDATE story_tag_submission SET thread_message_id = ? WHERE submission_id = ?`,
           [threadMessageId, submissionId]
@@ -100,19 +173,166 @@ export async function handleTagSubmitModalSubmit(connection, interaction) {
       }
     }
   } catch (err) {
-    log(`handleTagSubmitModalSubmit: failed to post to story thread: ${err?.stack ?? err}`, { show: true });
+    log(`handleTagSubmitModalSubmit failed to post to story thread: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
 
   const successKey = threadMessageId ? 'txtTagSubmitSuccess' : 'txtTagSubmitNoThread';
   await interaction.editReply({ content: await getConfigValue(connection, successKey, guildId) });
 }
 
+// ─── Button: "Delete" on thread post (submitter / creator / admin) ───────────
+
 /**
- * Button: "View Tags" — paginated view of pending tag submissions with live reaction counts.
- * customId: story_view_tags_<storyId>
+ * First click: show ephemeral confirmation embed with confirm/cancel buttons.
+ * customId: story_tag_delete_<submissionId>
  */
-export async function handleViewTagsButton(connection, interaction) {
-  log(`handleViewTagsButton: user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+export async function handleTagDeleteButton(connection, interaction) {
+  log(`handleTagDeleteButton: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  const submissionId = interaction.customId.split('_').at(-1);
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  const [rows] = await connection.execute(
+    `SELECT submission_id, story_id, submitter_user_id, tag_text, submission_status
+     FROM story_tag_submission WHERE submission_id = ?`,
+    [submissionId]
+  );
+  if (rows.length === 0 || rows[0].submission_status !== 'pending') {
+    await interaction.reply({ content: await getConfigValue(connection, 'txtTagDeleteNotFound', guildId), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const { story_id: storyId, submitter_user_id: submitterUserId, tag_text: tagText } = rows[0];
+
+  const isSubmitter = String(userId) === String(submitterUserId);
+  const isCreator = await checkIsCreator(connection, storyId, userId);
+  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
+
+  if (!isSubmitter && !isCreator && !isAdmin) {
+    await interaction.reply({ content: await getConfigValue(connection, 'txtTagNotSubmitter', guildId), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  const cfg = await getConfigValue(connection, [
+    'txtTagDeleteConfirmTitle', 'txtTagDeleteConfirmBody', 'btnTagDeleteConfirm', 'btnCancel'
+  ], guildId);
+
+  const embed = new EmbedBuilder()
+    .setTitle(cfg.txtTagDeleteConfirmTitle)
+    .setDescription(replaceTemplateVariables(cfg.txtTagDeleteConfirmBody, { tag_text: tagText }))
+    .setColor(0xed4245);
+
+  const row = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId(`story_tag_delete_confirm_${submissionId}`)
+      .setLabel(cfg.btnTagDeleteConfirm)
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`story_tag_delete_cancel_${submissionId}`)
+      .setLabel(cfg.btnCancel)
+      .setStyle(ButtonStyle.Secondary)
+  );
+
+  await interaction.reply({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
+}
+
+/**
+ * Confirm delete: remove DB record, delete thread message, reply with success.
+ * customId: story_tag_delete_confirm_<submissionId>
+ */
+export async function handleTagDeleteConfirm(connection, interaction) {
+  log(`handleTagDeleteConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  const submissionId = interaction.customId.split('_').at(-1);
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  await interaction.deferUpdate();
+
+  const [rows] = await connection.execute(
+    `SELECT submission_id, story_id, submitter_user_id, tag_text, thread_message_id, submission_status
+     FROM story_tag_submission WHERE submission_id = ?`,
+    [submissionId]
+  );
+  if (rows.length === 0 || rows[0].submission_status !== 'pending') {
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtTagDeleteNotFound', guildId), embeds: [], components: [] });
+    return;
+  }
+
+  const { story_id: storyId, submitter_user_id: submitterUserId, tag_text: tagText, thread_message_id: threadMessageId } = rows[0];
+
+  const isSubmitter = String(userId) === String(submitterUserId);
+  const isCreator = await checkIsCreator(connection, storyId, userId);
+  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
+
+  if (!isSubmitter && !isCreator && !isAdmin) {
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtTagNotSubmitter', guildId), embeds: [], components: [] });
+    return;
+  }
+
+  await connection.execute(`DELETE FROM story_tag_submission WHERE submission_id = ?`, [submissionId]);
+  log(`Tag submission ${submissionId} deleted by user ${userId}`, { show: true, guildName: interaction?.guild?.name });
+
+  // Delete the thread voting post
+  if (threadMessageId) {
+    try {
+      const [storyRows] = await connection.execute(`SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+      const threadId = storyRows[0]?.story_thread_id;
+      if (threadId) {
+        const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
+        if (thread) {
+          const msg = await thread.messages.fetch(threadMessageId).catch(() => null);
+          if (msg) await msg.delete().catch(err => log(`handleTagDeleteConfirm: failed to delete thread post ${threadMessageId}: ${err?.stack ?? err}`, { show: true }));
+        }
+      }
+    } catch (err) {
+      log(`handleTagDeleteConfirm: error removing thread post: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    }
+  }
+
+  // Build success message with link to status post
+  let successText = '';
+  try {
+    const [storyRows] = await connection.execute(
+      `SELECT story_thread_id, status_message_id, guild_story_id FROM story WHERE story_id = ?`, [storyId]
+    );
+    const { story_thread_id: threadId, status_message_id: statusMsgId, guild_story_id: guildStoryId } = storyRows[0] ?? {};
+    const txtTemplate = await getConfigValue(connection, 'txtTagDeleteSuccess', guildId);
+    const threadLink = (threadId && statusMsgId)
+      ? `https://discord.com/channels/${guildId}/${threadId}/${statusMsgId}`
+      : (threadId ? `https://discord.com/channels/${guildId}/${threadId}` : '');
+    successText = replaceTemplateVariables(txtTemplate, {
+      tag_text: tagText,
+      thread_link: threadLink,
+      story_id: guildStoryId ?? storyId
+    });
+  } catch (err) {
+    log(`handleTagDeleteConfirm: failed building success message: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    successText = `"${tagText}" has been removed.`;
+  }
+
+  await interaction.editReply({ content: successText, embeds: [], components: [] });
+}
+
+/**
+ * Cancel delete: dismiss the confirmation.
+ * customId: story_tag_delete_cancel_<submissionId>
+ */
+export async function handleTagDeleteCancel(connection, interaction) {
+  log(`handleTagDeleteCancel: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.update({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
+}
+
+// ─── Button: "View Proposed Tags" — all server members ──────────────────────
+
+/**
+ * Entry point from thread post button OR read view button.
+ * customId: story_tag_view_proposed_<storyId>  (thread post)
+ *           story_view_tags_<storyId>           (read view — kept for back-compat)
+ */
+export async function handleViewProposedTags(connection, interaction) {
+  log(`handleViewProposedTags: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+
+  // Support both customId patterns
   const storyId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -123,98 +343,113 @@ export async function handleViewTagsButton(connection, interaction) {
   const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
   const [rows] = await connection.execute(
-    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id, submission_status
+    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
      FROM story_tag_submission
      WHERE story_id = ? AND submission_status = 'pending'
      ORDER BY submitted_at ASC`,
     [storyId]
   );
-  log(`handleViewTagsButton: storyId=${storyId} pending=${rows.length}`, { show: false, guildName: interaction?.guild?.name });
 
-  if (rows.length === 0) {
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtTagViewNone', guildId) });
-    return;
-  }
-
-  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(
+    `SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]
+  );
   const storyTitle = storyRows[0]?.title ?? '';
   const threadId = storyRows[0]?.story_thread_id;
 
   const cfg = await getConfigValue(connection, [
-    'txtTagPendingTitle', 'txtTagVoteCount', 'txtTagVoteNote',
-    'btnTagApprove', 'btnTagReject', 'txtTagNoPending'
+    'txtTagPendingTitlePublic', 'txtTagNoPendingPublic',
+    'lblTagViewNameTag', 'lblTagViewNameVotes', 'btnManageTags'
   ], guildId);
 
-  const pages = [];
-  for (const tag of rows) {
+  if (rows.length === 0) {
+    await interaction.editReply({ content: cfg.txtTagNoPendingPublic });
+    return;
+  }
+
+  // Fetch reaction counts for all tags
+  let thread = null;
+  if (threadId) {
+    thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
+  }
+
+  const tagLines = [];
+  for (let i = 0; i < rows.length; i++) {
+    const tag = rows[i];
     let upVotes = 0;
     let downVotes = 0;
-    if (tag.thread_message_id && threadId) {
+    let tagDisplay = `**"${tag.tag_text}"**`;
+
+    if (tag.thread_message_id && thread) {
       try {
-        const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
-        if (thread) {
-          const msg = await thread.messages.fetch(tag.thread_message_id).catch(() => null);
-          if (msg) {
-            const thumbsUp = msg.reactions.cache.get('👍');
-            const thumbsDown = msg.reactions.cache.get('👎');
-            upVotes = thumbsUp ? thumbsUp.count : 0;
-            downVotes = thumbsDown ? thumbsDown.count : 0;
-          }
+        const msg = await thread.messages.fetch(tag.thread_message_id).catch(() => null);
+        if (msg) {
+          upVotes = msg.reactions.cache.get('👍')?.count ?? 0;
+          downVotes = msg.reactions.cache.get('👎')?.count ?? 0;
+          const msgLink = `https://discord.com/channels/${guildId}/${threadId}/${tag.thread_message_id}`;
+          tagDisplay = `[**"${tag.tag_text}"**](${msgLink})`;
         }
       } catch (err) {
-        log(`handleViewTagsButton: failed to fetch reactions for submission ${tag.submission_id}: ${err?.stack ?? err}`, { show: false, guildName: interaction?.guild?.name });
+        log(`handleViewProposedTags: reaction fetch failed for submission ${tag.submission_id}: ${err?.stack ?? err}`, { show: false, guildName: interaction?.guild?.name });
       }
     }
-    pages.push({ tag, upVotes, downVotes });
+
+    tagLines.push(`${i + 1}. ${tagDisplay}:  👍(${upVotes}) 👎(${downVotes})`);
   }
 
-  function buildTagPage(pageIndex) {
-    const { tag, upVotes, downVotes } = pages[pageIndex];
-    const voteText = replaceTemplateVariables(cfg.txtTagVoteCount, { up: upVotes, down: downVotes });
-    const embed = new EmbedBuilder()
-      .setTitle(replaceTemplateVariables(cfg.txtTagPendingTitle, { story_title: storyTitle }))
-      .setDescription(`**"${tag.tag_text}"** — by ${tag.submitter_display_name}\n${voteText}\n${cfg.txtTagVoteNote}`)
-      .setFooter({ text: `Tag ${pageIndex + 1} of ${pages.length}` })
-      .setColor(0x5865f2);
+  const embed = new EmbedBuilder()
+    .setTitle(replaceTemplateVariables(cfg.txtTagPendingTitlePublic, { story_title: storyTitle }))
+    .setDescription(
+      `# ${cfg.lblTagViewNameTag} ​ ​ ​ ​ ${cfg.lblTagViewNameVotes}\n` +
+      tagLines.join('\n')
+    )
+    .setColor(0x5865f2);
 
-    const components = [];
-
-    if (pages.length > 1) {
-      components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`story_tag_view_prev_${storyId}_${pageIndex}`)
-          .setLabel('◀️ Prev')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pageIndex === 0),
-        new ButtonBuilder()
-          .setCustomId(`story_tag_view_next_${storyId}_${pageIndex}`)
-          .setLabel('Next ▶️')
-          .setStyle(ButtonStyle.Secondary)
-          .setDisabled(pageIndex === pages.length - 1)
-      ));
-    }
-
-    if (isCreator || isAdmin) {
-      components.push(new ActionRowBuilder().addComponents(
-        new ButtonBuilder()
-          .setCustomId(`story_tag_approve_${tag.submission_id}_${storyId}`)
-          .setLabel(cfg.btnTagApprove ?? '✅ Approve')
-          .setStyle(ButtonStyle.Success),
-        new ButtonBuilder()
-          .setCustomId(`story_tag_reject_${tag.submission_id}_${storyId}`)
-          .setLabel(cfg.btnTagReject ?? '❌ Reject')
-          .setStyle(ButtonStyle.Danger)
-      ));
-    }
-
-    return { embeds: [embed], components };
+  const components = [];
+  if (isCreator || isAdmin) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`story_manage_review_tags_read_${storyId}`)
+        .setLabel(cfg.btnManageTags)
+        .setStyle(ButtonStyle.Primary)
+    ));
   }
 
-  await interaction.editReply(buildTagPage(0));
+  await interaction.editReply({ embeds: [embed], components });
 }
 
+// ─── Button: "Manage Tags" from thread post ──────────────────────────────────
+
 /**
- * "Edit Tags" button from read view — opens the same approve/reject review panel as /story manage.
+ * Entry point from thread post. Creator/admin only — opens the same review panel
+ * as story_manage_review_tags_read_<storyId>. Auth check happens here so public
+ * thread post button does not need per-user rendering.
+ * customId: story_tag_manage_<storyId>
+ */
+export async function handleTagManageButton(connection, interaction) {
+  log(`handleTagManageButton: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  const storyId = interaction.customId.split('_').at(-1);
+  const guildId = interaction.guild.id;
+  const userId = interaction.user.id;
+
+  const isCreator = await checkIsCreator(connection, storyId, userId);
+  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
+
+  if (!isCreator && !isAdmin) {
+    await interaction.reply({ content: await getConfigValue(connection, 'txtTagNotCreator', guildId), flags: MessageFlags.Ephemeral });
+    return;
+  }
+
+  // Delegate to the shared Edit Tags handler (same panel, standalone entry point)
+  await handleEditTagsButton(connection, interaction);
+}
+
+// ─── Button: "Edit/Manage Tags" from read view ───────────────────────────────
+
+/**
+ * Entry point from read view and from handleTagManageButton.
+ * Two entry points documented:
+ *   1. story_manage_review_tags_read_<storyId>  — read view "Manage Tags" button
+ *   2. story_tag_manage_<storyId>               — thread post "Manage Tags" button (via handleTagManageButton)
  * customId: story_manage_review_tags_read_<storyId>
  */
 export async function handleEditTagsButton(connection, interaction) {
@@ -226,7 +461,8 @@ export async function handleEditTagsButton(connection, interaction) {
   const isCreator = await checkIsCreator(connection, storyId, userId);
   const isAdmin = await checkIsAdmin(connection, interaction, guildId);
   if (!isCreator && !isAdmin) {
-    await interaction.reply({ content: await getConfigValue(connection, 'txtTagNotCreator', guildId), flags: MessageFlags.Ephemeral });
+    const replyFn = interaction.replied || interaction.deferred ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
+    await replyFn({ content: await getConfigValue(connection, 'txtTagNotCreator', guildId), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -244,7 +480,8 @@ export async function handleEditTagsButton(connection, interaction) {
   ], guildId);
 
   if (rows.length === 0) {
-    await interaction.reply({ content: cfg.txtTagNoPending ?? 'No pending tag suggestions.', flags: MessageFlags.Ephemeral });
+    const replyFn = interaction.replied || interaction.deferred ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
+    await replyFn({ content: cfg.txtTagNoPending, flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -252,34 +489,45 @@ export async function handleEditTagsButton(connection, interaction) {
   const queueNote = rows.length > 1 ? ` (${rows.length - 1} more pending)` : '';
 
   const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(cfg.txtTagPendingTitle ?? '🏷️ Pending Tags — [story_title]', { story_title: storyTitle }))
+    .setTitle(replaceTemplateVariables(cfg.txtTagPendingTitle, { story_title: storyTitle }))
     .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}`)
     .setColor(0x5865f2);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`story_tag_approve_${firstTag.submission_id}_${storyId}`)
-      .setLabel(cfg.btnTagApprove ?? '✅ Approve')
+      .setLabel(cfg.btnTagApprove)
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
       .setCustomId(`story_tag_reject_${firstTag.submission_id}_${storyId}`)
-      .setLabel(cfg.btnTagReject ?? '❌ Reject')
+      .setLabel(cfg.btnTagReject)
       .setStyle(ButtonStyle.Danger)
   );
 
-  await interaction.reply({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
+  const replyFn = interaction.replied || interaction.deferred ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
+  await replyFn({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
+}
+
+// ─── Paginated "View Tags" — writers / creator / admin (legacy read-view) ────
+
+/**
+ * Original paginated view for writers with approve/reject controls.
+ * customId: story_view_tags_<storyId>
+ * Now routes to handleViewProposedTags for unified public view.
+ */
+export async function handleViewTagsButton(connection, interaction) {
+  await handleViewProposedTags(connection, interaction);
 }
 
 /**
- * Navigation buttons for the View Tags paginated panel.
+ * Navigation buttons for the paginated view (legacy — kept for any in-flight sessions).
  * customId: story_tag_view_prev_<storyId>_<pageIndex>
  *           story_tag_view_next_<storyId>_<pageIndex>
  */
 export async function handleViewTagsNav(connection, interaction) {
   log(`handleViewTagsNav: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const parts = interaction.customId.split('_');
-  // story_tag_view_prev_<storyId>_<pageIndex>
-  const direction = parts[3]; // 'prev' or 'next'
+  const direction = parts[3];
   const storyId = parts[4];
   const currentPage = parseInt(parts[5]);
   const newPage = direction === 'next' ? currentPage + 1 : currentPage - 1;
@@ -313,20 +561,18 @@ export async function handleViewTagsNav(connection, interaction) {
   ], guildId);
 
   const pages = [];
+  const thread = threadId ? await interaction.guild.channels.fetch(threadId).catch(() => null) : null;
   for (const tag of rows) {
     let upVotes = 0;
     let downVotes = 0;
-    if (tag.thread_message_id && threadId) {
+    if (tag.thread_message_id && thread) {
       try {
-        const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
-        if (thread) {
-          const msg = await thread.messages.fetch(tag.thread_message_id).catch(() => null);
-          if (msg) {
-            upVotes = msg.reactions.cache.get('👍')?.count ?? 0;
-            downVotes = msg.reactions.cache.get('👎')?.count ?? 0;
-          }
+        const msg = await thread.messages.fetch(tag.thread_message_id).catch(() => null);
+        if (msg) {
+          upVotes = msg.reactions.cache.get('👍')?.count ?? 0;
+          downVotes = msg.reactions.cache.get('👎')?.count ?? 0;
         }
-      } catch { /* swallow — reaction fetch is best-effort */ }
+      } catch { /* best-effort */ }
     }
     pages.push({ tag, upVotes, downVotes });
   }
@@ -360,11 +606,11 @@ export async function handleViewTagsNav(connection, interaction) {
     components.push(new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`story_tag_approve_${tag.submission_id}_${storyId}`)
-        .setLabel(cfg.btnTagApprove ?? '✅ Approve')
+        .setLabel(cfg.btnTagApprove)
         .setStyle(ButtonStyle.Success),
       new ButtonBuilder()
         .setCustomId(`story_tag_reject_${tag.submission_id}_${storyId}`)
-        .setLabel(cfg.btnTagReject ?? '❌ Reject')
+        .setLabel(cfg.btnTagReject)
         .setStyle(ButtonStyle.Danger)
     ));
   }

@@ -39,6 +39,17 @@ For system architecture and routing, see `system_roadmap.md`.
   → story_manage_* (edit, skip, close, tags)
   → story_skip_confirm_* / story_close_confirm_*
   → skip_turn_* → PickNextWriter → NextTurn
+  → story_manage_review_tags (when pending tags > 0) → Manage Tags panel (approve/reject queue)
+
+Tag Submission Thread Post (in story thread)
+  → Delete button → ephemeral confirm embed → story_tag_delete_confirm_* → removes record + thread post
+  → View Proposed Tags → handleViewProposedTags → all-tags embed with linked tag text and reaction counts
+  → Manage Tags → handleTagManageButton (creator/admin auth check) → Manage Tags panel
+
+/story read [story_id] tag buttons
+  → Submit Tag (active writers) → story_submit_tag_* → modal → story_tag_submit_modal_*
+  → View Proposed Tags (all) → story_tag_view_proposed_* → all-tags embed
+  → Manage Tags (creator/admin) → story_manage_review_tags_read_* → Manage Tags panel
 
 /story list
   → story_list_* (pagination, filter select menus)
@@ -46,6 +57,12 @@ For system architecture and routing, see `system_roadmap.md`.
 /story edit [story_id]
   → chunkEntryContent → paginated edit modals
   → story_edit_modal_* → entry updated
+
+/story tag [story_id]
+  → Active writers only; opens tag submission modal
+  → story_tag_submit_modal_<storyId> → handleTagSubmitModalSubmit
+    → Posts voting message to story thread with 👍/👎 auto-reactions
+    → Thread post buttons: Delete (submitter/creator/admin), View Proposed Tags (all), Manage Tags (creator/admin)
 
 /story ping / timeleft / help
   → Ephemeral replies only; no follow-up interactions

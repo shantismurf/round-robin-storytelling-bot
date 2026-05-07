@@ -109,35 +109,31 @@ export function buildReadEmbed(session, pageIndex) {
   }
   extraButtons.push(new ActionRowBuilder().addComponents(...utilityButtons));
 
-  // Tag row: Submit Tag always shown for writers; View Tags when pending submissions exist; Edit Tags for creator/admin
+  // Tag row: Submit Tag for active writers; View Proposed Tags for all; Manage Tags for creator/admin
   const tagButtons = [];
   if (session.isActiveWriter) {
     tagButtons.push(
       new ButtonBuilder()
         .setCustomId(`story_submit_tag_${session.storyId}`)
-        .setLabel(session.btnSubmitTagRead ?? '🏷️ Submit Tag')
+        .setLabel(session.btnSubmitTagRead)
         .setStyle(ButtonStyle.Secondary)
     );
   }
-  if (session.pendingTagCount > 0) {
-    tagButtons.push(
-      new ButtonBuilder()
-        .setCustomId(`story_view_tags_${session.storyId}`)
-        .setLabel(session.btnViewTags ?? '🏷️ View Tags')
-        .setStyle(ButtonStyle.Secondary)
-    );
-  }
+  tagButtons.push(
+    new ButtonBuilder()
+      .setCustomId(`story_tag_view_proposed_${session.storyId}`)
+      .setLabel(session.btnViewProposedTags)
+      .setStyle(ButtonStyle.Secondary)
+  );
   if (session.isAdminOrCreator) {
     tagButtons.push(
       new ButtonBuilder()
         .setCustomId(`story_manage_review_tags_read_${session.storyId}`)
-        .setLabel(session.btnEditTags ?? '✏️ Edit Tags')
+        .setLabel(session.btnManageTags)
         .setStyle(ButtonStyle.Secondary)
     );
   }
-  if (tagButtons.length > 0) {
-    extraButtons.push(new ActionRowBuilder().addComponents(...tagButtons));
-  }
+  extraButtons.push(new ActionRowBuilder().addComponents(...tagButtons));
 
   const result = buildEntryEmbed(page, {
     title: `📖 ${session.title}`,
@@ -265,10 +261,10 @@ export async function handleRead(connection, interaction) {
     );
 
     const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
-    const [btnSubmitTagRead, btnViewTags, btnEditTags, ratingBadgeDisplay] = await Promise.all([
+    const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay] = await Promise.all([
       getConfigValue(connection, 'btnSubmitTagRead', guildId),
-      getConfigValue(connection, 'btnViewTags', guildId),
-      getConfigValue(connection, 'btnEditTags', guildId),
+      getConfigValue(connection, 'btnViewProposedTags', guildId),
+      getConfigValue(connection, 'btnManageTags', guildId),
       getConfigValue(connection, ratingBadgeCfgKey, guildId),
     ]);
 
@@ -284,7 +280,7 @@ export async function handleRead(connection, interaction) {
       title: titleWithRating, wordCount, guildId, userId: interaction.user.id,
       isAdmin, isAdminOrCreator: isAdmin || isCreator, isActiveWriter,
       pendingTagCount: Number(pendingTagCount),
-      btnSubmitTagRead, btnViewTags, btnEditTags,
+      btnSubmitTagRead, btnViewProposedTags, btnManageTags,
       storyThreadId: story.story_thread_id, imagePageIndex: 0
     };
     pendingReadData.set(interaction.user.id, session);

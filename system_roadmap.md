@@ -31,6 +31,22 @@ All Discord interactions are dispatched in `index.js` → `InteractionCreate` ha
 ### Slash Commands
 Routed by `interaction.commandName` to the matching command in `client.commands`.
 
+### Slash Subcommands (`/story`)
+| Subcommand | Handler | Notes |
+|------------|---------|-------|
+| `add` | `handleAddStory` | |
+| `list` | `handleListStories` | |
+| `write` | `handleWrite` | Quick mode only |
+| `join` | `handleJoin` | |
+| `read` | `handleRead` | |
+| `close` | `handleClose` | Creator/admin |
+| `manage` | `handleManage` | Creator/admin |
+| `timeleft` | `handleTimeleft` | |
+| `help` | `handleHelp` | |
+| `ping` | `handlePing` | Creator/admin |
+| `edit` | `handleEdit` | |
+| `tag` | `handleTagCommand` | Active writers only; opens tag submit modal |
+
 ### Modal Submissions (`isModalSubmit`)
 | Prefix | Handler |
 |--------|---------|
@@ -38,7 +54,28 @@ Routed by `interaction.commandName` to the matching command in `client.commands`
 | `storyadmin_*` | `storyadmin.handleModalSubmit()` |
 | `mystory_*` | `mystory.handleModalSubmit()` |
 
-### Button Clicks (`isButton`)
+### Button Clicks (`isButton`) — tag-related
+| Prefix | Handler | Auth |
+|--------|---------|------|
+| `story_submit_tag_<storyId>` | `handleTagSubmit` | Active writers only |
+| `story_tag_submit_modal_<storyId>` | `handleTagSubmitModalSubmit` | Active writers only (modal) |
+| `story_tag_delete_<submissionId>` | `handleTagDeleteButton` | Submitter / creator / admin |
+| `story_tag_delete_confirm_<submissionId>` | `handleTagDeleteConfirm` | Re-checked on confirm |
+| `story_tag_delete_cancel_<submissionId>` | `handleTagDeleteCancel` | Any |
+| `story_tag_view_proposed_<storyId>` | `handleViewProposedTags` | All server members |
+| `story_view_tags_<storyId>` | `handleViewProposedTags` | All server members (legacy alias) |
+| `story_tag_manage_<storyId>` | `handleTagManageButton` | Creator/admin (auth-gated on click) |
+| `story_manage_review_tags_read_<storyId>` | `handleEditTagsButton` | Creator/admin |
+| `story_tag_approve_<submissionId>_<storyId>` | `handleTagReviewButton` | Creator/admin |
+| `story_tag_reject_<submissionId>_<storyId>` | `handleTagReviewButton` | Creator/admin |
+| `story_tag_view_prev_<storyId>_<pageIndex>` | `handleViewTagsNav` | Writers/creator/admin |
+| `story_tag_view_next_<storyId>_<pageIndex>` | `handleViewTagsNav` | Writers/creator/admin |
+
+**Manage Tags panel entry points** (`handleEditTagsButton`):
+1. Read view → `story_manage_review_tags_read_<storyId>` button
+2. Thread post → `story_tag_manage_<storyId>` → `handleTagManageButton` → delegates to `handleEditTagsButton`
+
+### Button Clicks (`isButton`) — all others
 | Prefix | Handler |
 |--------|---------|
 | `storyadmin_*` | `storyadmin.handleButtonInteraction()` |

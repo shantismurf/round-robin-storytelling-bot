@@ -12,7 +12,7 @@ import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry 
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
 import { handleManage, handleManageButton, handleManageSelectMenu, handleTurnActionSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu, handleManageEntriesActionButton, handleManageEntriesModal } from '../story/_manageEntries.js';
-import { handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton } from '../story/tags.js';
+import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
@@ -126,6 +126,16 @@ const data = new SlashCommandBuilder()
   )
   .addSubcommand(subcommand =>
     subcommand
+      .setName('tag')
+      .setDescription('Suggest a tag for a story (active writers only)')
+      .addStringOption(option =>
+        option.setName('story_id')
+          .setDescription('Story to tag')
+          .setRequired(true)
+          .setAutocomplete(true))
+  )
+  .addSubcommand(subcommand =>
+    subcommand
       .setName('edit')
       .setDescription('Edit a confirmed story entry')
       .addStringOption(option =>
@@ -180,6 +190,8 @@ async function execute(connection, interaction) {
     await handlePing(connection, interaction);
   } else if (subcommand === 'edit') {
     await handleEdit(connection, interaction);
+  } else if (subcommand === 'tag') {
+    await handleTagCommand(connection, interaction);
   } else {
     log(`execute() - unrecognized subcommand '${subcommand}', no handler matched`, { show: false, guildName: interaction?.guild?.name });
   }
@@ -277,10 +289,18 @@ async function handleButtonInteraction(connection, interaction) {
     await handleTagReviewButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_submit_tag_')) {
     await handleTagSubmit(connection, interaction);
-  } else if (interaction.customId.startsWith('story_view_tags_')) {
-    await handleViewTagsButton(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_view_proposed_') || interaction.customId.startsWith('story_view_tags_')) {
+    await handleViewProposedTags(connection, interaction);
   } else if (interaction.customId.startsWith('story_tag_view_prev_') || interaction.customId.startsWith('story_tag_view_next_')) {
     await handleViewTagsNav(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_delete_confirm_')) {
+    await handleTagDeleteConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_delete_cancel_')) {
+    await handleTagDeleteCancel(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_delete_')) {
+    await handleTagDeleteButton(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_manage_')) {
+    await handleTagManageButton(connection, interaction);
   }
 }
 
