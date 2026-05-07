@@ -196,6 +196,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtTurnLengthPlaceholder', 'txtTimeoutReminderPlaceholder',
       'txtManageMaxWritersPlaceholder', 'txtManageTagsPlaceholder',
       'btnManageTurns', 'btnManageEntries',
+      'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject',
       'txtManageTurnsPanelTitle', 'txtManageTurnsNoTurn', 'txtManageTurnsActiveTurn',
       // Turn action cfg keys
       'btnTurnSkip', 'btnTurnExtend', 'btnTurnNext', 'btnTurnReassign',
