@@ -340,7 +340,7 @@ async function handleManageButton(connection, interaction) {
     await handleManageEntriesButton(connection, interaction, state);
 
   } else if (customId === 'story_manage_open_metadata') {
-    const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./addMetadata.js');
+    const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./_addMetadata.js');
     const cfg2 = await getMetaCfg(connection, interaction.guild.id);
     log(`handleManageButton: registering meta session storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
     registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id, async (saveInteraction, metaFields, cfg) => {
