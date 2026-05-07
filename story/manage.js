@@ -278,7 +278,7 @@ async function handleManageButton(connection, interaction) {
 
   if (!state) {
     return await interaction.reply({
-      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
       flags: MessageFlags.Ephemeral
     });
   }
@@ -771,7 +771,7 @@ async function handleManageModalSubmit(connection, interaction) {
 
   if (!state) {
     return await interaction.reply({
-      content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
       flags: MessageFlags.Ephemeral
     });
   }
@@ -843,7 +843,7 @@ async function handleManageSelectMenu(connection, interaction) {
 
   if (!state) {
     await interaction.deferUpdate();
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id), components: [] });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), components: [] });
     return;
   }
 

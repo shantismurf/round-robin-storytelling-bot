@@ -40,7 +40,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnCancel', 'Cancel', 'en', 1),
 ('txtDelete', 'Delete', 'en', 1),
 ('txtActionCancelled', 'Cancelled.', 'en', 1),
-('txtActionSessionExpired', 'This confirmation has expired. Please run the command again.', 'en', 1),
+('txtActionSessionExpired', 'Your session has expired. Please try again.', 'en', 1),
 ('txtNotActiveWriter', 'You are not an active writer in this story.', 'en', 1),
 ('txtNoConfirmedEntries', 'This story has no finalized entries yet.', 'en', 1),
 ('txtNoActiveStoriesToPause', 'You are not an active writer in any stories right now.', 'en', 1),
