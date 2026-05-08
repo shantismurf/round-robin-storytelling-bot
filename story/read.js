@@ -182,20 +182,23 @@ log(`handleRead: restrictedChannelId: ${restrictedChannelId}`,['',guildId]);
       const isConfigured = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';  
 
 if (isConfigured) {
-        // 1. Fetch the full channel object to populate .nsfw
-        // This ensures the bot actually checks the API for the channel status
-        const fullChannel = await interaction.client.channels.fetch(interaction.channelId);
+    // 1. Fetch the channel
+    const fullChannel = await interaction.client.channels.fetch(interaction.channelId);
 
-        log(`handleRead: Configured: ${isConfigured}, Channel: ${fullChannel.name}, NSFW: ${fullChannel.nsfw}`, ['', guildId]);
+    // 2. Logic: If it's a thread, look at the parent's NSFW status. 
+    // If it's a regular channel, look at its own NSFW status.
+    const isNsfw = fullChannel.nsfw || (fullChannel.parent && fullChannel.parent.nsfw);
 
-        // 2. Perform the check against the fetched channel
-        if (!fullChannel.nsfw) {
-        const txt = (await getConfigValue(connection, 'txtRestrictedStoryNotHere', guildId))
-          .replace('[rating]', story.rating);
+    log(`handleRead: Configured: ${isConfigured}, Channel: ${fullChannel.name}, NSFW: ${isNsfw}`, ['', guildId]);
+
+    // 3. Perform the check against the resolved status
+    if (!isNsfw) {
+        const txtValue = await getConfigValue(connection, 'txtRestrictedStoryNotHere', guildId);
+        const txt = txtValue.replace('[rating]', story.rating ?? 'M');
         return await interaction.editReply({ content: txt });
-      }
     }
-  }
+}
+
 
     const [entries] = await connection.execute(
       `SELECT se.content, se.story_entry_id, se.created_at, sw.discord_user_id AS original_author_id,
