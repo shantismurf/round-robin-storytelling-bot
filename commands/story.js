@@ -459,6 +459,16 @@ async function handleAutocomplete(connection, interaction) {
         [interaction.user.id, guildId, typed, typedPrefix]
       );
 
+    } else if (subcommand === 'tag') {
+      [rows] = await connection.execute(
+        `SELECT s.guild_story_id, s.title FROM story s
+         JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
+         WHERE s.guild_id = ? AND sw.sw_status = 1 AND s.story_status = 1
+           AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+         ORDER BY s.guild_story_id LIMIT 25`,
+        [interaction.user.id, guildId, typed, typedPrefix]
+      );
+
     } else {
       return interaction.respond([]);
     }
