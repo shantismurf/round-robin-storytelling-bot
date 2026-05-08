@@ -95,4 +95,5 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtTagPendingTitlePublic', '🏷️ Proposed Tags for [story_title]', 'en', 1),
 ('txtTagNoPendingPublic', 'There are no pending tag suggestions for this story right now.', 'en', 1),
 ('lblTagViewNameTag', 'Tag', 'en', 1),
-('lblTagViewNameVotes', 'Votes', 'en', 1);
+('lblTagViewNameVotes', 'Votes', 'en', 1),
+('txtManageWarningSelectInstructions', 'Dismiss menu to apply warnings', 'en', 1);

@@ -9,7 +9,7 @@ const pendingMetaPanelData = new Map();
 export async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [
     'txtMetaPanelTitle', 'txtMetaSaveSuccess', 'txtMetaApplied', 'txtSelectionStaged', 'btnSaveSettings', 'btnCancel',
-    'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings',
+    'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings', 'txtManageWarningSelectInstructions',
     'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
@@ -85,11 +85,10 @@ export function buildMetadataPanel(cfg, state) {
       .setPlaceholder(cfg.lblMetaWarnings)
       .setMinValues(1)
       .setMaxValues(warningOptions.length)
-      .addOptions(warningOptions.map(k => ({
-        label: cfg[k] ?? k,
-        value: k,
-        default: (state.warnings ?? []).includes(k),
-      })))
+      .addOptions([
+        { label: cfg.txtManageWarningSelectInstructions, value: '__dismiss__', default: false },
+        ...warningOptions.map(k => ({ label: cfg[k] ?? k, value: k, default: (state.warnings ?? []).includes(k) }))
+      ])
   );
 
   // Row 4: Main Relationship | Other Relationships | Characters | Tags
@@ -177,11 +176,10 @@ export async function handleMetadataButton(connection, interaction) {
         .setPlaceholder(cfg.lblMetaWarnings)
         .setMinValues(1)
         .setMaxValues(warningOptions.length)
-        .addOptions(warningOptions.map(k => ({
-          label: cfg[k] ?? k,
-          value: k,
-          default: (metaState.warnings ?? []).includes(k)
-        })));
+        .addOptions([
+          { label: cfg.txtManageWarningSelectInstructions, value: '__dismiss__', default: false },
+          ...warningOptions.map(k => ({ label: cfg[k] ?? k, value: k, default: (metaState.warnings ?? []).includes(k) }))
+        ]);
       await interaction.reply({
         content: cfg.lblMetaWarnings,
         components: [new ActionRowBuilder().addComponents(selectMenu)],
@@ -429,7 +427,7 @@ export async function handleMetadataSelectMenu(connection, interaction) {
     await interaction.update(buildMetadataPanel(cfg, metaState));
 
   } else if (customId === 'story_add_meta_warnings_select') {
-    metaState.warnings = interaction.values;
+    metaState.warnings = interaction.values.filter(v => v !== '__dismiss__');
     log(`handleMetadataSelectMenu: warnings saved for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.update(buildMetadataPanel(cfg, metaState));
   }

@@ -204,7 +204,8 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtTurnRestoreEntryPlaceholder', 'txtTurnNextSelectWrite',
       ...Object.values(ratingLabels),
       ...dynamicOptions,
-      ...warningOptions
+      ...warningOptions,
+      'txtManageWarningSelectInstructions'
     ], guildId);
     log(`handleManage: cfg loaded`, { show: false, guildName: interaction?.guild?.name });
 
@@ -874,7 +875,7 @@ async function handleManageSelectMenu(connection, interaction) {
     state.rating = newRating;
     log(`handleManageSelectMenu: rating staged ${currentRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
   } else if (customId === 'story_manage_warnings_select') {
-    state.warnings = interaction.values;
+    state.warnings = interaction.values.filter(v => v !== '__dismiss__');
     log(`handleManageSelectMenu: warnings staged for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
   } else {
     return;
