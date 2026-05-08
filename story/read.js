@@ -198,6 +198,7 @@ if (isConfigured) {
         return await interaction.editReply({ content: txt });
     }
 }
+}
 
 
     const [entries] = await connection.execute(
