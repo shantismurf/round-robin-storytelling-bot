@@ -12,6 +12,7 @@ import { getConfigValue, log, sanitizeModalInput, checkIsAdmin, checkIsCreator, 
  *   story_tag_manage_<storyId>        — creator / admin only (hidden from others via auth check on click)
  */
 function buildThreadPostButtons(submissionId, storyId, btnDelete, btnViewProposed, btnManageTags) {
+  log(`buildThreadPostButtons entry: submissionId=${submissionId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`story_tag_delete_${submissionId}`)
@@ -36,10 +37,10 @@ function buildThreadPostButtons(submissionId, storyId, btnDelete, btnViewPropose
  * customId: story_tag_submit_modal_<storyId>
  */
 export async function handleTagCommand(connection, interaction) {
-  log(`handleTagCommand: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const storyId = interaction.options.getString('story_id');
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
+  log(`handleTagCommand entry: user=${userId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   const [writerRows] = await connection.execute(
     `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
@@ -68,6 +69,7 @@ export async function handleTagSubmit(connection, interaction) {
   const storyId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
+  log(`handleTagSubmit entry: user=${userId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   const [writerRows] = await connection.execute(
     `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
@@ -87,6 +89,8 @@ export async function handleTagSubmit(connection, interaction) {
 }
 
 function buildTagSubmitModal(storyId, { title, label, placeholder }) {
+  log(`buildTagSubmitModal entry: storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+
   const modal = new ModalBuilder()
     .setCustomId(`story_tag_submit_modal_${storyId}`)
     .setTitle(title);
@@ -111,6 +115,7 @@ export async function handleTagSubmitModalSubmit(connection, interaction) {
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
   const displayName = interaction.member?.displayName ?? interaction.user.username;
+  log(`handleTagSubmitModalSubmit entry: user=${displayName}(${userId}), storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
