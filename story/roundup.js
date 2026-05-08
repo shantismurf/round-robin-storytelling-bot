@@ -186,7 +186,15 @@ export async function scheduleNextRoundup(connection, guildId) {
   const day = parseInt(cfg.cfgWeeklyRoundupDay) || 1;
   const hour = parseInt(cfg.cfgWeeklyRoundupHour) || 9;
   const runAt = calcNextRoundupTime(day, hour);
-  // Cancel any existing pending jobs before inserting to prevent duplicates
+  const [existing] = await connection.execute(
+    `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 0 AND run_at > NOW()
+     AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    [String(guildId)]
+  );
+  if (existing.length > 0) {
+    log(`weeklyRoundup future job already exists for guild ${guildId}, skipping schedule`, { show: true });
+    return runAt;
+  }
   await connection.execute(
     `UPDATE job SET job_status = 3
      WHERE job_type = 'weeklyRoundup' AND job_status = 0
@@ -195,7 +203,7 @@ export async function scheduleNextRoundup(connection, guildId) {
   );
   await connection.execute(
     `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-    ['weeklyRoundup', JSON.stringify({ guildId: String(guildId) }), runAt]
+    ['weeklyRoundup', JSON.stringify({ guildId: String(guildId), runAt: runAt.toISOString() }), runAt]
   );
   log(`Scheduled next weeklyRoundup for guild ${guildId} at ${runAt.toISOString()}`, { show: true });
   return runAt;
@@ -241,7 +249,22 @@ export async function scheduleAllRoundupJobs(connection) {
 }
 
 export async function handleWeeklyRoundup(connection, client, payload) {
-  const { guildId } = payload;
+  const { guildId, runAt } = payload;
+
+  if (runAt) {
+    const [alreadyRan] = await connection.execute(
+      `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 1
+       AND CAST(JSON_EXTRACT(payload, '$.runAt') AS CHAR) = ?
+       AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+      [runAt, String(guildId)]
+    );
+    if (alreadyRan.length > 0) {
+      log(`weeklyRoundup for guild ${guildId} already ran for window ${runAt}, skipping duplicate`, { show: true });
+      await cancelPendingRoundupJobs(connection, guildId);
+      await scheduleNextRoundup(connection, guildId);
+      return;
+    }
+  }
 
   const enabled = await getConfigValue(connection, 'cfgWeeklyRoundupEnabled', guildId);
   if (enabled !== '1') return;
