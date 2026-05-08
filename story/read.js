@@ -177,7 +177,7 @@ export async function handleRead(connection, interaction) {
     if (isRestricted(story.rating)) {
       const restrictedChannelId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
       const isConfigured = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';  
-      if (isConfigured && !channel.nsfw){
+      if (isConfigured && !interaction.channel.nsfw){
         const txt = (await getConfigValue(connection, 'txtRestrictedStoryNotHere', guildId))
           .replace('[rating]', story.rating ?? 'M');
         return await interaction.editReply({ content: txt });
