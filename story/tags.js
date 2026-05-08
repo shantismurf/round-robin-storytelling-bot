@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, log, sanitizeModalInput, checkIsAdmin, checkIsCreator, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -37,10 +37,15 @@ function buildThreadPostButtons(submissionId, storyId, btnDelete, btnViewPropose
  * customId: story_tag_submit_modal_<storyId>
  */
 export async function handleTagCommand(connection, interaction) {
-  const storyId = interaction.options.getString('story_id');
+  const guildStoryId = interaction.options.getString('story_id');
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
-  log(`handleTagCommand entry: user=${userId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  const storyId = await resolveStoryId(connection, guildId, guildStoryId);
+  if (!storyId) {
+    await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
+    return;
+  }
+  log(`handleTagCommand entry: user=${userId}, guildStoryId=${guildStoryId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   const [writerRows] = await connection.execute(
     `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
