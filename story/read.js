@@ -176,11 +176,11 @@ export async function handleRead(connection, interaction) {
     // Restricted story check — M/E rated stories can only be read in channels that are age-restricted, if the restricted feed if has been configured for this guild
 
     if (isRestricted(story.rating)) {
-log('handleRead: story isRestricted, Rating: ${story.rating}',['',guildId]);
+log(`handleRead: story isRestricted, Rating: ${story.rating}`,['',guildId]);
       const restrictedChannelId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
-log('handleRead: restrictedChannelId: ${restrictedChannelId}',['',guildId]);
+log(`handleRead: restrictedChannelId: ${restrictedChannelId}`,['',guildId]);
       const isConfigured = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';  
-log('handleRead: isConfigured: ${isConfigured}',['',guildId]);
+log(`handleRead: isConfigured: ${isConfigured}`,['',guildId]);
       if (isConfigured && !interaction.channel.nsfw){
         const txt = (await getConfigValue(connection, 'txtRestrictedStoryNotHere', guildId))
           .replace('[rating]', story.rating ?? 'M');
