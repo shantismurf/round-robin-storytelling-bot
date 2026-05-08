@@ -195,6 +195,7 @@ if (isConfigured) {
         return await interaction.editReply({ content: txt });
       }
     }
+  }
 
     const [entries] = await connection.execute(
       `SELECT se.content, se.story_entry_id, se.created_at, sw.discord_user_id AS original_author_id,
