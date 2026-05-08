@@ -60,10 +60,6 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setLabel(`${cfg.lblWriterOrder}: ${orderLabel}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId('story_manage_toggle_status')
-      .setLabel(`Status: ${isPaused ? cfg.txtPaused : cfg.txtActive}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
       .setCustomId('story_manage_toggle_latejoins')
       .setLabel(`Join: ${state.allowJoins ? cfg.txtOpen : cfg.txtClosed}`)
       .setStyle(ButtonStyle.Secondary)
@@ -308,12 +304,6 @@ async function handleManageButton(connection, interaction) {
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
   } else if (customId === 'story_manage_toggle_pauseresume') {
-    state.targetStatus = state.targetStatus === 1 ? 2 : 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-
-  } else if (customId === 'story_manage_toggle_status') {
-    // Legacy alias
     state.targetStatus = state.targetStatus === 1 ? 2 : 1;
     await interaction.deferUpdate();
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
@@ -669,9 +659,11 @@ async function applyPauseActions(connection, interaction, state) {
 
 async function applyResumeActions(connection, interaction, state) {
   const [activeTurnRows] = await connection.execute(
-    `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.discord_display_name, sw.notification_prefs
+    `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.discord_display_name, sw.notification_prefs,
+            s.story_thread_id, s.title
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     JOIN story s ON s.story_id = sw.story_id
      WHERE sw.story_id = ? AND t.turn_status = 1`,
     [state.storyId]
   );
@@ -737,8 +729,9 @@ async function applyResumeActions(connection, interaction, state) {
     );
   }
 
+  const newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
+
   if (activeTurn.thread_id) {
-    // Normal mode — unlock thread, rebuild title, post resumed message
     try {
       const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
       if (thread) {
@@ -750,33 +743,39 @@ async function applyResumeActions(connection, interaction, state) {
           .replace('[storyTurnNumber]', turnNumber)
           .replace('[user display name]', activeTurn.discord_display_name)
           .replace('[turnEndTime]', formattedEndTime);
-
         await thread.setName(newTitle);
         await thread.setLocked(false);
-
-        const newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
         const txtTurnThreadResumed = await getConfigValue(connection, 'txtTurnThreadResumed', state.guildId);
         await thread.send(replaceTemplateVariables(txtTurnThreadResumed, { turn_end_time: newEndTimestamp }));
       }
     } catch (err) {
       log(`Could not unlock turn thread on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
     }
-  } else {
-    // Quick mode — notify writer via DM or mention that their turn is active again
-    try {
-      const txtDMTurnStart = await getConfigValue(connection, 'txtDMTurnStart', state.guildId);
-      const user = await interaction.client.users.fetch(activeTurn.discord_user_id);
-      await user.send(txtDMTurnStart);
-    } catch {
+  }
+
+  try {
+    const linkThreadId = activeTurn.thread_id || activeTurn.story_thread_id;
+    const threadUrl = `https://discord.com/channels/${state.guildId}/${linkThreadId}`;
+    const resumeText = (await getConfigValue(connection, 'txtTurnResumed', state.guildId))
+      .replace(/\[story_title\]/g, activeTurn.title)
+      .replace(/\[turn_end_time\]/g, newEndTimestamp)
+      .replace(/\[turn_thread_link\]/g, threadUrl);
+    if (activeTurn.notification_prefs === 'mention') {
+      const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
+      const channel = await interaction.guild.channels.fetch(feedChannelId);
+      await channel.send(`<@${activeTurn.discord_user_id}> ${resumeText}`);
+    } else {
       try {
-        const txtMentionTurnStart = await getConfigValue(connection, 'txtMentionTurnStart', state.guildId);
-        const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
-        const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
-        await channel.send(`<@${activeTurn.discord_user_id}> ${txtMentionTurnStart}`);
-      } catch (err) {
-        log(`Could not notify writer on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
+        const user = await interaction.client.users.fetch(activeTurn.discord_user_id);
+        await user.send(resumeText);
+      } catch {
+        const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
+        const channel = await interaction.guild.channels.fetch(feedChannelId);
+        await channel.send(`<@${activeTurn.discord_user_id}> ${resumeText}`);
       }
     }
+  } catch (err) {
+    log(`Could not notify writer on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
   }
 
 }
