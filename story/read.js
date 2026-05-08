@@ -180,8 +180,12 @@ log(`handleRead: story isRestricted, Rating: ${story.rating}`,['',guildId]);
       const restrictedChannelId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
 log(`handleRead: restrictedChannelId: ${restrictedChannelId}`,['',guildId]);
       const isConfigured = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';  
-log(`handleRead: isConfigured: ${isConfigured}`,['',guildId]);
-      if (isConfigured && !interaction.channel.nsfw){
+log(`handleRead: isConfigured: ${isConfigured}, interaction.channel.nsfw: ${interaction.channel.nsfw}`,['',guildId]);
+// Ensure we have the full channel object
+const channel = interaction.channel.partial 
+    ? await interaction.channel.fetch() 
+    : interaction.channel;
+      if (isConfigured && !channel.nsfw){
         const txt = (await getConfigValue(connection, 'txtRestrictedStoryNotHere', guildId))
           .replace('[rating]', story.rating ?? 'M');
         return await interaction.editReply({ content: txt });
