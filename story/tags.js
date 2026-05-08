@@ -12,7 +12,7 @@ import { getConfigValue, log, sanitizeModalInput, checkIsAdmin, checkIsCreator, 
  *   story_tag_manage_<storyId>        — creator / admin only (hidden from others via auth check on click)
  */
 function buildThreadPostButtons(submissionId, storyId, btnDelete, btnViewProposed, btnManageTags) {
-  log(`buildThreadPostButtons entry: submissionId=${submissionId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`buildThreadPostButtons entry: submissionId=${submissionId}, storyId=${storyId}`, { show: false });
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId(`story_tag_delete_${submissionId}`)
