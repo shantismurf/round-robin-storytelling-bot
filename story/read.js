@@ -180,14 +180,18 @@ log(`handleRead: story isRestricted, Rating: ${story.rating}`,['',guildId]);
       const restrictedChannelId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
 log(`handleRead: restrictedChannelId: ${restrictedChannelId}`,['',guildId]);
       const isConfigured = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';  
-log(`handleRead: isConfigured: ${isConfigured}, interaction.channel.nsfw: ${interaction.channel.nsfw}`,['',guildId]);
-// Ensure we have the full channel object
-const channel = interaction.channel.partial 
-    ? await interaction.channel.fetch() 
-    : interaction.channel;
-      if (isConfigured && !channel.nsfw){
+
+if (isConfigured) {
+        // 1. Fetch the full channel object to populate .nsfw
+        // This ensures the bot actually checks the API for the channel status
+        const fullChannel = await interaction.client.channels.fetch(interaction.channelId);
+
+        log(`handleRead: Configured: ${isConfigured}, Channel: ${fullChannel.name}, NSFW: ${fullChannel.nsfw}`, ['', guildId]);
+
+        // 2. Perform the check against the fetched channel
+        if (!fullChannel.nsfw) {
         const txt = (await getConfigValue(connection, 'txtRestrictedStoryNotHere', guildId))
-          .replace('[rating]', story.rating ?? 'M');
+          .replace('[rating]', story.rating);
         return await interaction.editReply({ content: txt });
       }
     }
