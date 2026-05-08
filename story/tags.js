@@ -94,7 +94,7 @@ export async function handleTagSubmit(connection, interaction) {
 }
 
 function buildTagSubmitModal(storyId, { title, label, placeholder }) {
-  log(`buildTagSubmitModal entry: storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`buildTagSubmitModal entry: storyId=${storyId}`, { show: false });
 
   const modal = new ModalBuilder()
     .setCustomId(`story_tag_submit_modal_${storyId}`)
