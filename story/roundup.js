@@ -187,12 +187,12 @@ export async function scheduleNextRoundup(connection, guildId) {
   const hour = parseInt(cfg.cfgWeeklyRoundupHour) || 9;
   const runAt = calcNextRoundupTime(day, hour);
   const [existing] = await connection.execute(
-    `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 0 AND run_at > NOW()
-     AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-    [String(guildId)]
+    `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 0
+     AND run_at = ? AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    [runAt, String(guildId)]
   );
   if (existing.length > 0) {
-    log(`weeklyRoundup future job already exists for guild ${guildId}, skipping schedule`, { show: true });
+    log(`weeklyRoundup job already scheduled for guild ${guildId} at ${runAt.toISOString()}, skipping`, { show: true });
     return runAt;
   }
   await connection.execute(
