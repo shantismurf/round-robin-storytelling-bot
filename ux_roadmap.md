@@ -14,7 +14,6 @@ For system architecture and routing, see `system_roadmap.md`.
   → StoryAddPanel embed (select menus: mode, order, rating, privacy)
   → story_add_meta_* buttons (AO3 metadata, tags)
   → story_add_meta_save button → story.handleButtonInteraction
-    ⚠ Known bug: pendingStoryData null check fires before save (see TODO.md)
   → Confirm/Cancel → CreateStory()
 
 /story join [story_id]
@@ -53,6 +52,7 @@ Tag Submission Thread Post (in story thread)
 
 /story list
   → story_list_* (pagination, filter select menus)
+    → filters: All Stories, Joinable Stories, My Stories, Active Stories, Paused Stories
 
 /story edit [story_id]
   → chunkEntryContent → paginated edit modals
