@@ -51,6 +51,7 @@ async function main() {
   
   // create Discord client here (index.js owns the client)
   const processingButtons = new Set();
+  const processingModals = new Set();
 
   const client = new Client({ intents: [
     GatewayIntentBits.Guilds, 
@@ -161,20 +162,30 @@ async function main() {
         }
 
         // Handle story modal submissions
-        if (interaction.customId.startsWith('story_')) {
-          const storyCommand = interaction.client.commands.get('story');
-          if (storyCommand && storyCommand.handleModalSubmit) {
-            await storyCommand.handleModalSubmit(connection, interaction);
-          }
-        } else if (interaction.customId.startsWith('storyadmin_')) {
-          const adminCommand = interaction.client.commands.get('storyadmin');
-          if (adminCommand && adminCommand.handleModalSubmit) {
-            await adminCommand.handleModalSubmit(connection, interaction);
-          }
-        } else if (interaction.customId.startsWith('mystory_')) {
-          const mystoryCommand = interaction.client.commands.get('mystory');
-          if (mystoryCommand && mystoryCommand.handleModalSubmit) {
-            await mystoryCommand.handleModalSubmit(connection, interaction);
+        const modalDedupKey = `${interaction.user.id}:${interaction.customId}`;
+        if (processingModals.has(modalDedupKey)) {
+          log(`Duplicate modal suppressed: ${interaction.customId} from ${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+        } else {
+          processingModals.add(modalDedupKey);
+          try {
+            if (interaction.customId.startsWith('story_')) {
+              const storyCommand = interaction.client.commands.get('story');
+              if (storyCommand && storyCommand.handleModalSubmit) {
+                await storyCommand.handleModalSubmit(connection, interaction);
+              }
+            } else if (interaction.customId.startsWith('storyadmin_')) {
+              const adminCommand = interaction.client.commands.get('storyadmin');
+              if (adminCommand && adminCommand.handleModalSubmit) {
+                await adminCommand.handleModalSubmit(connection, interaction);
+              }
+            } else if (interaction.customId.startsWith('mystory_')) {
+              const mystoryCommand = interaction.client.commands.get('mystory');
+              if (mystoryCommand && mystoryCommand.handleModalSubmit) {
+                await mystoryCommand.handleModalSubmit(connection, interaction);
+              }
+            }
+          } finally {
+            processingModals.delete(modalDedupKey);
           }
         }
       } else if (interaction.isButton()) {
