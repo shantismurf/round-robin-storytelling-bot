@@ -48,35 +48,27 @@ export async function syncConfig(connection) {
     }
     console.log(`${formattedDate()}: Parsed ${fileEntries.length} total entries from ${files.length} context files`);
 
-    // Get all entries currently in the DB, exclude guild-specific setup keys that are
-    // written by /storyadmin setup and vary per server (not managed by sample_config.sql).
+    // Keys written by /storyadmin setup — vary per server, never touched by sync.
     const setupOnlyKeys = [
       'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
       'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
       'cfgWeeklyRoundupEnabled', 'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
-      'cfgHubServerId', 'cfgHubFaqChannelId',
-      'cfgFaqThreadOverview', 'cfgFaqThreadWriterCmds', 'cfgFaqThreadStoryCreation',
-      'cfgFaqThreadManaging', 'cfgFaqThreadAdminCmds',
     ];
     const placeholders = setupOnlyKeys.map(() => '?').join(',');
     const [dbRows] = await connection.execute(
       `SELECT config_key, config_value, guild_id FROM config WHERE config_key NOT IN (${placeholders})`,
       setupOnlyKeys
     );
-    
+
     const dbMap = new Map(dbRows.map(r => [`${r.guild_id}:${r.config_key}`, r.config_value]));
     console.log(`${formattedDate()}: Found ${dbRows.length} entries in the database\n`);
 
     const missing = [];
     const changed = [];
-    // Convert the array to a Set for faster lookup
     const setupKeysSet = new Set(setupOnlyKeys);
     // Compare File entries vs Database entries
     for (const entry of fileEntries) {
-      // Skip this entry if it's a setup-only key
-      if (setupKeysSet.has(entry.config_key)) {
-        continue; 
-      }
+      if (setupKeysSet.has(entry.config_key)) continue;
       const dbKey = `${entry.guild_id}:${entry.config_key}`;
       if (!dbMap.has(dbKey)) {
         missing.push(entry);
