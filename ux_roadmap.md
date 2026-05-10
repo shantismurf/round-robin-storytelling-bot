@@ -74,11 +74,9 @@ Tag Submission Thread Post (in story thread)
 /storyadmin setup
   → storyadmin_setup_* modal → guild config saved
 
-/storyadmin manage [story_id]
-  → AdminManagePanel embed
-  → storyadmin_mu_* (manage user panel: skip, remove, role change)
-  → storyadmin_delete_confirm_* / storyadmin_delete_cancel_*
-  ⚠ Staged edits vs. immediate actions: see Silo 3 audit
+/storyadmin user [story_id] [user]
+  → ManageUser panel (pause, remove, AO3 name, notif prefs, turn privacy)
+  → storyadmin_mu_* buttons → confirm embed → storyadmin_mu_confirm_* / storyadmin_mu_cancel_*
 
 /storyadmin skip / close / pause
   → Immediate actions; no confirm panel

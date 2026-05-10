@@ -1,6 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
-import { handleManage } from '../story/manage.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
 import { deleteThreadAndAnnouncement } from '../story/_turn.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
@@ -23,12 +22,12 @@ const data = new SlashCommandBuilder()
   .setName('storyadmin')
   .setDescription('Admin tools for story management')
   .addSubcommand(s =>
-    s.setName('manage')
-      .setDescription('Manage story settings, or a specific writer\'s settings')
+    s.setName('user')
+      .setDescription('Manage a writer\'s participation in a story')
       .addStringOption(o =>
-        o.setName('story_id').setDescription('Story to manage').setRequired(true).setAutocomplete(true))
+        o.setName('story_id').setDescription('Story the writer is in').setRequired(true).setAutocomplete(true))
       .addUserOption(o =>
-        o.setName('user').setDescription('Writer to manage (leave blank to manage story settings)').setRequired(false))
+        o.setName('user').setDescription('Writer to manage').setRequired(true))
   )
   .addSubcommand(s =>
     s.setName('delete')
@@ -65,7 +64,7 @@ async function execute(connection, interaction) {
       content: await getConfigValue(connection, 'txtAdminOnly', guildId),
     });
   }
-  if (subcommand === 'manage')  await handleAdminManage(connection, interaction);
+  if (subcommand === 'user')    await handleManageUser(connection, interaction);
   else if (subcommand === 'delete') await handleDelete(connection, interaction);
 }
 
@@ -595,20 +594,6 @@ async function handleSetupCancel(connection, interaction) {
     components: []
   });
 }
-
-// ---------------------------------------------------------------------------
-// /storyadmin manage — dispatch
-// ---------------------------------------------------------------------------
-async function handleAdminManage(connection, interaction) {
-  const targetUser = interaction.options.getUser('user');
-  log(`handleAdminManage: targetUser=${targetUser?.id ?? 'none'} storyId=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
-  if (targetUser) {
-    await handleManageUser(connection, interaction);
-  } else {
-    await handleManage(connection, interaction, true); // already deferred in execute()
-  }
-}
-
 
 // ---------------------------------------------------------------------------
 // /storyadmin delete
