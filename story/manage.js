@@ -157,10 +157,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     }
     const story = storyRows[0];
 
-    if (story.story_status === 3) {
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryAlreadyClosed', guildId) });
-    }
-
+    
     const isCreator = await checkIsCreator(connection, storyId, interaction.user.id);
     const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
