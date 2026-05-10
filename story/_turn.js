@@ -400,7 +400,7 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
 
   const cfgKeys = [...welcomeKey, 'btnFinalizeEntry', 'btnSkipTurn', 'btnViewLastEntry'];
   const cfg = await getConfigValue(connection, cfgKeys, guild_id);
-  const welcomeMsg = welcomeKey.map(key => cfg[key]).join('\n');
+  const welcomeMsg = welcomeKey.map(key => cfg[key]).join('\n\n');
   const unixTs = Math.floor(turnEndTime.getTime() / 1000);
   const welcomeContent = welcomeMsg
     .replace('[story_title]', writer.title)
