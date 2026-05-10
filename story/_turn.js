@@ -396,13 +396,13 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
   log(`postWelcomeMessage: entry storyId=${writer.story_id} writerId=${writer.discord_user_id}`, { show: false });
   const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guild_id);
   const mediaConfigured = mediaChannelId && mediaChannelId !== 'cfgMediaChannelId';
-  const welcomeKey = mediaConfigured ? 'txtNormalModeWelcome' : 'txtNormalModeWelcomeNoMedia';
+  const welcomeKey = mediaConfigured ? ['txtNormalModeWelcome','txtNormalModeImageHelp'] : ['txtNormalModeWelcomeNoMedia'];
 
-  const cfgKeys = [welcomeKey, 'btnFinalizeEntry', 'btnSkipTurn', 'btnViewLastEntry'];
+  const cfgKeys = [...welcomeKey, 'btnFinalizeEntry', 'btnSkipTurn', 'btnViewLastEntry'];
   const cfg = await getConfigValue(connection, cfgKeys, guild_id);
-
+  const welcomeMsg = welcomeKey.map(key => cfg[key]).join('\n');
   const unixTs = Math.floor(turnEndTime.getTime() / 1000);
-  const welcomeContent = cfg[welcomeKey]
+  const welcomeContent = welcomeMsg
     .replace('[story_title]', writer.title)
     .replace('[turn_end_full]', `<t:${unixTs}:F>`)
     .replace('[turn_end_relative]', `<t:${unixTs}:R>`)
@@ -446,9 +446,4 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
     content: welcomeContent,
     components: [row]
   });
-
-  if (mediaConfigured) {
-    const imageHelpText = await getConfigValue(connection, 'txtNormalModeImageHelp', guild_id);
-    await thread.send(imageHelpText);
-  }
 }
