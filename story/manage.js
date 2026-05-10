@@ -82,7 +82,8 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  // Row 3 (3): Show Names: <> | Hide Threads: <> | Pause/Resume
+  // Row 3 (3): Show Names: <> | Hide Threads: <> | Pause/Resume or Reopen
+  const isClosed = state.targetStatus === 3;
   const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
@@ -93,10 +94,15 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setCustomId('story_manage_toggle_privacy')
       .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`)
       .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_toggle_pauseresume')
-      .setLabel(pauseResumeLabel)
-      .setStyle(ButtonStyle.Secondary)
+    isClosed
+      ? new ButtonBuilder()
+          .setCustomId('story_manage_reopen')
+          .setLabel(cfg.txtReopenStory)
+          .setStyle(ButtonStyle.Success)
+      : new ButtonBuilder()
+          .setCustomId('story_manage_toggle_pauseresume')
+          .setLabel(pauseResumeLabel)
+          .setStyle(ButtonStyle.Secondary)
     );
 
   // Row 4 (3-4): Metadata | Manage Entries |  Manage Turns | [Review Tags if pending]
@@ -203,7 +209,8 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       ...Object.values(ratingLabels),
       ...dynamicOptions,
       ...warningOptions,
-      'txtManageWarningSelectInstructions'
+      'txtManageWarningSelectInstructions',
+      'txtReopenStory'
     ], guildId);
     log(`handleManage: cfg loaded`, { show: false, guildName: interaction?.guild?.name });
 
@@ -301,6 +308,9 @@ async function handleManageButton(connection, interaction) {
     state.orderType = state.orderType === 3 ? 1 : state.orderType + 1;
     await interaction.deferUpdate();
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+  } else if (customId === 'story_manage_reopen') {
+    await handleReopenStory(connection, interaction, state);
 
   } else if (customId === 'story_manage_toggle_pauseresume') {
     state.targetStatus = state.targetStatus === 1 ? 2 : 1;
@@ -737,6 +747,66 @@ async function applyResumeActions(connection, interaction, state) {
     log(`Could not notify writer on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
   }
 
+}
+
+async function handleReopenStory(connection, interaction, state) {
+  log(`handleReopenStory entry storyId=${state.storyId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+  await interaction.deferUpdate();
+  const guildId = state.guildId;
+
+  try {
+    // Set story active
+    await connection.execute(
+      `UPDATE story SET story_status = 1 WHERE story_id = ?`,
+      [state.storyId]
+    );
+
+    // Update story thread title to Active
+    try {
+      const [storyInfo] = await connection.execute(
+        `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
+      );
+      if (storyInfo[0]?.story_thread_id) {
+        const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
+        if (storyThread) {
+          const [txtActive, titleTemplate] = await Promise.all([
+            getConfigValue(connection, 'txtActive', guildId),
+            getConfigValue(connection, 'txtStoryThreadTitle', guildId)
+          ]);
+          await storyThread.setName(
+            titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
+          );
+        }
+      }
+    } catch (err) {
+      log(`handleReopenStory: could not update story thread title for story ${state.storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
+    }
+
+    const nextWriterId = await PickNextWriter(connection, state.storyId);
+    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+
+    updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
+
+    const joinStatus = state.allowJoins
+      ? (state.cfg.txtOpen ?? 'open')
+      : (state.cfg.txtClosed ?? 'closed');
+    const reopenMsg = replaceTemplateVariables(
+      await getConfigValue(connection, 'txtReopenSuccess', guildId),
+      { story_title: state.title, join_status: joinStatus }
+    );
+
+    state.originalStatus = 1;
+    state.targetStatus = 1;
+    pendingManageData.set(interaction.user.id, state);
+
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, null));
+    await interaction.followUp({ content: reopenMsg, flags: MessageFlags.Ephemeral });
+
+    log(`handleReopenStory: story ${state.storyId} reopened successfully`, { show: true, guildName: interaction?.guild?.name });
+  } catch (err) {
+    log(`handleReopenStory failed for story ${state.storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.followUp({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), flags: MessageFlags.Ephemeral });
+  }
 }
 
 async function handleManageModalSubmit(connection, interaction) {

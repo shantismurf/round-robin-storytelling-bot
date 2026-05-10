@@ -1,6 +1,6 @@
 {
   "name": "round-robin-storybot",
-  "version": "2.3.1",
+  "version": "2.4.0",
   "description": "A Discord bot to run round-robin collaborative stories",
   "type": "module",
   "main": "index.js",

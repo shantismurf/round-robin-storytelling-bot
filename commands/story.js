@@ -5,7 +5,7 @@ import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin } 
 import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton, handleAddStorySelectMenu } from '../story/add.js';
 import { handleMetadataButton, handleMetadataModal, handleMetadataSelectMenu } from '../story/_addMetadata.js';
 import { handleJoin, handleJoinSetAO3Button, handleJoinAO3ModalSubmit, handleJoinConfirm, buildJoinEmbed, pendingJoinData } from '../story/join.js';
-import { handleWrite, handleWriteModalSubmit, handleEntryConfirmation, handleViewLastEntry, handleFinalizeEntry, handleFinalizeConfirm, handleFinalizeImageConfirm, handlePreviewNav, handleSkipTurn, handleSkipConfirm } from '../story/write.js';
+import { handleWrite, handleWriteModalSubmit, handleEntryConfirmation, handleViewLastEntry, handleFinalizeEntry, handleFinalizeConfirm, handleFinalizeImageConfirm, handlePreviewNav, handleSkipTurn, handleSkipConfirm, handleThreadDeleteNow } from '../story/write.js';
 import { pendingPreviewData } from '../story/_state.js';
 import { handleRead, handleReadNav } from '../story/read.js';
 import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry } from '../story/edit.js';
@@ -244,6 +244,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleSkipTurn(connection, interaction);
   } else if (interaction.customId.startsWith('story_skip_confirm_')) {
     await handleSkipConfirm(connection, interaction);
+  } else if (interaction.customId.startsWith('story_thread_delete_now_')) {
+    await handleThreadDeleteNow(connection, interaction);
   } else if (interaction.customId.startsWith('story_skip_cancel_')) {
     await interaction.deferUpdate();
     await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), components: [] });
@@ -408,7 +410,7 @@ async function handleAutocomplete(connection, interaction) {
         [interaction.user.id, guildId, typed, typedPrefix]
       );
 
-    } else if (subcommand === 'close' || subcommand === 'manage') {
+    } else if (subcommand === 'close') {
       if (isAdmin) {
         [rows] = await connection.execute(
           `SELECT s.guild_story_id, s.title,
@@ -433,6 +435,39 @@ async function handleAutocomplete(connection, interaction) {
           [interaction.user.id, guildId, typed, typedPrefix]
         );
       }
+
+    } else if (subcommand === 'manage') {
+      let manageRows;
+      if (isAdmin) {
+        [manageRows] = await connection.execute(
+          `SELECT s.guild_story_id, s.title, s.story_status,
+             EXISTS (SELECT 1 FROM story_writer sw
+               WHERE sw.story_id = s.story_id AND sw.discord_user_id = ?
+                 AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
+             ) AS is_creator
+           FROM story s
+           WHERE s.guild_id = ?
+             AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+           ORDER BY is_creator DESC, (s.story_status = 3) ASC, s.guild_story_id LIMIT 25`,
+          [interaction.user.id, guildId, typed, typedPrefix]
+        );
+      } else {
+        [manageRows] = await connection.execute(
+          `SELECT s.guild_story_id, s.title, s.story_status FROM story s
+           JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
+           WHERE s.guild_id = ?
+             AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
+             AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
+           ORDER BY (s.story_status = 3) ASC, s.guild_story_id LIMIT 25`,
+          [interaction.user.id, guildId, typed, typedPrefix]
+        );
+      }
+      return interaction.respond(
+        manageRows.map(r => ({
+          name: (`${r.title} (#${r.guild_story_id})${r.story_status === 3 ? ' (closed)' : ''}`).slice(0, 100),
+          value: String(r.guild_story_id)
+        }))
+      );
 
     } else if (subcommand === 'ping') {
       const [pingRows] = await connection.execute(

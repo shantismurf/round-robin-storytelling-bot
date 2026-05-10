@@ -727,6 +727,9 @@ async function doFinalizeEntry(connection, interaction, storyId, writerId) {
     }
 
     pendingPreviewData.delete(interaction.user.id);
+    // Post processing message in thread before deletion so the writer sees confirmation
+    const txtProcessing = await getConfigValue(connection, 'txtEntrySubmittedProcessing', interaction.guild.id).catch(() => null);
+    if (txtProcessing) await thread.send(txtProcessing).catch(() => {});
     // Reply before deleting thread — interaction context is tied to the thread
     await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', interaction.guild.id), components: [] });
     log(`doFinalizeEntry: complete — deleting turn thread ${turn.thread_id}`, { show: true, guildName: interaction?.guild?.name });
@@ -879,24 +882,46 @@ async function handleSkipTurn(connection, interaction) {
       } catch {} // thread may not be accessible
     }
 
-    const [txtConfirm, btnConfirm, btnCancel] = await Promise.all([
-      getConfigValue(connection, hasContent ? 'txtSkipConfirmHasContent' : 'txtSkipConfirmNoContent', guildId),
-      getConfigValue(connection, 'btnSkipConfirm', guildId),
-      getConfigValue(connection, 'btnSkipCancel', guildId)
-    ]);
-
-    const row = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`story_skip_confirm_${storyId}`)
-        .setLabel(btnConfirm)
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`story_skip_cancel_${storyId}`)
-        .setLabel(btnCancel)
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    await interaction.editReply({ content: txtConfirm, components: [row] });
+    if (hasContent) {
+      const [txtConfirm, btnDelete, btnKeep, btnCancel] = await Promise.all([
+        getConfigValue(connection, 'txtSkipConfirmHasContentKeep', guildId),
+        getConfigValue(connection, 'btnSkipDelete', guildId),
+        getConfigValue(connection, 'btnSkipKeep', guildId),
+        getConfigValue(connection, 'btnSkipCancel', guildId)
+      ]);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_skip_confirm_delete_${storyId}`)
+          .setLabel(btnDelete)
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`story_skip_confirm_keep_${storyId}`)
+          .setLabel(btnKeep)
+          .setStyle(ButtonStyle.Secondary),
+        new ButtonBuilder()
+          .setCustomId(`story_skip_cancel_${storyId}`)
+          .setLabel(btnCancel)
+          .setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.editReply({ content: txtConfirm, components: [row] });
+    } else {
+      const [txtConfirm, btnConfirm, btnCancel] = await Promise.all([
+        getConfigValue(connection, 'txtSkipConfirmNoContent', guildId),
+        getConfigValue(connection, 'btnSkipConfirm', guildId),
+        getConfigValue(connection, 'btnSkipCancel', guildId)
+      ]);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_skip_confirm_${storyId}`)
+          .setLabel(btnConfirm)
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`story_skip_cancel_${storyId}`)
+          .setLabel(btnCancel)
+          .setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.editReply({ content: txtConfirm, components: [row] });
+    }
 
   } catch (error) {
     log(`Skip turn confirmation failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
@@ -905,8 +930,12 @@ async function handleSkipTurn(connection, interaction) {
 }
 
 async function handleSkipConfirm(connection, interaction) {
-  log(`handleSkipConfirm entry user=${interaction.user.id} story=${interaction.customId.split('_')[3]}`, { show: false, guildName: interaction?.guild?.name });
-  const storyId = interaction.customId.split('_')[3];
+  // customIds: story_skip_confirm_<storyId>  |  story_skip_confirm_delete_<storyId>  |  story_skip_confirm_keep_<storyId>
+  const parts = interaction.customId.split('_');
+  const variant = parts[3]; // 'delete', 'keep', or the storyId itself
+  const keepThread = variant === 'keep';
+  const storyId = (variant === 'delete' || variant === 'keep') ? parts[4] : variant;
+  log(`handleSkipConfirm entry user=${interaction.user.id} story=${storyId} keepThread=${keepThread}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
 
   await interaction.deferUpdate();
@@ -931,6 +960,11 @@ async function handleSkipConfirm(connection, interaction) {
       `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
       [turn.turn_id]
     );
+    // Cancel any pending timeout/reminder jobs for this turn
+    await connection.execute(
+      `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
+      [turn.turn_id]
+    );
 
     const nextWriterId = await PickNextWriter(connection, storyId);
     await NextTurn(connection, interaction, nextWriterId);
@@ -940,22 +974,78 @@ async function handleSkipConfirm(connection, interaction) {
       postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), template.replace('[writer_name]', turn.discord_display_name))
     ).catch(() => {});
 
-    // Reply before deleting thread — interaction context is tied to the thread
+    // Reply before touching thread — interaction context may be tied to it
     await interaction.editReply({ content: await getConfigValue(connection, 'txtSkipSuccess', guildId), components: [] });
 
-    // Delete turn thread
     if (turn.thread_id) {
-      try {
-        const thread = await interaction.guild.channels.fetch(turn.thread_id);
-        await deleteThreadAndAnnouncement(thread);
-      } catch (err) {
-        log(`Failed to delete skipped turn thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
+      if (keepThread) {
+        // Post scheduled-delete notice with Delete Now button
+        try {
+          const thread = await interaction.guild.channels.fetch(turn.thread_id);
+          if (thread) {
+            const deleteAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+            const relativeTs = `<t:${Math.floor(deleteAt.getTime() / 1000)}:R>`;
+            const [scheduleMsg, btnDeleteLabel] = await Promise.all([
+              getConfigValue(connection, 'txtThreadScheduledDelete', guildId),
+              getConfigValue(connection, 'btnDeleteNow', guildId)
+            ]);
+            const { ActionRowBuilder, ButtonBuilder, ButtonStyle } = await import('discord.js');
+            const row = new ActionRowBuilder().addComponents(
+              new ButtonBuilder()
+                .setCustomId(`story_thread_delete_now_${turn.thread_id}`)
+                .setLabel(btnDeleteLabel)
+                .setStyle(ButtonStyle.Danger)
+            );
+            await thread.send({
+              content: scheduleMsg.replace('[relative_timestamp]', relativeTs),
+              components: [row]
+            });
+            await connection.execute(
+              `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+              ['threadDelete', JSON.stringify({ threadId: turn.thread_id, guildId, turnId: turn.turn_id }), deleteAt]
+            );
+            log(`handleSkipConfirm: thread ${turn.thread_id} kept — scheduled delete at ${deleteAt.toISOString()}`, { show: true, guildName: interaction?.guild?.name });
+          }
+        } catch (err) {
+          log(`handleSkipConfirm: failed to schedule thread delete: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        }
+      } else {
+        try {
+          const thread = await interaction.guild.channels.fetch(turn.thread_id);
+          await deleteThreadAndAnnouncement(thread);
+        } catch (err) {
+          log(`Failed to delete skipped turn thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        }
       }
     }
 
   } catch (error) {
     log(`Skip turn failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
+  }
+}
+
+/**
+ * Handle Delete Now button on a preserved draft thread.
+ * Cancels the scheduled threadDelete job and deletes the thread immediately.
+ */
+async function handleThreadDeleteNow(connection, interaction) {
+  const threadId = interaction.customId.replace('story_thread_delete_now_', '');
+  log(`handleThreadDeleteNow entry threadId=${threadId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferUpdate();
+  try {
+    await connection.execute(
+      `UPDATE job SET job_status = 3 WHERE job_type = 'threadDelete' AND job_status = 0
+       AND CAST(JSON_EXTRACT(payload, '$.threadId') AS CHAR) = ?`,
+      [String(threadId)]
+    );
+    const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
+    if (thread) {
+      await deleteThreadAndAnnouncement(thread);
+      log(`handleThreadDeleteNow: deleted thread ${threadId}`, { show: true, guildName: interaction?.guild?.name });
+    }
+  } catch (err) {
+    log(`handleThreadDeleteNow failed for thread ${threadId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
@@ -972,4 +1062,5 @@ export {
   handlePreviewNav,
   handleSkipTurn,
   handleSkipConfirm,
+  handleThreadDeleteNow,
 };

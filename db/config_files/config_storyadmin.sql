@@ -1,6 +1,6 @@
 -- Context: config_storyadmin
 INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
-('txtStoryCloseConfirm', '⚠️ Are you sure you want to close **[story_title]**? The active turn will be ended. This cannot be undone.', 'en', 1),
+('txtStoryCloseConfirm', 'Are you sure you want to close **[story_title]**?', 'en', 1),
 ('btnCloseConfirm', '🔒 Close Story', 'en', 1),
 ('txtStoryClosedPublic', '📕 **[story_title]** is now complete! Thank you to all [writer_count] writer(s) who participated — [turn_count] turns and ~[word_count] words. The full story is attached below.', 'en', 1),
 ('txtStoryFeedClosed', '🎉 **Congratulations to the writers of [story_title]!** The story has concluded with [turn_count] turns and ~[word_count] words. Thank you to all [writer_count] writer(s)! The full story is attached below.', 'en', 1),
@@ -241,4 +241,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtSetupAgeRestrictNote', '*(Age-restrict this channel if the server is not already 18+)*', 'en', 1),
 ('txtSetupNoMediaNote', 'ℹ️ No media channel set — images will not be processed.', 'en', 1),
 ('txtSetupNoRoleNote', 'ℹ️ No admin role set — only Discord Administrators can use admin commands.', 'en', 1),
-('txtSetupRoundupDisabledNote', 'ℹ️ Weekly roundup disabled.', 'en', 1);
+('txtSetupRoundupDisabledNote', 'ℹ️ Weekly roundup disabled.', 'en', 1),
+-- Reopen story
+('txtReopenStory', 'Reopen Story', 'en', 1),
+('txtReopenSuccess', '✅ **[story_title]** has been reopened. A new turn has started and the story is [join_status] to new writers.', 'en', 1);

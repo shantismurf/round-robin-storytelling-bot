@@ -1,3 +1,4 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfigValue, log } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement } from './story/_turn.js';
@@ -51,6 +52,9 @@ async function processJob(connection, client, job) {
         break;
       case 'weeklyRoundup':
         await handleWeeklyRoundup(connection, client, payload);
+        break;
+      case 'threadDelete':
+        await handleThreadDelete(connection, client, payload);
         break;
       default:
         log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
@@ -112,6 +116,26 @@ async function handleCheckStoryDelay(connection, client, payload) {
 }
 
 // ---------------------------------------------------------------------------
+// threadDelete — fires 24h after a preserved draft thread is scheduled for deletion
+// ---------------------------------------------------------------------------
+async function handleThreadDelete(connection, client, payload) {
+  const { threadId, guildId } = payload;
+  log(`handleThreadDelete entry for thread ${threadId} guild ${guildId}`, { show: false });
+  try {
+    const ctx = await buildSyntheticContext(client, guildId);
+    const thread = await ctx.guild.channels.fetch(threadId).catch(() => null);
+    if (thread) {
+      await deleteThreadAndAnnouncement(thread);
+      log(`handleThreadDelete: deleted preserved draft thread ${threadId}`, { show: true, guildName: ctx.guild?.name });
+    } else {
+      log(`handleThreadDelete: thread ${threadId} not found — likely already deleted`, { show: false });
+    }
+  } catch (err) {
+    log(`handleThreadDelete failed for thread ${threadId}: ${err}`, { show: true });
+  }
+}
+
+// ---------------------------------------------------------------------------
 // turnTimeout — fires when a turn's deadline passes
 // ---------------------------------------------------------------------------
 async function handleTurnTimeout(connection, client, payload) {
@@ -153,14 +177,42 @@ async function handleTurnTimeout(connection, client, payload) {
   const ctx = await buildSyntheticContext(client, guildId);
   log(`Turn ${turnId} timed out for story ${storyId}`, { show: true, guildName: ctx.guild?.name });
 
-  // Delete turn thread if one exists
+  // Handle turn thread: preserve if writer posted content, otherwise delete immediately
   if (activeTurn.thread_id) {
-    log(`handleTurnTimeout deleting thread ${activeTurn.thread_id} for turn ${turnId}`, { show: false });
+    let hasContent = false;
     try {
       const thread = await ctx.guild.channels.fetch(activeTurn.thread_id);
-      if (thread) await deleteThreadAndAnnouncement(thread);
+      if (thread) {
+        const messages = await thread.messages.fetch({ limit: 50 });
+        hasContent = messages.some(m => !m.author.bot && m.author.id === activeTurn.discord_user_id);
+
+        if (hasContent) {
+          const deleteAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+          const relativeTs = `<t:${Math.floor(deleteAt.getTime() / 1000)}:R>`;
+          const scheduleMsg = await getConfigValue(connection, 'txtThreadScheduledDelete', guildId);
+          const btnDeleteLabel = await getConfigValue(connection, 'btnDeleteNow', guildId);
+          const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+              .setCustomId(`story_thread_delete_now_${activeTurn.thread_id}`)
+              .setLabel(btnDeleteLabel)
+              .setStyle(ButtonStyle.Danger)
+          );
+          await thread.send({
+            content: scheduleMsg.replace('[relative_timestamp]', relativeTs),
+            components: [row]
+          });
+          await connection.execute(
+            `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+            ['threadDelete', JSON.stringify({ threadId: activeTurn.thread_id, guildId, turnId }), deleteAt]
+          );
+          log(`handleTurnTimeout: thread ${activeTurn.thread_id} has writer content — scheduled delete at ${deleteAt.toISOString()}`, { show: true, guildName: ctx.guild?.name });
+        } else {
+          await deleteThreadAndAnnouncement(thread);
+          log(`handleTurnTimeout: thread ${activeTurn.thread_id} had no writer content — deleted immediately`, { show: false, guildName: ctx.guild?.name });
+        }
+      }
     } catch (err) {
-      log(`Could not delete thread on timeout for turn ${turnId}: ${err}`, { show: true, guildName: ctx.guild?.name });
+      log(`Could not handle thread on timeout for turn ${turnId}: ${err}`, { show: true, guildName: ctx.guild?.name });
     }
   }
 
