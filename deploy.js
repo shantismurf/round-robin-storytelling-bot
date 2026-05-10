@@ -11,7 +11,7 @@
  */
 
 import { fileURLToPath } from 'url';
-import { DB, loadConfig, formattedDate } from './utilities.js';
+import { DB, loadConfig, formattedDate, getConfigValue } from './utilities.js';
 import { setupDatabase, dbSetup } from './database-setup.js';
 import { deployCommands } from './deploy-commands.js';
 import { syncConfig } from './sync-config.js';
@@ -45,9 +45,9 @@ async function stepDeployCommands(config) {
 
 async function stepSyncFaq(config, connection) {
   header('Step 4 of 4 — FAQ post sync');
-  const hubServerId = config.hubServerId;
+  const hubServerId = await getConfigValue(connection, 'cfgHubServerId', 1);
   if (!hubServerId) {
-    console.log(`${formattedDate()}: No hubServerId in config.json — skipping FAQ sync.`);
+    console.log(`${formattedDate()}: cfgHubServerId not set in config table — skipping FAQ sync.`);
     return;
   }
 
