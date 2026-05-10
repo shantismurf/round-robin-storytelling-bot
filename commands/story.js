@@ -12,7 +12,7 @@ import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry 
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
 import { handleManage, handleManageButton, handleManageSelectMenu, handleTurnActionSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu, handleManageEntriesActionButton, handleManageEntriesModal } from '../story/_manageEntries.js';
-import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton } from '../story/tags.js';
+import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton, handleTagReviewNav } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
@@ -285,6 +285,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleEditButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_read_')) {
     await handleReadNav(connection, interaction);
+  } else if (interaction.customId.startsWith('story_tag_review_prev_') || interaction.customId.startsWith('story_tag_review_next_')) {
+    await handleTagReviewNav(connection, interaction);
   } else if (interaction.customId.startsWith('story_tag_approve_') || interaction.customId.startsWith('story_tag_reject_')) {
     await handleTagReviewButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_submit_tag_')) {

@@ -6,6 +6,7 @@ import { migrateStoryThread } from './_migration.js';
 import { ratingLabels, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
+import { buildTagReviewPanel } from './tags.js';
 
 const pendingManageData = new Map();
 
@@ -494,52 +495,12 @@ async function handleReviewTags(connection, interaction, state) {
   );
 
   if (rows.length === 0) {
-    await interaction.reply({
-      content: state.cfg.txtTagNoPending,
-      flags: MessageFlags.Ephemeral
-    });
+    await interaction.reply({ content: state.cfg.txtTagNoPending, flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const firstTag = rows[0];
-  const queueNote = rows.length > 1 ? ` (${rows.length - 1} more pending)` : '';
-
-  let upVotes = 0;
-  let downVotes = 0;
-  if (firstTag.thread_message_id && state.storyThreadId) {
-    try {
-      const thread = await interaction.guild.channels.fetch(state.storyThreadId).catch(() => null);
-      if (thread) {
-        const msg = await thread.messages.fetch(firstTag.thread_message_id).catch(() => null);
-        if (msg) {
-          upVotes = msg.reactions.cache.get('👍')?.count ?? 0;
-          downVotes = msg.reactions.cache.get('👎')?.count ?? 0;
-        }
-      }
-    } catch (err) {
-      log(`handleReviewTags: reaction fetch failed for submission ${firstTag.submission_id}: ${err?.stack ?? err}`, { show: false, guildName: interaction?.guild?.name });
-    }
-  }
-
-  const voteText = replaceTemplateVariables(state.cfg.txtTagVoteCount, { up: upVotes, down: downVotes });
-
-  const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(state.cfg.txtTagPendingTitle, { story_title: state.title }))
-    .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}\n${voteText}`)
-    .setColor(0x5865f2);
-
-  const row = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId(`story_tag_approve_${firstTag.submission_id}_${state.storyId}`)
-      .setLabel(state.cfg.btnTagApprove)
-      .setStyle(ButtonStyle.Success),
-    new ButtonBuilder()
-      .setCustomId(`story_tag_reject_${firstTag.submission_id}_${state.storyId}`)
-      .setLabel(state.cfg.btnTagReject)
-      .setStyle(ButtonStyle.Danger)
-  );
-
-  await interaction.reply({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
+  const { embeds, components } = await buildTagReviewPanel(rows, 0, state.storyId, state.title, state.storyThreadId, state.cfg, interaction.guild);
+  await interaction.reply({ embeds, components, flags: MessageFlags.Ephemeral });
 }
 
 async function handleManageSave(connection, interaction, state) {
@@ -888,10 +849,11 @@ async function handleManageSelectMenu(connection, interaction) {
 async function handleTagReviewButton(connection, interaction) {
   log(`handleTagReviewButton entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const parts = interaction.customId.split('_');
-  // story_tag_approve_<submissionId>_<storyId>
+  // story_tag_approve_<submissionId>_<storyId>_<pageIndex>
   const action = parts[2]; // 'approve' or 'reject'
   const submissionId = parts[3];
   const storyId = parts[4];
+  const pageIndex = parseInt(parts[5] ?? '0');
   const guildId = interaction.guild.id;
 
   // Only story creator can approve/reject
@@ -956,17 +918,41 @@ async function handleTagReviewButton(connection, interaction) {
     const newTags = existing ? `${existing}, ${tagText}` : tagText;
     await connection.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [newTags, storyId]);
     updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`updateStoryStatusMessage failed for story ${storyId} after tag approve: ${err}`, { show: true, guildName: interaction?.guild?.name }));
-    const txt = replaceTemplateVariables(cfg.txtTagApproved, { tag_text: tagText });
-    await interaction.editReply({ content: txt, embeds: [], components: [] });
   } else {
     log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
     await connection.execute(
       `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
       [reviewerName, submissionId]
     );
-    const txt = replaceTemplateVariables(cfg.txtTagRejected, { tag_text: tagText });
-    await interaction.editReply({ content: txt, embeds: [], components: [] });
   }
+
+  // Advance to next pending tag, staying at same index (next tag shifts into this position)
+  const [remaining] = await connection.execute(
+    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
+     FROM story_tag_submission WHERE story_id = ? AND submission_status = 'pending'
+     ORDER BY submitted_at ASC`,
+    [storyId]
+  );
+
+  const actionCfg = await getConfigValue(connection, [
+    'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject',
+    'txtTagVoteCount', 'txtTagApproved', 'txtTagRejected'
+  ], guildId);
+
+  if (remaining.length === 0) {
+    const doneMsg = isApprove
+      ? replaceTemplateVariables(actionCfg.txtTagApproved, { tag_text: tagText })
+      : replaceTemplateVariables(actionCfg.txtTagRejected, { tag_text: tagText });
+    await interaction.editReply({ content: doneMsg, embeds: [], components: [] });
+    return;
+  }
+
+  const [storyMeta] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const nextPage = Math.min(pageIndex, remaining.length - 1);
+  const { embeds, components } = await buildTagReviewPanel(
+    remaining, nextPage, storyId, storyMeta[0]?.title ?? '', storyMeta[0]?.story_thread_id ?? null, actionCfg, interaction.guild
+  );
+  await interaction.editReply({ content: '', embeds, components });
 }
 
 export {

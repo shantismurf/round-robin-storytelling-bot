@@ -462,7 +462,7 @@ export async function handleTagManageButton(connection, interaction) {
  *   2. story_tag_manage_<storyId>               — thread post "Manage Tags" button (via handleTagManageButton)
  * customId: story_manage_review_tags_read_<storyId>
  */
-export async function handleEditTagsButton(connection, interaction) {
+export async function handleEditTagsButton(connection, interaction, pageIndex = 0) {
   log(`handleEditTagsButton: user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const storyId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
@@ -492,50 +492,98 @@ export async function handleEditTagsButton(connection, interaction) {
 
   if (rows.length === 0) {
     const replyFn = interaction.replied || interaction.deferred ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
-    await replyFn({ content: cfg.txtTagNoPending, flags: MessageFlags.Ephemeral });
+    await replyFn({ content: cfg.txtTagNoPending, embeds: [], components: [], flags: MessageFlags.Ephemeral });
     return;
   }
 
-  const firstTag = rows[0];
-  const queueNote = rows.length > 1 ? ` (${rows.length - 1} more pending)` : '';
+  const page = Math.min(pageIndex, rows.length - 1);
+  const { embeds, components } = await buildTagReviewPanel(rows, page, storyId, storyTitle, threadId, cfg, interaction.guild);
+  const replyFn = interaction.replied || interaction.deferred ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
+  await replyFn({ embeds, components, flags: MessageFlags.Ephemeral });
+}
+
+export async function handleTagReviewNav(connection, interaction) {
+  log(`handleTagReviewNav: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  // story_tag_review_prev_<storyId>_<page> or story_tag_review_next_<storyId>_<page>
+  const parts = interaction.customId.split('_');
+  const storyId = parts[4];
+  const page = parseInt(parts[5]);
+  const guildId = interaction.guild.id;
+
+  const [rows] = await connection.execute(
+    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
+     FROM story_tag_submission WHERE story_id = ? AND submission_status = 'pending'
+     ORDER BY submitted_at ASC`,
+    [storyId]
+  );
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const storyTitle = storyRows[0]?.title ?? '';
+  const threadId = storyRows[0]?.story_thread_id ?? null;
+
+  const cfg = await getConfigValue(connection, [
+    'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount'
+  ], guildId);
+
+  if (rows.length === 0) {
+    await interaction.update({ content: cfg.txtTagNoPending, embeds: [], components: [] });
+    return;
+  }
+
+  const safePage = Math.min(Math.max(page, 0), rows.length - 1);
+  const { embeds, components } = await buildTagReviewPanel(rows, safePage, storyId, storyTitle, threadId, cfg, interaction.guild);
+  await interaction.update({ embeds, components });
+}
+
+export async function buildTagReviewPanel(rows, pageIndex, storyId, storyTitle, threadId, cfg, guild) {
+  const tag = rows[pageIndex];
+  const total = rows.length;
+  const pageLabel = total > 1 ? ` (${pageIndex + 1} of ${total})` : '';
 
   let upVotes = 0;
   let downVotes = 0;
-  if (firstTag.thread_message_id && threadId) {
+  if (tag.thread_message_id && threadId) {
     try {
-      const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
+      const thread = await guild.channels.fetch(threadId).catch(() => null);
       if (thread) {
-        const msg = await thread.messages.fetch(firstTag.thread_message_id).catch(() => null);
+        const msg = await thread.messages.fetch(tag.thread_message_id).catch(() => null);
         if (msg) {
           upVotes = msg.reactions.cache.get('👍')?.count ?? 0;
           downVotes = msg.reactions.cache.get('👎')?.count ?? 0;
         }
       }
-    } catch (err) {
-      log(`handleEditTagsButton: reaction fetch failed for submission ${firstTag.submission_id}: ${err?.stack ?? err}`, { show: false, guildName: interaction?.guild?.name });
+    } catch {
+      // vote fetch is best-effort
     }
   }
 
   const voteText = replaceTemplateVariables(cfg.txtTagVoteCount, { up: upVotes, down: downVotes });
-
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(cfg.txtTagPendingTitle, { story_title: storyTitle }))
-    .setDescription(`**"${firstTag.tag_text}"** — suggested by ${firstTag.submitter_display_name}${queueNote}\n${voteText}`)
+    .setDescription(`**"${tag.tag_text}"** — suggested by ${tag.submitter_display_name}${pageLabel}\n${voteText}`)
     .setColor(0x5865f2);
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`story_tag_approve_${firstTag.submission_id}_${storyId}`)
+      .setCustomId(`story_tag_review_prev_${storyId}_${pageIndex - 1}`)
+      .setLabel('◀')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(pageIndex === 0),
+    new ButtonBuilder()
+      .setCustomId(`story_tag_approve_${tag.submission_id}_${storyId}_${pageIndex}`)
       .setLabel(cfg.btnTagApprove)
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(`story_tag_reject_${firstTag.submission_id}_${storyId}`)
+      .setCustomId(`story_tag_reject_${tag.submission_id}_${storyId}_${pageIndex}`)
       .setLabel(cfg.btnTagReject)
-      .setStyle(ButtonStyle.Danger)
+      .setStyle(ButtonStyle.Danger),
+    new ButtonBuilder()
+      .setCustomId(`story_tag_review_next_${storyId}_${pageIndex + 1}`)
+      .setLabel('▶')
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(pageIndex === total - 1)
   );
 
-  const replyFn = interaction.replied || interaction.deferred ? interaction.editReply.bind(interaction) : interaction.reply.bind(interaction);
-  await replyFn({ embeds: [embed], components: [row], flags: MessageFlags.Ephemeral });
+  return { embeds: [embed], components: [row] };
 }
 
 // ─── Paginated "View Tags" — writers / creator / admin (legacy read-view) ────
