@@ -118,7 +118,7 @@ async function handleList(connection, interaction) {
 
   try {
     const [stories] = await connection.execute(
-      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.quick_mode,
+      `SELECT s.story_id, s.guild_story_id, s.title, s.story_status, s.mode,
               sw.sw_status as writer_status,
               COUNT(DISTINCT t.turn_id) as my_turn_count,
               COALESCE(SUM(LENGTH(se.content) - LENGTH(REPLACE(se.content, ' ', '')) + 1), 0) as my_word_count,
@@ -153,7 +153,7 @@ async function handleList(connection, interaction) {
     const pageStories = stories.slice(pageStart, pageStart + LIST_PAGE_SIZE);
 
     const listCfg = await getConfigValue(connection, [
-      'txtModeQuick', 'txtModeNormal', 'txtMyListTitle',
+      'txtModeQuick', 'txtModeNormal', 'txtModeSlow', 'txtMyListTitle',
       'txtActive', 'txtPaused', 'txtDelayed', 'txtClosed',
       'txtMyListJoined', 'txtMyListMyStats', 'txtMyListNoTurns',
       'txtMyListStoryTotal', 'txtMyListPausedSuffix',
@@ -189,7 +189,7 @@ function buildListEmbed(pageStories, clampedPage, totalPages, listCfg) {
   const embed = new EmbedBuilder().setTitle(title).setColor(0x5865f2).setTimestamp();
 
   for (const story of pageStories) {
-    const modeLabel = story.quick_mode ? listCfg.txtModeQuick : listCfg.txtModeNormal;
+    const modeLabel = story.mode === 1 ? listCfg.txtModeQuick : story.mode === 2 ? listCfg.txtModeSlow : listCfg.txtModeNormal;
     const dateRange = story.my_first_turn_unix
       ? `${fmt(story.my_first_turn_unix)} – ${fmt(story.my_last_turn_unix ?? story.my_first_turn_unix)}`
       : replaceTemplateVariables(listCfg.txtMyListJoined, { date: fmt(story.created_at_unix) });

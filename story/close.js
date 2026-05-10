@@ -75,7 +75,7 @@ export async function handleCloseConfirm(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, guild_story_id, title, story_status, story_thread_id, quick_mode FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT story_id, guild_story_id, title, story_status, story_thread_id, mode FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0 || storyRows[0].story_status === 3) {
@@ -97,7 +97,7 @@ export async function handleCloseConfirm(connection, interaction) {
         `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
         [activeTurn.turn_id]
       );
-      if (!story.quick_mode && activeTurn.thread_id) {
+      if (story.mode !== 1 && activeTurn.thread_id) {
         try {
           const turnThread = await interaction.guild.channels.fetch(activeTurn.thread_id);
           if (turnThread) await deleteThreadAndAnnouncement(turnThread);

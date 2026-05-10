@@ -117,7 +117,7 @@ export async function discordMarkdownToHtml(text, guild = null) {
  */
 export async function generateStoryExport(connection, storyId, guildId, guild = null) {
   const [storyRows] = await connection.execute(
-    `SELECT story_id, guild_story_id, title, created_at, story_status, quick_mode, closed_at, show_authors,
+    `SELECT story_id, guild_story_id, title, created_at, story_status, mode, closed_at, show_authors,
             summary, tags, rating, warnings, main_pairing, other_relationships, characters, dynamic
      FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
@@ -160,7 +160,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   const exportDate = fmt(new Date());
 
   const writersList = writers.map(w => `${w.AO3_name || w.discord_display_name} (${w.discord_display_name})`).join(', ');
-  const modeLabel = story.quick_mode ? 'Quick Mode' : 'Normal Mode';
+  const modeLabel = story.mode === 1 ? 'Quick Mode' : story.mode === 2 ? 'Slow Mode' : 'Normal Mode';
 
   let entriesHtml = '';
   let currentTurn = null;

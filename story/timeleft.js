@@ -10,7 +10,7 @@ export async function handleTimeleft(connection, interaction) {
   }
 
   const [rows] = await connection.execute(
-    `SELECT s.title, s.guild_story_id, s.show_authors, s.story_thread_id, s.quick_mode,
+    `SELECT s.title, s.guild_story_id, s.show_authors, s.story_thread_id, s.mode,
             sw.discord_display_name AS writer_name, sw.discord_user_id,
             t.turn_id, t.turn_ends_at, t.more_time_requested
      FROM story s
@@ -35,17 +35,25 @@ export async function handleTimeleft(connection, interaction) {
   );
   const nextWriter = nextRows[0]?.discord_display_name ?? null;
 
-  const unixTs = Math.floor(new Date(turn.turn_ends_at).getTime() / 1000);
+  const isSlowMode = turn.mode === 2;
   const timeleftCfg = await getConfigValue(connection, [
-    'lblTimeleftStory', 'lblTimeleftCurrentWriter', 'lblTimeleftTurnEnds', 'lblTimeleftUpNext', 'txtTimeleftAuthorsHidden'
+    'lblTimeleftStory', 'lblTimeleftCurrentWriter', 'lblTimeleftTurnEnds', 'lblTimeleftUpNext',
+    'txtTimeleftAuthorsHidden', 'txtTimeleftSlowMode',
   ], guildId);
+
+  const turnEndsValue = isSlowMode
+    ? timeleftCfg.txtTimeleftSlowMode
+    : (() => {
+        const unixTs = Math.floor(new Date(turn.turn_ends_at).getTime() / 1000);
+        return `<t:${unixTs}:F> (<t:${unixTs}:R>)`;
+      })();
 
   const embed = new EmbedBuilder()
     .setTitle(turn.title)
     .addFields(
       { name: timeleftCfg.lblTimeleftStory, value: `#${turn.guild_story_id}`, inline: true },
       { name: timeleftCfg.lblTimeleftCurrentWriter, value: turn.show_authors ? turn.writer_name : timeleftCfg.txtTimeleftAuthorsHidden, inline: true },
-      { name: timeleftCfg.lblTimeleftTurnEnds, value: `<t:${unixTs}:F> (<t:${unixTs}:R>)`, inline: false }
+      { name: timeleftCfg.lblTimeleftTurnEnds, value: turnEndsValue, inline: false }
     );
   if (nextWriter) embed.addFields({ name: timeleftCfg.lblTimeleftUpNext, value: nextWriter, inline: true });
 
@@ -55,7 +63,7 @@ export async function handleTimeleft(connection, interaction) {
     .setCustomId(`story_request_more_time_${storyId}`)
     .setLabel(btnLabel)
     .setStyle(ButtonStyle.Secondary)
-    .setDisabled(!isCurrentWriter || !!turn.more_time_requested);
+    .setDisabled(!isCurrentWriter || !!turn.more_time_requested || isSlowMode);
   const row = new ActionRowBuilder().addComponents(requestBtn);
 
   try {

@@ -70,7 +70,7 @@ export async function renderStoryListReply(connection, interaction, filter, page
     getConfigValue(connection, [
       'txtStoriesPageTitle', 'txtStoriesPageDesc',
       'lblStoryStatus', 'lblStoryTurn', 'lblStoryWriters', 'lblStoryMode', 'lblStoryCreator',
-      'txtModeQuick', 'txtModeNormal',
+      'txtModeQuick', 'txtModeNormal', 'txtModeSlow',
       'txtActive', 'txtPaused', 'txtClosed', 'txtDelayed',
       'txtMemberStatusJoined', 'txtMemberStatusCanJoin', 'txtMemberStatusCanNotJoin',
       'txtTurnWaiting', 'txtTurnOverdue', 'txtTurnTimeLeft',
@@ -113,7 +113,7 @@ export async function renderStoryListReply(connection, interaction, filter, page
     const joinStatus = story.join_status === 2 ? cfg.txtMemberStatusJoined
       : story.join_status === 1 ? cfg.txtMemberStatusCanJoin
       : cfg.txtMemberStatusCanNotJoin;
-    const modeText = story.quick_mode ? cfg.txtModeQuick : cfg.txtModeNormal;
+    const modeText = story.mode === 1 ? cfg.txtModeQuick : story.mode === 2 ? cfg.txtModeSlow : cfg.txtModeNormal;
     const statusText = statusTextMap[story.story_status] ?? '—';
 
     let currentTurn;
@@ -185,7 +185,7 @@ export async function renderStoryListReply(connection, interaction, filter, page
           description: replaceTemplateVariables(cfg.txtQuickJoinDesc, {
             writer_count: s.writer_count,
             max_writers: s.max_writers || '∞',
-            mode: s.quick_mode ? cfg.txtModeQuick : cfg.txtModeNormal,
+            mode: s.mode === 1 ? cfg.txtModeQuick : s.mode === 2 ? cfg.txtModeSlow : cfg.txtModeNormal,
           })
         })))
     );

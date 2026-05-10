@@ -121,8 +121,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     // Get story and writer info
     const [writerInfo] = await connection.execute(
       `SELECT sw.story_id, sw.discord_user_id, sw.discord_display_name, sw.turn_privacy, sw.notification_prefs,
-              s.quick_mode, s.turn_length_hours, s.story_thread_id, s.restricted_thread_id, s.story_turn_privacy, s.title,
-              s.timeout_reminder_percent, s.guild_id, s.guild_story_id, s.show_authors, s.rating
+              s.mode, s.turn_length_hours, s.story_thread_id, s.restricted_thread_id, s.story_turn_privacy, s.title,
+              s.reminder_timing, s.guild_id, s.guild_story_id, s.show_authors, s.rating
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_writer_id = ?`,
@@ -149,59 +149,69 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       );
     }
 
-    // Insert turn record
-    const turnEndsAt = new Date(Date.now() + (writer.turn_length_hours * 60 * 60 * 1000));
+    const isSlowMode = writer.mode === 2;
+
+    // Insert turn record — slow mode has no deadline (turn_ends_at stays NULL)
+    let turnEndsAt = null;
+    if (!isSlowMode) {
+      turnEndsAt = new Date(Date.now() + (writer.turn_length_hours * 60 * 60 * 1000));
+    }
     const [turnResult] = await connection.execute(
       `INSERT INTO turn (story_writer_id, started_at, turn_ends_at, turn_status) VALUES (?, NOW(), ?, 1)`,
       [storyWriterId, turnEndsAt]
     );
 
     const turnId = turnResult.insertId;
+    log(`NextTurn: created turn ${turnId} for writer ${storyWriterId} (${writer.discord_display_name}) story ${writer.story_id} mode=${writer.mode}`, { show: false, guildName: interaction?.guild?.name });
 
-    // Schedule turnTimeout job
-    await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-      ['turnTimeout', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id }), turnEndsAt, turnId]
-    );
-
-    // Schedule turnReminder job if configured
-    if (writer.timeout_reminder_percent > 0) {
-      const reminderMs = writer.turn_length_hours * (writer.timeout_reminder_percent / 100) * 60 * 60 * 1000;
-      const reminderTime = new Date(Date.now() + reminderMs);
+    if (!isSlowMode) {
+      // Schedule turnTimeout job
       await connection.execute(
         `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-        ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime, turnId]
+        ['turnTimeout', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id }), turnEndsAt, turnId]
+      );
+
+      // Schedule turnReminder job if configured (percent-based, fires once)
+      if (writer.reminder_timing > 0) {
+        const reminderMs = writer.turn_length_hours * (writer.reminder_timing / 100) * 60 * 60 * 1000;
+        const reminderTime = new Date(Date.now() + reminderMs);
+        await connection.execute(
+          `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+          ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime, turnId]
+        );
+      }
+    } else if (writer.reminder_timing > 0) {
+      // Slow mode: schedule repeating reminder (hours-based; re-schedules itself on each fire)
+      const reminderTime = new Date(Date.now() + (writer.reminder_timing * 60 * 60 * 1000));
+      await connection.execute(
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+        ['turnSlowReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id, reminderHours: writer.reminder_timing }), reminderTime, turnId]
       );
     }
 
     let threadId = null;
     let dmMessage = '';
 
-    // Compute turn number and end time here — used by both modes for activity log and thread title
     const turnNumber = await getTurnNumber(connection, writer.story_id);
-    const turnEndTime = turnEndTimeFunction(writer.turn_length_hours);
+    // turnEndTime is only meaningful for normal/quick mode
+    const turnEndTime = isSlowMode ? null : turnEndTimeFunction(writer.turn_length_hours);
 
-    // Handle quick mode vs normal mode
-    if (writer.quick_mode) {
-      // Quick mode - send notifications and post feed announcement
+    if (writer.mode === 1) {
+      // Quick mode — feed announcement, no turn thread
       await handleQuickModeNotification(connection, interaction, writer, guild_id);
       dmMessage = 'Quick mode notification sent';
     } else {
-      // Normal mode - create private thread on the correct feed channel (restricted if M/E)
+      // Normal and Slow mode — create turn thread on the feed channel
       const storyFeedChannelId = await resolveFeedChannelId(connection, guild_id, writer.rating ?? 'NR');
       const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
 
-      // Create thread title — turn number first for channel visibility
       const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', guild_id);
       const threadTitle = threadTitleTemplate
         .replace('[story_id]', writer.guild_story_id)
         .replace('[storyTurnNumber]', turnNumber)
         .replace('[user display name]', writer.discord_display_name);
 
-      // Determine privacy: story-level privacy overrides writer preference
       const isPrivateThread = writer.story_turn_privacy || writer.turn_privacy;
-
-      // Create thread based on privacy setting
       const thread = await channel.threads.create({
         name: threadTitle,
         type: isPrivateThread ? ChannelType.PrivateThread : ChannelType.PublicThread,
@@ -210,38 +220,34 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 
       threadId = thread.id;
 
-      // Set thread membership
       if (isPrivateThread) {
-        // Private thread — add writer only.
-        // Admin role members have Manage Threads on the feed channel and can see all threads.
         await thread.members.add(writer.discord_user_id);
       }
-      // Public threads are visible to all — no membership changes needed
 
-      // Update turn with thread ID
       await connection.execute(
         `UPDATE turn SET thread_id = ? WHERE turn_id = ?`,
         [threadId, turnId]
       );
 
-      // Post welcome message with buttons
       await postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime);
-
-      // Send notification to writer
       await handleWriterNotification(connection, interaction, writer, threadId, guild_id);
-      dmMessage = 'Normal mode thread created and notification sent';
+      dmMessage = `${isSlowMode ? 'Slow' : 'Normal'} mode thread created and notification sent`;
     }
 
-    // Update status embed first, then post activity log — order matters in the story thread
-    const unixTs = Math.floor(turnEndTime.getTime() / 1000);
+    // Update status embed then post activity log — order matters in the story thread
     updateStoryStatusMessage(connection, interaction.guild, writer.story_id)
-      .then(() => getConfigValue(connection, 'txtStoryThreadTurnStart', guild_id))
-      .then(template => {
-        const msg = template
+      .then(async () => {
+        const cfgKey = isSlowMode ? 'txtStoryThreadTurnStartSlow' : 'txtStoryThreadTurnStart';
+        const template = await getConfigValue(connection, cfgKey, guild_id);
+        let msg = template
           .replace('[turn_number]', turnNumber)
-          .replace('[writer_name]', writer.discord_display_name)
-          .replace('[turn_end_full]', `<t:${unixTs}:F>`)
-          .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
+          .replace('[writer_name]', writer.discord_display_name);
+        if (!isSlowMode && turnEndTime) {
+          const unixTs = Math.floor(turnEndTime.getTime() / 1000);
+          msg = msg
+            .replace('[turn_end_full]', `<t:${unixTs}:F>`)
+            .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
+        }
         return postStoryThreadActivity(connection, interaction.guild, writer.story_id, msg);
       })
       .catch(err => log(`NextTurn: status/activity post failed for story ${writer.story_id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
@@ -337,7 +343,7 @@ export function turnEndTimeFunction(turnLengthHours) {
 // ---------------------------------------------------------------------------
 
 async function handleQuickModeNotification(connection, interaction, writer, guild_id) {
-  log(`handleQuickModeNotification: entry storyId=${writer.story_id} writerId=${writer.discord_user_id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleQuickModeNotification: entry storyId=${writer.story_id} (${writer.title}) writerId=${writer.discord_user_id} (${writer.discord_display_name})`, { show: false, guildName: interaction?.guild?.name });
   const turnEndTime = turnEndTimeFunction(writer.turn_length_hours);
   const discordTimestamp = `<t:${Math.floor(turnEndTime.getTime() / 1000)}:F>`;
 
@@ -358,10 +364,10 @@ async function handleQuickModeNotification(connection, interaction, writer, guil
 }
 
 async function handleWriterNotification(connection, interaction, writer, linkToThreadId, guild_id) {
-  log(`handleWriterNotification: entry writerId=${writer.discord_user_id} prefs=${writer.notification_prefs}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleWriterNotification: entry writerId=${writer.discord_user_id} (${writer.discord_display_name}) prefs=${writer.notification_prefs} mode=${writer.mode}`, { show: false, guildName: interaction?.guild?.name });
   const linkToUse = linkToThreadId || writer.story_thread_id;
   const threadUrl = `https://discord.com/channels/${guild_id}/${linkToUse}`;
-  const modeKey = writer.quick_mode ? 'Quick' : 'Normal';
+  const modeKey = writer.mode === 1 ? 'Quick' : writer.mode === 2 ? 'Slow' : 'Normal';
 
   function applyTokens(text) {
     return text
@@ -393,20 +399,32 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
 }
 
 async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime) {
-  log(`postWelcomeMessage: entry storyId=${writer.story_id} writerId=${writer.discord_user_id}`, { show: false });
+  log(`postWelcomeMessage: entry storyId=${writer.story_id} (${writer.title}) writerId=${writer.discord_user_id} (${writer.discord_display_name}) mode=${writer.mode}`, { show: false });
+  const isSlowMode = writer.mode === 2;
   const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guild_id);
   const mediaConfigured = mediaChannelId && mediaChannelId !== 'cfgMediaChannelId';
-  const welcomeKey = mediaConfigured ? ['txtNormalModeWelcome','txtNormalModeImageHelp'] : ['txtNormalModeWelcomeNoMedia'];
+
+  let welcomeKey;
+  if (isSlowMode) {
+    welcomeKey = mediaConfigured ? ['txtSlowModeWelcome', 'txtNormalModeImageHelp'] : ['txtSlowModeWelcomeNoMedia'];
+  } else {
+    welcomeKey = mediaConfigured ? ['txtNormalModeWelcome', 'txtNormalModeImageHelp'] : ['txtNormalModeWelcomeNoMedia'];
+  }
 
   const cfgKeys = [...welcomeKey, 'btnFinalizeEntry', 'btnSkipTurn', 'btnViewLastEntry'];
   const cfg = await getConfigValue(connection, cfgKeys, guild_id);
   const welcomeMsg = welcomeKey.map(key => cfg[key]).join('\n\n');
-  const unixTs = Math.floor(turnEndTime.getTime() / 1000);
-  const welcomeContent = welcomeMsg
+
+  let welcomeContent = welcomeMsg
     .replace('[story_title]', writer.title)
-    .replace('[turn_end_full]', `<t:${unixTs}:F>`)
-    .replace('[turn_end_relative]', `<t:${unixTs}:R>`)
     .replace('[story_id]', writer.guild_story_id);
+
+  if (!isSlowMode && turnEndTime) {
+    const unixTs = Math.floor(turnEndTime.getTime() / 1000);
+    welcomeContent = welcomeContent
+      .replace('[turn_end_full]', `<t:${unixTs}:F>`)
+      .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
+  }
 
   // Check whether there is a previous confirmed entry to offer
   const [lastEntryRows] = await connection.execute(

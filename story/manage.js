@@ -16,6 +16,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const orderEmoji = orderEmojis[state.orderType];
   const orderLabel = orderLabels[state.orderType];
   const isPaused = state.targetStatus === 2;
+  const isSlowMode = state.storyMode === 2;
 
   const ratingLabel = cfg[ratingLabels[state.rating ?? 'NR']] ?? state.rating;
   const warningsDisplay = state.warnings?.length
@@ -39,8 +40,8 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblManageJoinStatus, value: joinDisplay, inline: true },
       { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
       { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : cfg.txtInfinity, inline: true },
-      { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
-      { name: cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtOff, inline: true },
+      { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : `${state.turnLength} hours`, inline: true },
+      { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? (isSlowMode ? `${state.timeoutReminder}h` : `${state.timeoutReminder}%`) : cfg.txtOff, inline: true },
       { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic, inline: true },
       { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtYes : cfg.txtNo, inline: true },
       { name: sectionLine, value: cfg.txtManageSectionBreakMeta, inline: false },
@@ -50,12 +51,17 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       { name: cfg.lblTags, value: state.tags || cfg.txtNotSet, inline: false },
     );
 
-  // Row 1 (4): Set Title | Writer Order: <> | Status: <> | Join Status: <>
+  const modeLabelManage = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC }[state.storyMode] ?? cfg.txtNormalUC;
+  // Row 1 (4): Set Title | Mode: <> | Writer Order: <> | Join Status: <>
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_set_title')
       .setLabel(cfg.txtManageSetTitleModalTitle)
       .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_cycle_mode')
+      .setLabel(`${cfg.lblModeToggle}: ${modeLabelManage}`)
+      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_cycle_order')
       .setLabel(`${cfg.lblWriterOrder}: ${orderLabel}`)
@@ -67,6 +73,9 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   );
 
   // Row 2 (3): Max Writers: <> | Turn Length: <> | Reminder: <> |
+  const reminderBtnLabel = isSlowMode
+    ? replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}h` : cfg.txtNone })
+    : replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtNone });
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_set_maxwriters')
@@ -74,11 +83,12 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_set_turnlength')
-      .setLabel(replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} ${cfg.txtHrs}` }))
-      .setStyle(ButtonStyle.Secondary),
+      .setLabel(isSlowMode ? cfg.txtNA : replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} ${cfg.txtHrs}` }))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(isSlowMode),
     new ButtonBuilder()
       .setCustomId('story_manage_set_reminder')
-      .setLabel(replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtNone }))
+      .setLabel(reminderBtnLabel)
       .setStyle(ButtonStyle.Secondary),
   );
 
@@ -152,7 +162,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, guild_story_id, title, story_status, turn_length_hours, timeout_reminder_percent,
+      `SELECT story_id, guild_story_id, title, story_status, mode, turn_length_hours, reminder_timing,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy,
               rating, warnings, main_pairing, other_relationships, characters, dynamic,
               story_thread_id
@@ -173,16 +183,18 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     }
 
     const cfg = await getConfigValue(connection, [
-      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtInfinity',
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtInfinity','txtNA',
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
-      'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
+      'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC','txtSlowTC',
       'txtOpen','txtClosed','txtActive','txtPaused','txtHrs',
       'txtStory','txtPause','txtResume','txtRatingNR','txtNotSet',
       'txtManageEmbedTitle', 'btnAdminConfigSave', 'btnSaveSettings', 'btnCancel',
       'lblTurnLength', 'btnSetTurnLength',
-      'lblTimeoutReminder', 'btnSetTimeout',
+      'lblTimeoutReminder', 'lblTimeoutReminderSlow', 'btnSetTimeout',
+      'txtTimeoutReminderSlowPlaceholder', 'txtManageValidationSlowReminder',
       'lblMaxWriters', 'btnSetMaxWriters',
       'lblOpenToWriters', 'lblShowAuthors',
+      'lblModeToggle',
       'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
       'lblTags', 'btnSetTags',
       'lblPrivateToggle',
@@ -237,8 +249,9 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       guildStoryId: story.guild_story_id,
       guildId,
       title: story.title,
+      storyMode: story.mode ?? 0,
       turnLength: story.turn_length_hours,
-      timeoutReminder: story.timeout_reminder_percent ?? 50,
+      timeoutReminder: story.reminder_timing ?? 50,
       maxWriters: story.max_writers,
       allowJoins: story.allow_joins,
       showAuthors: story.show_authors,
@@ -301,6 +314,11 @@ async function handleManageButton(connection, interaction) {
 
   } else if (customId === 'story_manage_toggle_privacy') {
     state.turnPrivacy = state.turnPrivacy ? 0 : 1;
+    await interaction.deferUpdate();
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+  } else if (customId === 'story_manage_cycle_mode') {
+    state.storyMode = state.storyMode === 2 ? 0 : state.storyMode + 1;
     await interaction.deferUpdate();
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
@@ -409,19 +427,22 @@ async function handleManageButton(connection, interaction) {
     );
 
   } else if (customId === 'story_manage_set_reminder') {
+    const isSlowMode = state.storyMode === 2;
+    const reminderLabel = isSlowMode ? state.cfg.lblTimeoutReminderSlow : state.cfg.lblTimeoutReminder;
+    const reminderPlaceholder = isSlowMode ? state.cfg.txtTimeoutReminderSlowPlaceholder : state.cfg.txtTimeoutReminderPlaceholder;
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_manage_reminder_modal')
-        .setTitle(state.cfg.lblTimeoutReminder)
+        .setTitle(reminderLabel)
         .addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder()
               .setCustomId('timeout_reminder')
-              .setLabel(state.cfg.lblTimeoutReminder)
+              .setLabel(reminderLabel)
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
               .setValue(String(state.timeoutReminder))
-              .setPlaceholder(state.cfg.txtTimeoutReminderPlaceholder)
+              .setPlaceholder(reminderPlaceholder)
           )
         )
     );
@@ -516,15 +537,14 @@ async function handleReviewTags(connection, interaction, state) {
 async function handleManageSave(connection, interaction, state) {
   const guildId = interaction.guild.id;
   try {
-    log(`handleManageSave: storyId=${state.storyId} title=${state.title} turnLength=${state.turnLength}`, { show: false, guildName: state.guildName });
-
+    log(`handleManageSave: storyId=${state.storyId} title=${state.title} mode=${state.storyMode} turnLength=${state.turnLength} reminder=${state.timeoutReminder}`, { show: false, guildName: state.guildName });
     await connection.execute(
-      `UPDATE story SET title = ?, turn_length_hours = ?, timeout_reminder_percent = ?, max_writers = ?,
+      `UPDATE story SET title = ?, mode = ?, turn_length_hours = ?, reminder_timing = ?, max_writers = ?,
        allow_joins = ?, show_authors = ?, story_order_type = ?, story_turn_privacy = ?, tags = ?
        WHERE story_id = ?`,
       [
         state.title,
-        state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
+        state.storyMode, state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
         state.allowJoins, state.showAuthors, state.orderType,
         state.turnPrivacy, state.tags || null,
         state.storyId
@@ -572,10 +592,10 @@ async function applyPauseActions(connection, interaction, state) {
 
   const { turn_id: turnId, thread_id: threadId, discord_display_name } = activeTurnRows[0];
 
-  // Cancel pending timeout and reminder jobs
+  // Cancel pending timeout and reminder jobs (all modes)
   await connection.execute(
     `UPDATE job SET job_status = 2 WHERE job_status = 0
-     AND job_type IN ('turnTimeout', 'turnReminder')
+     AND job_type IN ('turnTimeout', 'turnReminder', 'turnSlowReminder')
      AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
     [turnId]
   );
@@ -670,52 +690,62 @@ async function applyResumeActions(connection, interaction, state) {
   }
 
   const activeTurn = activeTurnRows[0];
-  const newTurnEndsAt = new Date(Date.now() + (state.turnLength * 60 * 60 * 1000));
+  const isSlowMode = state.storyMode === 2;
 
-  // Reset turn deadline
-  await connection.execute(
-    `UPDATE turn SET turn_ends_at = ? WHERE turn_id = ?`,
-    [newTurnEndsAt, activeTurn.turn_id]
-  );
-
-  // Cancel any lingering jobs, then reschedule fresh
+  // Cancel any lingering timer/reminder jobs before rescheduling
   await connection.execute(
     `UPDATE job SET job_status = 2 WHERE job_status = 0
-     AND job_type IN ('turnTimeout', 'turnReminder')
+     AND job_type IN ('turnTimeout', 'turnReminder', 'turnSlowReminder')
      AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
     [activeTurn.turn_id]
   );
-  await connection.execute(
-    `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-    ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt]
-  );
-  if (state.timeoutReminder > 0) {
-    const reminderMs = state.turnLength * (state.timeoutReminder / 100) * 60 * 60 * 1000;
-    const reminderTime = new Date(Date.now() + reminderMs);
+
+  let newTurnEndsAt = null;
+  let newEndTimestamp = null;
+
+  if (!isSlowMode) {
+    // Reset deadline and reschedule timeout + reminder
+    newTurnEndsAt = new Date(Date.now() + (state.turnLength * 60 * 60 * 1000));
+    await connection.execute(
+      `UPDATE turn SET turn_ends_at = ? WHERE turn_id = ?`,
+      [newTurnEndsAt, activeTurn.turn_id]
+    );
     await connection.execute(
       `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-      ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime]
+      ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt]
+    );
+    if (state.timeoutReminder > 0) {
+      const reminderMs = state.turnLength * (state.timeoutReminder / 100) * 60 * 60 * 1000;
+      const reminderTime = new Date(Date.now() + reminderMs);
+      await connection.execute(
+        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+        ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime]
+      );
+    }
+    newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
+  } else if (state.timeoutReminder > 0) {
+    // Slow mode — no timer; schedule slow reminder if configured
+    const reminderTime = new Date(Date.now() + (state.timeoutReminder * 60 * 60 * 1000));
+    await connection.execute(
+      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+      ['turnSlowReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id, reminderHours: state.timeoutReminder }), reminderTime]
     );
   }
-
-  const newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
 
   if (activeTurn.thread_id) {
     try {
       const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
       if (thread) {
         const turnNumber = await getTurnNumber(connection, state.storyId);
-        const formattedEndTime = newTurnEndsAt.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
         const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
         const newTitle = threadTitleTemplate
           .replace('[story_id]', state.guildStoryId)
           .replace('[storyTurnNumber]', turnNumber)
-          .replace('[user display name]', activeTurn.discord_display_name)
-          .replace('[turnEndTime]', formattedEndTime);
+          .replace('[user display name]', activeTurn.discord_display_name);
         await thread.setName(newTitle);
         await thread.setLocked(false);
         const txtTurnThreadResumed = await getConfigValue(connection, 'txtTurnThreadResumed', state.guildId);
-        await thread.send(replaceTemplateVariables(txtTurnThreadResumed, { turn_end_time: newEndTimestamp }));
+        await thread.send(replaceTemplateVariables(txtTurnThreadResumed, { turn_end_time: newEndTimestamp ?? '—' }));
       }
     } catch (err) {
       log(`Could not unlock turn thread on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
@@ -727,7 +757,7 @@ async function applyResumeActions(connection, interaction, state) {
     const threadUrl = `https://discord.com/channels/${state.guildId}/${linkThreadId}`;
     const resumeText = (await getConfigValue(connection, 'txtTurnResumed', state.guildId))
       .replace(/\[story_title\]/g, activeTurn.title)
-      .replace(/\[turn_end_time\]/g, newEndTimestamp)
+      .replace(/\[turn_end_time\]/g, newEndTimestamp ?? '—')
       .replace(/\[turn_thread_link\]/g, threadUrl);
     if (activeTurn.notification_prefs === 'mention') {
       const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
@@ -842,8 +872,15 @@ async function handleManageModalSubmit(connection, interaction) {
 
     } else if (interaction.customId === 'story_manage_reminder_modal') {
       const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('timeout_reminder'), 10));
-      if (isNaN(val) || val < 0 || val > 100) {
-        return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      const isSlowMode = state.storyMode === 2;
+      if (isSlowMode) {
+        if (isNaN(val) || val < 0) {
+          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id), flags: MessageFlags.Ephemeral });
+        }
+      } else {
+        if (isNaN(val) || val < 0 || val > 100) {
+          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id), flags: MessageFlags.Ephemeral });
+        }
       }
       state.timeoutReminder = val;
 

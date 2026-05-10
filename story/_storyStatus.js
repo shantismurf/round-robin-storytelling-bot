@@ -31,8 +31,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
   log(`updateStoryStatusMessage: entry storyId=${storyId}`, { show: false, guildName: guild?.name });
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, guild_story_id, title, story_status, quick_mode, turn_length_hours,
-              timeout_reminder_percent, max_writers, allow_joins, show_authors,
+      `SELECT story_id, guild_story_id, title, story_status, mode, turn_length_hours,
+              reminder_timing, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, restricted_thread_id, status_message_id, guild_id,
               next_writer_id, closed_at, rating, warnings, main_pairing,
               other_relationships, characters, dynamic
@@ -81,7 +81,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const cfg = await getConfigValue(connection, [
       'txtActive', 'txtPaused', 'txtClosed', 'txtDelayed',
       'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
-      'txtModeQuick', 'txtModeNormal',
+      'txtModeQuick', 'txtModeNormal', 'txtModeSlow',
+      'txtStatusSlowModeNoTimer', 'txtStatusReminderSuffixSlow',
       'txtYes', 'txtNo', 'txtOpen',
       'txtStatusLegendCreator', 'txtStatusLegendCurrentTurn', 'txtStatusLegendNextUp', 'txtStatusLegendPaused',
       'txtStatusNoActiveTurn',
@@ -138,8 +139,12 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     let turnValue;
     if (activeTurn) {
-      const endTimestamp = `<t:${Math.floor(new Date(activeTurn.turn_ends_at).getTime() / 1000)}:R>`;
-      turnValue = `**${activeTurn.discord_display_name}** — ends ${endTimestamp}`;
+      if (activeTurn.turn_ends_at) {
+        const endTimestamp = `<t:${Math.floor(new Date(activeTurn.turn_ends_at).getTime() / 1000)}:R>`;
+        turnValue = `**${activeTurn.discord_display_name}** — ends ${endTimestamp}`;
+      } else {
+        turnValue = `**${activeTurn.discord_display_name}** — ${cfg.txtStatusSlowModeNoTimer}`;
+      }
     } else {
       turnValue = story.story_status === 1 ? cfg.txtStatusNoActiveTurn : '—';
     }
@@ -164,8 +169,12 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       }
     }
 
-    const reminderText = story.timeout_reminder_percent > 0
-      ? replaceTemplateVariables(cfg.txtStatusReminderSuffix, { percent: story.timeout_reminder_percent }) : '';
+    let reminderText = '';
+    if (story.reminder_timing > 0) {
+      reminderText = story.mode === 2
+        ? replaceTemplateVariables(cfg.txtStatusReminderSuffixSlow, { hours: story.reminder_timing })
+        : replaceTemplateVariables(cfg.txtStatusReminderSuffix, { percent: story.reminder_timing });
+    }
 
     const imagePart = imageCount > 0 ? ` · ${imageCount} images` : '';
     const statsValue = entryCount > 0
@@ -192,9 +201,9 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       .addFields(
         ...(story.tags ? [{ name: cfg.lblStatusTags, value: story.tags, inline: false }] : []),
         { name: cfg.lblStatusStatus,      value: statusMap[story.story_status] ?? '—',                                         inline: true },
-        { name: cfg.lblStatusMode,        value: story.quick_mode ? cfg.txtModeQuick : cfg.txtModeNormal,                      inline: true },
-        { name: cfg.lblStatusWriterOrder, value: orderMap[story.story_order_type] ?? '—',                                      inline: true },
-        { name: cfg.lblStatusTurnLength,  value: `${story.turn_length_hours}h${reminderText}`,                                 inline: true },
+        { name: cfg.lblStatusMode,        value: story.mode === 1 ? cfg.txtModeQuick : story.mode === 2 ? cfg.txtModeSlow : cfg.txtModeNormal, inline: true },
+        { name: cfg.lblStatusWriterOrder, value: orderMap[story.story_order_type] ?? '—',                                                        inline: true },
+        { name: cfg.lblStatusTurnLength,  value: story.mode === 2 ? cfg.txtNA : `${story.turn_length_hours}h${reminderText}`,                    inline: true },
         { name: cfg.lblStatusWriters,     value: `${activeWriters.length}/${story.max_writers || '∞'} · ${joinStatus}`,        inline: true },
         { name: cfg.lblStatusShowAuthors, value: story.show_authors ? cfg.txtYes : cfg.txtNo,                                  inline: true },
         { name: cfg.lblStatusCurrentTurn, value: turnValue,                                                                    inline: true },
