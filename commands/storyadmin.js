@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
+import { syncFaqPosts, FAQ_PAGES } from '../story/faq.js';
 import { deleteThreadAndAnnouncement } from '../story/_turn.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 
@@ -42,6 +43,10 @@ const data = new SlashCommandBuilder()
   .addSubcommand(s =>
     s.setName('help')
       .setDescription('Show all admin commands and what they do')
+  )
+  .addSubcommand(s =>
+    s.setName('faqsync')
+      .setDescription('Re-sync the FAQ forum posts from current config values')
   );
 
 async function execute(connection, interaction) {
@@ -64,8 +69,9 @@ async function execute(connection, interaction) {
       content: await getConfigValue(connection, 'txtAdminOnly', guildId),
     });
   }
-  if (subcommand === 'user')    await handleManageUser(connection, interaction);
-  else if (subcommand === 'delete') await handleDelete(connection, interaction);
+  if (subcommand === 'user')         await handleManageUser(connection, interaction);
+  else if (subcommand === 'delete')  await handleDelete(connection, interaction);
+  else if (subcommand === 'faqsync') await handleFaqSync(connection, interaction);
 }
 
 // ---------------------------------------------------------------------------
@@ -593,6 +599,29 @@ async function handleSetupCancel(connection, interaction) {
     embeds: [],
     components: []
   });
+}
+
+// ---------------------------------------------------------------------------
+// /storyadmin faqsync
+// ---------------------------------------------------------------------------
+
+async function handleFaqSync(connection, interaction) {
+  log(`handleFaqSync entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  const guildId = interaction.guild.id;
+
+  const { errors } = await syncFaqPosts(interaction.client, connection, guildId);
+  const total = FAQ_PAGES.length;
+
+  if (errors === 0) {
+    const msg = await getConfigValue(connection, 'txtFaqSyncSuccess', guildId);
+    await interaction.editReply({ content: msg });
+  } else if (errors === total) {
+    const msg = await getConfigValue(connection, 'txtFaqSyncNoThreads', guildId);
+    await interaction.editReply({ content: msg });
+  } else {
+    const template = await getConfigValue(connection, 'txtFaqSyncPartial', guildId);
+    await interaction.editReply({ content: replaceTemplateVariables(template, { error_count: String(errors) }) });
+  }
 }
 
 // ---------------------------------------------------------------------------

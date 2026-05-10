@@ -15,6 +15,8 @@ import { DB, loadConfig, formattedDate } from './utilities.js';
 import { setupDatabase, dbSetup } from './database-setup.js';
 import { deployCommands } from './deploy-commands.js';
 import { syncConfig } from './sync-config.js';
+import { syncFaqPosts, FAQ_PAGES } from './story/faq.js';
+import { Client, GatewayIntentBits } from 'discord.js';
 
 function header(label) {
   console.log(`\n${'─'.repeat(50)}`);
@@ -36,9 +38,36 @@ async function stepSyncConfig(connection) {
 }
 
 async function stepDeployCommands(config) {
-  header('Step 3 of 3 — Slash command registration');
+  header('Step 3 of 4 — Slash command registration');
   await deployCommands(config);
   console.log(`\n${formattedDate()}: Command registration complete.`);
+}
+
+async function stepSyncFaq(config, connection) {
+  header('Step 4 of 4 — FAQ post sync');
+  const hubServerId = config.hubServerId;
+  if (!hubServerId) {
+    console.log(`${formattedDate()}: No hubServerId in config.json — skipping FAQ sync.`);
+    return;
+  }
+
+  const client = new Client({ intents: [GatewayIntentBits.Guilds] });
+  await client.login(config.token);
+  // Wait for client to be ready before fetching guilds/channels
+  await new Promise(resolve => client.once('ready', resolve));
+
+  try {
+    // Sync FAQ for the hub guild (guild_id=1 defaults)
+    const { errors } = await syncFaqPosts(client, connection, 1);
+    const total = FAQ_PAGES.length;
+    if (errors === 0) {
+      console.log(`${formattedDate()}: FAQ sync complete — ${total}/${total} pages updated.`);
+    } else {
+      console.log(`${formattedDate()}: FAQ sync complete — ${total - errors}/${total} pages updated, ${errors} error(s). Check logs.`);
+    }
+  } finally {
+    await client.destroy();
+  }
 }
 
 export async function main() {
@@ -59,6 +88,7 @@ export async function main() {
     await stepMigrations(config, connection);
     await stepSyncConfig(connection);
     await stepDeployCommands(config);
+    await stepSyncFaq(config, connection);
 
     console.log(`\n${'═'.repeat(50)}`);
     console.log('  Deploy complete.');

@@ -139,4 +139,14 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblHelp3PauseResume', 'Pausing and Resuming', 'en', 1),
 ('lblHelp3Closing', 'Closing a Story', 'en', 1),
 ('lblHelp3AdminControls', 'Admin Controls', 'en', 1),
-('txtHelp2Metadata', 'Optional AO3-style metadata set via the **Metadata** button in the story create form:\n- 🔞 **Rating** — G, T, M, E, or Not Rated. Affects which feed channel the story posts to.\n- ⚠️ **Warnings** — Select all that apply.\n- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other.\n- 💞 **Main Relationship** — Primary ship or pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships.\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags (e.g. slow burn, hurt/comfort, AU).', 'en', 1);
+('txtHelp2Metadata', 'Optional AO3-style metadata set via the **Metadata** button in the story create form:\n- 🔞 **Rating** — G, T, M, E, or Not Rated. Affects which feed channel the story posts to.\n- ⚠️ **Warnings** — Select all that apply.\n- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other.\n- 💞 **Main Relationship** — Primary ship or pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships.\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags (e.g. slow burn, hurt/comfort, AU).', 'en', 1),
+-- Help1 new keys (FAQ page 1 restructure)
+('lblHelp1TurnThreadPrivacy', '**🔒 Turn Thread Privacy** *(Normal Mode only)*', 'en', 1),
+('txtHelp1TurnThreadPrivacy', '- **Public** — Threads for your turns will be visible to all.\n- **Private** — Turn threads will only be visible to you and admins.', 'en', 1),
+('lblHelp1Notifications', '**💬 Notifications**', 'en', 1),
+('txtHelp1Notifications', '- **DM** — StoryBot sends DMs for turn start, reminders, and turn timeout or skip.\n- **Mention in channel** — The bot will tag you about your turn in messages on the story thread.', 'en', 1),
+('lblHelp1PenName', '**✒️ Pen Name** *(optional)*', 'en', 1),
+('txtHelp1PenName', '- Your name as it appears on the story. If the story is configured to display names, it will show on entries and in the exported story. Defaults to your Discord display name.', 'en', 1),
+('lblHelp1WritingYourTurn', '**✍️ Writing Your Turn**', 'en', 1),
+('lblHelp1WriteSlow', '**🐢 Slow Mode**', 'en', 1),
+('txtHelp1WriteSlow', 'Slow Mode is just like Normal mode, with individual turn threads and the ability to upload images, if enabled. The difference is, there is no timer. Turns only end when skipped or finalized, so you can take your time and write as you are able without feeling pressured. Reminders can be configured to send every X hours, so you don''t forget about the story entirely!', 'en', 1);

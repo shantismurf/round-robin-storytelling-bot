@@ -78,6 +78,9 @@ Tag Submission Thread Post (in story thread)
   → ManageUser panel (pause, remove, AO3 name, notif prefs, turn privacy)
   → storyadmin_mu_* buttons → confirm embed → storyadmin_mu_confirm_* / storyadmin_mu_cancel_*
 
+/storyadmin faqsync
+  → syncFaqPosts: fetches each cfgFaqThread* thread, edits bot's first post or posts new one
+
 /storyadmin skip / close / pause
   → Immediate actions; no confirm panel
 ```
