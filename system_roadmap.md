@@ -100,8 +100,9 @@ Jobs are stored in the `job` table and polled every 60 seconds by `job-runner.js
 | `job_type` | Handler | Description |
 |------------|---------|-------------|
 | `checkStoryDelay` | `handleCheckStoryDelay()` | Fires when the join-window expires; activates story if writer count met |
-| `turnTimeout` | `handleTurnTimeout()` | Fires when a turn deadline passes; ends turn, advances to next writer |
-| `turnReminder` | `handleTurnReminder()` | Fires partway through a turn to remind the active writer |
+| `turnTimeout` | `handleTurnTimeout()` | Fires when a turn deadline passes; ends turn, advances to next writer. Not created for slow mode stories. |
+| `turnReminder` | `handleTurnReminder()` | Fires once partway through a turn (at `reminder_timing`% of turn length) to remind the active writer. Normal/quick mode only. |
+| `turnSlowReminder` | `handleSlowTurnReminder()` | Fires every `reminder_timing` hours to remind the writer of an open slow mode turn. Self-rescheduling: inserts a new job on fire. Cancelled on turn end or story pause. |
 | `weeklyRoundup` | `handleWeeklyRoundup()` (story/roundup.js) | Weekly summary post |
 
 Job retry: max 3 attempts, 5-minute delay between retries. Status codes: `0`=pending, `1`=in-progress, `2`=permanently failed, `3`=cancelled.

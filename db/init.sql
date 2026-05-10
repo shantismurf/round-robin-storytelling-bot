@@ -17,16 +17,16 @@ CREATE TABLE IF NOT EXISTS story (
   closed_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
   updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
-  quick_mode TINYINT(1) DEFAULT 0,
+  mode TINYINT(1) DEFAULT 0, -- 0=Normal, 1=Quick, 2=Slow
   turn_length_hours INT DEFAULT 24,
-  timeout_reminder_percent INT DEFAULT 50,
+  reminder_timing INT DEFAULT 50, -- percent of turn in normal/quick; hours between reminders in slow; 0=disabled
   next_writer_id BIGINT NULL,
   story_thread_id BIGINT,
   story_turn_privacy TINYINT(1) DEFAULT 0,
   show_authors TINYINT(1) DEFAULT 1,
   story_delay_hours INT DEFAULT 0,
   story_delay_users INT DEFAULT NULL,
-  story_order_type TINYINT(1) DEFAULT 1, -- 1=random, 2=round-robin, 3=fixed
+  story_order_type TINYINT(1) DEFAULT 1, -- 1=Random, 2=Round-Robin, 3=Fixed
   max_writers INT DEFAULT NULL,
   min_entry_length INT DEFAULT 0,
   max_entry_length INT DEFAULT 5000,

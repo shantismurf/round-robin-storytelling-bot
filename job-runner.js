@@ -50,6 +50,9 @@ async function processJob(connection, client, job) {
       case 'turnReminder':
         await handleTurnReminder(connection, client, payload);
         break;
+      case 'turnSlowReminder':
+        await handleSlowTurnReminder(connection, client, payload);
+        break;
       case 'weeklyRoundup':
         await handleWeeklyRoundup(connection, client, payload);
         break;
@@ -251,7 +254,7 @@ async function handleTurnReminder(connection, client, payload) {
 
   // Get writer's notification preference
   const [writerRows] = await connection.execute(
-    `SELECT sw.notification_prefs, s.quick_mode, t.thread_id
+    `SELECT sw.notification_prefs, s.mode, t.thread_id
      FROM story_writer sw
      JOIN story s ON sw.story_id = s.story_id
      LEFT JOIN turn t ON t.turn_id = ? AND t.story_writer_id = sw.story_writer_id
@@ -260,13 +263,13 @@ async function handleTurnReminder(connection, client, payload) {
   );
   if (writerRows.length === 0) return; // writer left
 
-  const { notification_prefs: notificationPrefs, quick_mode: quickMode, thread_id: turnThreadId } = writerRows[0];
+  const { notification_prefs: notificationPrefs, mode, thread_id: turnThreadId } = writerRows[0];
   const ctx = await buildSyntheticContext(client, guildId);
 
-  // Build thread link — normal mode links to the turn thread, quick mode to the story thread
-  const linkThreadId = (!quickMode && turnThreadId) ? turnThreadId : story.story_thread_id;
+  // Build thread link — quick mode links to the story thread; normal/slow link to the turn thread
+  const linkThreadId = (mode !== 1 && turnThreadId) ? turnThreadId : story.story_thread_id;
   const threadUrl = `https://discord.com/channels/${guildId}/${linkThreadId}`;
-  const modeKey = quickMode ? 'Quick' : 'Normal';
+  const modeKey = mode === 1 ? 'Quick' : mode === 2 ? 'Slow' : 'Normal';
 
   function applyReminderTokens(text) {
     return text
@@ -290,7 +293,80 @@ async function handleTurnReminder(connection, client, payload) {
     }
   }
 
-  log(`Turn reminder sent for turn ${turnId} (story ${storyId})`, { show: true, guildName: ctx.guild?.name });
+  log(`Turn reminder sent for turn ${turnId} story ${storyId} (${story.title}) writer ${writerUserId}`, { show: true, guildName: ctx.guild?.name });
+}
+
+// ---------------------------------------------------------------------------
+// turnSlowReminder — fires on a repeating interval for slow mode turns
+// ---------------------------------------------------------------------------
+async function handleSlowTurnReminder(connection, client, payload) {
+  const { turnId, storyId, guildId, writerUserId, reminderHours } = payload;
+  log(`handleSlowTurnReminder entry for turn ${turnId} story ${storyId} writer ${writerUserId}`, { show: false });
+
+  // Verify turn is still active
+  const [turnRows] = await connection.execute(
+    `SELECT turn_id, thread_id FROM turn WHERE turn_id = ? AND turn_status = 1`,
+    [turnId]
+  );
+  if (turnRows.length === 0) return; // turn ended
+
+  // Verify story is still active
+  const [storyRows] = await connection.execute(
+    `SELECT story_status, title, story_thread_id FROM story WHERE story_id = ?`,
+    [storyId]
+  );
+  if (storyRows.length === 0 || storyRows[0].story_status !== 1) return;
+
+  const story = storyRows[0];
+  const turnThreadId = turnRows[0].thread_id;
+
+  // Get writer notification preference
+  const [writerRows] = await connection.execute(
+    `SELECT notification_prefs FROM story_writer
+     WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
+    [storyId, writerUserId]
+  );
+  if (writerRows.length === 0) return; // writer left
+
+  const { notification_prefs: notificationPrefs } = writerRows[0];
+  const ctx = await buildSyntheticContext(client, guildId);
+
+  const linkThreadId = turnThreadId || story.story_thread_id;
+  const threadUrl = `https://discord.com/channels/${guildId}/${linkThreadId}`;
+
+  function applySlowTokens(text) {
+    return text
+      .replace(/\[story_title\]/g, story.title)
+      .replace(/\[turn_thread_link\]/g, threadUrl);
+  }
+
+  if (notificationPrefs === 'mention') {
+    const txt = await getConfigValue(connection, 'txtMentionTurnReminderSlow', guildId);
+    const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
+    const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
+    await channel.send(`<@${writerUserId}> ${applySlowTokens(txt)}`);
+  } else {
+    try {
+      const user = await client.users.fetch(writerUserId);
+      const txt = await getConfigValue(connection, 'txtDMTurnReminderSlow', guildId);
+      await user.send(applySlowTokens(txt));
+    } catch (dmErr) {
+      log(`handleSlowTurnReminder DM failed for user ${writerUserId} turn ${turnId}, falling back to mention: ${dmErr}`, { show: true, guildName: ctx.guild?.name });
+      const txt = await getConfigValue(connection, 'txtMentionTurnReminderSlow', guildId);
+      const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
+      const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
+      await channel.send(`<@${writerUserId}> ${applySlowTokens(txt)}`);
+    }
+  }
+
+  // Re-schedule for the next interval
+  const nextRun = new Date(Date.now() + (reminderHours * 60 * 60 * 1000));
+  await connection.execute(
+    `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+    ['turnSlowReminder', JSON.stringify({ turnId, storyId, guildId, writerUserId, reminderHours }), nextRun, turnId]
+  );
+
+  log(`Slow reminder sent for turn ${turnId} story ${storyId} (${story.title}) writer ${writerUserId}; next at ${nextRun.toISOString()}`, { show: true, guildName: ctx.guild?.name });
 }
 
 async function sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyTokens) {

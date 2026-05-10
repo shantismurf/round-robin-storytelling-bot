@@ -20,27 +20,37 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
       }
       
       const [turnInfo] = await connection.execute(`
-        SELECT sw.discord_display_name, t.started_at, s.turn_length_hours
+        SELECT sw.discord_display_name, t.started_at, s.turn_length_hours, s.mode
         FROM turn t
         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
         JOIN story s ON sw.story_id = s.story_id
         WHERE sw.story_id = ? AND t.turn_status = 1
         ORDER BY t.started_at DESC LIMIT 1
       `, [storyId]);
-      
+
       const joinerName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
       let announcement;
 
       if (turnInfo.length > 0) {
         const turn = turnInfo[0];
-        const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
-        const txtStoryFeedJoinAnnouncement = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncement', guildId);
-        announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncement, {
-          joiner_name: joinerName,
-          story_title: storyTitle,
-          current_writer: turn.discord_display_name,
-          turn_end_date: `<t:${Math.floor(endTime.getTime() / 1000)}:f>`
-        });
+        const isSlowMode = turn.mode === 2;
+        if (isSlowMode) {
+          const txtStoryFeedJoinAnnouncementSlow = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncementSlow', guildId);
+          announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncementSlow, {
+            joiner_name: joinerName,
+            story_title: storyTitle,
+            current_writer: turn.discord_display_name,
+          });
+        } else {
+          const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
+          const txtStoryFeedJoinAnnouncement = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncement', guildId);
+          announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncement, {
+            joiner_name: joinerName,
+            story_title: storyTitle,
+            current_writer: turn.discord_display_name,
+            turn_end_date: `<t:${Math.floor(endTime.getTime() / 1000)}:f>`
+          });
+        }
       } else {
         const txtStoryFeedJoinAnnouncementNoTurn = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncementNoTurn', guildId);
         announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncementNoTurn, {
@@ -73,7 +83,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
     }
 
     const [storyRows] = await connection.execute(
-      `SELECT s.title, s.quick_mode, s.story_order_type, s.turn_length_hours,
+      `SELECT s.title, s.mode, s.story_order_type, s.turn_length_hours,
               s.max_writers, s.allow_joins, s.story_delay_hours, s.story_delay_users,
               s.created_at, s.rating, COUNT(sw.story_writer_id) as writer_count
        FROM story s
@@ -87,11 +97,12 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
 
     const creatorName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
 
-    const modeText = story.quick_mode ? 'Quick' : 'Normal';
+    const modeText = story.mode === 1 ? 'Quick' : story.mode === 2 ? 'Slow' : 'Normal';
     const orderMap = { 1: 'Random', 2: 'Round-Robin', 3: 'Fixed' };
     const orderText = orderMap[story.story_order_type] ?? 'Random';
     const writersText = `${story.writer_count}/${story.max_writers || '∞'} Writers`;
     const openText = story.allow_joins ? 'Open' : 'Closed';
+    const turnLengthText = story.mode === 2 ? 'No Timer' : `${story.turn_length_hours}h Turns`;
 
     const delayParts = [];
     if (story.story_delay_hours > 0) {
@@ -106,7 +117,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
     const metaParts = [
       `${modeText} Mode`,
       `${orderText} Order`,
-      `${story.turn_length_hours}h Turns`,
+      turnLengthText,
       writersText,
       openText,
       ...delayParts
@@ -174,25 +185,33 @@ export async function postStoryFeedActivationAnnouncement(connection, storyId, i
       
       // Get active writer and turn end time
       const [turnInfo] = await connection.execute(`
-        SELECT sw.discord_display_name, t.started_at, s.turn_length_hours
+        SELECT sw.discord_display_name, t.started_at, s.turn_length_hours, s.mode
         FROM turn t
         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
         JOIN story s ON sw.story_id = s.story_id
         WHERE sw.story_id = ? AND t.turn_status = 1
         ORDER BY t.started_at DESC LIMIT 1
       `, [storyId]);
-      
+
       if (turnInfo.length > 0) {
         const turn = turnInfo[0];
-        const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
-        
-        const txtStoryFeedNowActive = await getConfigValue(connection,'txtStoryFeedNowActive', guildId);
-        const announcement = replaceTemplateVariables(txtStoryFeedNowActive, {
-          story_title: storyTitle,
-          first_writer: turn.discord_display_name,
-          turn_end_date: `<t:${Math.floor(endTime.getTime() / 1000)}:f>`
-        });
-        
+        const isSlowMode = turn.mode === 2;
+        let announcement;
+        if (isSlowMode) {
+          const txtStoryFeedNowActiveSlow = await getConfigValue(connection, 'txtStoryFeedNowActiveSlow', guildId);
+          announcement = replaceTemplateVariables(txtStoryFeedNowActiveSlow, {
+            story_title: storyTitle,
+            first_writer: turn.discord_display_name,
+          });
+        } else {
+          const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
+          const txtStoryFeedNowActive = await getConfigValue(connection, 'txtStoryFeedNowActive', guildId);
+          announcement = replaceTemplateVariables(txtStoryFeedNowActive, {
+            story_title: storyTitle,
+            first_writer: turn.discord_display_name,
+            turn_end_date: `<t:${Math.floor(endTime.getTime() / 1000)}:f>`
+          });
+        }
         const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
         if (feedChannel) {
           await feedChannel.send(announcement);

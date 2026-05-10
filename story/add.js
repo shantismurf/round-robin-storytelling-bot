@@ -24,16 +24,16 @@ export async function handleAddStory(connection, interaction) {
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
     const cfg = await getConfigValue(connection, [
-      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtInfinity',
+      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtInfinity','txtNA',
       'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
-      'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC',
+      'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC','txtSlowTC','txtSlowLC',
       'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',
-      'txtNormalModeDesc', 'txtQuickModeDesc',
+      'txtNormalModeDesc', 'txtQuickModeDesc', 'txtSlowModeDesc',
       'txtHideThreadsOffDesc', 'txtHideThreadsOnDesc',
       'btnSetTitle', 'btnSetTurnLength', 'btnSetTimeout',
       'btnSetAO3Name', 'btnSetDelayHours', 'btnSetDelayWriters', 'btnCreateStory',
       'lblModeToggle', 'lblHideToggle', 'btnAddHideToggle', 'lblPrivateToggle', 'txtPrivateOffDesc', 'txtPrivateOnDesc',
-      'lblStoryTitle', 'lblTurnLength', 'lblTimeoutReminder',
+      'lblStoryTitle', 'lblTurnLength', 'lblTimeoutReminder', 'lblTimeoutReminderSlow',
       'lblDelayStart', 'txtDelayHint', 'lblYourAO3Name',
       'lblNoHours', 'lblNoWriters',
       'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
@@ -43,12 +43,13 @@ export async function handleAddStory(connection, interaction) {
       'txtSectionBreakLine', 'txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin',
       'btnSetMetadata', 'lblMyNotifications',
       'lblMetaRating', 'lblMetaWarnings', 'lblMetaDynamic',
+      'txtTimeoutReminderSlowPlaceholder',
     ], interaction.guild.id);
 
     const state = {
       cfg,
       storyTitle: null,
-      quickMode: 0,
+      storyMode: 0, // 0=Normal, 1=Quick, 2=Slow
       hideThreads: 0,
       turnLength: 24,
       timeoutReminder: 50,
@@ -90,14 +91,20 @@ export async function handleAddStory(connection, interaction) {
 }
 
 export function buildStoryAddMessage(cfg, state) {
-  const modeEmoji = state.quickMode ? '🟣' : '🟢';
-  const modeLabel = state.quickMode ? cfg.txtQuickUC : cfg.txtNormalUC;
-  const modeDesc = state.quickMode ? cfg.txtQuickModeDesc : cfg.txtNormalModeDesc;
+  const modeEmojis = { 0: '🟢', 1: '🟣', 2: '🔵' };
+  const modeLabels = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC };
+  const modeDescs = { 0: cfg.txtNormalModeDesc, 1: cfg.txtQuickModeDesc, 2: cfg.txtSlowModeDesc };
+  const modeEmoji = modeEmojis[state.storyMode] ?? '🟢';
+  const modeLabel = modeLabels[state.storyMode] ?? cfg.txtNormalUC;
+  const modeDesc = modeDescs[state.storyMode] ?? cfg.txtNormalModeDesc;
+  const isSlowMode = state.storyMode === 2;
   const hideDesc = state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc;
   const privateDesc = state.keepPrivate ? cfg.txtPrivateOnDesc : cfg.txtPrivateOffDesc;
   const privateLabel = state.keepPrivate ? cfg.txtYes : cfg.txtNo;
   const showAuthorsDesc = state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc;
-  const timeoutDisplay = state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}%`;
+  const timeoutDisplay = isSlowMode
+    ? (state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}h`)
+    : (state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}%`);
   const delayHours = state.delayHours ?? 0;
   const delayWriters = state.delayWriters ?? 0;
   const maxWritersDisplay = state.maxWriters ? String(state.maxWriters) : cfg.txtInfinity;
@@ -129,8 +136,8 @@ export function buildStoryAddMessage(cfg, state) {
       { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
       { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
       { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-      { name: cfg.lblTurnLength, value: `${state.turnLength} hours`, inline: true },
-      { name: cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
+      { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : `${state.turnLength} hours`, inline: true },
+      { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
       { name: cfg.lblHideToggle, value: hideDesc, inline: true },
       { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${showAuthorsDesc}`, inline: true },
       { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
@@ -148,7 +155,7 @@ export function buildStoryAddMessage(cfg, state) {
       { name: cfg.lblHideToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
       { name: cfg.lblMyNotifications, value: state.notifications ? cfg.txtOn : cfg.txtOff, inline: true },
     )
-    .setColor(state.quickMode ? 0xE040FB : 0x57F287);
+    .setColor(state.storyMode === 1 ? 0xE040FB : state.storyMode === 2 ? 0x5865F2 : 0x57F287);
 
   // Row 1 (3): Set Story Title | Story Mode: <> | Writer Order: <>
   const row1 = new ActionRowBuilder().addComponents(
@@ -157,7 +164,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setLabel(cfg.btnSetTitle)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
-      .setCustomId('story_add_toggle_mode')
+      .setCustomId('story_add_cycle_mode')
       .setLabel(`${cfg.lblModeToggle}: ${modeLabel}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
@@ -167,14 +174,18 @@ export function buildStoryAddMessage(cfg, state) {
   );
 
   // Row 2 (4): Turn Length: <> | Reminder Interval: <> | Show Names: <> | Hide Turn Threads: <>
+  const reminderBtnLabel = isSlowMode
+    ? replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}h` : cfg.txtNone })
+    : replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtNone });
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_set_turnlength')
-      .setLabel(replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} hrs` }))
-      .setStyle(ButtonStyle.Secondary),
+      .setLabel(isSlowMode ? cfg.txtNA : replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} hrs` }))
+      .setStyle(ButtonStyle.Secondary)
+      .setDisabled(isSlowMode),
     new ButtonBuilder()
       .setCustomId('story_add_set_timeout')
-      .setLabel(replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : 'Disabled' }))
+      .setLabel(reminderBtnLabel)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_authors')
@@ -273,9 +284,17 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
     } else if (customId === 'story_add_timeout_modal') {
       const raw = sanitizeModalInput(interaction.fields.getTextInputValue('timeout_reminder'), 10);
       const val = parseInt(raw);
-      if (isNaN(val) || val < 0 || val > 100) {
-        await interaction.reply({ content: await getConfigValue(connection, 'txtTimeoutReminderValidation', interaction.guild.id), flags: MessageFlags.Ephemeral });
-        return;
+      const isSlowMode = state.storyMode === 2;
+      if (isSlowMode) {
+        if (isNaN(val) || val < 0) {
+          await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          return;
+        }
+      } else {
+        if (isNaN(val) || val < 0 || val > 100) {
+          await interaction.reply({ content: await getConfigValue(connection, 'txtTimeoutReminderValidation', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          return;
+        }
       }
       state.timeoutReminder = val;
 
@@ -366,8 +385,8 @@ export async function handleAddStoryButton(connection, interaction) {
 
   const customId = interaction.customId;
 
-  if (customId === 'story_add_toggle_mode') {
-    state.quickMode = state.quickMode ? 0 : 1;
+  if (customId === 'story_add_cycle_mode') {
+    state.storyMode = state.storyMode === 2 ? 0 : state.storyMode + 1;
     await interaction.deferUpdate();
     await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
 
@@ -433,19 +452,22 @@ export async function handleAddStoryButton(connection, interaction) {
     );
 
   } else if (customId === 'story_add_set_timeout') {
+    const isSlowMode = state.storyMode === 2;
+    const reminderLabel = isSlowMode ? state.cfg.lblTimeoutReminderSlow : state.cfg.lblTimeoutReminder;
+    const reminderPlaceholder = isSlowMode ? state.cfg.txtTimeoutReminderSlowPlaceholder : 'Enter 0–100 (0 = no reminder)';
     await interaction.showModal(
       new ModalBuilder()
         .setCustomId('story_add_timeout_modal')
-        .setTitle(state.cfg.lblTimeoutReminder)
+        .setTitle(reminderLabel)
         .addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder()
               .setCustomId('timeout_reminder')
-              .setLabel(state.cfg.lblTimeoutReminder)
+              .setLabel(reminderLabel)
               .setStyle(TextInputStyle.Short)
               .setRequired(true)
               .setValue(String(state.timeoutReminder))
-              .setPlaceholder('Enter 0–100 (0 = no reminder)')
+              .setPlaceholder(reminderPlaceholder)
           )
         )
     );
@@ -548,7 +570,7 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
   try {
     const storyInput = {
       storyTitle: state.storyTitle,
-      quickMode: state.quickMode,
+      mode: state.storyMode,
       hideTurnThreads: state.hideThreads,
       turnLength: state.turnLength,
       timeoutReminder: state.timeoutReminder,

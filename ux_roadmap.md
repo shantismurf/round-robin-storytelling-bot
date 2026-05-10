@@ -112,10 +112,17 @@ turnTimeout job
   → PickNextWriter → NextTurn
   → posts timeout activity to story thread
 
-turnReminder job
-  → fires partway through a turn
+turnReminder job (normal/quick mode only)
+  → fires once at reminder_timing% of turn length
   → checks writer notification_prefs: 'mention' or DM
   → DM attempt → fallback to channel mention on failure (logged)
+
+turnSlowReminder job (slow mode only)
+  → fires every reminder_timing hours (self-rescheduling)
+  → verifies turn still active (turn_status = 1); cancels if not
+  → DM (txtDMTurnReminderSlow) or mention (txtMentionTurnReminderSlow)
+  → inserts new turnSlowReminder job for reminder_timing hours later
+  → cancelled on turn end (finalize/skip/timeout) or story pause
 ```
 
 ---
