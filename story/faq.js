@@ -4,6 +4,24 @@ function section(label, value) {
   return `## ${label}\n${value}`;
 }
 
+function chunkContent(content, maxLen = 2000) {
+  if (content.length <= maxLen) return [content];
+  const chunks = [];
+  const parts = content.split('\n\n');
+  let current = '';
+  for (const part of parts) {
+    const next = current ? current + '\n\n' + part : part;
+    if (next.length > maxLen) {
+      if (current) chunks.push(current);
+      current = part;
+    } else {
+      current = next;
+    }
+  }
+  if (current) chunks.push(current);
+  return chunks;
+}
+
 export async function buildFaqPage1(connection, guildId) {
   const cfg = await getConfigValue(connection, [
     'lblHelp1FindJoin', 'txtHelp1FindJoin',
@@ -190,18 +208,23 @@ export async function syncFaqPosts(client, connection, guildId) {
       }
 
       const content = await page.build(connection, guildId);
+      const chunks = chunkContent(content);
 
-      // Find the bot's first message in the thread, or post a new one
+      // Collect existing bot messages in chronological order
       const messages = await thread.messages.fetch({ limit: 100 });
-      const botMsg = messages.filter(m => m.author.id === client.user.id).last();
+      const botMsgs = messages.filter(m => m.author.id === client.user.id)
+        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
+        .map(m => m);
 
-      if (botMsg) {
-        await botMsg.edit(content);
-        log(`syncFaqPosts: edited post in ${page.label} (thread ${threadId})`, { show: true });
-      } else {
-        await thread.send(content);
-        log(`syncFaqPosts: posted new message in ${page.label} (thread ${threadId})`, { show: true });
+      // Edit existing messages, post any new chunks needed
+      for (let i = 0; i < chunks.length; i++) {
+        if (i < botMsgs.length) {
+          await botMsgs[i].edit(chunks[i]);
+        } else {
+          await thread.send(chunks[i]);
+        }
       }
+      log(`syncFaqPosts: synced ${chunks.length} message(s) in ${page.label} (thread ${threadId})`, { show: true });
     } catch (err) {
       log(`syncFaqPosts: failed for ${page.label}: ${err?.stack ?? err}`, { show: true });
       errors++;
