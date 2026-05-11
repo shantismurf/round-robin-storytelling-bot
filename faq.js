@@ -264,7 +264,10 @@ export async function syncFaqPosts(client, connection, guildId) {
 
   // Load existing post (thread) IDs — stored as pipe-delimited string, one per page
   const storedIds = await getConfigValue(connection, 'cfgFaqPostIds', guildId).catch(() => null);
-  const existingIds = storedIds ? storedIds.split('|') : [];
+  const isSnowflake = id => /^\d{17,20}$/.test(id);
+  const existingIds = (storedIds && isSnowflake(storedIds.split('|')[0]))
+    ? storedIds.split('|')
+    : [];
 
   const newIds = new Array(PAGE_DEFS.length).fill('');
   let errors = 0;
@@ -273,9 +276,9 @@ export async function syncFaqPosts(client, connection, guildId) {
   for (let i = PAGE_DEFS.length - 1; i >= 0; i--) {
     const pageDef = PAGE_DEFS[i];
     try {
-      // Delete existing forum post (thread) if we have an ID for it
+      // Delete existing forum post (thread) if we have a valid ID for it
       const existingId = existingIds[i];
-      if (existingId) {
+      if (existingId && isSnowflake(existingId)) {
         const existingThread = await faqChannel.threads.fetch(existingId).catch(() => null);
         if (existingThread) await existingThread.delete().catch(() => null);
       }
