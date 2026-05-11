@@ -148,8 +148,7 @@ async function buildTocEmbed(connection, guildId) {
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtHelpTocTitle)
-    .setColor(EMBED_COLOR)
-    .setDescription(PAGE_DEFS.map((p, i) => `${i + 1}. ${cfg[p.titleKey]}`).join('\n'));
+    .setColor(EMBED_COLOR);
 
   return {
     embeds: [embed],
