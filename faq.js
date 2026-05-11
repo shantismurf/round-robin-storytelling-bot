@@ -113,21 +113,13 @@ function renderEntries(entries, cfg, depth = 0) {
   return entries.map(entry => {
     const label = cfg[entry.lbl];
     const value = entry.txt ? cfg[entry.txt] : null;
+    const heading = depth === 0 ? '##' : '###';
 
-    if (depth === 0) {
-      if (!entry.children) {
-        return `## ${label}\n${value}`;
-      }
-      const childBlock = renderEntries(entry.children, cfg, depth + 1);
-      return value
-        ? `## ${label}\n${value}\n${childBlock}`
-        : `## ${label}\n${childBlock}`;
-    } else {
-      const valueLines = value ? value.split('\n').map(l => `> ${l}`).join('\n') : '';
-      return value
-        ? `> **${label}**\n${valueLines}`
-        : `> **${label}**`;
-    }
+    const childBlock = entry.children ? renderEntries(entry.children, cfg, depth + 1) : null;
+    const parts = [`${heading} ${label}`];
+    if (value) parts.push(value);
+    if (childBlock) parts.push(childBlock);
+    return parts.join('\n');
   }).join('\n\n');
 }
 
