@@ -8,7 +8,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp1Footer', 'Page 1 of 3 · Story IDs appear in /story list and in story thread titles.', 'en', 1),
 ('btnHelp1ToPage2', '📝 Story Creation Guide →', 'en', 1),
 ('lblHelp1FindJoin', '📚 Find & Join a Story', 'en', 1),
-('txtHelp1FindJoin', 'Use `/story list` to browse all of the stories on the server, past or present. Stories have dedicated threads for all of their activity, and those can be found by clicking the 🧵 icon in the Round Robin feed channel.\n\nWhen you''re ready, you can join a story in several ways:\n- Use the quick join menu on `/story list`\n- Type `/story join [id]`\n- Navigate to the story thread and click the "✍️ Join This Story" button on the pinned story info post at the top of the thread.', 'en', 1),
+('txtHelp1FindJoin', 'Use `/story list` to browse all of the stories on the server, past or present. Stories have dedicated threads for all of their activity, and those can be found by clicking the 🧵 icon in the Round Robin feed channel.\n\nTo find out who has the current turn in a story and when it will end, use `/story timeleft`\nWhen you''re ready, you can join a story in several ways:\n- Use the quick join menu on `/story list`\n- Type `/story join [id]`\n- Navigate to the story thread and click the "✍️ Join This Story" button on the pinned story info post at the top of the thread.', 'en', 1),
 ('lblHelp1JoiningOptions', '⚙️ Joining Options', 'en', 1),
 ('lblHelp1TurnThreadPrivacy', '**🔒 Turn Thread Privacy** *(Normal Mode only)*', 'en', 1),
 ('txtHelp1TurnThreadPrivacy', '- **Public** — Threads for your turns will be visible to all.\n- **Private** — Turn threads will only be visible to you and admins.', 'en', 1),

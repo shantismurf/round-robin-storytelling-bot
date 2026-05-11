@@ -31,16 +31,19 @@ function parseConfigEntries(sql) {
 export async function syncConfig(connection) {
   try {
     // Point to the folder where the config files live
-    const configDir = './db/config_files'; 
+    const configDir = './db/config_files';
     const files = fs.readdirSync(configDir).filter(f => f.endsWith('.sql'));
-    let sql = "";
-    // Loop through and combine the files into one massive string
+
+    // Parse per-file so we can track which files contributed changes
+    const fileEntriesByFile = new Map();
+    let allFileEntries = [];
     for (const file of files) {
       const content = fs.readFileSync(path.join(configDir, file), 'utf8');
-      sql += content + "\n\n";
+      const entries = parseConfigEntries(content);
+      fileEntriesByFile.set(file, entries);
+      allFileEntries = allFileEntries.concat(entries);
     }
-    // Parse the aggregated string
-    const fileEntries = parseConfigEntries(sql);
+    const fileEntries = allFileEntries;
 
     if (fileEntries.length === 0) {
       console.log(`No entries parsed from ${configDir} — check the file formats.`);
@@ -66,14 +69,27 @@ export async function syncConfig(connection) {
     const missing = [];
     const changed = [];
     const setupKeysSet = new Set(setupOnlyKeys);
+
+    // Build a reverse map from config_key to source filename for change tracking
+    const keyToFile = new Map();
+    for (const [file, entries] of fileEntriesByFile) {
+      for (const entry of entries) {
+        keyToFile.set(`${entry.guild_id}:${entry.config_key}`, file);
+      }
+    }
+
+    const changedFiles = new Set();
+
     // Compare File entries vs Database entries
     for (const entry of fileEntries) {
       if (setupKeysSet.has(entry.config_key)) continue;
       const dbKey = `${entry.guild_id}:${entry.config_key}`;
       if (!dbMap.has(dbKey)) {
         missing.push(entry);
+        changedFiles.add(keyToFile.get(dbKey));
       } else if (dbMap.get(dbKey) !== entry.config_value) {
         changed.push({ ...entry, old_value: dbMap.get(dbKey) });
+        changedFiles.add(keyToFile.get(dbKey));
       }
     }
 
@@ -114,6 +130,8 @@ export async function syncConfig(connection) {
       console.log(`\nNote: ${extras.length} key(s) in DB not found in the config files (will not be touched):`);
       extras.forEach(r => console.log(`  ? ${r.config_key} (guild ${r.guild_id})`));
     }
+
+    return { changedFiles };
 
   } catch (err) {
     console.error(`${formattedDate()}: Sync failed:`, err);

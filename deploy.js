@@ -33,8 +33,9 @@ async function stepMigrations(config, connection) {
 
 async function stepSyncConfig(connection) {
   header('Step 2 of 3 — Config sync');
-  await syncConfig(connection);
+  const result = await syncConfig(connection);
   console.log(`\n${formattedDate()}: Config sync complete.`);
+  return result ?? { changedFiles: new Set() };
 }
 
 async function stepDeployCommands(config) {
@@ -43,8 +44,16 @@ async function stepDeployCommands(config) {
   console.log(`\n${formattedDate()}: Command registration complete.`);
 }
 
-async function stepSyncFaq(config, connection) {
+async function stepSyncFaq(config, connection, changedFiles) {
   header('Step 4 of 4 — FAQ post sync');
+  if (config.testMode) {
+    console.log(`${formattedDate()}: Test mode — skipping FAQ sync.`);
+    return;
+  }
+  if (!changedFiles.has('config_help.sql')) {
+    console.log(`${formattedDate()}: config_help.sql unchanged — skipping FAQ sync.`);
+    return;
+  }
   const hubServerId = await getConfigValue(connection, 'cfgHubServerId', 1);
   if (!hubServerId) {
     console.log(`${formattedDate()}: cfgHubServerId not set in config table — skipping FAQ sync.`);
@@ -53,8 +62,7 @@ async function stepSyncFaq(config, connection) {
 
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   await client.login(config.token);
-  // Wait for client to be ready before fetching guilds/channels
-  await new Promise(resolve => client.once('ready', resolve));
+  await new Promise(resolve => client.once('clientReady', resolve));
 
   try {
     // Sync FAQ for the hub guild (guild_id=1 defaults)
@@ -86,9 +94,9 @@ export async function main() {
 
   try {
     await stepMigrations(config, connection);
-    await stepSyncConfig(connection);
+    const { changedFiles } = await stepSyncConfig(connection);
     await stepDeployCommands(config);
-    await stepSyncFaq(config, connection);
+    await stepSyncFaq(config, connection, changedFiles);
 
     console.log(`\n${'═'.repeat(50)}`);
     console.log('  Deploy complete.');
