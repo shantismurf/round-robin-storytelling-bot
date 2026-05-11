@@ -100,12 +100,26 @@ Jobs are stored in the `job` table and polled every 60 seconds by `job-runner.js
 | `job_type` | Handler | Description |
 |------------|---------|-------------|
 | `checkStoryDelay` | `handleCheckStoryDelay()` | Fires when the join-window expires; activates story if writer count met |
-| `turnTimeout` | `handleTurnTimeout()` | Fires when a turn deadline passes; ends turn, advances to next writer. Not created for slow mode stories. |
+| `turnTimeout` | `handleTurnTimeout()` | Fires when a turn deadline passes; ends turn, advances to next writer. Not created for slow mode turns — guarded by `isSlowMode` check in `story/_turn.js`. |
 | `turnReminder` | `handleTurnReminder()` | Fires once partway through a turn (at `reminder_timing`% of turn length) to remind the active writer. Normal/quick mode only. |
 | `turnSlowReminder` | `handleSlowTurnReminder()` | Fires every `reminder_timing` hours to remind the writer of an open slow mode turn. Self-rescheduling: inserts a new job on fire. Cancelled on turn end or story pause. |
-| `weeklyRoundup` | `handleWeeklyRoundup()` (story/roundup.js) | Weekly summary post |
+| `weeklyRoundup` | `handleWeeklyRoundup()` (story/roundup.js) | Weekly summary post. Dedup via `job_log` table — `INSERT IGNORE` on `(job_type, guild_id, window_key)` ensures only the first execution per window posts. |
 
 Job retry: max 3 attempts, 5-minute delay between retries. Status codes: `0`=pending, `1`=in-progress, `2`=permanently failed, `3`=cancelled.
+
+### job_log table
+
+Permanent record of completed scheduled job windows. Used for idempotency — a job checks `job_log` before acting, not the transient `job` table state.
+
+| Column | Type | Purpose |
+|--------|------|---------|
+| `job_type` | VARCHAR(50) | Matches `job.job_type` |
+| `guild_id` | BIGINT NOT NULL | Guild the job ran for |
+| `window_key` | VARCHAR(100) | Unique identifier for the logical window (e.g. scheduled ISO timestamp) |
+| `scheduled_at` | DATETIME | When the job was supposed to run |
+| `posted_at` | DATETIME | When it actually ran (DEFAULT NOW) |
+
+Unique constraint on `(job_type, guild_id, window_key)` — duplicate insert fails silently via `INSERT IGNORE`.
 
 ---
 

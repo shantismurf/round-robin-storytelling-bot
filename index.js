@@ -4,7 +4,6 @@ import { updateStoryStatusMessage } from './story/_storyStatus.js';
 import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log } from './utilities.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';
-import { scheduleAllRoundupJobs } from './story/roundup.js';
 import fs from 'fs';
 
 /**
@@ -105,7 +104,6 @@ async function main() {
     await bot.start();
     await loadCommands('./commands');
     startJobRunner(connection, client);
-    scheduleAllRoundupJobs(connection);
     refreshAllStatusMessages(connection, client);
   });
   function formatCommandLog(interaction) {

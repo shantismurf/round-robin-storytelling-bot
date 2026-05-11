@@ -186,18 +186,11 @@ export async function scheduleNextRoundup(connection, guildId) {
   const day = parseInt(cfg.cfgWeeklyRoundupDay) || 1;
   const hour = parseInt(cfg.cfgWeeklyRoundupHour) || 9;
   const runAt = calcNextRoundupTime(day, hour);
-  const [existing] = await connection.execute(
-    `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 0
-     AND run_at = ? AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-    [runAt, String(guildId)]
-  );
-  if (existing.length > 0) {
-    log(`weeklyRoundup job already scheduled for guild ${guildId} at ${runAt.toISOString()}, skipping`, { show: true });
-    return runAt;
-  }
+
+  // Cancel all pending/in-progress roundup jobs for this guild, then insert one clean job
   await connection.execute(
     `UPDATE job SET job_status = 3
-     WHERE job_type = 'weeklyRoundup' AND job_status = 0
+     WHERE job_type = 'weeklyRoundup' AND job_status IN (0, 1)
      AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
     [String(guildId)]
   );
@@ -218,52 +211,23 @@ export async function cancelPendingRoundupJobs(connection, guildId) {
   );
 }
 
-export async function scheduleAllRoundupJobs(connection) {
-  try {
-    const [enabledRows] = await connection.execute(
-      `SELECT guild_id FROM config WHERE config_key = 'cfgWeeklyRoundupEnabled' AND config_value = '1' AND guild_id != 1`
-    );
-    for (const { guild_id: guildId } of enabledRows) {
-      // Cancel any stale failed or duplicate pending jobs before checking
-      await connection.execute(
-        `UPDATE job SET job_status = 3
-         WHERE job_type = 'weeklyRoundup' AND job_status = 2
-         AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-        [String(guildId)]
-      );
-      const [pending] = await connection.execute(
-        `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 0
-         AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-        [String(guildId)]
-      );
-      if (pending.length === 0) {
-        const runAt = await scheduleNextRoundup(connection, guildId);
-        log(`Registered weeklyRoundup job for guild ${guildId}, next run: ${runAt.toISOString()}`, { show: true });
-      } else {
-        log(`weeklyRoundup job already pending for guild ${guildId} (${pending.length} job(s)), skipping`, { show: true });
-      }
-    }
-  } catch (err) {
-    log(`scheduleAllRoundupJobs failed: ${err?.stack ?? err}`, { show: true });
-  }
-}
-
 export async function handleWeeklyRoundup(connection, client, payload) {
   const { guildId, runAt } = payload;
 
-  if (runAt) {
-    const [alreadyRan] = await connection.execute(
-      `SELECT job_id FROM job WHERE job_type = 'weeklyRoundup' AND job_status = 1
-       AND CAST(JSON_EXTRACT(payload, '$.runAt') AS CHAR) = ?
-       AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-      [runAt, String(guildId)]
-    );
-    if (alreadyRan.length > 0) {
-      log(`weeklyRoundup for guild ${guildId} already ran for window ${runAt}, skipping duplicate`, { show: true });
-      await cancelPendingRoundupJobs(connection, guildId);
-      await scheduleNextRoundup(connection, guildId);
-      return;
-    }
+  // Use job_log as the authoritative dedup record. INSERT IGNORE means only the first
+  // job to reach this point for a given (type, guild, window) will proceed — any
+  // duplicate jobs (from accumulated backlog or restart races) get 0 affectedRows and bail.
+  const scheduledAt = runAt ? new Date(runAt) : new Date();
+  const windowKey = runAt ?? scheduledAt.toISOString();
+  const [logResult] = await connection.execute(
+    `INSERT IGNORE INTO job_log (job_type, guild_id, window_key, scheduled_at)
+     VALUES ('weeklyRoundup', ?, ?, ?)`,
+    [String(guildId), windowKey, scheduledAt]
+  );
+  if (logResult.affectedRows === 0) {
+    log(`weeklyRoundup for guild ${guildId} window ${windowKey} already logged — skipping duplicate`, { show: true });
+    await scheduleNextRoundup(connection, guildId);
+    return;
   }
 
   const enabled = await getConfigValue(connection, 'cfgWeeklyRoundupEnabled', guildId);
@@ -294,6 +258,9 @@ export async function handleWeeklyRoundup(connection, client, payload) {
     throw err;
   }
 
-  await cancelPendingRoundupJobs(connection, guildId);
+  await connection.execute(
+    `DELETE FROM job_log WHERE posted_at < DATE_SUB(NOW(), INTERVAL 90 DAY)`
+  );
+
   await scheduleNextRoundup(connection, guildId);
 }
