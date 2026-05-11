@@ -15,7 +15,7 @@ import { DB, loadConfig, formattedDate, getConfigValue } from './utilities.js';
 import { setupDatabase, dbSetup } from './database-setup.js';
 import { deployCommands } from './deploy-commands.js';
 import { syncConfig } from './sync-config.js';
-import { syncFaqPosts, FAQ_PAGES } from './story/faq.js';
+import { syncFaqPosts, FAQ_PAGES } from './faq.js';
 import { Client, GatewayIntentBits } from 'discord.js';
 
 function header(label) {
