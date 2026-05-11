@@ -150,7 +150,7 @@ async function buildTocEmbed(connection, guildId) {
     .setPlaceholder(cfg.txtHelpTocFooter)
     .addOptions(PAGE_DEFS.map((p, i) =>
       new StringSelectMenuOptionBuilder()
-        .setLabel(cfg[p.titleKey].replace(/^[^\w\s]+\s*/, ''))
+        .setLabel(cfg[p.titleKey].replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}️\s]+/gu, '').trim())
         .setValue(String(i))
     ));
 
@@ -281,7 +281,7 @@ export async function syncFaqPosts(client, connection, guildId) {
       }
 
       const { content, cfg } = await buildPage(connection, guildId, pageDef);
-      const title = cfg[pageDef.titleKey].replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]\s*/gu, '').trim();
+      const title = cfg[pageDef.titleKey].replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}️\s]+/gu, '').trim();
       const thread = await faqChannel.threads.create({ name: title, message: { content } });
       newIds[i] = thread.id;
       log(`syncFaqPosts: posted page ${i + 1} "${title}" (thread ${thread.id})`, { show: true });
