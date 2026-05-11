@@ -15,7 +15,7 @@ import { DB, loadConfig, formattedDate, getConfigValue } from './utilities.js';
 import { setupDatabase, dbSetup } from './database-setup.js';
 import { deployCommands } from './deploy-commands.js';
 import { syncConfig } from './sync-config.js';
-import { syncFaqPosts, FAQ_PAGES } from './faq.js';
+import { syncFaqPosts } from './faq.js';
 import { Client, GatewayIntentBits } from 'discord.js';
 
 function header(label) {
@@ -66,8 +66,7 @@ async function stepSyncFaq(config, connection, changedFiles) {
 
   try {
     // Sync FAQ for the hub guild (guild_id=1 defaults)
-    const { errors } = await syncFaqPosts(client, connection, 1);
-    const total = FAQ_PAGES.length;
+    const { errors, total } = await syncFaqPosts(client, connection, 1);
     if (errors === 0) {
       console.log(`${formattedDate()}: FAQ sync complete — ${total}/${total} pages updated.`);
     } else {

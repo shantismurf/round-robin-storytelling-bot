@@ -300,5 +300,5 @@ export async function syncFaqPosts(client, connection, guildId) {
   );
 
   log(`syncFaqPosts: complete for guild=${guildId} errors=${errors}`, { show: true });
-  return { errors };
+  return { errors, total: PAGE_DEFS.length };
 }
