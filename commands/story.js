@@ -16,7 +16,7 @@ import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleVi
 import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
-import { handleHelp, handleHelpNavigation } from '../faq.js';
+import { handleHelp, handleHelpSelect } from '../faq.js';
 import { handlePing } from '../story/ping.js';
 
 const data = new SlashCommandBuilder()
@@ -275,8 +275,6 @@ async function handleButtonInteraction(connection, interaction) {
     await handleJoin(connection, interaction, storyId);
   } else if (interaction.customId === 'story_filter') {
     await handleFilterButton(connection, interaction);
-  } else if (interaction.customId === 'story_help_page_1' || interaction.customId === 'story_help_page_2' || interaction.customId === 'story_help_page_3') {
-    await handleHelpNavigation(connection, interaction);
   } else if (interaction.customId.startsWith('story_request_more_time_')) {
     await handleRequestMoreTime(connection, interaction);
   } else if (interaction.customId.startsWith('story_read_post_public_')) {
@@ -309,7 +307,10 @@ async function handleButtonInteraction(connection, interaction) {
 }
 
 async function handleSelectMenuInteraction(connection, interaction) {
-  if (interaction.customId === 'story_quick_join') {
+  if (interaction.customId === 'story_help_toc') {
+    await handleHelpSelect(connection, interaction);
+
+  } else if (interaction.customId === 'story_quick_join') {
     const storyId = parseInt(interaction.values[0]);
     await handleJoin(connection, interaction, storyId);
 

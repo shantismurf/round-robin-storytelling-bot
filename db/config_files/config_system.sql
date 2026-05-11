@@ -78,9 +78,5 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnSubmitTagRead', '🏷️ Submit Tag', 'en', 1),
 ('cfgHubServerId', '1498673027720679635', 'en', 1),
 ('cfgHubFaqChannelId', '1499454495044927739', 'en', 1),
-('cfgFaqThreadOverview', '1503107814434803802', 'en', 1),
-('cfgFaqThreadWriterCmds', '1503107678619046119', 'en', 1),
-('cfgFaqThreadStoryCreation', '1503107767467245698', 'en', 1),
-('cfgFaqThreadManaging', '1503107731136057395', 'en', 1),
-('cfgFaqThreadAdminCmds', '1503107615167873244', 'en', 1),
+('cfgFaqPostIds', '', 'en', 1),
 ('txtSectionBreakLine', '═══════════════', 'en', 1);

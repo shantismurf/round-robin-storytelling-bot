@@ -1,299 +1,216 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
+import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log } from './utilities.js';
 
 const EMBED_COLOR = 0x5865f2;
 
 // ---------------------------------------------------------------------------
-// Internal helpers
+// Page definitions
+// Each page is a tree of { lbl, txt?, children? } entries.
+// - lbl only (no txt, has children): group header, children rendered below
+// - lbl + txt (no children): standard section
+// - lbl + txt + children: section with value, then children blockquoted below
 // ---------------------------------------------------------------------------
 
-function section(label, value) {
-  return `## ${label}\n${value}`;
-}
-
-function chunkContent(content, maxLen = 2000) {
-  if (content.length <= maxLen) return [content];
-  const chunks = [];
-  const parts = content.split('\n\n');
-  let current = '';
-  for (const part of parts) {
-    const next = current ? current + '\n\n' + part : part;
-    if (next.length > maxLen) {
-      if (current) chunks.push(current);
-      current = part;
-    } else {
-      current = next;
-    }
-  }
-  if (current) chunks.push(current);
-  return chunks;
-}
-
-// ---------------------------------------------------------------------------
-// Page content builders
-// Canonical source for all help embeds and FAQ sync posts.
-// Each returns { content } — a markdown string used by both Discord embeds
-// and Hub FAQ thread posts.
-// ---------------------------------------------------------------------------
-
-async function buildPage1(connection, guildId) {
-  const cfg = await getConfigValue(connection, [
-    'lblHelp1FindJoin', 'txtHelp1FindJoin',
-    'lblHelp1JoiningOptions',
-    'lblHelp1TurnThreadPrivacy', 'txtHelp1TurnThreadPrivacy',
-    'lblHelp1Notifications', 'txtHelp1Notifications',
-    'lblHelp1PenName', 'txtHelp1PenName',
-    'lblHelp1Dashboard', 'txtHelp1Dashboard',
-    'lblHelp1ManageParticipation', 'txtHelp1ManageParticipation',
-    'lblHelp1WritingYourTurn',
-    'lblHelp1WriteNormal', 'txtHelp1WriteNormal',
-    'lblHelp1WriteQuick', 'txtHelp1WriteQuick',
-    'lblHelp1WriteSlow', 'txtHelp1WriteSlow',
-  ], guildId);
-
-  return [
-    section(cfg.lblHelp1FindJoin, cfg.txtHelp1FindJoin),
-    section(cfg.lblHelp1JoiningOptions, [
-      section(cfg.lblHelp1TurnThreadPrivacy, cfg.txtHelp1TurnThreadPrivacy),
-      section(cfg.lblHelp1Notifications, cfg.txtHelp1Notifications),
-      section(cfg.lblHelp1PenName, cfg.txtHelp1PenName),
-    ].join('\n\n')),
-    section(cfg.lblHelp1Dashboard, cfg.txtHelp1Dashboard),
-    section(cfg.lblHelp1ManageParticipation, cfg.txtHelp1ManageParticipation),
-    section(cfg.lblHelp1WritingYourTurn, [
-      section(cfg.lblHelp1WriteNormal, cfg.txtHelp1WriteNormal),
-      section(cfg.lblHelp1WriteQuick, cfg.txtHelp1WriteQuick),
-      section(cfg.lblHelp1WriteSlow, cfg.txtHelp1WriteSlow),
-    ].join('\n\n')),
-  ].join('\n\n');
-}
-
-async function buildPage2(connection, guildId) {
-  const cfg = await getConfigValue(connection, [
-    'lblHelp2StoryTitle', 'txtHelp2StoryTitle',
-    'lblHelp2StoryMode', 'txtHelp2StoryMode',
-    'lblHelp2WriterOrder', 'txtHelp2WriterOrder',
-    'lblHelp2TurnLength', 'txtHelp2TurnLength',
-    'lblHelp2TimeoutReminder', 'txtHelp2TimeoutReminder',
-    'lblHelp2HideThreads', 'txtHelp2HideThreads',
-    'lblHelp2ShowAuthors', 'txtHelp2ShowAuthors',
-    'lblHelp2MaxWriters', 'txtHelp2MaxWriters',
-    'lblHelp2DelayStart', 'txtHelp2DelayStart',
-    'lblHelp2CreatorOptions', 'txtHelp2CreatorOptions',
-    'lblHelp2Metadata', 'txtHelp2Metadata',
-  ], guildId);
-
-  return [
-    section(cfg.lblHelp2StoryTitle, cfg.txtHelp2StoryTitle),
-    section(cfg.lblHelp2StoryMode, cfg.txtHelp2StoryMode),
-    section(cfg.lblHelp2WriterOrder, cfg.txtHelp2WriterOrder),
-    section(cfg.lblHelp2TurnLength, cfg.txtHelp2TurnLength),
-    section(cfg.lblHelp2TimeoutReminder, cfg.txtHelp2TimeoutReminder),
-    section(cfg.lblHelp2HideThreads, cfg.txtHelp2HideThreads),
-    section(cfg.lblHelp2ShowAuthors, cfg.txtHelp2ShowAuthors),
-    section(cfg.lblHelp2MaxWriters, cfg.txtHelp2MaxWriters),
-    section(cfg.lblHelp2DelayStart, cfg.txtHelp2DelayStart),
-    section(cfg.lblHelp2CreatorOptions, cfg.txtHelp2CreatorOptions),
-    section(cfg.lblHelp2Metadata, cfg.txtHelp2Metadata),
-    '*After story creation, these settings can be edited by admins or the story creator via `/story manage`.*',
-  ].join('\n\n');
-}
-
-async function buildPage3(connection, guildId) {
-  const cfg = await getConfigValue(connection, [
-    'lblHelp3WhoCanUse', 'txtHelp3WhoCanUse',
-    'lblHelp3WhatEdit', 'txtHelp3WhatEdit',
-    'lblHelp3PauseResume', 'txtHelp3PauseResume',
-    'lblHelp3Closing', 'txtHelp3Closing',
-    'lblHelp3AdminControls', 'txtHelp3AdminControls',
-  ], guildId);
-
-  return [
-    section(cfg.lblHelp3WhoCanUse, cfg.txtHelp3WhoCanUse),
-    section(cfg.lblHelp3WhatEdit, cfg.txtHelp3WhatEdit),
-    section(cfg.lblHelp3PauseResume, cfg.txtHelp3PauseResume),
-    section(cfg.lblHelp3Closing, cfg.txtHelp3Closing),
-    section(cfg.lblHelp3AdminControls, cfg.txtHelp3AdminControls),
-  ].join('\n\n');
-}
-
-async function buildPage4(connection, guildId) {
-  const cfg = await getConfigValue(connection, [
-    'lblHelp4Turn', 'txtHelp4Turn',
-    'lblHelp4Dashboard', 'txtHelp4Dashboard',
-    'lblHelp4Pause', 'txtHelp4Pause',
-  ], guildId);
-
-  return [
-    section(cfg.lblHelp4Turn, cfg.txtHelp4Turn),
-    section(cfg.lblHelp4Dashboard, cfg.txtHelp4Dashboard),
-    section(cfg.lblHelp4Pause, cfg.txtHelp4Pause),
-  ].join('\n\n');
-}
-
-async function buildPage5Content(connection, guildId) {
-  const cfg = await getConfigValue(connection, [
-    'lblHelp5Skip', 'txtHelp5Skip',
-    'lblHelp5Extend', 'txtHelp5Extend',
-    'lblHelp5ManageUser', 'txtHelp5ManageUser',
-    'lblHelp5Next', 'txtHelp5Next',
-    'lblHelp5Reassign', 'txtHelp5Reassign',
-    'lblHelp5Delete', 'txtHelp5Delete',
-    'lblHelp5Setup', 'txtHelp5Setup',
-    'lblHelp5Remove', 'txtHelp5Remove',
-  ], guildId);
-
-  return { cfg, content: [
-    section(cfg.lblHelp5Skip, cfg.txtHelp5Skip),
-    section(cfg.lblHelp5Extend, cfg.txtHelp5Extend),
-    section(cfg.lblHelp5ManageUser, cfg.txtHelp5ManageUser),
-    section(cfg.lblHelp5Next, cfg.txtHelp5Next),
-    section(cfg.lblHelp5Reassign, cfg.txtHelp5Reassign),
-    section(cfg.lblHelp5Delete, cfg.txtHelp5Delete),
-    section(cfg.lblHelp5Setup, cfg.txtHelp5Setup),
-    section(cfg.lblHelp5Remove, cfg.txtHelp5Remove),
-  ].join('\n\n') };
-}
-
-// FAQ sync builds a richer page 5 that includes setup channel descriptions and FAQ-specific sections
-async function buildPage5Faq(connection, guildId) {
-  const cfg = await getConfigValue(connection, [
-    'txtSetupEmbedDescFeed', 'txtSetupEmbedDescMedia',
-    'txtSetupEmbedDescAdminRole',
-    'txtSetupEmbedDescRestrictedFeed', 'txtSetupEmbedDescRestrictedMedia',
-    'txtSetupEmbedDescRoundupChannel',
-    'lblHelp5FaqSetup', 'txtHelp5FaqSetup',
-    'lblHelp5FaqUserPanel', 'txtHelp5FaqUserPanel',
-    'lblHelp5FaqDelete', 'txtHelp5FaqDelete',
-    'txtHelp5FaqFooter',
-  ], guildId);
-
-  const setupContent = [
-    '**📡 Configure Story Channels**',
-    `- **Story Feed Channel** — ${cfg.txtSetupEmbedDescFeed}`,
-    `- **Media Channel** — ${cfg.txtSetupEmbedDescMedia}`,
-    `- **Restricted Feed Channel** — ${cfg.txtSetupEmbedDescRestrictedFeed}`,
-    `- **Restricted Media Channel** — ${cfg.txtSetupEmbedDescRestrictedMedia}`,
-    '',
-    '**🔑 Permissions**',
-    `- **Admin Role** — ${cfg.txtSetupEmbedDescAdminRole}`,
-    '',
-    '**📆 Weekly Roundup**',
-    'The weekly roundup is a summary of the story activity on your server. It lists active stories and writers, and gives a count of stories created or completed, turns submitted or missed, and words written.',
-    `- **Roundup Channel** — ${cfg.txtSetupEmbedDescRoundupChannel}`,
-    '- **Roundup Timing** — Choose the day and hour you\'d like the summary to post: day (0 = Sunday, 6 = Saturday), hour UTC (0–23).',
-  ].join('\n');
-
-  return [
-    section('🛠️ Setup', `- \`/storyadmin setup\` — This command must be run before the bot can function, but it's also used to update system settings.\n${setupContent}`),
-    section(cfg.lblHelp5FaqSetup, cfg.txtHelp5FaqSetup),
-    section(cfg.lblHelp5FaqUserPanel, cfg.txtHelp5FaqUserPanel),
-    section(cfg.lblHelp5FaqDelete, `${cfg.txtHelp5FaqDelete} *(requires confirmation)*`),
-    cfg.txtHelp5FaqFooter,
-  ].join('\n\n');
-}
-
-// ---------------------------------------------------------------------------
-// FAQ page registry — used by syncFaqPosts and /storyadmin faqsync
-// ---------------------------------------------------------------------------
-
-export const FAQ_PAGES = [
-  { threadKey: 'cfgFaqThreadOverview',      build: (c, g) => buildPage1(c, g).then(content => ({ content })),      label: 'Overview' },
-  { threadKey: 'cfgFaqThreadStoryCreation', build: (c, g) => buildPage2(c, g).then(content => ({ content })),      label: 'Story Creation' },
-  { threadKey: 'cfgFaqThreadManaging',      build: (c, g) => buildPage3(c, g).then(content => ({ content })),      label: 'Managing a Story' },
-  { threadKey: 'cfgFaqThreadWriterCmds',    build: (c, g) => buildPage4(c, g).then(content => ({ content })),      label: 'Writer Commands' },
-  { threadKey: 'cfgFaqThreadAdminCmds',     build: (c, g) => buildPage5Faq(c, g).then(content => ({ content })),   label: 'Admin Commands' },
+const PAGE_DEFS = [
+  {
+    titleKey: 'txtHelp1Title',
+    entries: [
+      { lbl: 'lblHelp1FindJoin', txt: 'txtHelp1FindJoin' },
+      { lbl: 'lblHelp1JoiningOptions', children: [
+        { lbl: 'lblHelp1TurnThreadPrivacy', txt: 'txtHelp1TurnThreadPrivacy' },
+        { lbl: 'lblHelp1Notifications',     txt: 'txtHelp1Notifications' },
+        { lbl: 'lblHelp1PenName',           txt: 'txtHelp1PenName' },
+      ]},
+    ],
+  },
+  {
+    titleKey: 'txtHelp2Title',
+    entries: [
+      { lbl: 'lblHelp2Dashboard',           txt: 'txtHelp2Dashboard' },
+      { lbl: 'lblHelp2ManageParticipation', txt: 'txtHelp2ManageParticipation' },
+      { lbl: 'lblHelp2WritingYourTurn', children: [
+        { lbl: 'lblHelp2WriteNormal', txt: 'txtHelp2WriteNormal' },
+        { lbl: 'lblHelp2WriteQuick',  txt: 'txtHelp2WriteQuick' },
+        { lbl: 'lblHelp2WriteSlow',   txt: 'txtHelp2WriteSlow' },
+      ]},
+    ],
+  },
+  {
+    titleKey: 'txtHelp3Title',
+    entries: [
+      { lbl: 'lblHelp3StoryTitle',      txt: 'txtHelp3StoryTitle' },
+      { lbl: 'lblHelp3StoryMode',       txt: 'txtHelp3StoryMode' },
+      { lbl: 'lblHelp3WriterOrder',     txt: 'txtHelp3WriterOrder' },
+      { lbl: 'lblHelp3TurnLength',      txt: 'txtHelp3TurnLength' },
+      { lbl: 'lblHelp3TimeoutReminder', txt: 'txtHelp3TimeoutReminder' },
+      { lbl: 'lblHelp3HideThreads',     txt: 'txtHelp3HideThreads' },
+      { lbl: 'lblHelp3ShowAuthors',     txt: 'txtHelp3ShowAuthors' },
+      { lbl: 'lblHelp3MaxWriters',      txt: 'txtHelp3MaxWriters' },
+      { lbl: 'lblHelp3DelayStart',      txt: 'txtHelp3DelayStart' },
+    ],
+  },
+  {
+    titleKey: 'txtHelp4Title',
+    entries: [
+      { lbl: 'lblHelp4CreatorOptions', children: [
+        { lbl: 'lblHelp4PenName',       txt: 'txtHelp4PenName' },
+        { lbl: 'lblHelp4HideMyThreads', txt: 'txtHelp4HideMyThreads' },
+        { lbl: 'lblHelp4Notifications', txt: 'txtHelp4Notifications' },
+      ]},
+      { lbl: 'lblHelp4Metadata', txt: 'txtHelp4Metadata' },
+    ],
+  },
+  {
+    titleKey: 'txtHelp5Title',
+    entries: [
+      { lbl: 'lblHelp5WhoCanUse',    txt: 'txtHelp5WhoCanUse' },
+      { lbl: 'lblHelp5WhatEdit',     txt: 'txtHelp5WhatEdit' },
+      { lbl: 'lblHelp5Metadata',     txt: 'txtHelp5Metadata' },
+      { lbl: 'lblHelp5Closing',      txt: 'txtHelp5Closing' },
+      { lbl: 'lblHelp5AdminControls', txt: 'txtHelp5AdminControls' },
+    ],
+  },
+  {
+    titleKey: 'txtHelp6Title',
+    footerKey: 'txtHelp6Footer',
+    entries: [
+      { lbl: 'lblHelp6StoryCommands',   txt: 'txtHelp6StoryCommands' },
+      { lbl: 'lblHelp6Dashboard',       txt: 'txtHelp6Dashboard' },
+      { lbl: 'lblHelp6CreatorCommands', txt: 'txtHelp6CreatorCommands' },
+    ],
+  },
+  {
+    titleKey: 'txtHelp7Title',
+    footerKey: 'txtHelp7Footer',
+    entries: [
+      { lbl: 'lblHelp7Setup', txt: 'txtHelp7Setup', children: [
+        { lbl: 'lblHelp7SetupChannels',    txt: 'txtHelp7SetupChannels' },
+        { lbl: 'lblHelp7SetupPermissions', txt: 'txtHelp7SetupPermissions' },
+        { lbl: 'lblHelp7SetupRoundup',     txt: 'txtHelp7SetupRoundup' },
+      ]},
+      { lbl: 'lblHelp7ManageStory', txt: 'txtHelp7ManageStory' },
+      { lbl: 'lblHelp7ManageUser',  txt: 'txtHelp7ManageUser' },
+      { lbl: 'lblHelp7Delete',      txt: 'txtHelp7Delete' },
+    ],
+  },
 ];
 
 // ---------------------------------------------------------------------------
-// /story help — paged embed (pages 1–3), with nav buttons
+// Renderer
 // ---------------------------------------------------------------------------
 
-async function buildStoryHelpEmbed(connection, guildId, pageNumber) {
-  const builders = [buildPage1, buildPage2, buildPage3];
-  const titleKeys = ['txtHelp1Title', 'txtHelp2Title', 'txtHelp3Title'];
-  const footerKeys = ['txtHelp1Footer', 'txtHelp2Footer', 'txtHelp3Footer'];
-  const navKeys = [
-    { next: 'btnHelp1ToPage2' },
-    { prev: 'btnHelp2ToPage1', next: 'btnHelp2ToPage3' },
-    { prev: 'btnHelp3ToPage2' },
-  ];
+function collectKeys(entries) {
+  const keys = [];
+  for (const entry of entries) {
+    keys.push(entry.lbl);
+    if (entry.txt) keys.push(entry.txt);
+    if (entry.children) keys.push(...collectKeys(entry.children));
+  }
+  return keys;
+}
 
-  const idx = pageNumber - 1;
-  const nav = navKeys[idx];
-  const metaKeys = [titleKeys[idx], footerKeys[idx], ...Object.values(nav)];
-  const [content, metaCfg] = await Promise.all([
-    builders[idx](connection, guildId),
-    getConfigValue(connection, metaKeys, guildId),
-  ]);
+function renderEntries(entries, cfg, depth = 0) {
+  return entries.map(entry => {
+    const label = cfg[entry.lbl];
+    const value = entry.txt ? cfg[entry.txt] : null;
+
+    if (depth === 0) {
+      if (!entry.children) {
+        return `## ${label}\n${value}`;
+      }
+      const childBlock = renderEntries(entry.children, cfg, depth + 1);
+      return value
+        ? `## ${label}\n${value}\n${childBlock}`
+        : `## ${label}\n${childBlock}`;
+    } else {
+      const valueLines = value ? value.split('\n').map(l => `> ${l}`).join('\n') : '';
+      return value
+        ? `> **${label}**\n${valueLines}`
+        : `> **${label}**`;
+    }
+  }).join('\n\n');
+}
+
+async function buildPage(connection, guildId, pageDef) {
+  const keys = [pageDef.titleKey, ...collectKeys(pageDef.entries)];
+  if (pageDef.footerKey) keys.push(pageDef.footerKey);
+  const cfg = await getConfigValue(connection, keys, guildId);
+  return { content: renderEntries(pageDef.entries, cfg), cfg };
+}
+
+// ---------------------------------------------------------------------------
+// /story help — ToC embed with select menu
+// ---------------------------------------------------------------------------
+
+async function buildTocEmbed(connection, guildId) {
+  const titleKeys = PAGE_DEFS.map(p => p.titleKey);
+  const cfg = await getConfigValue(connection, ['txtHelpTocTitle', 'txtHelpTocFooter', ...titleKeys], guildId);
+
+  const select = new StringSelectMenuBuilder()
+    .setCustomId('story_help_toc')
+    .setPlaceholder(cfg.txtHelpTocFooter)
+    .addOptions(PAGE_DEFS.map((p, i) =>
+      new StringSelectMenuOptionBuilder()
+        .setLabel(cfg[p.titleKey].replace(/^[^\w\s]+\s*/, ''))
+        .setValue(String(i))
+    ));
 
   const embed = new EmbedBuilder()
-    .setTitle(metaCfg[titleKeys[idx]])
+    .setTitle(cfg.txtHelpTocTitle)
     .setColor(EMBED_COLOR)
-    .setDescription(content)
-    .setFooter({ text: metaCfg[footerKeys[idx]] });
-
-  const buttons = [];
-  if (nav.prev) buttons.push(
-    new ButtonBuilder().setCustomId(`story_help_page_${pageNumber - 1}`).setLabel(metaCfg[nav.prev]).setStyle(ButtonStyle.Secondary)
-  );
-  if (nav.next) buttons.push(
-    new ButtonBuilder().setCustomId(`story_help_page_${pageNumber + 1}`).setLabel(metaCfg[nav.next]).setStyle(ButtonStyle.Secondary)
-  );
+    .setDescription(PAGE_DEFS.map((p, i) => `${i + 1}. ${cfg[p.titleKey]}`).join('\n'));
 
   return {
     embeds: [embed],
-    components: buttons.length > 0 ? [new ActionRowBuilder().addComponents(...buttons)] : [],
+    components: [new ActionRowBuilder().addComponents(select)],
   };
 }
 
 export async function handleHelp(connection, interaction) {
   log(`handleHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   try {
-    await interaction.reply({ ...await buildStoryHelpEmbed(connection, interaction.guild.id, 1), flags: MessageFlags.Ephemeral });
+    await interaction.reply({ ...await buildTocEmbed(connection, interaction.guild.id), flags: MessageFlags.Ephemeral });
   } catch (err) {
     log(`handleHelp failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
-export async function handleHelpNavigation(connection, interaction) {
-  log(`handleHelpNavigation entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
-  await interaction.deferUpdate();
+export async function handleHelpSelect(connection, interaction) {
+  log(`handleHelpSelect entry user=${interaction.user.id} value=${interaction.values[0]}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const match = interaction.customId.match(/^story_help_page_(\d+)$/);
-    const pageNumber = Math.min(3, Math.max(1, match ? parseInt(match[1]) : 1));
-    await interaction.editReply(await buildStoryHelpEmbed(connection, interaction.guild.id, pageNumber));
+    const idx = parseInt(interaction.values[0]);
+    const pageDef = PAGE_DEFS[idx];
+    const guildId = interaction.guild.id;
+    const { content, cfg } = await buildPage(connection, guildId, pageDef);
+
+    const embed = new EmbedBuilder()
+      .setTitle(cfg[pageDef.titleKey])
+      .setColor(EMBED_COLOR)
+      .setDescription(content);
+    if (pageDef.footerKey) embed.setFooter({ text: cfg[pageDef.footerKey] });
+
+    await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    log(`handleHelpNavigation failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleHelpSelect failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
 // ---------------------------------------------------------------------------
-// /mystory help — single embed, page 4 content
+// /mystory help — page 6
 // ---------------------------------------------------------------------------
 
 export async function handleWriterHelp(connection, interaction) {
   log(`handleWriterHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const guildId = interaction.guild.id;
-    const cfg = await getConfigValue(connection, [
-      'txtHelp4Title', 'txtHelp4Footer',
-      'lblHelp4Dashboard', 'txtHelp4Dashboard',
-      'lblHelp4Turn', 'txtHelp4Turn',
-      'lblHelp4Pause', 'txtHelp4Pause',
-    ], guildId);
-
+    const pageDef = PAGE_DEFS[5];
+    const { content, cfg } = await buildPage(connection, interaction.guild.id, pageDef);
     const embed = new EmbedBuilder()
-      .setTitle(cfg.txtHelp4Title)
+      .setTitle(cfg[pageDef.titleKey])
       .setColor(EMBED_COLOR)
-      .addFields(
-        { name: cfg.lblHelp4Turn,      value: cfg.txtHelp4Turn,      inline: false },
-        { name: cfg.lblHelp4Dashboard, value: cfg.txtHelp4Dashboard, inline: false },
-        { name: cfg.lblHelp4Pause,     value: cfg.txtHelp4Pause,     inline: false },
-      )
-      .setFooter({ text: cfg.txtHelp4Footer });
-
+      .setDescription(content)
+      .setFooter({ text: cfg[pageDef.footerKey] });
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
     log(`handleWriterHelp failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
@@ -301,39 +218,19 @@ export async function handleWriterHelp(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /storyadmin help — single embed, page 5 content
+// /storyadmin help — page 7
 // ---------------------------------------------------------------------------
 
 export async function handleAdminHelp(connection, interaction, guildId) {
   log(`handleAdminHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   try {
-    const cfg = await getConfigValue(connection, [
-      'txtHelp5Title', 'txtHelp5Footer',
-      'lblHelp5Skip', 'txtHelp5Skip',
-      'lblHelp5Extend', 'txtHelp5Extend',
-      'lblHelp5ManageUser', 'txtHelp5ManageUser',
-      'lblHelp5Next', 'txtHelp5Next',
-      'lblHelp5Reassign', 'txtHelp5Reassign',
-      'lblHelp5Delete', 'txtHelp5Delete',
-      'lblHelp5Setup', 'txtHelp5Setup',
-      'lblHelp5Remove', 'txtHelp5Remove',
-    ], guildId);
-
+    const pageDef = PAGE_DEFS[6];
+    const { content, cfg } = await buildPage(connection, guildId, pageDef);
     const embed = new EmbedBuilder()
-      .setTitle(cfg.txtHelp5Title)
+      .setTitle(cfg[pageDef.titleKey])
       .setColor(EMBED_COLOR)
-      .addFields(
-        { name: cfg.lblHelp5Skip,       value: cfg.txtHelp5Skip,       inline: false },
-        { name: cfg.lblHelp5Extend,     value: cfg.txtHelp5Extend,     inline: false },
-        { name: cfg.lblHelp5ManageUser, value: cfg.txtHelp5ManageUser, inline: false },
-        { name: cfg.lblHelp5Next,       value: cfg.txtHelp5Next,       inline: false },
-        { name: cfg.lblHelp5Reassign,   value: cfg.txtHelp5Reassign,   inline: false },
-        { name: cfg.lblHelp5Delete,     value: cfg.txtHelp5Delete,     inline: false },
-        { name: cfg.lblHelp5Setup,      value: cfg.txtHelp5Setup,      inline: false },
-        { name: cfg.lblHelp5Remove,     value: cfg.txtHelp5Remove,     inline: false },
-      )
-      .setFooter({ text: cfg.txtHelp5Footer });
-
+      .setDescription(content)
+      .setFooter({ text: cfg[pageDef.footerKey] });
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   } catch (err) {
     log(`handleAdminHelp failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
@@ -341,7 +238,7 @@ export async function handleAdminHelp(connection, interaction, guildId) {
 }
 
 // ---------------------------------------------------------------------------
-// FAQ sync — posts/updates Hub server FAQ threads
+// FAQ sync — deletes and reposts all pages to hub FAQ forum
 // ---------------------------------------------------------------------------
 
 export async function syncFaqPosts(client, connection, guildId) {
@@ -352,60 +249,55 @@ export async function syncFaqPosts(client, connection, guildId) {
 
   if (!hubServerId || !faqChannelId) {
     log(`syncFaqPosts: cfgHubServerId or cfgHubFaqChannelId not set for guild=${guildId}`, { show: true });
-    return { errors: FAQ_PAGES.length };
+    return { errors: PAGE_DEFS.length };
   }
 
   const hubGuild = await client.guilds.fetch(hubServerId).catch(() => null);
   if (!hubGuild) {
     log(`syncFaqPosts: could not fetch hub guild ${hubServerId}`, { show: true });
-    return { errors: FAQ_PAGES.length };
+    return { errors: PAGE_DEFS.length };
   }
 
   const faqChannel = await hubGuild.channels.fetch(faqChannelId).catch(() => null);
   if (!faqChannel) {
     log(`syncFaqPosts: could not fetch FAQ channel ${faqChannelId}`, { show: true });
-    return { errors: FAQ_PAGES.length };
+    return { errors: PAGE_DEFS.length };
   }
 
+  // Load existing post IDs
+  const storedIds = await getConfigValue(connection, 'cfgFaqPostIds', guildId);
+  const existingIds = storedIds ? storedIds.split('|') : [];
+
+  const newIds = new Array(PAGE_DEFS.length).fill('');
   let errors = 0;
 
-  for (const page of FAQ_PAGES) {
+  // Post in reverse order so page 1 (Overview) sorts to top of forum
+  for (let i = PAGE_DEFS.length - 1; i >= 0; i--) {
+    const pageDef = PAGE_DEFS[i];
     try {
-      const threadId = await getConfigValue(connection, page.threadKey, guildId);
-      if (!threadId) {
-        log(`syncFaqPosts: ${page.threadKey} not set — skipping ${page.label}`, { show: true });
-        errors++;
-        continue;
+      // Delete existing post if we have an ID for it
+      const existingId = existingIds[i];
+      if (existingId) {
+        const existing = await faqChannel.messages.fetch(existingId).catch(() => null);
+        if (existing) await existing.delete().catch(() => null);
       }
 
-      const thread = await faqChannel.threads.fetch(threadId).catch(() => null);
-      if (!thread) {
-        log(`syncFaqPosts: thread ${threadId} not found for ${page.label}`, { show: true });
-        errors++;
-        continue;
-      }
-
-      const { content } = await page.build(connection, guildId);
-      const chunks = chunkContent(content);
-
-      const messages = await thread.messages.fetch({ limit: 100 });
-      const botMsgs = messages.filter(m => m.author.id === client.user.id)
-        .sort((a, b) => a.createdTimestamp - b.createdTimestamp)
-        .map(m => m);
-
-      for (let i = 0; i < chunks.length; i++) {
-        if (i < botMsgs.length) {
-          await botMsgs[i].edit(chunks[i]);
-        } else {
-          await thread.send(chunks[i]);
-        }
-      }
-      log(`syncFaqPosts: synced ${chunks.length} message(s) in ${page.label} (thread ${threadId})`, { show: true });
+      const { content, cfg } = await buildPage(connection, guildId, pageDef);
+      const title = cfg[pageDef.titleKey];
+      const msg = await faqChannel.send(`# ${title}\n${content}`);
+      newIds[i] = msg.id;
+      log(`syncFaqPosts: posted page ${i + 1} "${title}" (${msg.id})`, { show: true });
     } catch (err) {
-      log(`syncFaqPosts: failed for ${page.label}: ${err?.stack ?? err}`, { show: true });
+      log(`syncFaqPosts: failed for page ${i + 1}: ${err?.stack ?? err}`, { show: true });
       errors++;
     }
   }
+
+  // Save new IDs back
+  await connection.execute(
+    `UPDATE config SET config_value = ? WHERE config_key = 'cfgFaqPostIds' AND guild_id = ?`,
+    [newIds.join('|'), guildId]
+  );
 
   log(`syncFaqPosts: complete for guild=${guildId} errors=${errors}`, { show: true });
   return { errors };

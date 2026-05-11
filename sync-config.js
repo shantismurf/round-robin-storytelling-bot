@@ -128,7 +128,7 @@ export async function syncConfig(connection) {
     const extras = dbRows.filter(r => !fileKeys.has(`${r.guild_id}:${r.config_key}`));
     if (extras.length > 0) {
       console.log(`\nNote: ${extras.length} key(s) in DB not found in the config files (will not be touched):`);
-      extras.forEach(r => console.log(`  ? ${r.config_key} (guild ${r.guild_id})`));
+      extras.forEach(r => console.log(`  '${r.config_key}',`));
     }
 
     return { changedFiles };
