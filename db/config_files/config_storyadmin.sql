@@ -249,7 +249,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblAdminFaqSetup', '⚙️ Story Management Panel', 'en', 1),
 ('txtAdminFaqSetup', '- `/story manage [id]` — See "Managing a Story" (`/story help`) for more information on the Story Management Panel.', 'en', 1),
 ('lblAdminFaqUserPanel', '👤 User Management Panel', 'en', 1),
-('txtAdminFaqUserPanel', '- `/storyadmin user [story_id] [writer]` — Manage a writer''s participation in a story: pause, remove, change their notification or privacy settings, or update their AO3 name.', 'en', 1),
+('txtAdminFaqUserPanel', '- `/storyadmin user [story_id] [writer]` — Manage a writer''s participation in a story: pause, remove, change their notification or privacy settings, or update their pen name.', 'en', 1),
 ('lblAdminFaqDelete', '🗑️ Delete a Story', 'en', 1),
 ('txtAdminFaqDelete', '- `/storyadmin delete [id]` — Permanently delete a story and all its data', 'en', 1),
 ('txtAdminFaqFooter', '*All admin commands require the Discord Administrator permission, or the Round Robin admin role configured in `/storyadmin setup`*', 'en', 1),

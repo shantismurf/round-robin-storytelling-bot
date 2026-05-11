@@ -1,6 +1,6 @@
 -- Context: config_metadata
 INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
-('txtExportAO3Instructions', 'If you don''t see a download icon, click the ··· menu on the file and choose **Download**.\n\n**To post to AO3:** Open the file in any text editor and copy everything between the `[body]` and `[/body]` tags. In AO3''s Work Text field, click the **HTML** button to switch to HTML mode, then paste. If your story includes images, you''ll need to host them on an image host and update the links in the file before copying.', 'en', 1),
+('txtExportAO3Instructions', 'If you don''t see a download icon, click the ··· menu on the file and choose **Download**.\n\n**To post your story online:** Open the file in any text editor and copy everything between the `[body]` and `[/body]` tags. For AO3, in the "Work Text" field, click the **HTML** button to switch to HTML mode, then paste. If your story includes images, you''ll need to host them on an image host and update the links in the file before copying.', 'en', 1),
 ('btnExportPostPublicly', '📢 Post to Story Thread', 'en', 1),
 ('txtExportPostedPublicly', '✅ Story file posted to the story thread.', 'en', 1),
 ('lblRating', 'Rating', 'en', 1),
