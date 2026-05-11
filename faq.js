@@ -255,8 +255,8 @@ export async function syncFaqPosts(client, connection, guildId) {
     return { errors: PAGE_DEFS.length };
   }
 
-  // Load existing post IDs
-  const storedIds = await getConfigValue(connection, 'cfgFaqPostIds', guildId);
+  // Load existing post (thread) IDs — stored as pipe-delimited string, one per page
+  const storedIds = await getConfigValue(connection, 'cfgFaqPostIds', guildId).catch(() => null);
   const existingIds = storedIds ? storedIds.split('|') : [];
 
   const newIds = new Array(PAGE_DEFS.length).fill('');
@@ -266,27 +266,28 @@ export async function syncFaqPosts(client, connection, guildId) {
   for (let i = PAGE_DEFS.length - 1; i >= 0; i--) {
     const pageDef = PAGE_DEFS[i];
     try {
-      // Delete existing post if we have an ID for it
+      // Delete existing forum post (thread) if we have an ID for it
       const existingId = existingIds[i];
       if (existingId) {
-        const existing = await faqChannel.messages.fetch(existingId).catch(() => null);
-        if (existing) await existing.delete().catch(() => null);
+        const existingThread = await faqChannel.threads.fetch(existingId).catch(() => null);
+        if (existingThread) await existingThread.delete().catch(() => null);
       }
 
       const { content, cfg } = await buildPage(connection, guildId, pageDef);
       const title = cfg[pageDef.titleKey].replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]\s*/gu, '').trim();
-      const msg = await faqChannel.send(`# ${title}\n${content}`);
-      newIds[i] = msg.id;
-      log(`syncFaqPosts: posted page ${i + 1} "${title}" (${msg.id})`, { show: true });
+      const thread = await faqChannel.threads.create({ name: title, message: { content } });
+      newIds[i] = thread.id;
+      log(`syncFaqPosts: posted page ${i + 1} "${title}" (thread ${thread.id})`, { show: true });
     } catch (err) {
       log(`syncFaqPosts: failed for page ${i + 1}: ${err?.stack ?? err}`, { show: true });
       errors++;
     }
   }
 
-  // Save new IDs back
+  // Save new thread IDs back — use INSERT ... ON DUPLICATE KEY to handle missing key gracefully
   await connection.execute(
-    `UPDATE config SET config_value = ? WHERE config_key = 'cfgFaqPostIds' AND guild_id = ?`,
+    `INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES ('cfgFaqPostIds', ?, 'en', ?)
+     ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
     [newIds.join('|'), guildId]
   );
 
