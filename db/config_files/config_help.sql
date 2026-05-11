@@ -101,7 +101,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- ---------------------------------------------------------------------------
 -- Page 7: MyStory Commands
 -- ---------------------------------------------------------------------------
-('txtHelp7Title', '📋 MyStory Commands', 'en', 1),
+('txtHelp7Title', '📋 Writer Command Reference', 'en', 1),
 ('txtHelp7Footer', 'Use /story help for detailed explanations of story modes, writer order, metadata, and more.', 'en', 1),
 ('lblHelp7StoryCommands', '📖 Story Commands', 'en', 1),
 ('txtHelp7StoryCommands', '- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story join [id]` — Join a story\n- `/story write [id]` — Submit your entry *(Quick Mode only)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id]` — Edit one of your finalized entries\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story ping [id]` — Ping all writers in a story\n- `/story help` — Detailed guide with all writer options', 'en', 1),
