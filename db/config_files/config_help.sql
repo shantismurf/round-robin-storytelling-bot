@@ -88,36 +88,47 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp5AdminControls', '**Manage Turns** (via the Manage Turns button in `/story manage`):\n- Skip the current turn\n- Extend the current turn deadline\n- Designate the next writer\n- Reassign the turn to the previous writer (e.g. if they missed their turn and still want to write) and set the current writer to go after them\n\n**Manage Users** (via `/storyadmin user [id] [user]`):\n- Pause or unpause a writer\n- Remove a writer from a story\n- Update a writer''s pen name\n\n**Other admin actions** (via `/storyadmin`):\n- Permanently delete a story: `/storyadmin delete`', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 6: MyStory Commands
+-- Page 6: Reading & Editing
 -- ---------------------------------------------------------------------------
-('txtHelp6Title', '📋 Writer Command Reference', 'en', 1),
-('txtHelp6Footer', 'Use /story help for detailed explanations of story modes, writer order, metadata, and more.', 'en', 1),
-('lblHelp6StoryCommands', '📖 Story Commands', 'en', 1),
-('txtHelp6StoryCommands', '- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story join [id]` — Join a story\n- `/story write [id]` — Submit your entry *(Quick Mode only)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id]` — Edit one of your finalized entries\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story ping [id]` — Ping all writers in a story\n- `/story help` — Detailed guide with all writer options', 'en', 1),
-('lblHelp6Dashboard', '🗂️ Your Dashboard', 'en', 1),
-('txtHelp6Dashboard', '- `/mystory list` — See all your stories — active, paused, delayed, and closed\n- `/mystory catchup [id]` — Read entries written since your last turn\n- `/mystory manage [id]` — Update your settings, pass your turn, pause, or leave a story', 'en', 1),
-('lblHelp6CreatorCommands', '⚙️ Story Creator Commands', 'en', 1),
-('txtHelp6CreatorCommands', '- `/story manage [id]` — Edit story settings, manage turns and entries, pause or close', 'en', 1),
+('txtHelp6Title', '📖 Reading & Editing', 'en', 1),
+('lblHelp6Read', '📖 Reading a Story', 'en', 1),
+('txtHelp6Read', '`/story read [id]` — Displays the story in Discord, paginated by entry. Longer entries are broken into additional pages. Each entry shows the writer''s name (if enabled) and the text they submitted. Images are shown as placeholders with their alternate text.', 'en', 1),
+('lblHelp6Edit', '✏️ Editing an Entry', 'en', 1),
+('txtHelp6Edit', 'You can edit a finalized entry two ways:\n- `/story edit [id] [turn]` — Opens the edit interface directly.\n- Click the **Edit** button in `/story read` — appears on the first page of each entry.\n\nWriters can edit their own entries. Admins can edit or delete any entry and restore previous versions.', 'en', 1),
+('lblHelp6EditPages', '📄 Entries Split Across Pages', 'en', 1),
+('txtHelp6EditPages', 'Entries longer than 3,800 characters are split into pages. Each page is edited separately — changes on one page do not affect the others. You can add up to 200 characters to a page before saving; if you need more space, save and the pages will reload with the updated content.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 7: StoryAdmin Commands
+-- Page 7: MyStory Commands
 -- ---------------------------------------------------------------------------
-('txtHelp7Title', '⚙️ Admin Command Reference', 'en', 1),
-('txtHelp7Footer', '*All admin commands require the Discord Administrator permission, or the Round Robin admin role configured in `/storyadmin setup`*', 'en', 1),
-('lblHelp7Setup', '🛠️ Setup', 'en', 1),
-('txtHelp7Setup', '- `/storyadmin setup` — This command must be run before the bot can function, but it''s also used to update system settings.', 'en', 1),
-('lblHelp7SetupChannels', '📡 Configure Story Channels', 'en', 1),
-('txtHelp7SetupChannels', '- **Story Feed Channel** — Central hub where all story threads and activity are posted.\n- **Media Channel** — Images posted to Normal or Slow Mode stories are forwarded here for long-term storage. Leave blank to disable images for your server. *Recommended admin-only.*\n- **Restricted Feed Channel** — Age-restricted channel for stories rated Mature or Explicit in non-18+ servers.\n- **Restricted Media Channel** — Private, age-restricted storage for mature story images. *Recommended admin-only.*', 'en', 1),
-('lblHelp7SetupPermissions', '🔑 Permissions', 'en', 1),
-('txtHelp7SetupPermissions', '- **Admin Role** — This is the role that can manage stories and writers in the bot. Leave this blank to limit access to server Admins.', 'en', 1),
-('lblHelp7SetupRoundup', '📆 Weekly Roundup', 'en', 1),
-('txtHelp7SetupRoundup', 'The weekly roundup is a summary of the story activity on your server. It lists active stories and writers, and gives a count of stories created or completed, turns submitted or missed, and words written.\n- **Roundup Channel** — Set the channel where the roundup will be posted, or leave this field blank to disable the weekly post.\n- **Roundup Timing** — Choose the day and hour you''d like the summary to post: day (0 = Sunday, 6 = Saturday), hour UTC (0–23).', 'en', 1),
-('lblHelp7ManageStory', '⚙️ Story Management Panel', 'en', 1),
-('txtHelp7ManageStory', '*(admin or story creator)*\n- `/story manage [id]` — See "Managing a Story" (`/story help`) for more information on the Story Management Panel.', 'en', 1),
-('lblHelp7ManageUser', '👤 User Management Panel', 'en', 1),
-('txtHelp7ManageUser', '*(admin only)*\n- `/storyadmin user [story_id] [writer]` — Manage a writer''s participation in a story: pause, remove, change their notification or privacy settings, or update their pen name.', 'en', 1),
-('lblHelp7Delete', '🗑️ Delete a Story', 'en', 1),
-('txtHelp7Delete', '*(requires confirmation)*\n- `/storyadmin delete [id]` — Permanently delete a story and all its data', 'en', 1),
+('txtHelp7Title', '📋 MyStory Commands', 'en', 1),
+('txtHelp7Footer', 'Use /story help for detailed explanations of story modes, writer order, metadata, and more.', 'en', 1),
+('lblHelp7StoryCommands', '📖 Story Commands', 'en', 1),
+('txtHelp7StoryCommands', '- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story join [id]` — Join a story\n- `/story write [id]` — Submit your entry *(Quick Mode only)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id]` — Edit one of your finalized entries\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story ping [id]` — Ping all writers in a story\n- `/story help` — Detailed guide with all writer options', 'en', 1),
+('lblHelp7Dashboard', '🗂️ Your Dashboard', 'en', 1),
+('txtHelp7Dashboard', '- `/mystory list` — See all your stories — active, paused, delayed, and closed\n- `/mystory catchup [id]` — Read entries written since your last turn\n- `/mystory manage [id]` — Update your settings, pass your turn, pause, or leave a story', 'en', 1),
+('lblHelp7CreatorCommands', '⚙️ Story Creator Commands', 'en', 1),
+('txtHelp7CreatorCommands', '- `/story manage [id]` — Edit story settings, manage turns and entries, pause or close', 'en', 1),
+
+-- ---------------------------------------------------------------------------
+-- Page 8: StoryAdmin Commands
+-- ---------------------------------------------------------------------------
+('txtHelp8Title', '⚙️ Admin Command Reference', 'en', 1),
+('txtHelp8Footer', '*All admin commands require the Discord Administrator permission, or the Round Robin admin role configured in `/storyadmin setup`*', 'en', 1),
+('lblHelp8Setup', '🛠️ Setup', 'en', 1),
+('txtHelp8Setup', '- `/storyadmin setup` — This command must be run before the bot can function, but it''s also used to update system settings.', 'en', 1),
+('lblHelp8SetupChannels', '📡 Configure Story Channels', 'en', 1),
+('txtHelp8SetupChannels', '- **Story Feed Channel** — Central hub where all story threads and activity are posted.\n- **Media Channel** — Images posted to Normal or Slow Mode stories are forwarded here for long-term storage. Leave blank to disable images for your server. *Recommended admin-only.*\n- **Restricted Feed Channel** — Age-restricted channel for stories rated Mature or Explicit in non-18+ servers.\n- **Restricted Media Channel** — Private, age-restricted storage for mature story images. *Recommended admin-only.*', 'en', 1),
+('lblHelp8SetupPermissions', '🔑 Permissions', 'en', 1),
+('txtHelp8SetupPermissions', '- **Admin Role** — This is the role that can manage stories and writers in the bot. Leave this blank to limit access to server Admins.', 'en', 1),
+('lblHelp8SetupRoundup', '📆 Weekly Roundup', 'en', 1),
+('txtHelp8SetupRoundup', 'The weekly roundup is a summary of the story activity on your server. It lists active stories and writers, and gives a count of stories created or completed, turns submitted or missed, and words written.\n- **Roundup Channel** — Set the channel where the roundup will be posted, or leave this field blank to disable the weekly post.\n- **Roundup Timing** — Choose the day and hour you''d like the summary to post: day (0 = Sunday, 6 = Saturday), hour UTC (0–23).', 'en', 1),
+('lblHelp8ManageStory', '⚙️ Story Management Panel', 'en', 1),
+('txtHelp8ManageStory', '*(admin or story creator)*\n- `/story manage [id]` — See "Managing a Story" (`/story help`) for more information on the Story Management Panel.', 'en', 1),
+('lblHelp8ManageUser', '👤 User Management Panel', 'en', 1),
+('txtHelp8ManageUser', '*(admin only)*\n- `/storyadmin user [story_id] [writer]` — Manage a writer''s participation in a story: pause, remove, change their notification or privacy settings, or update their pen name.', 'en', 1),
+('lblHelp8Delete', '🗑️ Delete a Story', 'en', 1),
+('txtHelp8Delete', '*(requires confirmation)*\n- `/storyadmin delete [id]` — Permanently delete a story and all its data', 'en', 1),
 
 -- ---------------------------------------------------------------------------
 -- FAQ sync status messages

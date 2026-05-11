@@ -71,25 +71,33 @@ const PAGE_DEFS = [
   },
   {
     titleKey: 'txtHelp6Title',
-    footerKey: 'txtHelp6Footer',
     entries: [
-      { lbl: 'lblHelp6StoryCommands',   txt: 'txtHelp6StoryCommands' },
-      { lbl: 'lblHelp6Dashboard',       txt: 'txtHelp6Dashboard' },
-      { lbl: 'lblHelp6CreatorCommands', txt: 'txtHelp6CreatorCommands' },
+      { lbl: 'lblHelp6Read',      txt: 'txtHelp6Read' },
+      { lbl: 'lblHelp6Edit',      txt: 'txtHelp6Edit' },
+      { lbl: 'lblHelp6EditPages', txt: 'txtHelp6EditPages' },
     ],
   },
   {
     titleKey: 'txtHelp7Title',
     footerKey: 'txtHelp7Footer',
     entries: [
-      { lbl: 'lblHelp7Setup', txt: 'txtHelp7Setup', children: [
-        { lbl: 'lblHelp7SetupChannels',    txt: 'txtHelp7SetupChannels' },
-        { lbl: 'lblHelp7SetupPermissions', txt: 'txtHelp7SetupPermissions' },
-        { lbl: 'lblHelp7SetupRoundup',     txt: 'txtHelp7SetupRoundup' },
+      { lbl: 'lblHelp7StoryCommands',   txt: 'txtHelp7StoryCommands' },
+      { lbl: 'lblHelp7Dashboard',       txt: 'txtHelp7Dashboard' },
+      { lbl: 'lblHelp7CreatorCommands', txt: 'txtHelp7CreatorCommands' },
+    ],
+  },
+  {
+    titleKey: 'txtHelp8Title',
+    footerKey: 'txtHelp8Footer',
+    entries: [
+      { lbl: 'lblHelp8Setup', txt: 'txtHelp8Setup', children: [
+        { lbl: 'lblHelp8SetupChannels',    txt: 'txtHelp8SetupChannels' },
+        { lbl: 'lblHelp8SetupPermissions', txt: 'txtHelp8SetupPermissions' },
+        { lbl: 'lblHelp8SetupRoundup',     txt: 'txtHelp8SetupRoundup' },
       ]},
-      { lbl: 'lblHelp7ManageStory', txt: 'txtHelp7ManageStory' },
-      { lbl: 'lblHelp7ManageUser',  txt: 'txtHelp7ManageUser' },
-      { lbl: 'lblHelp7Delete',      txt: 'txtHelp7Delete' },
+      { lbl: 'lblHelp8ManageStory', txt: 'txtHelp8ManageStory' },
+      { lbl: 'lblHelp8ManageUser',  txt: 'txtHelp8ManageUser' },
+      { lbl: 'lblHelp8Delete',      txt: 'txtHelp8Delete' },
     ],
   },
 ];
@@ -194,7 +202,7 @@ export async function handleWriterHelp(connection, interaction) {
   log(`handleWriterHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const pageDef = PAGE_DEFS[5];
+    const pageDef = PAGE_DEFS[6]; // page 7: MyStory Commands
     const { content, cfg } = await buildPage(connection, interaction.guild.id, pageDef);
     const embed = new EmbedBuilder()
       .setTitle(cfg[pageDef.titleKey])
@@ -214,7 +222,7 @@ export async function handleWriterHelp(connection, interaction) {
 export async function handleAdminHelp(connection, interaction, guildId) {
   log(`handleAdminHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   try {
-    const pageDef = PAGE_DEFS[6];
+    const pageDef = PAGE_DEFS[7]; // page 8: StoryAdmin Commands
     const { content, cfg } = await buildPage(connection, guildId, pageDef);
     const embed = new EmbedBuilder()
       .setTitle(cfg[pageDef.titleKey])
