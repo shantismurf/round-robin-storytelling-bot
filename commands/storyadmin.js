@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
-import { syncFaqPosts, FAQ_PAGES, handleAdminHelp } from '../faq.js';
+import { syncFaqPosts, handleAdminHelp } from '../faq.js';
 import { deleteThreadAndAnnouncement } from '../story/_turn.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 
@@ -577,8 +577,7 @@ async function handleFaqSync(connection, interaction) {
   log(`handleFaqSync entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
 
-  const { errors } = await syncFaqPosts(interaction.client, connection, guildId);
-  const total = FAQ_PAGES.length;
+  const { errors, total } = await syncFaqPosts(interaction.client, connection, guildId);
 
   if (errors === 0) {
     const msg = await getConfigValue(connection, 'txtHelpFaqSyncSuccess', guildId);
