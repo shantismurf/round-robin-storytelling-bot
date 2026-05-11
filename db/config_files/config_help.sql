@@ -41,36 +41,36 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- Page 3: Create a New Story — General Options
 -- ---------------------------------------------------------------------------
 ('txtHelp3Title', '📝 Create a New Story — General Options', 'en', 1),
-('lblHelp3StoryTitle', 'Story Title', 'en', 1),
-('txtHelp3StoryTitle', '- ⚠️ *Required.*', 'en', 1),
-('lblHelp3StoryMode', 'Story Mode', 'en', 1),
-('txtHelp3StoryMode', '- 🟢 **Normal** — Writers get a private or public thread for each turn.\n- 🟣 **Quick** — Writers submit entries via `/story write`.', 'en', 1),
-('lblHelp3WriterOrder', 'Writer Order', 'en', 1),
-('txtHelp3WriterOrder', '- 🎲 **Random** — Next writer chosen at random each turn.\n- 🔄 **Round Robin** — Rotates randomly, but no repeats until everyone has had a turn.\n- 📋 **Fixed Order** — Writers take turns in join order.', 'en', 1),
-('lblHelp3TurnLength', 'Turn Length', 'en', 1),
-('txtHelp3TurnLength', '- ⌛ How many hours each writer has per turn. Default: 24h.', 'en', 1),
-('lblHelp3TimeoutReminder', 'Reminder Timing', 'en', 1),
-('txtHelp3TimeoutReminder', '- ⏰ Send a reminder to the current writer after X% of their turn has elapsed. Default: 50%. Set to 0% to disable. (Example: 50% of a 24hr turn means the reminder is sent after 12hrs.)', 'en', 1),
-('lblHelp3HideThreads', 'Turn Thread Privacy', 'en', 1),
-('txtHelp3HideThreads', '- 👀 **Public** — Threads for all turns will be visible to all members of your server.\n- 🫣 **Private** — Turn threads will only be visible to the writer and server admins.', 'en', 1),
-('lblHelp3ShowAuthors', 'Show Author Names', 'en', 1),
-('txtHelp3ShowAuthors', '- 📑 **Yes** — Writer names appear on entries in Discord and in the export file.\n- 📄 **No** — Entries are posted and exported anonymously. Writer names still appear in story messages.', 'en', 1),
-('lblHelp3MaxWriters', 'Max Writers', 'en', 1),
-('txtHelp3MaxWriters', '- #️⃣ Optional. Leave blank for no limit.', 'en', 1),
-('lblHelp3DelayStart', 'Delay Start By', 'en', 1),
-('txtHelp3DelayStart', '- 🫸 Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.', 'en', 1),
+('lblHelp3StoryTitle', '⚠️ Story Title', 'en', 1),
+('txtHelp3StoryTitle', '- *Required.*', 'en', 1),
+('lblHelp3StoryMode', '🚦 Story Mode', 'en', 1),
+('txtHelp3StoryMode', '- **Normal** — Writers get a private or public thread for each turn.\n- **Quick** — Writers submit entries via `/story write`.\n- **Slow** — Like Normal mode, but there is no turn timer.', 'en', 1),
+('lblHelp3WriterOrder', '🎲 Writer Order', 'en', 1),
+('txtHelp3WriterOrder', '- **Random** — Next writer chosen at random each turn.\n- **Round Robin** — Rotates randomly, but no repeats until everyone has had a turn.\n- **Fixed Order** — Writers take turns in join order.', 'en', 1),
+('lblHelp3TurnLength', '⌛ Turn Length', 'en', 1),
+('txtHelp3TurnLength', '- How many hours each writer has per turn. Default: 24h.', 'en', 1),
+('lblHelp3TimeoutReminder', '⏰ Reminder Timing', 'en', 1),
+('txtHelp3TimeoutReminder', '- Send a reminder to the current writer after X% of their turn has elapsed. Default: 50%. Set to 0% to disable. (Example: 50% of a 24hr turn means the reminder is sent after 12hrs.)', 'en', 1),
+('lblHelp3HideThreads', '🔑 Turn Thread Privacy', 'en', 1),
+('txtHelp3HideThreads', '- **Public** — Threads for all turns will be visible to all members of your server.\n- **Private** — Turn threads will only be visible to the writer and server admins.', 'en', 1),
+('lblHelp3ShowAuthors', '📑 Show Author Names', 'en', 1),
+('txtHelp3ShowAuthors', '- **Yes** — Writer names appear on entries in Discord and in the export file.\n- **No** — Entries are posted and exported anonymously. Writer names still appear in story messages.', 'en', 1),
+('lblHelp3MaxWriters', '#️⃣ Max Writers', 'en', 1),
+('txtHelp3MaxWriters', '- *Optional.* A cap on total writers. Leave blank for no limit.', 'en', 1),
+('lblHelp3DelayStart', '🫸 Delay Start By', 'en', 1),
+('txtHelp3DelayStart', '- *Optional.* Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
 -- Page 4: Create a New Story — Join Options & Metadata
 -- ---------------------------------------------------------------------------
 ('txtHelp4Title', '📝 Create a New Story — Join Options & Metadata', 'en', 1),
 ('lblHelp4CreatorOptions', 'Story Creator''s Join Options', 'en', 1),
-('lblHelp4PenName', 'Your Pen Name', 'en', 1),
-('txtHelp4PenName', '- ✍️ Your name as it will appear on the story. Used in story exports. Defaults to your Discord display name if left blank.', 'en', 1),
-('lblHelp4HideMyThreads', 'Hide My Threads', 'en', 1),
-('txtHelp4HideMyThreads', '- 🔒 **On** — Your turn threads will be private to you and admins, regardless of the story''s thread setting.\n- 🌐 **Off** — Your thread visibility follows the story''s Hide Threads setting.', 'en', 1),
-('lblHelp4Notifications', 'Notifications', 'en', 1),
-('txtHelp4Notifications', '- 💬 **DM** — StoryBot will send you a DM when your turn starts.\n- 📢 **Mention** — You''ll be mentioned in the story thread instead.', 'en', 1),
+('lblHelp4PenName', '✒️ Your Pen Name', 'en', 1),
+('txtHelp4PenName', '- Your name as it will appear on the story. Used in story exports. Defaults to your Discord display name if left blank.', 'en', 1),
+('lblHelp4HideMyThreads', '🔒 Hide My Threads', 'en', 1),
+('txtHelp4HideMyThreads', '- **On** — Your turn threads will be private to you and admins, regardless of the story''s thread setting.\n- **Off** — Your thread visibility follows the story''s Hide Threads setting.', 'en', 1),
+('lblHelp4Notifications', '💬 Notifications', 'en', 1),
+('txtHelp4Notifications', '- **DM** — StoryBot will send you a DM when your turn starts.\n- **Mention** — You''ll be mentioned in the story thread instead.', 'en', 1),
 ('lblHelp4Metadata', '📋 Story Metadata', 'en', 1),
 ('txtHelp4Metadata', 'Optional story info set via the **Metadata** sub-panel.\n- 🛡️ **Rating** — Global, Teen, Mature, Explicit, or Not Rated. M and E works may be posted to an age-restricted feed channel.\n- ⚠️ **Warnings** — Select all that apply: All Clear: No Content Warnings, Extreme or Visceral Violence, Main Character Fatality, Other: See Tags, Rape/Lack of Sexual Consent, Sex Involving a Minor, Unspecified: Warnings May Apply\n- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other\n- 💞 **Main Relationship** — Primary pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags, or tags submitted by story authors (e.g. slow burn, hurt/comfort, modern AU).', 'en', 1),
 
@@ -78,21 +78,21 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- Page 5: Managing a Story
 -- ---------------------------------------------------------------------------
 ('txtHelp5Title', '⚙️ Managing a Story', 'en', 1),
-('lblHelp5WhoCanUse', 'Who can use `/story manage`?', 'en', 1),
+('lblHelp5WhoCanUse', '👤 Who can use `/story manage`?', 'en', 1),
 ('txtHelp5WhoCanUse', 'The story creator (the first writer to join) and server admins.', 'en', 1),
-('lblHelp5WhatEdit', 'What settings can be edited?', 'en', 1),
+('lblHelp5WhatEdit', '❓ What settings can be edited?', 'en', 1),
 ('txtHelp5WhatEdit', '- **Story Title**\n- **Writer Order** — Choose between Random, Round Robin, and Fixed (Join) Order.\n- **Join Status** — You can close or open a story to new writers joining.\n- **Max Writers** — Cap on total writers. Leave blank for no limit.\n- **Turn Length** — hours per turn\n- **Reminder Timing** — a percentage of the total turn time when reminders will be sent, or 0% to disable. (Example: 50% of a 24hr turn means the reminder is sent after 12hrs.)\n- **Show Author Names** — Writer names appear on entries and in the story export if enabled.\n- **Turn Privacy** — Turn threads are only visible to the current writer (and server admins). Public turns are visible to all.\n- **Story Status** — Toggles the story status from Paused to Resumed, or Reopens a closed story. When paused, the current turn is frozen until the story status is resumed, then the turn restarts with a refreshed deadline.', 'en', 1),
 ('lblHelp5Metadata', '📋 Metadata Panel', 'en', 1),
 ('txtHelp5Metadata', '- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other\n- 🛡️ **Rating** — Global, Teen, Mature, Explicit, or Not Rated. M and E works may be posted to an age-restricted feed channel.\n- ⚠️ **Warnings** — Select all that apply: All Clear: No Content Warnings, Extreme or Visceral Violence, Main Character Fatality, Other: See Tags, Rape/Lack of Sexual Consent, Sex Involving a Minor, Unspecified: Warnings May Apply\n- 💞 **Main Relationship** — Primary pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags, or tags submitted by story authors (e.g. slow burn, hurt/comfort, modern AU).\n- 📝 **Summary** — A brief teaser for your story.', 'en', 1),
-('lblHelp5Closing', 'Closing a Story', 'en', 1),
-('txtHelp5Closing', '- Use `/story close [id]` to permanently close a story. This posts a completion message with the full story export and ends the current turn, but leaves the story thread open for discussion. This cannot be undone.', 'en', 1),
-('lblHelp5AdminControls', 'Admin Controls', 'en', 1),
+('lblHelp5Closing', '🏁 Closing a Story', 'en', 1),
+('txtHelp5Closing', '- Use `/story close [id]` to close a story. This posts a completion message with the full story export, ends the current turn, and closes the story to new joins, but leaves the story thread open for discussion. You can always reopen a story from the management panel.', 'en', 1),
+('lblHelp5AdminControls', '🛡️ Admin Controls', 'en', 1),
 ('txtHelp5AdminControls', '**Manage Turns** (via the Manage Turns button in `/story manage`):\n- Skip the current turn\n- Extend the current turn deadline\n- Designate the next writer\n- Reassign the turn to the previous writer (e.g. if they missed their turn and still want to write) and set the current writer to go after them\n\n**Manage Users** (via `/storyadmin user [id] [user]`):\n- Pause or unpause a writer\n- Remove a writer from a story\n- Update a writer''s pen name\n\n**Other admin actions** (via `/storyadmin`):\n- Permanently delete a story: `/storyadmin delete`', 'en', 1),
 
 -- ---------------------------------------------------------------------------
 -- Page 6: MyStory Commands
 -- ---------------------------------------------------------------------------
-('txtHelp6Title', '📋 MyStory Commands', 'en', 1),
+('txtHelp6Title', '📋 Writer Command Reference', 'en', 1),
 ('txtHelp6Footer', 'Use /story help for detailed explanations of story modes, writer order, metadata, and more.', 'en', 1),
 ('lblHelp6StoryCommands', '📖 Story Commands', 'en', 1),
 ('txtHelp6StoryCommands', '- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story join [id]` — Join a story\n- `/story write [id]` — Submit your entry *(Quick Mode only)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id]` — Edit one of your finalized entries\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story ping [id]` — Ping all writers in a story\n- `/story help` — Detailed guide with all writer options', 'en', 1),
@@ -104,7 +104,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- ---------------------------------------------------------------------------
 -- Page 7: StoryAdmin Commands
 -- ---------------------------------------------------------------------------
-('txtHelp7Title', '⚙️ StoryAdmin Commands', 'en', 1),
+('txtHelp7Title', '⚙️ Admin Command Reference', 'en', 1),
 ('txtHelp7Footer', '*All admin commands require the Discord Administrator permission, or the Round Robin admin role configured in `/storyadmin setup`*', 'en', 1),
 ('lblHelp7Setup', '🛠️ Setup', 'en', 1),
 ('txtHelp7Setup', '- `/storyadmin setup` — This command must be run before the bot can function, but it''s also used to update system settings.', 'en', 1),
