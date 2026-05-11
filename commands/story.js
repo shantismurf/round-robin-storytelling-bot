@@ -16,7 +16,7 @@ import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleVi
 import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
-import { handleHelp, handleHelpNavigation } from '../story/help.js';
+import { handleHelp, handleHelpNavigation } from '../faq.js';
 import { handlePing } from '../story/ping.js';
 
 const data = new SlashCommandBuilder()

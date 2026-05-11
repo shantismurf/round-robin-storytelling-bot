@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
-import { syncFaqPosts, FAQ_PAGES } from '../story/faq.js';
+import { syncFaqPosts, FAQ_PAGES, handleAdminHelp } from '../faq.js';
 import { deleteThreadAndAnnouncement } from '../story/_turn.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 
@@ -59,7 +59,7 @@ async function execute(connection, interaction) {
   const guildId = interaction.guild.id;
   const subcommand = interaction.options.getSubcommand();
 
-  if (subcommand === 'help')  return await handleHelp(connection, interaction, guildId);
+  if (subcommand === 'help')  return await handleAdminHelp(connection, interaction, guildId);
   if (subcommand === 'setup') return await handleSetup(connection, interaction);
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -75,38 +75,6 @@ async function execute(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /storyadmin help
-// ---------------------------------------------------------------------------
-async function handleHelp(connection, interaction, guildId) {
-  log(`handleHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
-  const cfg = await getConfigValue(connection, [
-    'txtAdminHelpTitle', 'txtAdminHelpFooter',
-    'lblAdminHelpSkip', 'txtAdminHelpSkip',
-    'lblAdminHelpExtend', 'txtAdminHelpExtend',
-    'lblAdminHelpManageUser', 'txtAdminHelpManageUser',
-    'lblAdminHelpNext', 'txtAdminHelpNext',
-    'lblAdminHelpReassign', 'txtAdminHelpReassign',
-    'lblAdminHelpDelete', 'txtAdminHelpDelete',
-    'lblAdminHelpSetup', 'txtAdminHelpSetup'
-  ], guildId);
-
-  const embed = new EmbedBuilder()
-    .setTitle(cfg.txtAdminHelpTitle)
-    .setColor(0x5865f2)
-    .addFields(
-      { name: cfg.lblAdminHelpSkip,        value: cfg.txtAdminHelpSkip,        inline: false },
-      { name: cfg.lblAdminHelpExtend,      value: cfg.txtAdminHelpExtend,      inline: false },
-      { name: cfg.lblAdminHelpManageUser,  value: cfg.txtAdminHelpManageUser,  inline: false },
-      { name: cfg.lblAdminHelpNext,        value: cfg.txtAdminHelpNext,        inline: false },
-      { name: cfg.lblAdminHelpReassign,    value: cfg.txtAdminHelpReassign,    inline: false },
-      { name: cfg.lblAdminHelpDelete,      value: cfg.txtAdminHelpDelete,      inline: false },
-      { name: cfg.lblAdminHelpSetup,       value: cfg.txtAdminHelpSetup,       inline: false }
-    )
-    .setFooter({ text: cfg.txtAdminHelpFooter });
-
-  await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
-}
-
 // ---------------------------------------------------------------------------
 // /storyadmin setup — embed control panel
 // ---------------------------------------------------------------------------
@@ -613,13 +581,13 @@ async function handleFaqSync(connection, interaction) {
   const total = FAQ_PAGES.length;
 
   if (errors === 0) {
-    const msg = await getConfigValue(connection, 'txtFaqSyncSuccess', guildId);
+    const msg = await getConfigValue(connection, 'txtHelpFaqSyncSuccess', guildId);
     await interaction.editReply({ content: msg });
   } else if (errors === total) {
-    const msg = await getConfigValue(connection, 'txtFaqSyncNoThreads', guildId);
+    const msg = await getConfigValue(connection, 'txtHelpFaqSyncNoThreads', guildId);
     await interaction.editReply({ content: msg });
   } else {
-    const template = await getConfigValue(connection, 'txtFaqSyncPartial', guildId);
+    const template = await getConfigValue(connection, 'txtHelpFaqSyncPartial', guildId);
     await interaction.editReply({ content: replaceTemplateVariables(template, { error_count: String(errors) }) });
   }
 }

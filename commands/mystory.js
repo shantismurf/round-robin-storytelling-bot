@@ -1,6 +1,7 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from '../story/_turn.js';
+import { handleWriterHelp } from '../faq.js';
 
 // Cached catchup pages keyed by "catchup_<userId>_<storyId>"
 const pendingCatchUpData = new Map();
@@ -55,7 +56,7 @@ async function execute(connection, interaction) {
   if (subcommand === 'list') await handleList(connection, interaction);
   else if (subcommand === 'catchup') await handleCatchUp(connection, interaction);
   else if (subcommand === 'manage') await handleMyStoryManage(connection, interaction);
-  else if (subcommand === 'help') await handleHelp(connection, interaction);
+  else if (subcommand === 'help') await handleWriterHelp(connection, interaction);
 }
 
 async function handleButtonInteraction(connection, interaction) {
@@ -76,33 +77,6 @@ async function handleButtonInteraction(connection, interaction) {
   }
 }
 
-/**
- * /mystory help — quick reference for all writer-facing commands
- */
-async function handleHelp(connection, interaction) {
-  log(`handleHelp: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  const guildId = interaction.guild.id;
-
-  const cfg = await getConfigValue(connection, [
-    'txtMyHelpTitle', 'txtMyHelpFooter',
-    'lblMyHelpDashboard', 'txtMyHelpDashboard',
-    'lblMyHelpTurn', 'txtMyHelpTurn',
-    'lblMyHelpPause', 'txtMyHelpPause',
-  ], guildId);
-
-  const embed = new EmbedBuilder()
-    .setTitle(cfg.txtMyHelpTitle)
-    .setColor(0x5865f2)
-    .addFields(
-      { name: cfg.lblMyHelpDashboard, value: cfg.txtMyHelpDashboard, inline: false },
-      { name: cfg.lblMyHelpTurn,      value: cfg.txtMyHelpTurn,      inline: false },
-      { name: cfg.lblMyHelpPause,     value: cfg.txtMyHelpPause,     inline: false },
-    )
-    .setFooter({ text: cfg.txtMyHelpFooter });
-
-  await interaction.editReply({ embeds: [embed] });
-}
 
 const LIST_PAGE_SIZE = 5;
 
