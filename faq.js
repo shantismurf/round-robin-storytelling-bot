@@ -63,10 +63,9 @@ const PAGE_DEFS = [
   {
     titleKey: 'txtHelp5Title',
     entries: [
-      { lbl: 'lblHelp5WhoCanUse',    txt: 'txtHelp5WhoCanUse' },
-      { lbl: 'lblHelp5WhatEdit',     txt: 'txtHelp5WhatEdit' },
-      { lbl: 'lblHelp5Metadata',     txt: 'txtHelp5Metadata' },
-      { lbl: 'lblHelp5Closing',      txt: 'txtHelp5Closing' },
+      { lbl: 'lblHelp5WhoCanUse', txt: 'txtHelp5WhoCanUse' },
+      { lbl: 'lblHelp5WhatEdit',  txt: 'txtHelp5WhatEdit' },
+      { lbl: 'lblHelp5Closing',   txt: 'txtHelp5Closing' },
       { lbl: 'lblHelp5AdminControls', txt: 'txtHelp5AdminControls' },
     ],
   },
@@ -275,7 +274,7 @@ export async function syncFaqPosts(client, connection, guildId) {
       }
 
       const { content, cfg } = await buildPage(connection, guildId, pageDef);
-      const title = cfg[pageDef.titleKey];
+      const title = cfg[pageDef.titleKey].replace(/[\p{Emoji_Presentation}\p{Extended_Pictographic}]\s*/gu, '').trim();
       const msg = await faqChannel.send(`# ${title}\n${content}`);
       newIds[i] = msg.id;
       log(`syncFaqPosts: posted page ${i + 1} "${title}" (${msg.id})`, { show: true });
