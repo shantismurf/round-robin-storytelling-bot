@@ -349,8 +349,19 @@ export async function handleReadEditButton(connection, interaction, session, ent
   if (isMultiChunk) {
     // Multi-chunk: show the paginated edit embed so all pages are reachable
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+    const editCfg = await getConfigValue(connection, [
+      'lblEditPageSplitNotice', 'txtEditPageSplitInstructions',
+      'btnEditPrev', 'btnEditNext', 'btnEditOpen', 'btnEditHistory', 'lblEditEntryContent',
+      'txtEditRestoreWarningMulti', 'txtEditRestoreWarningSingle',
+      'btnEditHistNewer', 'btnEditHistPrevPage', 'btnEditRestore',
+      'btnEditHistNextPage', 'btnEditHistOlder', 'btnEditBackToEntry',
+      'txtEditRestoreConfirmSingle', 'txtEditRestoreConfirmMulti',
+      'txtEditRestoreConfirmTitle', 'btnEditRestoreConfirm', 'btnEditRestoreCancel'
+    ], session.guildId);
+    const editState = pendingEditData.get(interaction.user.id);
+    if (editState) editState.editCfg = editCfg;
     await interaction.editReply(
-      buildEditMessage(chunks, 0, page.hasHistory, page.turnNumber, storyTitle, session.guildStoryId)
+      buildEditMessage(chunks, 0, page.hasHistory, page.turnNumber, storyTitle, session.guildStoryId, editCfg)
     );
   } else {
     // Single chunk: open modal directly — no embed needed
