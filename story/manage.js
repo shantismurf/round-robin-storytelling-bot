@@ -619,12 +619,6 @@ async function handleManageModalSubmit(connection, interaction) {
 
     } else if (interaction.customId === 'story_manage_tags_modal') {
       state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 500) ?? '';
-
-    } else if (interaction.customId === 'story_manage_meta_modal') {
-      state.mainPairing        = sanitizeModalInput(interaction.fields.getTextInputValue('main_pairing'), 200) || '';
-      state.characters         = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
-      state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
-      state.tags               = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
