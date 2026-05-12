@@ -374,11 +374,11 @@ export function replaceTemplateVariables(template, keyValueMap) {
  * Requires interaction.member (guild context).
  */
 export async function checkIsAdmin(connection, interaction, guildId) {
-  log(`checkIsAdmin entry for user ${interaction.user?.id} guild ${guildId}`, { show: false });
+  log(`checkIsAdmin entry for user ${interaction.user?.username} guild ${guildId}`, { show: false });
   const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
   const result = interaction.member.permissions.has('Administrator') ||
     (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
-  log(`checkIsAdmin result: ${result} for user ${interaction.user?.id}`, { show: false });
+  log(`checkIsAdmin result: ${result} for user ${interaction.user?.username}`, { show: false });
   return result;
 }
 

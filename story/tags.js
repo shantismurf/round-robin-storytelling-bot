@@ -45,7 +45,7 @@ export async function handleTagCommand(connection, interaction) {
     await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
     return;
   }
-  log(`handleTagCommand entry: user=${userId}, guildStoryId=${guildStoryId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagCommand entry: user=${interaction.user.username}, guildStoryId=${guildStoryId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   const [writerRows] = await connection.execute(
     `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
@@ -74,7 +74,7 @@ export async function handleTagSubmit(connection, interaction) {
   const storyId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
-  log(`handleTagSubmit entry: user=${userId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagSubmit entry: user=${interaction.user.username}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   const [writerRows] = await connection.execute(
     `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
@@ -197,7 +197,7 @@ export async function handleTagSubmitModalSubmit(connection, interaction) {
  * customId: story_tag_delete_<submissionId>
  */
 export async function handleTagDeleteButton(connection, interaction) {
-  log(`handleTagDeleteButton: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagDeleteButton: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const submissionId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -251,7 +251,7 @@ export async function handleTagDeleteButton(connection, interaction) {
  * customId: story_tag_delete_confirm_<submissionId>
  */
 export async function handleTagDeleteConfirm(connection, interaction) {
-  log(`handleTagDeleteConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagDeleteConfirm: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const submissionId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -328,7 +328,7 @@ export async function handleTagDeleteConfirm(connection, interaction) {
  * customId: story_tag_delete_cancel_<submissionId>
  */
 export async function handleTagDeleteCancel(connection, interaction) {
-  log(`handleTagDeleteCancel: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagDeleteCancel: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.update({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
 }
 
@@ -340,7 +340,7 @@ export async function handleTagDeleteCancel(connection, interaction) {
  *           story_view_tags_<storyId>           (read view — kept for back-compat)
  */
 export async function handleViewProposedTags(connection, interaction) {
-  log(`handleViewProposedTags: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleViewProposedTags: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   // Support both customId patterns
   const storyId = interaction.customId.split('_').at(-1);
@@ -436,7 +436,7 @@ export async function handleViewProposedTags(connection, interaction) {
  * customId: story_tag_manage_<storyId>
  */
 export async function handleTagManageButton(connection, interaction) {
-  log(`handleTagManageButton: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagManageButton: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const storyId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -463,7 +463,7 @@ export async function handleTagManageButton(connection, interaction) {
  * customId: story_manage_review_tags_read_<storyId>
  */
 export async function handleEditTagsButton(connection, interaction, pageIndex = 0) {
-  log(`handleEditTagsButton: user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleEditTagsButton: user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const storyId = interaction.customId.split('_').at(-1);
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -503,7 +503,7 @@ export async function handleEditTagsButton(connection, interaction, pageIndex = 
 }
 
 export async function handleTagReviewNav(connection, interaction) {
-  log(`handleTagReviewNav: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagReviewNav: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   // story_tag_review_prev_<storyId>_<page> or story_tag_review_next_<storyId>_<page>
   const parts = interaction.customId.split('_');
   const storyId = parts[4];
@@ -603,7 +603,7 @@ export async function handleViewTagsButton(connection, interaction) {
  *           story_tag_view_next_<storyId>_<pageIndex>
  */
 export async function handleViewTagsNav(connection, interaction) {
-  log(`handleViewTagsNav: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleViewTagsNav: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const parts = interaction.customId.split('_');
   const direction = parts[3];
   const storyId = parts[4];

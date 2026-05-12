@@ -2,7 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlag
 import { getConfigValue, log, resolveStoryId } from '../utilities.js';
 
 export async function handleTimeleft(connection, interaction) {
-  log(`handleTimeleft entry user=${interaction.user.id} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTimeleft entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (!storyId) {
@@ -75,7 +75,7 @@ export async function handleTimeleft(connection, interaction) {
 }
 
 export async function handleRequestMoreTime(connection, interaction) {
-  log(`handleRequestMoreTime entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleRequestMoreTime entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
@@ -96,7 +96,7 @@ export async function handleRequestMoreTime(connection, interaction) {
   const turn = rows[0];
 
   if (interaction.user.id !== String(turn.discord_user_id)) {
-    log(`handleRequestMoreTime: not current writer user=${interaction.user.id} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+    log(`handleRequestMoreTime: not current writer user=${interaction.user.username} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
     return interaction.editReply({ content: await getConfigValue(connection, 'txtRequestMoreTimeNotYourTurn', guildId) });
   }
   if (turn.more_time_requested) {

@@ -45,7 +45,7 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(connection, interaction) {
-  log(`execute: entry subcommand=${interaction.options.getSubcommand()} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`execute: entry subcommand=${interaction.options.getSubcommand()} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!interaction.guild) {
     await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
@@ -84,7 +84,7 @@ const LIST_PAGE_SIZE = 5;
  * /mystory list — merged active+history, sorted active→paused→delayed→closed, paginated
  */
 async function handleList(connection, interaction) {
-  log(`handleList: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleList: entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const userId = interaction.user.id;
@@ -226,7 +226,7 @@ async function handleListNavigation(connection, interaction) {
  * /mystory catchup — paginated view of entries since user's last turn
  */
 async function handleCatchUp(connection, interaction) {
-  log(`handleCatchUp: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleCatchUp: entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -327,7 +327,7 @@ async function handleCatchUp(connection, interaction) {
 }
 
 async function handleCatchUpNavigation(connection, interaction) {
-  log(`handleCatchUpNavigation: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleCatchUpNavigation: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const [, action, currentPageStr] = interaction.customId.split('_');
   const currentPage = parseInt(currentPageStr);
@@ -420,7 +420,7 @@ function buildMyStoryManagePanel(state, cfg) {
 }
 
 async function handleMyStoryManage(connection, interaction) {
-  log(`handleMyStoryManage: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleMyStoryManage: entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -492,7 +492,7 @@ async function handleMyStoryManage(connection, interaction) {
 }
 
 async function handleMyStoryManageButton(connection, interaction) {
-  log(`handleMyStoryManageButton: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleMyStoryManageButton: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingMyStoryManageData.get(userId);
   const customId = interaction.customId;
@@ -621,7 +621,7 @@ async function handleMyStoryManageButton(connection, interaction) {
 }
 
 async function handlePanelPassConfirm(connection, interaction) {
-  log(`handlePanelPassConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handlePanelPassConfirm: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
@@ -660,7 +660,7 @@ async function handlePanelPassConfirm(connection, interaction) {
 }
 
 async function handlePanelPauseConfirm(connection, interaction) {
-  log(`handlePanelPauseConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handlePanelPauseConfirm: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
@@ -719,7 +719,7 @@ async function handlePanelPauseConfirm(connection, interaction) {
 }
 
 async function handlePanelLeaveConfirm(connection, interaction) {
-  log(`handlePanelLeaveConfirm: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handlePanelLeaveConfirm: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
@@ -786,7 +786,7 @@ async function handlePanelLeaveConfirm(connection, interaction) {
 }
 
 async function handlePanelActionCancel(connection, interaction) {
-  log(`handlePanelActionCancel: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handlePanelActionCancel: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const userId = interaction.user.id;
   const state = pendingMyStoryManageData.get(userId);
@@ -798,7 +798,7 @@ async function handlePanelActionCancel(connection, interaction) {
 }
 
 async function handleMyStoryManageModal(connection, interaction) {
-  log(`handleMyStoryManageModal: entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleMyStoryManageModal: entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingMyStoryManageData.get(userId);
   if (!state) {

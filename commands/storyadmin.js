@@ -50,7 +50,7 @@ const data = new SlashCommandBuilder()
   );
 
 async function execute(connection, interaction) {
-  log(`execute entry subcommand=${interaction.options.getSubcommand()} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`execute entry subcommand=${interaction.options.getSubcommand()} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   if (!interaction.guild) {
     await interaction.reply({ content: 'This command can only be used in a server.', flags: MessageFlags.Ephemeral });
     return;
@@ -574,7 +574,7 @@ async function handleSetupCancel(connection, interaction) {
 // ---------------------------------------------------------------------------
 
 async function handleFaqSync(connection, interaction) {
-  log(`handleFaqSync entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleFaqSync entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
 
   const { errors, total } = await syncFaqPosts(interaction.client, connection, guildId);
@@ -597,7 +597,7 @@ async function handleFaqSync(connection, interaction) {
 
 
 async function handleDelete(connection, interaction) {
-  log(`handleDelete entry user=${interaction.user.id} story_id=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleDelete entry user=${interaction.user.username} story_id=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   if (storyId === null) {
@@ -645,7 +645,7 @@ async function handleDelete(connection, interaction) {
 async function handleDeleteConfirm(connection, interaction) {
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_')[3]);
-  log(`handleDeleteConfirm entry storyId=${storyId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleDeleteConfirm entry storyId=${storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
 
   try {

@@ -62,12 +62,12 @@ function buildManageUserPanel(state) {
 }
 
 export async function handleManageUser(connection, interaction) {
-  log(`handleManageUser: entry for user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageUser: entry for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
   const targetUser = interaction.options.getUser('user');
 
-  log(`handleManageUser: storyId=${storyId} targetUser=${targetUser?.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageUser: storyId=${storyId} targetUser=${targetUser?.username}`, { show: false, guildName: interaction?.guild?.name });
 
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
@@ -173,7 +173,7 @@ export async function handleManageUser(connection, interaction) {
 }
 
 export async function handleManageUserButton(connection, interaction) {
-  log(`handleManageUserButton: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageUserButton: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const adminId = interaction.user.id;
   const pending = pendingManageUserData.get(adminId);
   const customId = interaction.customId;
@@ -384,7 +384,7 @@ async function handleManageUserConfirm(connection, interaction) {
 async function handleManageUserCancel(connection, interaction) {
   await interaction.deferUpdate();
   const pending = pendingManageUserData.get(interaction.user.id);
-  log(`handleManageUserCancel: user=${interaction.user.id} hasPending=${!!pending}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageUserCancel: user=${interaction.user.username} hasPending=${!!pending}`, { show: false, guildName: interaction?.guild?.name });
   if (!pending) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), embeds: [], components: [] });
   }
@@ -393,7 +393,7 @@ async function handleManageUserCancel(connection, interaction) {
 }
 
 export async function handleManageUserModalSubmit(connection, interaction) {
-  log(`handleManageUserModalSubmit: customId=${interaction.customId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageUserModalSubmit: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const adminId = interaction.user.id;
   const pending = pendingManageUserData.get(adminId);
   if (!pending) {

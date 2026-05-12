@@ -59,7 +59,7 @@ export function getActiveThreadId(story) {
  * CreateStory function with explicit transaction handling
  */
 export async function CreateStory(connection, interaction, storyInput) {
-  log(`CreateStory: entry guildId=${interaction.guild.id} title="${storyInput.storyTitle}"`, { show: false, guildName: interaction?.guild?.name });
+  log(`CreateStory: entry title="${storyInput.storyTitle}"`, { show: false, guildName: interaction?.guild?.name });
   const guild_id = interaction.guild.id;
   const txn = await connection.getConnection();
   await txn.beginTransaction();
@@ -204,7 +204,7 @@ export async function CreateStory(connection, interaction, storyInput) {
  * StoryJoin function - adds a writer to a story
  */
 export async function StoryJoin(connection, interaction, storyInput, storyId) {
-  log(`StoryJoin: entry storyId=${storyId} userId=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`StoryJoin: entry storyId=${storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const guild_id = interaction.guild.id;
     const userId = interaction.user.id;

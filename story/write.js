@@ -8,7 +8,7 @@ import { pendingPreviewData, pendingViewData } from './_state.js';
 export const pendingReminderTimeouts = new Map();
 
 async function handleWrite(connection, interaction) {
-  log(`handleWrite entry user=${interaction.user.id} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleWrite entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const guildId = interaction.guild.id;
     const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -73,7 +73,7 @@ async function handleWrite(connection, interaction) {
  * Handle write modal submission
  */
 async function handleWriteModalSubmit(connection, interaction) {
-    log(`handleWriteModalSubmit entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+    log(`handleWriteModalSubmit entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
     const guildId = interaction.guild.id;
     const storyId = interaction.customId.split('_')[2];
     const content = interaction.fields.getTextInputValue('entry_content')
@@ -135,7 +135,7 @@ async function handleWriteModalSubmit(connection, interaction) {
         const user = await interaction.client.users.fetch(interaction.user.id);
         await user.send(`${await getConfigValue(connection,'txtDMReminder', guildId)}\n\n${await getConfigValue(connection,'txtRecoveryInstructions', guildId)}\n\n⏰ Expires: ${expiryTimestamp}`);
       } catch (error) {
-        log(`Could not send DM reminder to user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+        log(`Could not send DM reminder to user ${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       }
     }, 5 * 60 * 1000);
     pendingReminderTimeouts.set(entryId, reminderTimeout);
@@ -249,7 +249,7 @@ async function handleEntryConfirmation(connection, interaction) {
  * Confirm and finalize entry
  */
 async function confirmEntry(connection, entryId, interaction) {
-  log(`confirmEntry entry entryId=${entryId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`confirmEntry entry entryId=${entryId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   if (pendingReminderTimeouts.has(entryId)) {
     clearTimeout(pendingReminderTimeouts.get(entryId));
     pendingReminderTimeouts.delete(entryId);
@@ -340,7 +340,7 @@ async function confirmEntry(connection, entryId, interaction) {
  * Discard pending entry
  */
 async function discardEntry(connection, entryId, interaction) {
-  log(`discardEntry entry entryId=${entryId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`discardEntry entry entryId=${entryId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   if (pendingReminderTimeouts.has(entryId)) {
     clearTimeout(pendingReminderTimeouts.get(entryId));
     pendingReminderTimeouts.delete(entryId);
@@ -369,7 +369,7 @@ async function discardEntry(connection, entryId, interaction) {
  * Handle view last entry button — posts the previous confirmed entry as a permanent embed in the thread
  */
 async function handleViewLastEntry(connection, interaction) {
-  log(`handleViewLastEntry entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleViewLastEntry entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_')[3]);
   const guildId = interaction.guild.id;
@@ -427,7 +427,7 @@ async function handleFinalizeEntry(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
   const isAdmin = await checkIsAdmin(connection, interaction, guildId);
-  log(`handleFinalizeEntry entry user=${interaction.user.id} story=${storyId}${isAdmin ? ' (admin)' : ''}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleFinalizeEntry entry user=${interaction.user.username} story=${storyId}${isAdmin ? ' (admin)' : ''}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
     // Admins can finalize from inside the turn thread on behalf of the current writer.
@@ -456,7 +456,7 @@ async function handleFinalizeEntry(connection, interaction) {
     }
 
     if (turnInfo.length === 0) {
-      log(`handleFinalizeEntry: no active turn — story ${storyId} channel ${interaction.channel.id} user ${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+      log(`handleFinalizeEntry: no active turn — story ${storyId} channel ${interaction.channel.id} user ${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId) });
       return;
     }
@@ -523,7 +523,7 @@ async function handleFinalizeEntry(connection, interaction) {
       title: txtFinalizeConfirm,
     });
 
-    log(`handleFinalizeEntry: showing preview page 1/${pages.length} to user ${interaction.user.id} for writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleFinalizeEntry: showing preview page 1/${pages.length} to user ${interaction.user.username} for writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply(buildPreviewEmbed(interaction.user.id, 0, confirmRow));
 
   } catch (error) {
@@ -598,7 +598,7 @@ async function handlePreviewNav(connection, interaction) {
  * Called by handleFinalizeConfirm (no images) and handleFinalizeImageConfirm (after image review).
  */
 async function doFinalizeEntry(connection, interaction, storyId, writerId) {
-  log(`doFinalizeEntry: start — story ${storyId}, writer ${writerId}, triggered by ${interaction.user.id}`, { show: true, guildName: interaction?.guild?.name });
+  log(`doFinalizeEntry: start — story ${storyId}, writer ${writerId}, triggered by ${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
   try {
     const [turnInfo] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id
@@ -752,7 +752,7 @@ async function handleFinalizeConfirm(connection, interaction) {
   const storyId = interaction.customId.split('_')[3];
   const session = pendingPreviewData.get(interaction.user.id);
   const writerId = session?.writerId ?? interaction.user.id;
-  log(`handleFinalizeConfirm entry user=${interaction.user.id} writer=${writerId} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleFinalizeConfirm entry user=${interaction.user.username} writer=${writerId} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
 
   try {
@@ -839,7 +839,7 @@ async function handleFinalizeImageConfirm(connection, interaction) {
   const storyId = interaction.customId.split('_').at(-1);
   const session = pendingPreviewData.get(interaction.user.id);
   const writerId = session?.writerId ?? interaction.user.id;
-  log(`handleFinalizeImageConfirm entry user=${interaction.user.id} story=${storyId} writer=${writerId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleFinalizeImageConfirm entry user=${interaction.user.username} story=${storyId} writer=${writerId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   await doFinalizeEntry(connection, interaction, storyId, writerId);
 }
@@ -848,7 +848,7 @@ async function handleFinalizeImageConfirm(connection, interaction) {
  * Handle skip turn button click
  */
 async function handleSkipTurn(connection, interaction) {
-  log(`handleSkipTurn entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleSkipTurn entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const storyId = interaction.customId.split('_')[2];
   const guildId = interaction.guild.id;
 
@@ -935,7 +935,7 @@ async function handleSkipConfirm(connection, interaction) {
   const variant = parts[3]; // 'delete', 'keep', or the storyId itself
   const keepThread = variant === 'keep';
   const storyId = (variant === 'delete' || variant === 'keep') ? parts[4] : variant;
-  log(`handleSkipConfirm entry user=${interaction.user.id} story=${storyId} keepThread=${keepThread}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleSkipConfirm entry user=${interaction.user.username} story=${storyId} keepThread=${keepThread}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
 
   await interaction.deferUpdate();
@@ -1031,7 +1031,7 @@ async function handleSkipConfirm(connection, interaction) {
  */
 async function handleThreadDeleteNow(connection, interaction) {
   const threadId = interaction.customId.replace('story_thread_delete_now_', '');
-  log(`handleThreadDeleteNow entry threadId=${threadId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleThreadDeleteNow entry threadId=${threadId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   try {
     await connection.execute(

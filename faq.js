@@ -165,16 +165,16 @@ async function buildTocEmbed(connection, guildId) {
 }
 
 export async function handleHelp(connection, interaction) {
-  log(`handleHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   try {
     await interaction.reply({ ...await buildTocEmbed(connection, interaction.guild.id), flags: MessageFlags.Ephemeral });
   } catch (err) {
-    log(`handleHelp failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
 export async function handleHelpSelect(connection, interaction) {
-  log(`handleHelpSelect entry user=${interaction.user.id} value=${interaction.values[0]}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleHelpSelect entry user=${interaction.user.username} value=${interaction.values[0]}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
     const idx = parseInt(interaction.values[0]);
@@ -190,7 +190,7 @@ export async function handleHelpSelect(connection, interaction) {
 
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    log(`handleHelpSelect failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleHelpSelect failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
@@ -199,7 +199,7 @@ export async function handleHelpSelect(connection, interaction) {
 // ---------------------------------------------------------------------------
 
 export async function handleWriterHelp(connection, interaction) {
-  log(`handleWriterHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleWriterHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
     const pageDef = PAGE_DEFS[6]; // page 7: MyStory Commands
@@ -211,7 +211,7 @@ export async function handleWriterHelp(connection, interaction) {
       .setFooter({ text: cfg[pageDef.footerKey] });
     await interaction.editReply({ embeds: [embed] });
   } catch (err) {
-    log(`handleWriterHelp failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleWriterHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 
@@ -220,7 +220,7 @@ export async function handleWriterHelp(connection, interaction) {
 // ---------------------------------------------------------------------------
 
 export async function handleAdminHelp(connection, interaction, guildId) {
-  log(`handleAdminHelp entry user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleAdminHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const pageDef = PAGE_DEFS[7]; // page 8: StoryAdmin Commands
     const { content, cfg } = await buildPage(connection, guildId, pageDef);
@@ -231,7 +231,7 @@ export async function handleAdminHelp(connection, interaction, guildId) {
       .setFooter({ text: cfg[pageDef.footerKey] });
     await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
   } catch (err) {
-    log(`handleAdminHelp failed for user=${interaction.user.id}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleAdminHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
 }
 

@@ -141,7 +141,7 @@ async function main() {
           if (!isSetupCommand && interaction.guild) {
             const configured = await isGuildConfigured(connection, interaction.guild.id);
             if (!configured) {
-              log(`Setup required: blocked /${interaction.commandName} for guild ${interaction.guild.id}`, { show: true, guildName: interaction.guild.name });
+              log(`Setup required: blocked /${interaction.commandName}`, { show: true, guildName: interaction.guild.name });
               const isAdmin = interaction.member?.permissions?.has('ManageGuild');
               const msgKey = isAdmin ? 'txtSetupRequiredAdmin' : 'txtSetupRequiredUser';
               const msg = await getConfigValue(connection, msgKey, 1);

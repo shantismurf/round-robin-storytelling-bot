@@ -289,7 +289,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
 }
 
 async function handleManageButton(connection, interaction) {
-  log(`handleManageButton entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageButton entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingManageData.get(userId);
 
@@ -516,7 +516,7 @@ async function handleManageButton(connection, interaction) {
 }
 
 async function handleReviewTags(connection, interaction, state) {
-  log(`handleReviewTags entry storyId=${state.storyId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleReviewTags entry storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const [rows] = await connection.execute(
     `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
      FROM story_tag_submission
@@ -922,7 +922,7 @@ async function handleManageModalSubmit(connection, interaction) {
  * Handle select menu interactions from the manage panel (rating/warnings/dynamic).
  */
 async function handleManageSelectMenu(connection, interaction) {
-  log(`handleManageSelectMenu entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageSelectMenu entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   const state = pendingManageData.get(userId);
 
@@ -954,7 +954,7 @@ async function handleManageSelectMenu(connection, interaction) {
  * Handle tag approval/rejection buttons (story_tag_approve_* / story_tag_reject_*).
  */
 async function handleTagReviewButton(connection, interaction) {
-  log(`handleTagReviewButton entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleTagReviewButton entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const parts = interaction.customId.split('_');
   // story_tag_approve_<submissionId>_<storyId>_<pageIndex>
   const action = parts[2]; // 'approve' or 'reject'

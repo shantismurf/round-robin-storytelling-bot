@@ -93,8 +93,6 @@ async function buildSyntheticContext(client, guildId) {
 // ---------------------------------------------------------------------------
 async function handleCheckStoryDelay(connection, client, payload) {
   const { storyId } = payload;
-  log(`handleCheckStoryDelay entry for story ${storyId}`, { show: false });
-
   const [storyRows] = await connection.execute(
     `SELECT story_status, guild_id, title FROM story WHERE story_id = ?`,
     [storyId]
@@ -102,6 +100,7 @@ async function handleCheckStoryDelay(connection, client, payload) {
   if (storyRows.length === 0 || storyRows[0].story_status !== 2) return; // gone or already active
 
   const { guild_id: guildId, title } = storyRows[0];
+  log(`handleCheckStoryDelay entry for story ${storyId} "${title}"`, { show: false });
 
   // checkStoryDelay handles both hour and writer-count conditions and activates the story
   const result = await checkStoryDelay(connection, storyId);
@@ -123,7 +122,7 @@ async function handleCheckStoryDelay(connection, client, payload) {
 // ---------------------------------------------------------------------------
 async function handleThreadDelete(connection, client, payload) {
   const { threadId, guildId } = payload;
-  log(`handleThreadDelete entry for thread ${threadId} guild ${guildId}`, { show: false });
+  log(`handleThreadDelete entry for thread ${threadId}`, { show: false });
   try {
     const ctx = await buildSyntheticContext(client, guildId);
     const thread = await ctx.guild.channels.fetch(threadId).catch(() => null);
@@ -143,8 +142,6 @@ async function handleThreadDelete(connection, client, payload) {
 // ---------------------------------------------------------------------------
 async function handleTurnTimeout(connection, client, payload) {
   const { turnId, storyId, guildId } = payload;
-  log(`handleTurnTimeout entry for turn ${turnId} story ${storyId}`, { show: false });
-
   // Verify turn is still active
   const [turnRows] = await connection.execute(
     `SELECT t.turn_id, t.thread_id, sw.discord_display_name
@@ -154,6 +151,7 @@ async function handleTurnTimeout(connection, client, payload) {
     [turnId]
   );
   if (turnRows.length === 0) return; // already ended or advanced by someone else
+  log(`handleTurnTimeout entry for turn ${turnId} story ${storyId} writer ${turnRows[0].discord_display_name}`, { show: false });
 
   // Verify story is still active (not paused or closed)
   const [storyRows] = await connection.execute(

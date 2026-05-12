@@ -6,7 +6,7 @@ import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
 
 export async function handleClose(connection, interaction) {
-  log(`handleClose entry user=${interaction.user.id} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleClose entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
@@ -37,7 +37,7 @@ export async function handleClose(connection, interaction) {
     const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
     if (!isCreator && !isAdmin) {
-      log(`handleClose: unauthorized user=${interaction.user.id} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
+      log(`handleClose: unauthorized user=${interaction.user.username} story=${storyId}`, { show: false, guildName: interaction?.guild?.name });
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryCloseNotAuthorized', guildId) });
     }
 
@@ -68,7 +68,7 @@ export async function handleClose(connection, interaction) {
 }
 
 export async function handleCloseConfirm(connection, interaction) {
-  log(`handleCloseConfirm entry user=${interaction.user.id} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleCloseConfirm entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   const storyId = parseInt(interaction.customId.split('_')[3]);
   const guildId = interaction.guild.id;

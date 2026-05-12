@@ -124,7 +124,7 @@ export async function buildJoinEmbed(connection, state, threadMode = false) {
 }
 
 export async function handleJoin(connection, interaction, buttonStoryId = null) {
-  log(`handleJoin entry: buttonStoryId=${buttonStoryId} user=${interaction.user.id}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleJoin entry: buttonStoryId=${buttonStoryId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const guildId = interaction.guild.id;
     let storyId;
@@ -163,7 +163,7 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     log(`handleJoin: complete`, { show: false, guildName: interaction?.guild?.name });
 
   } catch (error) {
-    log(`handleJoin failed for user=${interaction.user.id} storyId=${buttonStoryId ?? 'slash'}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleJoin failed for user=${interaction.user.username} storyId=${buttonStoryId ?? 'slash'}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     const errMsg = await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id);
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: errMsg, flags: MessageFlags.Ephemeral }).catch(() => {});
