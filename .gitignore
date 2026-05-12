@@ -6,9 +6,4 @@ coverage/
 logs/
 CLAUDE.md
 TODO.md
-check-unconfigured.js
-adminmsg.js
-test-embeds.js
-cleanup-orphan-keys.js
-cleanup.js
 docs/
