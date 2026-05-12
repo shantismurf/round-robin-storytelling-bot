@@ -76,27 +76,32 @@ Copy `config.example.json` to `config.json` and fill in your values:
 }
 ```
 
-**`testMode`** controls how slash commands are registered:
-- `true` — commands register to the single guild specified by `guildId`. Changes take effect instantly. Use this for development and single-server deployments.
-- `false` — commands register globally across all servers the bot is in. Changes can take up to one hour to propagate. Use this for production multi-server deployments.
+**`testMode`** controls how slash commands are registered and what logs are printed the the console:
+- `true` — commands register to the single guild specified by `guildId`. Changes take effect instantly. Returns high-resolution logging of all entry points and major logic paths with relevant data, in addition to production logs. Use this for development and single-server deployments.
+- `false` — commands register globally across all servers the bot is in. Changes can take up to one hour to propagate. Minimal logging tracks user interactions and errors. Use this for production multi-server deployments.
 
 **`guildId`** is required when `testMode: true`. To find it: in Discord, enable Developer Mode (User Settings → Advanced), then right-click your server name and choose **Copy Server ID**.
 
 ---
 
-## Step 5 — Install and Start
+## Step 5 — Initialize 
 
 ```bash
 npm install
 node index.js
 ```
 
-On first run, the bot detects a fresh database and automatically:
-1. Creates the database schema
-2. Loads default configuration values
-3. Registers slash commands with Discord
+Every time index.js is run, the bot connects to the database and automatically:
+1. Creates or updates the database schema (changes applied via migration SQL scripts in \db\migrations)
+2. Loads or updates system configuration values (necessary IDs and all user-facing text) from \db\config_files
+3. Attempts to create FAQ posts from config_help.sql, posted in a forum channel on the hub server (cfgHubServerID and cfgHubFaqChannelID).
+4. Registers slash commands with Discord (instantly for test environment, globally for production)
+5. Starts the job runner process for ongoing turn management and weekly posts
+6. Refreshes status messages on all active stories
 
-You do not need to run `node deploy.js` manually on a first install. Use `node deploy.js` (or `npm run deploy`) after updates to apply schema migrations, sync any new config keys, and re-register commands.
+No manual entry to the database is required for ongoing maintenance. It can all be handled by index.js. 
+
+Unused config values will be reported in the startup log, and those can be cleaned up by adding the log output to \helper\cleanup.js and running it in a terminal.
 
 ---
 
@@ -106,35 +111,14 @@ In your Discord server, run `/storyadmin setup` in any channel as a user with th
 
 This opens a form where you set:
 - **Story feed channel** — the channel where story threads, turn notifications, and announcements will be posted. Required.
-- **Media channel** — images posted in turn threads are forwarded here for preservation. Optional; if not set, images are silently skipped during entry finalization.
+- **Media channel** — images posted in turn threads are forwarded here for preservation. It's recommended that this channel be private, but it's not necessary. Optional; if not set, images are silently skipped during entry.  finalization.
 - **Admin role** — members with this role can use `/storyadmin` commands. Optional; if not set, only users with the Discord Administrator permission can manage stories.
+- **Restricted Feed Channel** — Optional age-restricted channel for Mature or Explicit stories.
+- **Restricted Media Channel** — Optional alternative media storage. If blank it will default to the main media channel. If that's blank images will not be processed.
+- **Weekly Roundup Channel** — Channel to post a weekly summary of story activity on the current server. Day and Hour can also be configured.
 
-After submitting, the bot will attempt to set channel-level permission overrides on the feed and media channels and will report any permissions it was unable to apply. If warnings appear, check that the bot's role has **Manage Roles** in Server Settings → Roles.
-
----
-
-## Ongoing Maintenance
-
-After pulling updates from the repository, run:
-
-```bash
-node deploy.js
-```
-
-This is safe to run at any time — all steps are idempotent (they only add what's missing, never overwrite existing data). Then restart the bot.
+After submitting, the bot will attempt to set channel-level permission overrides on the feed and media channels and will report any permissions it was unable to apply. If warnings appear, check that the bot itself has **Manage Roles** access in Server Settings → Roles.
 
 ---
 
-## Troubleshooting
-
-**Commands show up in the bot's DMs but not in the server, or return "This command can only be used in a server."**
-The bot was invited without the `bot` scope — only `applications.commands` was used. Re-invite using a URL that includes both scopes. Confirm the bot appears in the server member list after inviting.
-
-**`/storyadmin setup` reports it could not set bot permissions.**
-This can happen when the feed channel is private — Discord does not allow bots to grant themselves access to channels they can't already see. Fix it manually: go to the feed channel → Edit Channel → Permissions → Add Role → select the bot's role → enable all the permissions listed in the setup warning. Then run `/storyadmin setup` again to confirm.
-
-**Private threads aren't being created.**
-Private threads require server boost level 2. If your server isn't boosted, use public threads or have users set their privacy preference to public when joining a story.
-
-**The bot can't send DMs to a user.**
-Users who have DMs from server members disabled will not receive turn notifications by DM. The bot will fall back to an @mention in the feed channel automatically.
+Application support can be found on the Round Robin Storybot Hub server: https://discord.gg/hKH9G5XFpJ
