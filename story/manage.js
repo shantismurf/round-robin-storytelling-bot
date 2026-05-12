@@ -6,7 +6,8 @@ import { migrateStoryThread } from './_migration.js';
 import { ratingLabels, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
-import { buildTagReviewPanel } from './tags.js';
+import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
+import { applyPauseActions, applyResumeActions, handleReopenStory } from './_managePauseResume.js';
 
 const pendingManageData = new Map();
 
@@ -115,7 +116,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
           .setStyle(ButtonStyle.Secondary)
     );
 
-  // Row 4 (3-4): Metadata | Manage Entries |  Manage Turns | [Review Tags if pending]
+  // Row 4 (3-4): Metadata | Manage Entries | Manage Turns | [Review Tags if pending]
   const row4Components = [
     new ButtonBuilder()
       .setCustomId('story_manage_open_metadata')
@@ -174,7 +175,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     }
     const story = storyRows[0];
 
-    
     const isCreator = await checkIsCreator(connection, storyId, interaction.user.id);
     const isAdmin = await checkIsAdmin(connection, interaction, guildId);
 
@@ -211,7 +211,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'btnManageTurns', 'btnManageEntries',
       'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount',
       'txtManageTurnsPanelTitle', 'txtManageTurnsNoTurn', 'txtManageTurnsActiveTurn',
-      // Turn action cfg keys
       'btnTurnSkip', 'btnTurnExtend', 'btnTurnNext', 'btnTurnReassign',
       'btnTurnDeleteEntry', 'btnTurnRestoreEntry', 'txtTurnSkipConfirm',
       'txtTurnReassignConfirm', 'txtTurnExtendModalTitle', 'lblTurnExtendHours',
@@ -226,13 +225,11 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     ], guildId);
     log(`handleManage: cfg loaded`, { show: false, guildName: interaction?.guild?.name });
 
-    // Count pending tag submissions for this story
     const [[{ pendingTagCount }]] = await connection.execute(
       `SELECT COUNT(*) AS pendingTagCount FROM story_tag_submission WHERE story_id = ? AND submission_status = 'pending'`,
       [storyId]
     );
 
-    // Fetch active turn for turn actions section
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_display_name, sw.discord_user_id,
               sw.story_writer_id, UNIX_TIMESTAMP(t.turn_ends_at) as turn_ends_unix
@@ -262,7 +259,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       originalStatus: story.story_status,
       targetStatus: story.story_status,
       originalInteraction: interaction,
-      // AO3 metadata
       rating: story.rating ?? 'NR',
       originalRating: story.rating ?? 'NR',
       warnings: story.warnings ? story.warnings.split(',').map(w => w.trim()).filter(Boolean) : [],
@@ -270,7 +266,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       otherRelationships: story.other_relationships ?? '',
       characters: story.characters ?? '',
       dynamic: story.dynamic ?? '',
-      tags: story.tags ?? '',
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
@@ -328,7 +323,14 @@ async function handleManageButton(connection, interaction) {
     await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
   } else if (customId === 'story_manage_reopen') {
-    await handleReopenStory(connection, interaction, state);
+    try {
+      const { reopenMsg } = await handleReopenStory(connection, interaction, state);
+      pendingManageData.set(interaction.user.id, state);
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, null));
+      await interaction.followUp({ content: reopenMsg, flags: MessageFlags.Ephemeral });
+    } catch (err) {
+      await interaction.followUp({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+    }
 
   } else if (customId === 'story_manage_toggle_pauseresume') {
     state.targetStatus = state.targetStatus === 1 ? 2 : 1;
@@ -496,7 +498,6 @@ async function handleManageButton(connection, interaction) {
     return;
 
   } else if (customId.startsWith('story_manage_ta_')) {
-    // Turn action buttons — delegate to manageTurnActions
     await handleTurnActionButton(connection, interaction, state);
     return;
 
@@ -513,25 +514,6 @@ async function handleManageButton(connection, interaction) {
       components: []
     });
   }
-}
-
-async function handleReviewTags(connection, interaction, state) {
-  log(`handleReviewTags entry storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-  const [rows] = await connection.execute(
-    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
-     FROM story_tag_submission
-     WHERE story_id = ? AND submission_status = 'pending'
-     ORDER BY submitted_at ASC`,
-    [state.storyId]
-  );
-
-  if (rows.length === 0) {
-    await interaction.reply({ content: state.cfg.txtTagNoPending, flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const { embeds, components } = await buildTagReviewPanel(rows, 0, state.storyId, state.title, state.storyThreadId, state.cfg, interaction.guild);
-  await interaction.reply({ embeds, components, flags: MessageFlags.Ephemeral });
 }
 
 async function handleManageSave(connection, interaction, state) {
@@ -551,7 +533,6 @@ async function handleManageSave(connection, interaction, state) {
       ]
     );
 
-    // Handle pause/resume if status changed
     if (state.targetStatus !== state.originalStatus) {
       await connection.execute(`UPDATE story SET story_status = ? WHERE story_id = ?`, [state.targetStatus, state.storyId]);
 
@@ -580,269 +561,9 @@ async function handleManageSave(connection, interaction, state) {
   }
 }
 
-async function applyPauseActions(connection, interaction, state) {
-  const [activeTurnRows] = await connection.execute(
-    `SELECT t.turn_id, t.thread_id, sw.discord_display_name
-     FROM turn t
-     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ? AND t.turn_status = 1`,
-    [state.storyId]
-  );
-  if (activeTurnRows.length === 0) return;
-
-  const { turn_id: turnId, thread_id: threadId, discord_display_name } = activeTurnRows[0];
-
-  // Cancel pending timeout and reminder jobs (all modes)
-  await connection.execute(
-    `UPDATE job SET job_status = 2 WHERE job_status = 0
-     AND job_type IN ('turnTimeout', 'turnReminder', 'turnSlowReminder')
-     AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
-    [turnId]
-  );
-
-  if (!threadId) return; // Quick mode — no thread to lock
-
-  try {
-    const thread = await interaction.guild.channels.fetch(threadId);
-    if (!thread) return;
-
-    const turnNumber = await getTurnNumber(connection, state.storyId);
-    const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
-    const pausedTitle = threadTitleTemplate
-      .replace('[story_id]', state.guildStoryId)
-      .replace('[storyTurnNumber]', turnNumber)
-      .replace('[user display name]', discord_display_name)
-      .replace('[turnEndTime]', 'PAUSED');
-
-    await thread.setName(pausedTitle);
-    await thread.setLocked(true);
-  } catch (err) {
-    log(`Could not lock turn thread on pause (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-
-  // Update story thread title to show PAUSED
-  try {
-    const [storyInfo] = await connection.execute(
-      `SELECT story_thread_id, restricted_thread_id FROM story WHERE story_id = ?`, [state.storyId]
-    );
-    if (storyInfo[0]) {
-      const activeThreadId = (isRestricted(state.rating) && storyInfo[0].restricted_thread_id)
-        ? storyInfo[0].restricted_thread_id : storyInfo[0].story_thread_id;
-      if (activeThreadId) {
-        const storyThread = await interaction.guild.channels.fetch(activeThreadId).catch(() => null);
-        if (storyThread) {
-          const [txtPaused, titleTemplate] = await Promise.all([
-            getConfigValue(connection, 'txtPaused', state.guildId),
-            getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
-          ]);
-          await storyThread.setName(
-            titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtPaused)
-          );
-        }
-      }
-    }
-  } catch (err) {
-    log(`Could not update story thread title on pause (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-}
-
-async function applyResumeActions(connection, interaction, state) {
-  const [activeTurnRows] = await connection.execute(
-    `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.discord_display_name, sw.notification_prefs,
-            s.story_thread_id, s.title
-     FROM turn t
-     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     JOIN story s ON s.story_id = sw.story_id
-     WHERE sw.story_id = ? AND t.turn_status = 1`,
-    [state.storyId]
-  );
-
-  // Update story thread title back to Active regardless of turn state
-  try {
-    const [storyInfo] = await connection.execute(
-      `SELECT story_thread_id, restricted_thread_id FROM story WHERE story_id = ?`, [state.storyId]
-    );
-    if (storyInfo[0]) {
-      const activeThreadId = (isRestricted(state.rating) && storyInfo[0].restricted_thread_id)
-        ? storyInfo[0].restricted_thread_id : storyInfo[0].story_thread_id;
-      if (activeThreadId) {
-        const storyThread = await interaction.guild.channels.fetch(activeThreadId).catch(() => null);
-        if (storyThread) {
-          const [txtActive, titleTemplate] = await Promise.all([
-            getConfigValue(connection, 'txtActive', state.guildId),
-            getConfigValue(connection, 'txtStoryThreadTitle', state.guildId)
-          ]);
-          await storyThread.setName(
-            titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
-          );
-        }
-      }
-    }
-  } catch (err) {
-    log(`Could not update story thread title on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-
-  if (activeTurnRows.length === 0) {
-    // No active turn — start a new one
-    const nextWriterId = await PickNextWriter(connection, state.storyId);
-    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-    return;
-  }
-
-  const activeTurn = activeTurnRows[0];
-  const isSlowMode = state.storyMode === 2;
-
-  // Cancel any lingering timer/reminder jobs before rescheduling
-  await connection.execute(
-    `UPDATE job SET job_status = 2 WHERE job_status = 0
-     AND job_type IN ('turnTimeout', 'turnReminder', 'turnSlowReminder')
-     AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
-    [activeTurn.turn_id]
-  );
-
-  let newTurnEndsAt = null;
-  let newEndTimestamp = null;
-
-  if (!isSlowMode) {
-    // Reset deadline and reschedule timeout + reminder
-    newTurnEndsAt = new Date(Date.now() + (state.turnLength * 60 * 60 * 1000));
-    await connection.execute(
-      `UPDATE turn SET turn_ends_at = ? WHERE turn_id = ?`,
-      [newTurnEndsAt, activeTurn.turn_id]
-    );
-    await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-      ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt]
-    );
-    if (state.timeoutReminder > 0) {
-      const reminderMs = state.turnLength * (state.timeoutReminder / 100) * 60 * 60 * 1000;
-      const reminderTime = new Date(Date.now() + reminderMs);
-      await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-        ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime]
-      );
-    }
-    newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
-  } else if (state.timeoutReminder > 0) {
-    // Slow mode — no timer; schedule slow reminder if configured
-    const reminderTime = new Date(Date.now() + (state.timeoutReminder * 60 * 60 * 1000));
-    await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-      ['turnSlowReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id, reminderHours: state.timeoutReminder }), reminderTime]
-    );
-  }
-
-  if (activeTurn.thread_id) {
-    try {
-      const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-      if (thread) {
-        const turnNumber = await getTurnNumber(connection, state.storyId);
-        const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
-        const newTitle = threadTitleTemplate
-          .replace('[story_id]', state.guildStoryId)
-          .replace('[storyTurnNumber]', turnNumber)
-          .replace('[user display name]', activeTurn.discord_display_name);
-        await thread.setName(newTitle);
-        await thread.setLocked(false);
-        const txtTurnThreadResumed = await getConfigValue(connection, 'txtTurnThreadResumed', state.guildId);
-        await thread.send(replaceTemplateVariables(txtTurnThreadResumed, { turn_end_time: newEndTimestamp ?? '—' }));
-      }
-    } catch (err) {
-      log(`Could not unlock turn thread on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
-    }
-  }
-
-  try {
-    const linkThreadId = activeTurn.thread_id || activeTurn.story_thread_id;
-    const threadUrl = `https://discord.com/channels/${state.guildId}/${linkThreadId}`;
-    const resumeText = (await getConfigValue(connection, 'txtTurnResumed', state.guildId))
-      .replace(/\[story_title\]/g, activeTurn.title)
-      .replace(/\[turn_end_time\]/g, newEndTimestamp ?? '—')
-      .replace(/\[turn_thread_link\]/g, threadUrl);
-    if (activeTurn.notification_prefs === 'mention') {
-      const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
-      const channel = await interaction.guild.channels.fetch(feedChannelId);
-      await channel.send(`<@${activeTurn.discord_user_id}> ${resumeText}`);
-    } else {
-      try {
-        const user = await interaction.client.users.fetch(activeTurn.discord_user_id);
-        await user.send(resumeText);
-      } catch {
-        const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
-        const channel = await interaction.guild.channels.fetch(feedChannelId);
-        await channel.send(`<@${activeTurn.discord_user_id}> ${resumeText}`);
-      }
-    }
-  } catch (err) {
-    log(`Could not notify writer on resume (story ${state.storyId}): ${err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-
-}
-
-async function handleReopenStory(connection, interaction, state) {
-  log(`handleReopenStory entry storyId=${state.storyId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-  await interaction.deferUpdate();
-  const guildId = state.guildId;
-
-  try {
-    // Set story active
-    await connection.execute(
-      `UPDATE story SET story_status = 1 WHERE story_id = ?`,
-      [state.storyId]
-    );
-
-    // Update story thread title to Active
-    try {
-      const [storyInfo] = await connection.execute(
-        `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
-      );
-      if (storyInfo[0]?.story_thread_id) {
-        const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
-        if (storyThread) {
-          const [txtActive, titleTemplate] = await Promise.all([
-            getConfigValue(connection, 'txtActive', guildId),
-            getConfigValue(connection, 'txtStoryThreadTitle', guildId)
-          ]);
-          await storyThread.setName(
-            titleTemplate.replace('[story_id]', state.guildStoryId).replace('[inputStoryTitle]', state.title).replace('[story_status]', txtActive)
-          );
-        }
-      }
-    } catch (err) {
-      log(`handleReopenStory: could not update story thread title for story ${state.storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
-    }
-
-    const nextWriterId = await PickNextWriter(connection, state.storyId);
-    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-
-    updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
-
-    const joinStatus = state.allowJoins
-      ? (state.cfg.txtOpen ?? 'open')
-      : (state.cfg.txtClosed ?? 'closed');
-    const reopenMsg = replaceTemplateVariables(
-      await getConfigValue(connection, 'txtReopenSuccess', guildId),
-      { story_title: state.title, join_status: joinStatus }
-    );
-
-    state.originalStatus = 1;
-    state.targetStatus = 1;
-    pendingManageData.set(interaction.user.id, state);
-
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, null));
-    await interaction.followUp({ content: reopenMsg, flags: MessageFlags.Ephemeral });
-
-    log(`handleReopenStory: story ${state.storyId} reopened successfully`, { show: true, guildName: interaction?.guild?.name });
-  } catch (err) {
-    log(`handleReopenStory failed for story ${state.storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.followUp({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), flags: MessageFlags.Ephemeral });
-  }
-}
-
 async function handleManageModalSubmit(connection, interaction) {
   log(`handleManageModalSubmit entry customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
-  // divert turn actions
   if (interaction.customId.startsWith('story_manage_ta_')) {
     return await handleTurnActionModal(connection, interaction, pendingManageData.get(userId));
   }
@@ -891,7 +612,7 @@ async function handleManageModalSubmit(connection, interaction) {
         if (isNaN(val) || val < 0) {
           return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationMaxWriters', interaction.guild.id), flags: MessageFlags.Ephemeral });
         }
-        state.maxWriters = val > 0 ? val : null; // 0 = no limit
+        state.maxWriters = val > 0 ? val : null;
       } else {
         state.maxWriters = null;
       }
@@ -918,9 +639,6 @@ async function handleManageModalSubmit(connection, interaction) {
   }
 }
 
-/**
- * Handle select menu interactions from the manage panel (rating/warnings/dynamic).
- */
 async function handleManageSelectMenu(connection, interaction) {
   log(`handleManageSelectMenu entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
@@ -948,118 +666,6 @@ async function handleManageSelectMenu(connection, interaction) {
 
   await interaction.deferUpdate();
   await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-}
-
-/**
- * Handle tag approval/rejection buttons (story_tag_approve_* / story_tag_reject_*).
- */
-async function handleTagReviewButton(connection, interaction) {
-  log(`handleTagReviewButton entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
-  const parts = interaction.customId.split('_');
-  // story_tag_approve_<submissionId>_<storyId>_<pageIndex>
-  const action = parts[2]; // 'approve' or 'reject'
-  const submissionId = parts[3];
-  const storyId = parts[4];
-  const pageIndex = parseInt(parts[5] ?? '0');
-  const guildId = interaction.guild.id;
-
-  // Only story creator can approve/reject
-  const isCreator = await checkIsCreator(connection, storyId, interaction.user.id);
-  const isAdmin = await checkIsAdmin(connection, interaction, guildId);
-  if (!isCreator && !isAdmin) {
-    await interaction.reply({ content: await getConfigValue(connection, 'txtTagNotCreator', guildId), flags: MessageFlags.Ephemeral });
-    return;
-  }
-
-  const [rows] = await connection.execute(
-    `SELECT tag_text, thread_message_id FROM story_tag_submission WHERE submission_id = ? AND submission_status = 'pending'`,
-    [submissionId]
-  );
-  if (rows.length === 0) {
-    await interaction.reply({ content: await getConfigValue(connection, 'txtTagReviewSessionExpired', guildId), flags: MessageFlags.Ephemeral });
-    return;
-  }
-  const { tag_text: tagText, thread_message_id: threadMessageId } = rows[0];
-  const reviewerName = interaction.member?.displayName ?? interaction.user.username;
-  const reviewedAt = Date.now();
-
-  await interaction.deferUpdate();
-
-  const cfg = await getConfigValue(connection, ['txtTagApproved', 'txtTagRejected', 'txtTagStatus', 'txtApproved', 'txtRejected'], guildId);
-
-  const isApprove = action === 'approve';
-  const emojiStatus = isApprove ? `✅ ${cfg.txtApproved}` : `❌ ${cfg.txtRejected}`;
-  const statusLine = replaceTemplateVariables(cfg.txtTagStatus, {
-    emoji_status: emojiStatus,
-    reviewed_by: reviewerName,
-    reviewed_at: `<t:${Math.floor(reviewedAt / 1000)}:d> <t:${Math.floor(reviewedAt / 1000)}:T>`
-  });
-
-  // Edit the thread voting post to append the status line
-  const [storyThreadRows] = await connection.execute(`SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]);
-  const storyThreadId = storyThreadRows[0]?.story_thread_id ?? null;
-  if (threadMessageId && storyThreadId) {
-    try {
-      const thread = await interaction.guild.channels.fetch(storyThreadId).catch(() => null);
-      if (thread) {
-        const msg = await thread.messages.fetch(threadMessageId).catch(() => null);
-        if (msg) {
-          await msg.edit(`${msg.content}\n${statusLine}`).catch(err =>
-            log(`handleTagReviewButton: failed to edit thread post ${threadMessageId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name })
-          );
-        }
-      }
-    } catch (err) {
-      log(`handleTagReviewButton: error editing thread post: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
-    }
-  }
-
-  if (isApprove) {
-    log(`handleTagReviewButton: approving tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
-    await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
-      [reviewerName, submissionId]
-    );
-    const [storyRows] = await connection.execute(`SELECT tags FROM story WHERE story_id = ?`, [storyId]);
-    const existing = storyRows[0]?.tags?.trim() || '';
-    const newTags = existing ? `${existing}, ${tagText}` : tagText;
-    await connection.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [newTags, storyId]);
-    updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`updateStoryStatusMessage failed for story ${storyId} after tag approve: ${err}`, { show: true, guildName: interaction?.guild?.name }));
-  } else {
-    log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
-    await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
-      [reviewerName, submissionId]
-    );
-  }
-
-  // Advance to next pending tag, staying at same index (next tag shifts into this position)
-  const [remaining] = await connection.execute(
-    `SELECT submission_id, submitter_display_name, tag_text, thread_message_id
-     FROM story_tag_submission WHERE story_id = ? AND submission_status = 'pending'
-     ORDER BY submitted_at ASC`,
-    [storyId]
-  );
-
-  const actionCfg = await getConfigValue(connection, [
-    'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject',
-    'txtTagVoteCount', 'txtTagApproved', 'txtTagRejected'
-  ], guildId);
-
-  if (remaining.length === 0) {
-    const doneMsg = isApprove
-      ? replaceTemplateVariables(actionCfg.txtTagApproved, { tag_text: tagText })
-      : replaceTemplateVariables(actionCfg.txtTagRejected, { tag_text: tagText });
-    await interaction.editReply({ content: doneMsg, embeds: [], components: [] });
-    return;
-  }
-
-  const [storyMeta] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
-  const nextPage = Math.min(pageIndex, remaining.length - 1);
-  const { embeds, components } = await buildTagReviewPanel(
-    remaining, nextPage, storyId, storyMeta[0]?.title ?? '', storyMeta[0]?.story_thread_id ?? null, actionCfg, interaction.guild
-  );
-  await interaction.editReply({ content: '', embeds, components });
 }
 
 export {
