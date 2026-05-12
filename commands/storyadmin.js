@@ -173,6 +173,7 @@ async function handleSetup(connection, interaction) {
     roundupChannelId:         guildCfg.cfgWeeklyRoundupChannelId || '',
     roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '1',
     roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '9',
+    isFirstSetup:             !guildCfg.cfgStoryFeedChannelId,
     originalInteraction: interaction,
     cfg,
   };
@@ -556,6 +557,13 @@ async function handleSetupSave(connection, interaction) {
 
   pendingSetupData.delete(interaction.user.id);
   log(`handleSetupSave: complete for guild ${guildId} by ${interaction.user.tag}`, { show: true, guildName: interaction.guild.name });
+
+  if (state.isFirstSetup) {
+    interaction.client.users.fetch('426071848342781963').then(owner =>
+      owner.send(`🆕 New server setup: **${interaction.guild.name}** (${guildId}) by ${interaction.user.tag}`)
+    ).catch(err => log(`handleSetupSave: owner DM failed: ${err}`, { show: true, guildName: interaction.guild.name }));
+  }
+
   await interaction.editReply({ content: saved.join('\n'), embeds: [], components: [] });
 }
 
