@@ -42,15 +42,16 @@ export async function PickNextWriter(connection, storyId) {
   const story_order_type = storyData[0]?.story_order_type;
 
   if (story_order_type === 2) {
-    // Round-robin: cycle-based selection.
     const [allWriters] = await connection.execute(
       `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = 1`,
       [storyId]
     );
     if (allWriters.length === 0) return null;
-    if (!currentWriterId) return allWriters[0].story_writer_id;
+    if (!currentWriterId) {
+      return allWriters[Math.floor(Math.random() * allWriters.length)].story_writer_id;
+    }
 
-    // Find the current writer's previous turn (the one before the turn that just ended)
+    // Find the current writer's previous turn
     const [prevTurnRows] = await connection.execute(
       `SELECT turn_id FROM turn
        WHERE story_writer_id = ? AND turn_id < ?
@@ -59,30 +60,28 @@ export async function PickNextWriter(connection, storyId) {
     );
     const prevTurnId = prevTurnRows[0]?.turn_id ?? 0;
 
-    // Find the writer who went most recently before the current writer's last cycle
-    const [prevCycleRows] = await connection.execute(
-      `SELECT sw.story_writer_id FROM turn t
+    // Writers who have already had a turn started in this cycle
+    const [usedWriterRows] = await connection.execute(
+      `SELECT DISTINCT sw.story_writer_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.sw_status = 1 AND t.turn_id < ? AND t.turn_id > ?
-       ORDER BY t.turn_id DESC LIMIT 1`,
-      [storyId, currentTurnId, prevTurnId]
+       WHERE sw.story_id = ? AND t.turn_id > ? AND t.turn_id <= ?`,
+      [storyId, prevTurnId, currentTurnId]
+    );
+    const usedIds = new Set(usedWriterRows.map(r => r.story_writer_id));
+
+    // Eligible: active writers not yet in this cycle, excluding the current writer
+    const eligible = allWriters.filter(w =>
+      w.story_writer_id !== currentWriterId && !usedIds.has(w.story_writer_id)
     );
 
-    // Build writer list in join order
-    const [orderedWriters] = await connection.execute(
-      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC`,
-      [storyId]
-    );
+    // If everyone has gone this cycle, reset to all active writers except the current writer
+    const pool = eligible.length > 0
+      ? eligible
+      : allWriters.filter(w => w.story_writer_id !== currentWriterId);
 
-    if (prevCycleRows.length === 0) {
-      // No previous cycle data — start from beginning
-      const currentIdx = orderedWriters.findIndex(w => w.story_writer_id === currentWriterId);
-      return orderedWriters[(currentIdx + 1) % orderedWriters.length].story_writer_id;
-    }
+    if (pool.length === 0) return currentWriterId;
 
-    const lastInCycleId = prevCycleRows[0].story_writer_id;
-    const lastIdx = orderedWriters.findIndex(w => w.story_writer_id === lastInCycleId);
-    return orderedWriters[(lastIdx + 1) % orderedWriters.length].story_writer_id;
+    return pool[Math.floor(Math.random() * pool.length)].story_writer_id;
   }
 
   // For Random and Fixed: fetch active writers
