@@ -4,6 +4,3 @@ config.json
 .DS_Store
 coverage/
 logs/
-CLAUDE.md
-TODO.md
-docs/

@@ -1,0 +1,51 @@
+📝 Create New Story — Option Reference
+─────────────────────────────────────────────────────────
+
+Story Title
+- ⚠️ *Required.*
+
+Max Writers
+- #️⃣ Optional. Leave blank for no limit.
+
+Turn Length
+- ⌛ How many hours each writer has per turn. Default: 24h.
+
+Story Mode
+- 🟢 **Normal** — Writers get a private or public thread for each turn.
+- 🟣 **Quick** — Writers submit entries via `/story write`.
+
+Writer Order
+- 🎲 **Random** — Next writer chosen completely at random each turn.
+- 🔄 **Round Robin** — Rotates randomly, but no one repeats until everyone has had a turn.
+- 📋 **Fixed Order** — Writers take turns in a fixed sequence based on join order.
+
+Hide Threads
+- 🥷 **On** — Turn threads are private to the current writer and admins only.
+- 🤡 **Off** — Turn threads are visible to all server members.
+
+Show Author Names
+- 📑 **Yes** — Writer names appear on entries in Discord and in the export file.
+- 📄 **No** — Entries are posted and exported anonymously.
+
+Timeout Reminder
+- ⏰ Send a reminder to the current writer after X% of their turn has elapsed. Default: 50%. Set to 0% to disable.
+
+Delay Start By
+- 🫸 Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.
+
+Story Creator's Join Options
+**Your Pen Name**
+- ✍️ Your name as it will appear on the story. Used in story exports. Defaults to your Discord display name if left blank.
+
+**Keep My Turns Private**
+- 🔒 **Yes** — Your turn threads will only be visible to you and admins.
+- 🔓 **No** — Your turn threads will be visible to other writers.
+
+Page 2 of 3 · After story creation, these settings can be edited by admins or the story creator via `/story manage.`
+
+[← Back to Overview]  [⚙️ Story Manage Guide →]
+Page 2 changes needed:
+
+Add a Story Metadata section (new button, new panel — not in current text at all)
+Story Creator's Join Options needs updating: "Keep My Turns Private" → "Hide My Threads" (now refers to thread-level visibility, and there's also a new Notifications toggle to document)
+Remove any implication that summary is set during story creation (it's manage-only)

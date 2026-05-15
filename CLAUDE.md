@@ -1,0 +1,56 @@
+# Round Robin StoryBot — Claude Context
+## Developer Notes
+- Self-taught with professional DB experience; prefers plain language and context over jargon.
+- Regularly ask the user for context. If the root cause is unclear after 1 minute, stop and ask. Do not chase assumptions.
+- All user-facing text must be displayed for and approved by the user.
+
+## System Information
+- **Host:** Managed via restricted pterodactyl interface on bot-hosting.net. No manual console access.
+- **Startup:** Pulls main branch -> runs index.js -> fires deploy.js:
+  - database_setup: schema checks and migrations.
+  - sync_config: aggregates `db/config_files/*.sql` and syncs to DB.
+  - deploy_commands: registers slash commands (instant in test_mode).
+- **MariaDB:** Uses explicit transactions (`BEGIN`/`COMMIT`/`ROLLBACK`) for all story state changes.
+  - The migration runner splits on ; before stripping comments, so any ; inside a comment text corrupts the next statement. NO SEMI-COLONS IN SQL CODE COMMENTS!
+
+## High-level Architecture 
+- **index.js (The Gateway):** Primary entry point. Routes all interactions (isCommand, isButton, isModalSubmit) by customId 
+- **prefix.commands (UI Handlers):** story.js, mystory.js, and storyadmin.js handle Discord-specific logic (Builders, Modals, Buttons).
+- **storybot.js (The Engine):** Core business logic and DB operations. UI handlers must call functions here to execute state changes.
+- **job-runner.js (Automation):** Manages background tasks like turn timeouts and reminders.
+
+## Critical Program Standards
+- **Zero Hardcoding:** Never hard-code user-facing text. Labels, buttons, and prompts must be dynamic.
+- **High-resolution Logging:** Exhaustive traceability is required to debug the restricted server environment.
+- **Reuse & Modularize:** Export logic to shared helpers to avoid redundancy. Break up files if they significantly exceed 500 lines.
+- **SemVer:** Maintain the version number in `package.json` per SemVer standards
+- **Maintain Documentation:** Always sync roadmaps with code changes.
+
+## Config & Localization Rules
+- **NO HARDCODED USER TEXT:** Every user-facing string must use `getConfigValue()`. Logs, numbers, emojis, symbols, and the unicode space character may be hard-coded.
+- **Missing Config = Error:** Do not use `?? "Fallback"` defaults. Log a high-priority error.
+- **Roadmap-Driven:** Check `config_roadmap.md` before creating keys. Update the roadmap as needed.
+- **Naming Convention:** `[type][Location][Purpose][Name]` (e.g., `btnStoryAddPanelCreate`).
+  - `lbl`: Labels | `txt`: Content/Titles | `btn`: Buttons | `cfg`: System values.
+- use `utilities.js\replaceTemplateVariables(template, keyValueMap)` to add values to config text
+
+## Logging Rules
+Implement two-tier high-resolution coverage using `log(content, { show, guildName })`.
+- **show: true** (Standard Production Logs, Operational Visibility)
+  - User Actions, State Changes, Validation Failures, System Errors, Configuration Alerts.
+- **show: false** (Test-Mode Debugging, Traceability)
+  - Entry points, Major Logic Branches, Mid-process Milestones, API/DB Payloads.
+- **Format:** `functionName failed for [context]: ${error?.stack ?? error}`.
+- **Log Function:** Universal Logger logic:
+  - **Strings:** Appended to a standard prefix (timestamp and guildName).
+  - **Arrays:** Auto-renders `console.table` with empty-column filtering.
+  - **Objects:** Auto-renders `console.dir` with infinite depth and colors.
+  - **Bundles:** Pass `[label, data]` for a timestamped header followed by rendered data.
+- **Data in context:** Log entities active in the operation. If a readable name is already in scope, use `name (id)` format — otherwise ID alone is fine. Always include the triggering user and any story being acted on. Turns and threads need ID only. Guild is redundant if already passed as the log option.
+
+## System Documentation
+Review and maintain roadmaps with every implementation.
+- **system_roadmap.md:** Maps exported functions, state maps, and event routing logic.
+- **db/config_roadmap.md:** Manifest of all database-stored config strings and values.
+- **ux_roadmap.md:** Application workflows and interface structure.
+- **Help Sync Rule:** UX Roadmap changes must be reflected in the corresponding user help config keys (e.g., `txtHelp1FindJoin`).

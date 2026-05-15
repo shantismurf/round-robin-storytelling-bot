@@ -1,0 +1,41 @@
+⚙️ Managing a Story — /story manage
+─────────────────────────────────────────────────────────
+
+Who can use /story manage?
+The story creator (the first writer to join) and server admins.
+
+What can be edited?
+**Story settings** (via `/story manage`):
+- **Turn Length** — How many hours each writer has per turn.
+- **Timeout Reminder** — What % into a turn to send the writer a reminder. Set to 0% to disable.
+- **Max Writers** — Cap on total writers. Leave blank for no limit.
+- **Open to New Writers** — Allows new writers to join.
+- **Show Author Names** — Writer names appear on entries and in the story export if enabled.
+- **Writer Order** — Choose between Random, Round Robin, and Fixed (Join) Order.
+- **Turn Privacy** — Private turns are only visible to the current writer (and admins via channel permissions). Public turns are visible to all.
+- **Summary** — A freeform description used in story exports.
+- **Tags** — Comma-separated tag list used in story exports.
+
+**Entry content** — Use `/story edit [id]` to edit the text of a finalized entry. Writers can edit their own entries; admins can edit any.
+
+Pausing and Resuming
+- Sets the story status to paused (freezing the current turn) or resumes a paused story. Resuming starts the next turn automatically if no turn is currently active.
+- Use the button in `/story manage` to pause or resume.
+
+Closing a Story
+- Use `/story close [id]` to permanently close a story. This posts a completion message with the full story export and ends the current turn, but leaves the story thread open for discussion. This cannot be undone.
+
+Admin Controls
+- Skip the current turn
+- Extend the current turn
+- Set the writer who will be selected when the next turn starts
+- Remove a writer from a story
+- Delete a story
+
+Page 3 of 3
+
+Page 3 changes needed:
+
+The "What can be edited?" list should reflect the new manage panel: add Story Title, Rating/Metadata, note the Manage Entries feature (delete/restore entries)
+Admin Controls list is outdated — it should list the actual Manage Turns actions (Skip, Extend, Designate Next, Reassign) and note Manage Entries
+[← Story Creation Guide]
