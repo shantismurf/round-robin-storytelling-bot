@@ -85,7 +85,7 @@ export async function handleCloseConfirm(connection, interaction) {
 
     // End active turn if exists, delete its thread in normal mode
     const [activeTurnRows] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id, sw.discord_user_id FROM turn t
+      `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1
        ORDER BY t.started_at DESC LIMIT 1`,
@@ -100,34 +100,9 @@ export async function handleCloseConfirm(connection, interaction) {
       if (story.mode !== 1 && activeTurn.thread_id) {
         try {
           const turnThread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (turnThread) {
-            const messages = await turnThread.messages.fetch({ limit: 50 });
-            const hasContent = messages.some(m => !m.author.bot && m.author.id === String(activeTurn.discord_user_id));
-            if (hasContent) {
-              const deleteAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
-              const relativeTs = `<t:${Math.floor(deleteAt.getTime() / 1000)}:R>`;
-              const [scheduleMsg, btnDeleteLabel] = await Promise.all([
-                getConfigValue(connection, 'txtThreadScheduledDelete', guildId),
-                getConfigValue(connection, 'btnDeleteNow', guildId)
-              ]);
-              const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder()
-                  .setCustomId(`story_thread_delete_now_${activeTurn.thread_id}`)
-                  .setLabel(btnDeleteLabel)
-                  .setStyle(ButtonStyle.Danger)
-              );
-              await turnThread.send({ content: scheduleMsg.replace('[relative_timestamp]', relativeTs), components: [row] });
-              await connection.execute(
-                `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-                ['threadDelete', JSON.stringify({ threadId: activeTurn.thread_id, guildId, turnId: activeTurn.turn_id }), deleteAt]
-              );
-              log(`handleCloseConfirm: active turn thread ${activeTurn.thread_id} has writer content — scheduled delete`, { show: true, guildName: interaction?.guild?.name });
-            } else {
-              await deleteThreadAndAnnouncement(turnThread);
-            }
-          }
+          if (turnThread) await deleteThreadAndAnnouncement(turnThread);
         } catch (err) {
-          log(`Could not handle turn thread ${activeTurn.thread_id} on close: ${err}`, { show: true, guildName: interaction?.guild?.name });
+          log(`Could not delete turn thread ${activeTurn.thread_id}: ${err}`, { show: true, guildName: interaction?.guild?.name });
         }
       }
     }
