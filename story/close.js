@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
-import { deleteThreadAndAnnouncement } from './_turn.js';
+import { endTurnThread } from './_turn.js';
 import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
 
@@ -85,7 +85,7 @@ export async function handleCloseConfirm(connection, interaction) {
 
     // End active turn if exists, delete its thread in normal mode
     const [activeTurnRows] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id FROM turn t
+      `SELECT t.turn_id, t.thread_id, sw.discord_user_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND t.turn_status = 1
        ORDER BY t.started_at DESC LIMIT 1`,
@@ -97,13 +97,8 @@ export async function handleCloseConfirm(connection, interaction) {
         `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
         [activeTurn.turn_id]
       );
-      if (story.mode !== 1 && activeTurn.thread_id) {
-        try {
-          const turnThread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (turnThread) await deleteThreadAndAnnouncement(turnThread);
-        } catch (err) {
-          log(`Could not delete turn thread ${activeTurn.thread_id}: ${err}`, { show: true, guildName: interaction?.guild?.name });
-        }
+      if (story.mode !== 1) {
+        await endTurnThread(connection, interaction.guild, activeTurn.thread_id, activeTurn.discord_user_id, guildId);
       }
     }
 

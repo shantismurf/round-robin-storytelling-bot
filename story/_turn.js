@@ -307,6 +307,47 @@ export async function deleteThreadAndAnnouncement(thread) {
 }
 
 /**
+ * endTurnThread — handles turn thread disposal after a turn ends by any means
+ * (skip, timeout, close). Checks for writer-authored content and either
+ * schedules a 24h deletion with a Delete Now button, or deletes immediately.
+ * Safe to call with a null/undefined threadId — returns early if no thread.
+ */
+export async function endTurnThread(connection, guild, threadId, writerDiscordUserId, guildId) {
+  if (!threadId) return;
+  try {
+    const thread = await guild.channels.fetch(threadId).catch(() => null);
+    if (!thread) return;
+    const messages = await thread.messages.fetch({ limit: 50 });
+    const hasContent = messages.some(m => !m.author.bot && m.author.id === String(writerDiscordUserId));
+    if (hasContent) {
+      const deleteAt = new Date(Date.now() + 24 * 60 * 60 * 1000);
+      const relativeTs = `<t:${Math.floor(deleteAt.getTime() / 1000)}:R>`;
+      const [scheduleMsg, btnDeleteLabel] = await Promise.all([
+        getConfigValue(connection, 'txtThreadScheduledDelete', guildId),
+        getConfigValue(connection, 'btnDeleteNow', guildId)
+      ]);
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_thread_delete_now_${threadId}`)
+          .setLabel(btnDeleteLabel)
+          .setStyle(ButtonStyle.Danger)
+      );
+      await thread.send({ content: scheduleMsg.replace('[relative_timestamp]', relativeTs), components: [row] });
+      await connection.execute(
+        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
+        ['threadDelete', JSON.stringify({ threadId, guildId }), deleteAt]
+      );
+      log(`endTurnThread: thread ${threadId} has draft content — scheduled delete at ${deleteAt.toISOString()}`, { show: true, guildName: guild?.name });
+    } else {
+      await deleteThreadAndAnnouncement(thread);
+      log(`endTurnThread: thread ${threadId} empty — deleted immediately`, { show: false, guildName: guild?.name });
+    }
+  } catch (err) {
+    log(`endTurnThread failed for thread ${threadId}: ${err}`, { show: true, guildName: guild?.name });
+  }
+}
+
+/**
  * skipActiveTurn — ends a turn as a skip, cancels its pending jobs, and deletes its thread.
  * Shared by handleSkip and handleReassign so the skip logic lives in one place.
  */

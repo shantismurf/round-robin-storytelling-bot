@@ -202,14 +202,14 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
       return;
     }
     const turn = turnInfo[0];
-    log(`doFinalizeEntry: turn ${turn.turn_id}, thread ${turn.thread_id}`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: turn ${turn.turn_id}, thread ${turn.thread_id}`, { show: false, guildName: interaction?.guild?.name });
 
     const thread = await interaction.guild.channels.fetch(turn.thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
     const userMessages = messages
       .filter(msg => msg.author.id === String(writerId))
       .sort((a, b) => a.createdTimestamp - b.createdTimestamp);
-    log(`doFinalizeEntry: ${userMessages.size} messages from writer ${writerId} fetched`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: ${userMessages.size} messages from writer ${writerId} fetched`, { show: false, guildName: interaction?.guild?.name });
 
     if (userMessages.size === 0) {
       log(`doFinalizeEntry: no messages found, aborting`, { show: true, guildName: interaction?.guild?.name });
@@ -263,7 +263,7 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
        WHERE s.story_id = ?`,
       [writerId, storyId]
     );
-    log(`doFinalizeEntry: story info fetched — show_authors=${storyInfo[0]?.show_authors}, story_thread=${storyInfo[0]?.story_thread_id}`, { show: true, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: story info fetched — show_authors=${storyInfo[0]?.show_authors}, story_thread=${storyInfo[0]?.story_thread_id}`, { show: false, guildName: interaction?.guild?.name });
     const { show_authors, story_thread_id, discord_display_name } = storyInfo[0];
 
     log(`doFinalizeEntry: beginning DB transaction — turn ${turn.turn_id}`, { show: false, guildName: interaction?.guild?.name });
