@@ -79,7 +79,7 @@ export async function CreateStory(connection, interaction, storyInput) {
       `INSERT INTO story (guild_id, guild_story_id, title, story_status, mode, turn_length_hours,
        reminder_timing, story_turn_privacy, show_authors, story_delay_hours, story_delay_users, story_order_type, max_writers,
        rating, warnings, main_pairing, other_relationships, characters, dynamic, tags)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         guild_id,
         nextGuildStoryId,

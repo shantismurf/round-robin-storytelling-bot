@@ -118,16 +118,14 @@ export async function generateRoundupStats(connection, guildId) {
 
 export async function buildRoundupEmbed(connection, client, guildId, stats) {
   const cfg = await getConfigValue(connection, [
-    'cfgWeeklyRoundupColor', 'cfgWeeklyRoundupThumbnail', 'txtWeeklyRoundupTitle'
+    'cfgWeeklyRoundupColor', 'txtWeeklyRoundupTitle'
   ], guildId);
 
   const colorHex = (cfg.cfgWeeklyRoundupColor && cfg.cfgWeeklyRoundupColor !== 'cfgWeeklyRoundupColor')
     ? cfg.cfgWeeklyRoundupColor : '#57F287';
   const color = parseInt(colorHex.replace('#', ''), 16);
 
-  const thumbnailUrl = (cfg.cfgWeeklyRoundupThumbnail && cfg.cfgWeeklyRoundupThumbnail !== 'cfgWeeklyRoundupThumbnail')
-    ? cfg.cfgWeeklyRoundupThumbnail
-    : client.user.displayAvatarURL();
+  const thumbnailUrl = client.user.displayAvatarURL();
 
   const title = (cfg.txtWeeklyRoundupTitle && cfg.txtWeeklyRoundupTitle !== 'txtWeeklyRoundupTitle')
     ? cfg.txtWeeklyRoundupTitle : '📖 Weekly Story Roundup';
@@ -205,7 +203,7 @@ export async function scheduleNextRoundup(connection, guildId) {
 export async function cancelPendingRoundupJobs(connection, guildId) {
   await connection.execute(
     `UPDATE job SET job_status = 3
-     WHERE job_type = 'weeklyRoundup' AND job_status IN (0, 2)
+     WHERE job_type = 'weeklyRoundup' AND job_status IN (0, 1, 2)
      AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
     [String(guildId)]
   );
@@ -213,6 +211,7 @@ export async function cancelPendingRoundupJobs(connection, guildId) {
 
 export async function handleWeeklyRoundup(connection, client, payload) {
   const { guildId, runAt } = payload;
+  log(`handleWeeklyRoundup: entry — guild ${guildId} runAt=${runAt ?? 'now'}`, { show: true });
 
   // Use job_log as the authoritative dedup record. INSERT IGNORE means only the first
   // job to reach this point for a given (type, guild, window) will proceed — any
@@ -225,13 +224,16 @@ export async function handleWeeklyRoundup(connection, client, payload) {
     [String(guildId), windowKey, scheduledAt]
   );
   if (logResult.affectedRows === 0) {
-    log(`weeklyRoundup for guild ${guildId} window ${windowKey} already logged — skipping duplicate`, { show: true });
+    log(`handleWeeklyRoundup: duplicate window ${windowKey} — skipping and rescheduling for guild ${guildId}`, { show: true });
     await scheduleNextRoundup(connection, guildId);
     return;
   }
 
   const enabled = await getConfigValue(connection, 'cfgWeeklyRoundupEnabled', guildId);
-  if (enabled !== '1') return;
+  if (enabled !== '1') {
+    log(`handleWeeklyRoundup: roundup disabled for guild ${guildId} — skipping`, { show: true });
+    return;
+  }
 
   const [channelIdRaw, feedChannelIdRaw] = await Promise.all([
     getConfigValue(connection, 'cfgWeeklyRoundupChannelId', guildId),

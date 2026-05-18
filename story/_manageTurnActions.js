@@ -208,16 +208,17 @@ export async function handleTurnActionConfirm(connection, interaction) {
   try {
     if (action === 'skip') {
       const { activeTurn } = pending;
-      log(`handleTurnActionConfirm: executing skip — turnId=${activeTurn.turn_id}`, { show: false, guildName: interaction?.guild?.name });
+      log(`handleTurnActionConfirm: skip confirmed by ${interaction.user.username} — turnId=${activeTurn.turn_id} writer="${activeTurn.discord_display_name}" story=${storyId}`, { show: true, guildName: interaction?.guild?.name });
       await skipActiveTurn(connection, interaction.guild, activeTurn.turn_id, activeTurn.thread_id);
       const nextWriterId = await PickNextWriter(connection, storyId);
       if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
       await logAdminAction(connection, adminId, 'skip', storyId);
+      log(`handleTurnActionConfirm: skip complete — story ${storyId} nextWriterId=${nextWriterId ?? 'none'}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminSkipSuccess', guildId), components: [] });
 
     } else if (action === 'reassign') {
       const { activeTurn, prevWriter } = pending;
-      log(`handleTurnActionConfirm: executing reassign — prevWriterId=${prevWriter.story_writer_id}`, { show: false, guildName: interaction?.guild?.name });
+      log(`handleTurnActionConfirm: reassign confirmed by ${interaction.user.username} — story ${storyId} prevWriter="${prevWriter.discord_display_name}" (${prevWriter.story_writer_id}) currentWriter="${activeTurn.current_writer_name}"`, { show: true, guildName: interaction?.guild?.name });
       await skipActiveTurn(connection, interaction.guild, activeTurn.turn_id, activeTurn.thread_id);
       await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [prevWriter.story_writer_id, storyId]);
       const nextWriterId = await PickNextWriter(connection, storyId);
@@ -225,6 +226,7 @@ export async function handleTurnActionConfirm(connection, interaction) {
       // Queue the original current writer to go after the reassigned turn
       await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [activeTurn.story_writer_id ?? null, storyId]);
       await logAdminAction(connection, adminId, 'reassign', storyId);
+      log(`handleTurnActionConfirm: reassign complete — story ${storyId} nextWriterId=${nextWriterId ?? 'none'} queued=${activeTurn.story_writer_id ?? 'none'}`, { show: true, guildName: interaction?.guild?.name });
       const msg = replaceTemplateVariables(
         await getConfigValue(connection, 'txtAdminReassignSuccess', guildId),
         { prev_writer: prevWriter.discord_display_name, current_writer: activeTurn.current_writer_name }
@@ -277,7 +279,7 @@ export async function handleTurnActionSelectMenu(connection, interaction) {
       );
 
       if (activeTurnRows.length === 0) {
-        log(`handleTurnActionSelectMenu: next — no active turn, starting immediately`, { show: false, guildName: interaction?.guild?.name });
+        log(`handleTurnActionSelectMenu: next — no active turn, starting immediately for "${selectedWriter.discord_display_name}" story=${storyId}`, { show: true, guildName: interaction?.guild?.name });
         await connection.execute(`UPDATE story SET next_writer_id = NULL WHERE story_id = ?`, [storyId]);
         await NextTurn(connection, interaction, parseInt(selectedWriterId));
         await logAdminAction(connection, adminId, 'next', storyId, selectedWriter.discord_user_id);
@@ -292,7 +294,7 @@ export async function handleTurnActionSelectMenu(connection, interaction) {
         return;
       }
 
-      log(`handleTurnActionSelectMenu: next — setting next_writer_id=${selectedWriterId}`, { show: false, guildName: interaction?.guild?.name });
+      log(`handleTurnActionSelectMenu: next — queuing "${selectedWriter.discord_display_name}" as next writer for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
       await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [selectedWriterId, storyId]);
       await logAdminAction(connection, adminId, 'next', storyId, selectedWriter.discord_user_id);
       pendingTurnActionData.delete(adminId);

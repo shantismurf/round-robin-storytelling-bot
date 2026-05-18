@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
 import { StoryBot } from './storybot.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
-import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log } from './utilities.js';
+import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient } from './utilities.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
@@ -101,6 +101,10 @@ async function main() {
     log(`Discord client ready as ${client.user.tag}`, { show: true });
     const guildList = client.guilds.cache.map(g => `  • ${g.name} (${g.id})`).join('\n');
     log(`Installed on ${client.guilds.cache.size} server(s):\n${guildList}`, { show: true });
+    const hubLogChannelId = await getConfigValue(connection, 'cfgHubLogChannelId');
+    setHubLogClient(client, hubLogChannelId);
+    const { version } = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
+    log(`✅ Bot online — v${version} on ${client.guilds.cache.size} server(s)`, { show: true, hub: true });
     await bot.start();
     await loadCommands('./commands');
     startJobRunner(connection, client);

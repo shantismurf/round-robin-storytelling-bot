@@ -73,7 +73,7 @@ async function processJob(connection, client, job) {
       log(`Job ${job.job_id} scheduled for retry at ${retryAt.toISOString()} (attempt ${attemptNumber}/${JOB_MAX_ATTEMPTS})`, { show: true });
     } else {
       await connection.execute(`UPDATE job SET job_status = 2 WHERE job_id = ?`, [job.job_id]);
-      log(`Job ${job.job_id} permanently failed after ${attemptNumber} attempts`, { show: true });
+      log(`⚠️ Job ${job.job_id} (${job.job_type}) permanently failed after ${attemptNumber} attempts: ${err}`, { show: true });
     }
   }
 }

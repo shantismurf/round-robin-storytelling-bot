@@ -94,10 +94,12 @@ node index.js
 Every time index.js is run, the bot connects to the database and automatically:
 1. Creates or updates the database schema (changes applied via migration SQL scripts in \db\migrations)
 2. Loads or updates system configuration values (necessary IDs and all user-facing text) from \db\config_files
-3. Attempts to create FAQ posts from config_help.sql, posted in a forum channel on the hub server (cfgHubServerID and cfgHubFaqChannelID).
+3. Attempts to create FAQ posts from config_help.sql, posted in a forum channel on the hub server (cfgHubServerId and cfgHubFaqChannelId).
 4. Registers slash commands with Discord (instantly for test environment, globally for production)
 5. Starts the job runner process for ongoing turn management and weekly posts
 6. Refreshes status messages on all active stories
+
+**Hub log channel:** The bot posts new guild registrations and permanent job failures to the hub server's `#logs` channel (`cfgHubLogChannelId` in `config_system.sql`). To change the target channel, update that config value and restart.
 
 No manual entry to the database is required for ongoing maintenance. It can all be handled by index.js. 
 

@@ -127,14 +127,46 @@ export function sanitizeModalInput(input, maxLength = 1024, multiline = false) {
 let _testMode = false;
 export function setTestMode(value) { _testMode = !!value; }
 
+let _hubLogClient = null;
+let _hubLogChannelId = null;
+
+export function setHubLogClient(client, channelId) {
+  _hubLogClient = client;
+  _hubLogChannelId = channelId;
+}
+
+const HUB_LOG_PATTERNS = [
+  'failed', 'error', 'Error', 'FAILED',
+  'Config key not found', 'Config lookup failed',
+  'not configured', 'Unhandled interaction', 'Unknown job type',
+  'Setup required: blocked',
+];
+
+function shouldPostToHub(message) {
+  if (typeof message !== 'string') return false;
+  return HUB_LOG_PATTERNS.some(p => message.includes(p));
+}
+
+function postToHubChannel(message) {
+  if (!_hubLogClient || !_hubLogChannelId) return;
+  const text = typeof message === 'string' ? message : String(message);
+  _hubLogClient.channels.fetch(_hubLogChannelId)
+    .then(channel => channel.send(text.slice(0, 2000)))
+    .catch(() => {});
+}
+
 /**
  * Unified Dynamic Logger
  * Detects content type and renders strings, tables, or deep objects.
- * Usage: 
- *   log("Simple message"); 
+ * Usage:
+ *   log("Simple message");
+ *   log("New guild registered", { show: true, hub: true });
  *   log(["Label", dataArray, { detail: 'obj' }], { show: true });
+ *
+ * Hub log: fires automatically when show:true and the message matches a known
+ * error/problem pattern, or when hub:true is passed explicitly.
  */
-export function log(content, { show = false, guildName = null } = {}) {
+export function log(content, { show = false, guildName = null, hub = false } = {}) {
   if (!_testMode && !show) return;
 
   const guildTag = guildName ? ` (${guildName})` : '';
@@ -143,18 +175,15 @@ export function log(content, { show = false, guildName = null } = {}) {
   // Helper to handle specific data type rendering
   const renderItem = (item) => {
     if (Array.isArray(item)) {
-      // Your logic: Filter columns to only show keys with actual values
-      const activeKeys = [...new Set(item.flatMap(obj => 
-        Object.keys(obj || {}).filter(key => 
+      const activeKeys = [...new Set(item.flatMap(obj =>
+        Object.keys(obj || {}).filter(key =>
           obj[key] !== null && obj[key] !== undefined && obj[key] !== ''
         )
       ))];
       console.table(item, activeKeys);
     } else if (typeof item === 'object' && item !== null) {
-      // Use console.dir for deep object inspection with colors
       console.dir(item, { depth: null, colors: true });
     } else {
-      // Plain text/labels
       process.stdout.write(String(item) + '\n');
     }
   };
@@ -164,9 +193,14 @@ export function log(content, { show = false, guildName = null } = {}) {
     console.log(timestamp);
     content.forEach(renderItem);
   } else {
-    // Standard string logging or single-item logging
     process.stdout.write(timestamp);
     renderItem(content);
+  }
+
+  // Post to hub log channel if explicitly flagged or message matches error patterns
+  if (show && (hub || shouldPostToHub(content))) {
+    const guildPrefix = guildName ? `(${guildName}) ` : '';
+    postToHubChannel(`${guildPrefix}${typeof content === 'string' ? content : '[non-string log]'}`);
   }
 }
 

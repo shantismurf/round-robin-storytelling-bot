@@ -149,6 +149,7 @@ async function handleSetup(connection, interaction) {
     'txtSetupRoundupDayInvalid', 'txtSetupRoundupHourInvalid',
     'txtNotSet', 'txtOff',
     'txtSetupAgeRestrictNote', 'txtSetupNoMediaNote', 'txtSetupNoRoleNote', 'txtSetupRoundupDisabledNote',
+    'txtSetupSupportInvite',
   ], guildId);
 
   // Load current guild-specific config values without falling back to guild_id=1
@@ -555,13 +556,13 @@ async function handleSetupSave(connection, interaction) {
     saved.push('', ...permWarnings, '', fixMsg);
   }
 
+  saved.push('', state.cfg.txtSetupSupportInvite);
+
   pendingSetupData.delete(interaction.user.id);
   log(`handleSetupSave: complete for guild ${guildId} by ${interaction.user.tag}`, { show: true, guildName: interaction.guild.name });
 
   if (state.isFirstSetup) {
-    interaction.client.users.fetch('426071848342781963').then(owner =>
-      owner.send(`🆕 New server setup: **${interaction.guild.name}** (${guildId}) by ${interaction.user.tag}`)
-    ).catch(err => log(`handleSetupSave: owner DM failed: ${err}`, { show: true, guildName: interaction.guild.name }));
+    log(`🆕 New server setup: **${interaction.guild.name}** (${guildId}) by ${interaction.user.tag}`, { show: true, hub: true });
   }
 
   await interaction.editReply({ content: saved.join('\n'), embeds: [], components: [] });

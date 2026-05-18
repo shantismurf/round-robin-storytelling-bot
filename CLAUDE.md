@@ -48,6 +48,13 @@ Implement two-tier high-resolution coverage using `log(content, { show, guildNam
   - **Bundles:** Pass `[label, data]` for a timestamped header followed by rendered data.
 - **Data in context:** Log entities active in the operation. If a readable name is already in scope, use `name (id)` format — otherwise ID alone is fine. Always include the triggering user and any story being acted on. Turns and threads need ID only. Guild is redundant if already passed as the log option.
 
+## Hub Log Channel
+`log()` automatically posts to the hub server's `#logs` channel (`cfgHubLogChannelId`) for any `show: true` message that either:
+- Contains a known problem pattern (`failed`, `error`, `Error`, `FAILED`, `Config key not found`, `Config lookup failed`, `not configured`, `Unhandled interaction`, `Unknown job type`, `Setup required: blocked`), OR
+- Is explicitly flagged with `hub: true` (use for events that don't match patterns but need admin attention, e.g. new guild registration)
+
+The hub log client is injected at startup via `setHubLogClient(client, channelId)` in `index.js`. Posts are fire-and-forget; if the channel is unreachable the error is swallowed silently (console log is always the authoritative record). All `show: false` logs go to console only — hub posts are limited to `show: true` messages.
+
 ## System Documentation
 Review and maintain roadmaps with every implementation.
 - **system_roadmap.md:** Maps exported functions, state maps, and event routing logic.

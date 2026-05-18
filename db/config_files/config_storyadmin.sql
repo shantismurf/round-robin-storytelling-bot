@@ -105,8 +105,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('cfgWeeklyRoundupDay', '1', 'en', 1),
 ('cfgWeeklyRoundupHour', '9', 'en', 1),
 ('cfgWeeklyRoundupChannelId', '', 'en', 1),
-('cfgWeeklyRoundupColor', '57F287', 'en', 1),
-('cfgWeeklyRoundupThumbnail', '', 'en', 1),
+('cfgWeeklyRoundupColor', '#57F287', 'en', 1),
 ('txtRoundupDay0', 'Sunday', 'en', 1),
 ('txtRoundupDay1', 'Monday', 'en', 1),
 ('txtRoundupDay2', 'Tuesday', 'en', 1),
@@ -223,6 +222,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtSetupNoMediaNote', 'ℹ️ No media channel set — images will not be processed.', 'en', 1),
 ('txtSetupNoRoleNote', 'ℹ️ No admin role set — only Discord Administrators can use admin commands.', 'en', 1),
 ('txtSetupRoundupDisabledNote', 'ℹ️ Weekly roundup disabled.', 'en', 1),
+('txtSetupSupportInvite', 'Need help? Join our support server: https://discord.gg/hKH9G5XFpJ', 'en', 1),
 -- Reopen story
 ('txtReopenStory', 'Reopen Story', 'en', 1),
 ('txtReopenSuccess', '✅ **[story_title]** has been reopened. A new turn has started and the story is [join_status] to new writers.', 'en', 1);
