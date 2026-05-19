@@ -1,5 +1,5 @@
 import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getConfigValue, getTurnNumber, log } from '../utilities.js';
+import { getConfigValue, getTurnNumber, log, replaceTemplateVariables, discordTimestamp } from '../utilities.js';
 import { resolveFeedChannelId } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
@@ -408,11 +408,27 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
   const linkToUse = linkToThreadId || writer.story_thread_id;
   const threadUrl = `https://discord.com/channels/${guild_id}/${linkToUse}`;
   const modeKey = writer.mode === 1 ? 'Quick' : writer.mode === 2 ? 'Slow' : 'Normal';
+  const isSlowMode = writer.mode === 2;
+
+  const tokenMap = {
+    turn_thread_link: threadUrl,
+    story_title: writer.title,
+  };
+
+  if (!isSlowMode) {
+    const turnEndMs = Date.now() + (writer.turn_length_hours * 60 * 60 * 1000);
+    tokenMap.relative_end_time = discordTimestamp(turnEndMs, 'R');
+  }
+
+  if (writer.reminder_timing > 0) {
+    const reminderMs = isSlowMode
+      ? writer.reminder_timing * 60 * 60 * 1000
+      : writer.turn_length_hours * (writer.reminder_timing / 100) * 60 * 60 * 1000;
+    tokenMap.relative_reminder_time = discordTimestamp(Date.now() + reminderMs, 'R');
+  }
 
   function applyTokens(text) {
-    return text
-      .replace(/\[turn_thread_link\]/g, threadUrl)
-      .replace(/\[story_title\]/g, writer.title);
+    return replaceTemplateVariables(text, tokenMap);
   }
 
   if (writer.notification_prefs === 'mention') {

@@ -2,6 +2,7 @@
 ## Developer Notes
 - Self-taught with professional DB experience; prefers plain language and context over jargon.
 - Regularly ask the user for context. If the root cause is unclear after 1 minute, stop and ask. Do not chase assumptions.
+- Keep the user informed with regular comments if a process is going on for more than 30 seconds with no response.
 - All user-facing text must be displayed for and approved by the user.
 
 ## System Information
@@ -32,7 +33,8 @@
 - **Roadmap-Driven:** Check `config_roadmap.md` before creating keys. Update the roadmap as needed.
 - **Naming Convention:** `[type][Location][Purpose][Name]` (e.g., `btnStoryAddPanelCreate`).
   - `lbl`: Labels | `txt`: Content/Titles | `btn`: Buttons | `cfg`: System values.
-- use `utilities.js\replaceTemplateVariables(template, keyValueMap)` to add values to config text
+- **Token Substitution:** Always use `replaceTemplateVariables(template, keyValueMap)` — never inline `.replace()` on config strings. Wrap optional text in `{?text with [token]?}` markers (no spaces inside markers); the block is stripped if any `[token]` inside it is missing from the map.
+- **Discord Timestamps:** Always use Discord rendered timestamps for user-facing text, when they will render properly, using the `discordTimestamp (input, form)` utility.
 
 ## Logging Rules
 Implement two-tier high-resolution coverage using `log(content, { show, guildName })`.
@@ -47,13 +49,7 @@ Implement two-tier high-resolution coverage using `log(content, { show, guildNam
   - **Objects:** Auto-renders `console.dir` with infinite depth and colors.
   - **Bundles:** Pass `[label, data]` for a timestamped header followed by rendered data.
 - **Data in context:** Log entities active in the operation. If a readable name is already in scope, use `name (id)` format — otherwise ID alone is fine. Always include the triggering user and any story being acted on. Turns and threads need ID only. Guild is redundant if already passed as the log option.
-
-## Hub Log Channel
-`log()` automatically posts to the hub server's `#logs` channel (`cfgHubLogChannelId`) for any `show: true` message that either:
-- Contains a known problem pattern (`failed`, `error`, `Error`, `FAILED`, `Config key not found`, `Config lookup failed`, `not configured`, `Unhandled interaction`, `Unknown job type`, `Setup required: blocked`), OR
-- Is explicitly flagged with `hub: true` (use for events that don't match patterns but need admin attention, e.g. new guild registration)
-
-The hub log client is injected at startup via `setHubLogClient(client, channelId)` in `index.js`. Posts are fire-and-forget; if the channel is unreachable the error is swallowed silently (console log is always the authoritative record). All `show: false` logs go to console only — hub posts are limited to `show: true` messages.
+- **Hub Log Channel** some logs are duplicated to the hub server's `#logs` channel for instant admin notification (`cfgHubLogChannelId`): Any `show: true` message that either contains a clear problem pattern (e.g. 'error', 'failed'. 'not found', etc), OR is explicitly flagged with `hub: true` (e.g. new guild registration)
 
 ## System Documentation
 Review and maintain roadmaps with every implementation.

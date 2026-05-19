@@ -2,6 +2,8 @@
 
 - Roundup formatting
 - Help text review
+- Code review: Slow mode additions and End Turn Thread Preservation additions (project standard compliance)
+- Code review: inline `.replace()` calls on config strings (replaceTemplateVariables compliance)
 
 ---
 

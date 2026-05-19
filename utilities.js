@@ -400,6 +400,9 @@ export function replaceTemplateVariables(template, keyValueMap) {
   for (const [key, value] of Object.entries(keyValueMap)) {
     result = result.replaceAll(`[${key}]`, value);
   }
+  result = result.replace(/\{\?([^?]*)\?\}/g, (_, inner) => {
+    return /\[[^\]]+\]/.test(inner) ? '' : inner;
+  });
   return result;
 }
 

@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getConfigValue, log } from './utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, discordTimestamp } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread } from './story/_turn.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
@@ -202,7 +202,6 @@ async function handleTurnReminder(connection, client, payload) {
     [turnId]
   );
   if (turnRows.length === 0) return;
-  const unixTs = Math.floor(new Date(turnRows[0].turn_ends_at).getTime() / 1000);
 
   // Verify story is still active
   const [storyRows] = await connection.execute(
@@ -232,16 +231,19 @@ async function handleTurnReminder(connection, client, payload) {
   const threadUrl = `https://discord.com/channels/${guildId}/${linkThreadId}`;
   const modeKey = mode === 1 ? 'Quick' : mode === 2 ? 'Slow' : 'Normal';
 
+  const reminderTokenMap = {
+    story_title: story.title,
+    turn_end_full: discordTimestamp(new Date(turnRows[0].turn_ends_at).getTime(), 'F'),
+    turn_end_relative: discordTimestamp(new Date(turnRows[0].turn_ends_at).getTime(), 'R'),
+    turn_thread_link: threadUrl,
+  };
+
   function applyReminderTokens(text) {
-    return text
-      .replace(/\[story_title\]/g, story.title)
-      .replace(/\[turn_end_full\]/g, `<t:${unixTs}:F>`)
-      .replace(/\[turn_end_relative\]/g, `<t:${unixTs}:R>`)
-      .replace(/\[turn_thread_link\]/g, threadUrl);
+    return replaceTemplateVariables(text, reminderTokenMap);
   }
 
   if (notificationPrefs === 'mention') {
-    await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyReminderTokens);
+    await sendMentionReminder(connection, ctx, guildId, writerUserId, modeKey, applyReminderTokens);
   } else {
     try {
       const user = await client.users.fetch(writerUserId);
@@ -250,7 +252,7 @@ async function handleTurnReminder(connection, client, payload) {
       await user.send(applyReminderTokens(txt));
     } catch (dmErr) {
       log(`handleTurnReminder DM failed for user ${writerUserId}, falling back to mention: ${dmErr}`, { show: true, guildName: ctx.guild?.name });
-      await sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyReminderTokens);
+      await sendMentionReminder(connection, ctx, guildId, writerUserId, modeKey, applyReminderTokens);
     }
   }
 
@@ -295,17 +297,17 @@ async function handleSlowTurnReminder(connection, client, payload) {
   const linkThreadId = turnThreadId || story.story_thread_id;
   const threadUrl = `https://discord.com/channels/${guildId}/${linkThreadId}`;
 
+  const slowTokenMap = {
+    story_title: story.title,
+    turn_thread_link: threadUrl,
+  };
+
   function applySlowTokens(text) {
-    return text
-      .replace(/\[story_title\]/g, story.title)
-      .replace(/\[turn_thread_link\]/g, threadUrl);
+    return replaceTemplateVariables(text, slowTokenMap);
   }
 
   if (notificationPrefs === 'mention') {
-    const txt = await getConfigValue(connection, 'txtMentionTurnReminderSlow', guildId);
-    const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
-    const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
-    await channel.send(`<@${writerUserId}> ${applySlowTokens(txt)}`);
+    await sendMentionReminder(connection, ctx, guildId, writerUserId, 'Slow', applySlowTokens);
   } else {
     try {
       const user = await client.users.fetch(writerUserId);
@@ -313,10 +315,7 @@ async function handleSlowTurnReminder(connection, client, payload) {
       await user.send(applySlowTokens(txt));
     } catch (dmErr) {
       log(`handleSlowTurnReminder DM failed for user ${writerUserId} turn ${turnId}, falling back to mention: ${dmErr}`, { show: true, guildName: ctx.guild?.name });
-      const txt = await getConfigValue(connection, 'txtMentionTurnReminderSlow', guildId);
-      const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
-      const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
-      await channel.send(`<@${writerUserId}> ${applySlowTokens(txt)}`);
+      await sendMentionReminder(connection, ctx, guildId, writerUserId, 'Slow', applySlowTokens);
     }
   }
 
@@ -330,7 +329,7 @@ async function handleSlowTurnReminder(connection, client, payload) {
   log(`Slow reminder sent for turn ${turnId} story ${storyId} (${story.title}) writer ${writerUserId}; next at ${nextRun.toISOString()}`, { show: true, guildName: ctx.guild?.name });
 }
 
-async function sendMentionReminder(connection, ctx, guildId, story, writerUserId, unixTs, threadUrl, modeKey, applyTokens) {
+async function sendMentionReminder(connection, ctx, guildId, writerUserId, modeKey, applyTokens) {
   const mentionKey = `txtMentionTurnReminder${modeKey}`;
   const txt = await getConfigValue(connection, mentionKey, guildId);
   const storyFeedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
