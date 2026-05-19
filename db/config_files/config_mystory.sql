@@ -39,11 +39,29 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnMyPassConfirm', 'Yes, Pass My Turn', 'en', 1),
 ('btnMyPauseConfirm', 'Yes, Pause', 'en', 1),
 ('lblMyNotifications', 'DM Notifications', 'en', 1),
--- Silo 4: list embed stat strings
-('txtMyListJoined', 'Joined [date]', 'en', 1),
-('txtMyListMyStats', 'Your turns: [turn_count] · ~[word_count] words', 'en', 1),
-('txtMyListNoTurns', 'No turns yet', 'en', 1),
-('txtMyListStoryTotal', 'Story total: [turn_count] turn(s)', 'en', 1),
+-- Silo 4: list embed — view toggle buttons (no emojis per style standard)
+('btnMyListViewActive',   'Active',   'en', 1),
+('btnMyListViewPaused',   'Paused',   'en', 1),
+('btnMyListViewClosed',   'Closed',   'en', 1),
+('btnMyListViewJoinable', 'Joinable', 'en', 1),
+-- Silo 4: list embed — per-view titles
+('txtMyListTitleActive',   '📚 Active Stories (Page [page]/[total])',   'en', 1),
+('txtMyListTitlePaused',   '⏸️ Paused & Delayed (Page [page]/[total])', 'en', 1),
+('txtMyListTitleClosed',   '🏁 Closed Stories (Page [page]/[total])',   'en', 1),
+('txtMyListTitleJoinable', '➕ Joinable Stories (Page [page]/[total])', 'en', 1),
+-- Silo 4: list embed — per-view empty states
+('txtMyListNoneActive',   'No active stories. Use `/story join` to find one!', 'en', 1),
+('txtMyListNonePaused',   'No paused or delayed stories.',                      'en', 1),
+('txtMyListNoneClosed',   'No closed story history yet.',                       'en', 1),
+('txtMyListNoneJoinable', 'No open stories to join right now.',                 'en', 1),
+-- Silo 4: list embed — turn status line (always shown)
+('txtMyListMyTurn',       'It''s your turn — ends in [deadline_relative] ([deadline_date])', 'en', 1),
+('txtMyListOthersTurn',   '[writer_name]''s turn — ends in [deadline_relative]',             'en', 1),
+('txtMyListNoActiveTurn', 'There is no active turn.',                                         'en', 1),
+-- Silo 4: list embed — stats line (always shown)
+('txtMyListStats',        'You''ve had [my_turns] turns out of [total_turns] and written [my_words] of the story''s [total_words] words.', 'en', 1),
+('txtMyListNoEntries',    'There are no entries for this story yet.',                                                                       'en', 1),
+-- Silo 4: list embed — retained keys
 ('txtMyListPausedSuffix', '⏸ You are paused', 'en', 1),
 -- Silo 4: catchup embed strings
 ('txtCatchupTurnHeader', 'Turn [turn_number] — [writer_name]', 'en', 1),

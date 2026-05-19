@@ -4,6 +4,20 @@
 - Help text review
 - Code review: Slow mode additions and End Turn Thread Preservation additions (project standard compliance)
 - Code review: inline `.replace()` calls on config strings (replaceTemplateVariables compliance)
+- Create `style_roadmap.md` and link from CLAUDE.md
+- `/story list` overhaul — see [docs/PLAN-story-list-overhaul.md](docs/PLAN-story-list-overhaul.md)
+
+---
+
+## Create style_roadmap.md
+
+Establish a project style standard document and reference it from CLAUDE.md. Should define at minimum:
+- **No emojis in buttons** — button labels are plain text only
+- **Button colors** — use Discord ButtonStyle semantically: Success=green (active/positive), Secondary=gray (neutral/paused), Danger=red (closed/ended), Primary=blurple (call to action/joinable). Disabled state always renders gray regardless of style.
+- **Mode icons** — 🟣 Quick · 🟢 Normal · 🔵 Slow (hardcoded UI chrome, not config strings)
+- **Status icons** — 🟢 Active · ⏸️ Paused · ⏳ Delayed · 🏁 Closed (for titles/headers only, not inline text)
+- **Emoji policy** — emojis permitted in embed titles, field names, and status headers; not in buttons or inline turn/stat text
+- Any other visual conventions that emerge from feature work
 
 ---
 

@@ -1,7 +1,7 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { log } from '../utilities.js';
 import { handleWriterHelp } from '../faq.js';
-import { handleList, handleListNavigation, handleCatchUp, handleCatchUpNavigation } from './_myStoryList.js';
+import { handleList, handleListNavigation, handleViewToggle, handleCatchUp, handleCatchUpNavigation } from './_myStoryList.js';
 import { handleMyStoryManage, handleMyStoryManageButton, handlePanelPassConfirm, handlePanelPauseConfirm, handlePanelLeaveConfirm, handlePanelActionCancel, handleMyStoryManageModal } from './_myStoryManage.js';
 
 const data = new SlashCommandBuilder()
@@ -57,7 +57,9 @@ async function execute(connection, interaction) {
 async function handleButtonInteraction(connection, interaction) {
   if (interaction.customId.startsWith('catchup_prev_') || interaction.customId.startsWith('catchup_next_')) {
     await handleCatchUpNavigation(connection, interaction);
-  } else if (interaction.customId.startsWith('mystory_list_prev_') || interaction.customId.startsWith('mystory_list_next_')) {
+  } else if (interaction.customId.startsWith('mystory_list_view_')) {
+    await handleViewToggle(connection, interaction);
+  } else if (interaction.customId.startsWith('mystory_list_')) {
     await handleListNavigation(connection, interaction);
   } else if (interaction.customId.startsWith('mystory_manage_leave_confirm_')) {
     await handlePanelLeaveConfirm(connection, interaction);
