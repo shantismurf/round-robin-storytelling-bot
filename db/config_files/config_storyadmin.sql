@@ -28,7 +28,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtSetupEmbedDescRoundupChannel', '-# Where the weekly activity summary is posted. Leave blank to disable.', 'en', 1),
 ('txtSetupEmbedDescRoundupDay', '-# Day of the week to post (0 = Sunday, 6 = Saturday).', 'en', 1),
 ('txtSetupEmbedDescRoundupHour', '-# Hour to post in UTC (0–23).', 'en', 1),
-('txtSetupModalSaveWarning', '``` === You Must Click Save Settings to Apply Changes! === ```', 'en', 1),
+('txtSetupModalSaveWarning', '## === You Must Click Save Settings to Apply Changes! ===', 'en', 1),
 ('txtSetupModalTitleFeed', 'Story Feed Channel', 'en', 1),
 ('txtSetupModalTitleMedia', 'Media/Image Channel', 'en', 1),
 ('txtSetupModalTitleRole', 'Admin Role', 'en', 1),
