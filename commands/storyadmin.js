@@ -97,8 +97,10 @@ function buildSetupPanel(state, cfg) {
       { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + (state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``), inline: false },
       { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + strVal(state.roundupDay),                        inline: true  },
       { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + strVal(state.roundupHour),                       inline: true  },
-      { name: '\u200b',                             value: cfg.txtSetupModalSaveWarning,                                                               inline: false }
-    );
+      { name: '\u200b',                             value: ,                                                               inline: false }
+    )
+.setDescription(cfg.txtSetupModalSaveWarning)
+.setFooter({text: cfg.txtSetupModalSaveWarning + ` ##`});
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('storyadmin_setup_feed').setLabel(cfg.btnSetupFeed).setStyle(ButtonStyle.Primary),
