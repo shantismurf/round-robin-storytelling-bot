@@ -79,13 +79,14 @@ export async function PickNextWriter(connection, storyId) {
       return eligible[Math.floor(Math.random() * eligible.length)].story_writer_id;
     }
 
-    // Cycle reset — scale how many recently-turned writers to exclude from the reset
-    // pool so the same writers don't dominate the start of each new cycle.
-    // excludeCount=1 at 3 writers means only the finalized writer is excluded: identical
-    // to previous behavior. The finalized writer is always most-recent so always lands
-    // in the excluded group; the safety filter below is a belt-and-suspenders guard.
+    // Cycle reset — exclude the most recently-turned writers from the reset pool so
+    // the same writers don't dominate the start of each new cycle. excludeCount scales
+    // at ~25% of group size (ceil(n * 0.25), minimum 1). At 1–4 writers this is 1,
+    // meaning only the finalized writer is excluded — identical to previous behavior.
+    // The finalized writer is always most-recent so always lands in the excluded group;
+    // the safety filter below is a belt-and-suspenders guard.
     const n = allWriters.length;
-    const excludeCount = n >= 10 ? 4 : n >= 6 ? 3 : n >= 4 ? 2 : 1;
+    const excludeCount = Math.max(1, Math.ceil(n * 0.25));
 
     const [recencyRows] = await connection.execute(
       `SELECT sw.story_writer_id, MAX(t.turn_id) AS last_turn_id
