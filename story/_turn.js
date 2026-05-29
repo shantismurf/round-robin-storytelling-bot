@@ -74,13 +74,42 @@ export async function PickNextWriter(connection, storyId) {
       w.story_writer_id !== currentWriterId && !usedIds.has(w.story_writer_id)
     );
 
-    // If everyone has gone this cycle, reset to all active writers except the current writer
-    const pool = eligible.length > 0
-      ? eligible
-      : allWriters.filter(w => w.story_writer_id !== currentWriterId);
+    // Within a normal cycle, pick randomly from eligible writers
+    if (eligible.length > 0) {
+      return eligible[Math.floor(Math.random() * eligible.length)].story_writer_id;
+    }
+
+    // Cycle reset — scale how many recently-turned writers to exclude from the reset
+    // pool so the same writers don't dominate the start of each new cycle.
+    // excludeCount=1 at 3 writers means only the finalized writer is excluded: identical
+    // to previous behavior. The finalized writer is always most-recent so always lands
+    // in the excluded group; the safety filter below is a belt-and-suspenders guard.
+    const n = allWriters.length;
+    const excludeCount = n >= 10 ? 4 : n >= 6 ? 3 : n >= 4 ? 2 : 1;
+
+    const [recencyRows] = await connection.execute(
+      `SELECT sw.story_writer_id, MAX(t.turn_id) AS last_turn_id
+       FROM story_writer sw
+       LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id
+       WHERE sw.story_id = ? AND sw.sw_status = 1
+       GROUP BY sw.story_writer_id`,
+      [storyId]
+    );
+
+    // Sort most-recent first; treat NULL (never gone) as 0 so new joiners always land in the pool
+    recencyRows.sort((a, b) => (b.last_turn_id ?? 0) - (a.last_turn_id ?? 0));
+
+    // Drop top excludeCount entries, then safety-filter the finalized writer
+    const fairPool = recencyRows
+      .slice(excludeCount)
+      .filter(r => r.story_writer_id !== currentWriterId);
+
+    // Edge-case fallback: if fairPool is empty use the single longest-waiting eligible writer
+    const pool = fairPool.length > 0
+      ? fairPool
+      : recencyRows.filter(r => r.story_writer_id !== currentWriterId).slice(-1);
 
     if (pool.length === 0) return currentWriterId;
-
     return pool[Math.floor(Math.random() * pool.length)].story_writer_id;
   }
 
