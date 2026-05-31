@@ -100,7 +100,7 @@ async function handleModalTest(interaction) {
         new ChannelSelectMenuBuilder()
           .setCustomId('testChannel')
           .addChannelTypes(ChannelType.GuildText)
-          .setMinValues(0)
+//          .setMinValues(0)
           .setMaxValues(1)
       )
   );
