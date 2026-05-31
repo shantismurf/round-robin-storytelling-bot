@@ -28,7 +28,7 @@
 - **Maintain Documentation:** Always sync roadmaps with code changes.
 
 ## Config & Localization Rules
-- **NO HARDCODED USER TEXT:** Every user-facing string must use `getConfigValue()`. Logs, numbers, emojis, symbols, and the unicode space character may be hard-coded.
+- **NO HARDCODED USER TEXT:** Every user-facing string must use `getConfigValue()`. Logs and the unicode space character may be hard-coded.
 - **Missing Config = Error:** Do not use `?? "Fallback"` defaults. Log a high-priority error.
 - **Roadmap-Driven:** Check `config_roadmap.md` before creating keys. Update the roadmap as needed.
 - **Naming Convention:** `[type][Location][Purpose][Name]` (e.g., `btnStoryAddPanelCreate`).

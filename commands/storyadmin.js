@@ -76,6 +76,78 @@ async function execute(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
+// [TEMP] /storyadmin modaltest — verify TextDisplay, LabelBuilder, ChannelSelect in modals
+// ---------------------------------------------------------------------------
+
+async function handleModalTest(interaction) {
+  log(`handleModalTest entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+  const modal = new ModalBuilder()
+    .setCustomId('storyadmin_modaltest_modal')
+    .setTitle('Modal Component Test');
+
+  modal.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent('## Test Heading\nThis text is from a TextDisplayBuilder. If you can read this with heading formatting, TextDisplay works in modals.')
+  );
+
+  modal.addLabelComponents(
+    new LabelBuilder()
+      .setLabel('Channel Select (pick any text channel)')
+      .setChannelSelectMenuComponent(
+        new ChannelSelectMenuBuilder()
+          .setCustomId('testChannel')
+          .addChannelTypes(ChannelType.GuildText)
+//          .setMinValues(0)
+          .setMaxValues(1)
+      )
+  );
+
+  modal.addLabelComponents(
+    new LabelBuilder()
+      .setLabel('Text Input (type anything)')
+      .setTextInputComponent(
+        new TextInputBuilder()
+          .setCustomId('testText')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setPlaceholder('optional text here')
+      )
+  );
+
+  await interaction.showModal(modal);
+}
+
+async function handleModalTestSubmit(interaction) {
+  log(`handleModalTestSubmit entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  let channelResult = '(none selected)';
+  let textResult = '(empty)';
+
+  try {
+    const channelField = interaction.fields.getField('testChannel');
+    log(`handleModalTestSubmit: channelField raw`, { show: false, guildName: interaction?.guild?.name });
+    log(channelField, { show: false, guildName: interaction?.guild?.name });
+    const channelId = channelField?.channels?.first()?.id ?? channelField?.values?.[0] ?? null;
+    if (channelId) channelResult = `<#${channelId}> (id: ${channelId})`;
+  } catch (err) {
+    channelResult = `ERROR reading channel: ${err.message}`;
+    log(`handleModalTestSubmit: channel read failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
+  }
+
+  try {
+    const raw = interaction.fields.getTextInputValue('testText');
+    if (raw) textResult = raw;
+  } catch (err) {
+    textResult = `ERROR reading text: ${err.message}`;
+    log(`handleModalTestSubmit: text read failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
+  }
+
+  await interaction.editReply({
+    content: `**Modal Test Results**\nChannel: ${channelResult}\nText: ${textResult}`
+  });
+}
+
+// ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
 // /storyadmin setup — embed control panel
 // ---------------------------------------------------------------------------
