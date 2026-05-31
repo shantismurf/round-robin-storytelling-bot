@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, LabelBuilder, ChannelSelectMenuBuilder, ChannelType } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
 import { syncFaqPosts, handleAdminHelp } from '../faq.js';
@@ -47,6 +47,10 @@ const data = new SlashCommandBuilder()
   .addSubcommand(s =>
     s.setName('faqsync')
       .setDescription('Re-sync the FAQ forum posts from current config values')
+  )
+  .addSubcommand(s =>
+    s.setName('modaltest')
+      .setDescription('[TEMP] Test channel select and TextDisplay in a modal')
   );
 
 async function execute(connection, interaction) {
@@ -59,8 +63,9 @@ async function execute(connection, interaction) {
   const guildId = interaction.guild.id;
   const subcommand = interaction.options.getSubcommand();
 
-  if (subcommand === 'help')  return await handleAdminHelp(connection, interaction, guildId);
-  if (subcommand === 'setup') return await handleSetup(connection, interaction);
+  if (subcommand === 'help')      return await handleAdminHelp(connection, interaction, guildId);
+  if (subcommand === 'setup')     return await handleSetup(connection, interaction);
+  if (subcommand === 'modaltest') return await handleModalTest(interaction);
 
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
@@ -72,6 +77,78 @@ async function execute(connection, interaction) {
   if (subcommand === 'user')         await handleManageUser(connection, interaction);
   else if (subcommand === 'delete')  await handleDelete(connection, interaction);
   else if (subcommand === 'faqsync') await handleFaqSync(connection, interaction);
+}
+
+// ---------------------------------------------------------------------------
+// [TEMP] /storyadmin modaltest — verify TextDisplay, LabelBuilder, ChannelSelect in modals
+// ---------------------------------------------------------------------------
+
+async function handleModalTest(interaction) {
+  log(`handleModalTest entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+  const modal = new ModalBuilder()
+    .setCustomId('storyadmin_modaltest_modal')
+    .setTitle('Modal Component Test');
+
+  modal.addTextDisplayComponents(
+    new TextDisplayBuilder().setContent('## Test Heading\nThis text is from a TextDisplayBuilder. If you can read this with heading formatting, TextDisplay works in modals.')
+  );
+
+  modal.addLabelComponents(
+    new LabelBuilder()
+      .setLabel('Channel Select (pick any text channel)')
+      .setChannelSelectMenuComponent(
+        new ChannelSelectMenuBuilder()
+          .setCustomId('testChannel')
+          .addChannelTypes(ChannelType.GuildText)
+          .setMinValues(0)
+          .setMaxValues(1)
+      )
+  );
+
+  modal.addLabelComponents(
+    new LabelBuilder()
+      .setLabel('Text Input (type anything)')
+      .setTextInputComponent(
+        new TextInputBuilder()
+          .setCustomId('testText')
+          .setStyle(TextInputStyle.Short)
+          .setRequired(false)
+          .setPlaceholder('optional text here')
+      )
+  );
+
+  await interaction.showModal(modal);
+}
+
+async function handleModalTestSubmit(interaction) {
+  log(`handleModalTestSubmit entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+
+  let channelResult = '(none selected)';
+  let textResult = '(empty)';
+
+  try {
+    const channelField = interaction.fields.getField('testChannel');
+    log(`handleModalTestSubmit: channelField raw`, { show: false, guildName: interaction?.guild?.name });
+    log(channelField, { show: false, guildName: interaction?.guild?.name });
+    const channelId = channelField?.channels?.first()?.id ?? channelField?.values?.[0] ?? null;
+    if (channelId) channelResult = `<#${channelId}> (id: ${channelId})`;
+  } catch (err) {
+    channelResult = `ERROR reading channel: ${err.message}`;
+    log(`handleModalTestSubmit: channel read failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
+  }
+
+  try {
+    const raw = interaction.fields.getTextInputValue('testText');
+    if (raw) textResult = raw;
+  } catch (err) {
+    textResult = `ERROR reading text: ${err.message}`;
+    log(`handleModalTestSubmit: text read failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
+  }
+
+  await interaction.editReply({
+    content: `**Modal Test Results**\nChannel: ${channelResult}\nText: ${textResult}`
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -739,6 +816,8 @@ async function handleModalSubmit(connection, interaction) {
     await handleSetupRoundupDayModal(connection, interaction);
   } else if (interaction.customId === 'storyadmin_setup_roundup_hour_modal') {
     await handleSetupRoundupHourModal(connection, interaction);
+  } else if (interaction.customId === 'storyadmin_modaltest_modal') {
+    await handleModalTestSubmit(interaction);
   } else if (interaction.customId.startsWith('storyadmin_mu_')) {
     await handleManageUserModalSubmit(connection, interaction);
   }
