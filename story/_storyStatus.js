@@ -283,7 +283,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       // Post creator tip immediately after the first status embed so it's always message #2
       const creatorTip = await getConfigValue(connection, 'txtStoryThreadCreatorTip', story.guild_id).catch(() => null);
       if (creatorTip) {
-        const tipMsg = creatorTip.replace('[story_id]', story.guild_story_id);
+        const tipMsg = replaceTemplateVariables(creatorTip, { story_id: story.guild_story_id });
         await storyThread.send(tipMsg).catch(err => log(`updateStoryStatusMessage: creator tip post failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: guild?.name }));
       }
     }

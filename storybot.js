@@ -5,7 +5,7 @@ import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement 
 import { resolveFeedChannelId, isRestricted } from './story/_metadata.js';
 import { checkStoryDelay } from './story/_delay.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity } from './story/_turn.js';
-import { updateStoryStatusMessage } from './story/_storyStatus.js';
+import { updateStoryStatusMessage, buildThreadTitle } from './story/_storyStatus.js';
 
 export { checkStoryDelay } from './story/_delay.js';
 export { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement, skipActiveTurn } from './story/_turn.js';
@@ -124,18 +124,12 @@ export async function CreateStory(connection, interaction, storyInput) {
       throw new Error('Story feed channel not found');
     }
 
-    // Get thread title template and replace variables
-    const threadTitleTemplate = await getConfigValue(connection, 'txtStoryThreadTitle', guild_id);
-    const statusText = storyStatus === 1
-      ? await getConfigValue(connection, 'txtActive', guild_id)
-      : storyStatus === 4
-        ? await getConfigValue(connection, 'txtDelayed', guild_id)
-        : await getConfigValue(connection, 'txtPaused', guild_id);
-
-    const threadTitle = threadTitleTemplate
-      .replace('[story_id]', guildStoryId)
-      .replace('[inputStoryTitle]', storyInput.storyTitle)
-      .replace('[story_status]', statusText);
+    const threadTitle = await buildThreadTitle(connection, {
+      guild_id,
+      guild_story_id: guildStoryId,
+      title: storyInput.storyTitle,
+      story_status: storyStatus
+    });
 
     const storyThread = await channel.threads.create({
       name: threadTitle,
@@ -174,12 +168,6 @@ export async function CreateStory(connection, interaction, storyInput) {
       updateStoryStatusMessage(connection, interaction.guild, storyId)
         .catch(err => log(`CreateStory: updateStoryStatusMessage failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
     }
-
-    // Post creator tip to story thread (fire-and-forget — lands after status embed and turn log)
-    getConfigValue(connection, 'txtStoryThreadCreatorTip', guild_id).then(template => {
-      const msg = template.replace('[story_id]', guildStoryId);
-      return postStoryThreadActivity(connection, interaction.guild, storyId, msg);
-    }).catch(err => log(`CreateStory: creator tip failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
 
     return {
       success: true,
