@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, splitAtParagraphs } from '../utilities.js';
 import { getStoriesPaginated } from '../story/list.js';
 import { ratingBadge } from '../story/_metadata.js';
 
@@ -437,26 +437,32 @@ export async function handleCatchUp(connection, interaction) {
 
     const pages = [];
     let currentTurn = null;
+    let currentWriterName = null;
     let currentEmbed = null;
     let currentText = '';
 
+    const flushCurrentTurn = () => {
+      if (!currentEmbed) return;
+      const chunks = splitAtParagraphs(currentText.trim());
+      for (const [i, chunk] of chunks.entries()) {
+        const e = i === 0 ? currentEmbed : new EmbedBuilder()
+          .setAuthor({ name: replaceTemplateVariables(catchupCfg.txtCatchupTurnHeader, { turn_number: currentTurn, writer_name: currentWriterName }) });
+        pages.push(e.setDescription(chunk));
+      }
+    };
+
     for (const entry of entries) {
       if (entry.turn_number !== currentTurn) {
-        if (currentEmbed) {
-          currentEmbed.setDescription(currentText.trim());
-          pages.push(currentEmbed);
-        }
+        flushCurrentTurn();
         currentTurn = entry.turn_number;
+        currentWriterName = entry.discord_display_name;
         currentText = '';
         currentEmbed = new EmbedBuilder()
           .setAuthor({ name: replaceTemplateVariables(catchupCfg.txtCatchupTurnHeader, { turn_number: entry.turn_number, writer_name: entry.discord_display_name }) });
       }
       currentText += entry.content + '\n\n';
     }
-    if (currentEmbed) {
-      currentEmbed.setDescription(currentText.trim());
-      pages.push(currentEmbed);
-    }
+    flushCurrentTurn();
 
     const totalPages = pages.length;
     const storyTitle = storyRows[0].title;
