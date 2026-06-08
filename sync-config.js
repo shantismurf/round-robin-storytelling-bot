@@ -56,6 +56,7 @@ export async function syncConfig(connection) {
       'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
       'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
       'cfgWeeklyRoundupEnabled', 'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
+      'cfgGuildRegisteredAt',
     ];
     const placeholders = setupOnlyKeys.map(() => '?').join(',');
     const [dbRows] = await connection.execute(
