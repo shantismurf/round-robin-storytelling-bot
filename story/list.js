@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, storyLastActivitySQL } from '../utilities.js';
 import { ratingBadge } from './_metadata.js';
 
 export async function handleListStories(connection, interaction) {
@@ -267,7 +267,7 @@ export async function getStoriesPaginated(connection, guildId, filter, page, ite
       LEFT JOIN story_writer sw ON s.story_id = sw.story_id AND sw.sw_status = 1
       ${whereClause}
       GROUP BY s.story_id
-      ORDER BY s.updated_at DESC
+      ORDER BY ${storyLastActivitySQL()} DESC
       LIMIT ? OFFSET ?
     `, [userId, ...params, itemsPerPage, offset]);
     log(`getStoriesPaginated - stories rows returned: ${stories.length}`, { show: false });

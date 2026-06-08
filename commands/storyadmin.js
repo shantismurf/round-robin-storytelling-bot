@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, LabelBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ChannelType } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
 import { syncFaqPosts, handleAdminHelp } from '../faq.js';
 import { deleteThreadAndAnnouncement } from '../story/_turn.js';
@@ -789,7 +789,7 @@ async function handleAutocomplete(connection, interaction) {
      FROM story s
      WHERE s.guild_id = ? AND s.story_status != 3
        AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-     ORDER BY is_creator DESC, s.guild_story_id LIMIT 25`,
+     ORDER BY is_creator DESC, ${storyLastActivitySQL()} DESC LIMIT 25`,
     [interaction.user.id, guildId, typed, typedPrefix]
   );
   return interaction.respond(
