@@ -170,7 +170,6 @@ async function handleSetup(connection, interaction) {
     roundupChannelId:         guildCfg.cfgWeeklyRoundupChannelId || '',
     roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '1',
     roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '9',
-    isFirstSetup:             !guildCfg.cfgStoryFeedChannelId,
     originalInteraction: interaction,
     cfg,
   };
@@ -405,6 +404,13 @@ async function handleSetupSave(connection, interaction) {
   await interaction.deferUpdate();
   const { guildId } = state;
 
+  const [[{ priorSetupCount }]] = await connection.execute(
+    `SELECT COUNT(*) as priorSetupCount FROM config WHERE config_key = 'cfgStoryFeedChannelId' AND guild_id = ?`,
+    [guildId]
+  );
+  const isFirstSetup = priorSetupCount === 0;
+  log(`handleSetupSave: isFirstSetup=${isFirstSetup} for guild ${guildId}`, { show: false, guildName: interaction.guild.name });
+
   const dayNames = await getConfigValue(connection, [
     'txtRoundupDay0', 'txtRoundupDay1', 'txtRoundupDay2', 'txtRoundupDay3',
     'txtRoundupDay4', 'txtRoundupDay5', 'txtRoundupDay6'
@@ -601,7 +607,11 @@ async function handleSetupSave(connection, interaction) {
   pendingSetupData.delete(interaction.user.id);
   log(`handleSetupSave: complete for guild ${guildId} by ${interaction.user.tag}`, { show: true, guildName: interaction.guild.name });
 
-  if (state.isFirstSetup) {
+  if (isFirstSetup) {
+    await connection.execute(
+      `INSERT IGNORE INTO config (config_key, config_value, language_code, guild_id) VALUES ('cfgGuildRegisteredAt', ?, 'en', ?)`,
+      [new Date().toISOString(), guildId]
+    );
     log(`🆕 New server setup: **${interaction.guild.name}** (${guildId}) by ${interaction.user.tag}`, { show: true, hub: true });
   }
 
