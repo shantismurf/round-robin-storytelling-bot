@@ -99,8 +99,31 @@ async function main() {
   }
   client.once(Events.ClientReady, async () => {
     log(`Discord client ready as ${client.user.tag}`, { show: true });
-    const guildList = client.guilds.cache.map(g => `  • ${g.name} (${g.id})`).join('\n');
+
+    const guildIds = [...client.guilds.cache.keys()];
+    let registeredMap = new Map();
+    if (guildIds.length > 0) {
+      const placeholders = guildIds.map(() => '?').join(',');
+      const [regRows] = await connection.execute(
+        `SELECT guild_id, config_value AS registered_at FROM config WHERE config_key = 'cfgGuildRegisteredAt' AND guild_id IN (${placeholders})`,
+        guildIds
+      );
+      registeredMap = new Map(regRows.map(r => [String(r.guild_id), r.registered_at]));
+    }
+    const sortedGuilds = [...client.guilds.cache.values()].sort((a, b) => {
+      const aDate = registeredMap.get(a.id) ?? '';
+      const bDate = registeredMap.get(b.id) ?? '';
+      if (!aDate && !bDate) return 0;
+      if (!aDate) return 1;
+      if (!bDate) return -1;
+      return aDate.localeCompare(bDate);
+    });
+    const guildList = sortedGuilds.map(g => {
+      const date = registeredMap.get(g.id);
+      return `  • ${g.name} (${g.id})${date ? ` — since ${date.slice(0, 10)}` : ''}`;
+    }).join('\n');
     log(`Installed on ${client.guilds.cache.size} server(s):\n${guildList}`, { show: true });
+
     const hubLogChannelId = await getConfigValue(connection, 'cfgHubLogChannelId');
     setHubLogClient(client, hubLogChannelId);
     const { version } = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
