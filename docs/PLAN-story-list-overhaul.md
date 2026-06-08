@@ -9,7 +9,7 @@
 The `/story list` command (`story/list.js`) has interface problems noted during the `/mystory list` overhaul:
 - Open and closed stories appear mixed with no discernible order
 - No clear visual hierarchy between stories
-- Sorting is not intuitive (currently `ORDER BY s.updated_at DESC` with no status grouping)
+- Sorting is not intuitive (currently `ORDER BY lastActivity DESC` with no status grouping)
 
 ---
 
@@ -52,15 +52,15 @@ Uses Discord timestamps: `<t:${unix}:R>` (relative) and `<t:${unix}:D>` (long da
 
 ## Proposed Sorting Fix
 
-Stories should be grouped by status before sorting by date:
+Stories should be grouped by status before sorting by last activity:
 
 ```sql
 ORDER BY
   CASE s.story_status WHEN 1 THEN 0 WHEN 2 THEN 1 WHEN 4 THEN 2 WHEN 0 THEN 3 ELSE 4 END ASC,
-  s.updated_at DESC
+  storyLastActivitySQL() DESC
 ```
 
-Active first, then paused, then waiting/delayed, then closed.
+Active first, then paused, then waiting/delayed, then closed. `storyLastActivitySQL()` is exported from `utilities.js` and returns the most recent `turn.ended_at` for the story, falling back to `story.created_at`.
 
 ---
 

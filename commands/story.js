@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin } from '../utilities.js';
+import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
 
 // Sub-command handlers
 import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton, handleAddStorySelectMenu } from '../story/add.js';
@@ -370,7 +370,7 @@ async function handleAutocomplete(connection, interaction) {
          JOIN turn t ON t.story_writer_id = sw.story_writer_id
          WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1 AND t.turn_status = 1
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-         ORDER BY s.guild_story_id LIMIT 25`,
+         ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
         [guildId, interaction.user.id, typed, typedPrefix]
       );
 
@@ -381,20 +381,20 @@ async function handleAutocomplete(connection, interaction) {
            AND NOT EXISTS (SELECT 1 FROM story_writer sw
              WHERE sw.story_id = s.story_id AND sw.discord_user_id = ? AND sw.sw_status IN (1,2))
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-         ORDER BY s.guild_story_id LIMIT 25`,
+         ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
         [guildId, interaction.user.id, typed, typedPrefix]
       );
 
     } else if (subcommand === 'read') {
       [rows] = await connection.execute(
-        `SELECT s.guild_story_id, s.title, MAX(se.created_at) AS last_activity
+        `SELECT s.guild_story_id, s.title
          FROM story s
          JOIN story_writer sw ON sw.story_id = s.story_id
          JOIN turn t ON t.story_writer_id = sw.story_writer_id
          JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
          WHERE s.guild_id = ? AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          GROUP BY s.guild_story_id, s.title
-         ORDER BY last_activity DESC LIMIT 25`,
+         ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
         [guildId, typed, typedPrefix]
       );
 
@@ -407,7 +407,7 @@ async function handleAutocomplete(connection, interaction) {
          FROM story s
          WHERE s.guild_id = ? AND s.story_status = 1
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-         ORDER BY is_member DESC, s.guild_story_id LIMIT 25`,
+         ORDER BY is_member DESC, ${storyLastActivitySQL()} DESC LIMIT 25`,
         [interaction.user.id, guildId, typed, typedPrefix]
       );
 
@@ -422,7 +422,7 @@ async function handleAutocomplete(connection, interaction) {
            FROM story s
            WHERE s.guild_id = ? AND s.story_status != 3
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-           ORDER BY is_creator DESC, s.guild_story_id LIMIT 25`,
+           ORDER BY is_creator DESC, ${storyLastActivitySQL()} DESC LIMIT 25`,
           [interaction.user.id, guildId, typed, typedPrefix]
         );
       } else {
@@ -432,7 +432,7 @@ async function handleAutocomplete(connection, interaction) {
            WHERE s.guild_id = ? AND s.story_status != 3
              AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-           ORDER BY s.guild_story_id LIMIT 25`,
+           ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
           [interaction.user.id, guildId, typed, typedPrefix]
         );
       }
@@ -449,7 +449,7 @@ async function handleAutocomplete(connection, interaction) {
            FROM story s
            WHERE s.guild_id = ?
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-           ORDER BY is_creator DESC, (s.story_status = 3) ASC, s.guild_story_id LIMIT 25`,
+           ORDER BY is_creator DESC, (s.story_status = 3) ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
           [interaction.user.id, guildId, typed, typedPrefix]
         );
       } else {
@@ -459,7 +459,7 @@ async function handleAutocomplete(connection, interaction) {
            WHERE s.guild_id = ?
              AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-           ORDER BY (s.story_status = 3) ASC, s.guild_story_id LIMIT 25`,
+           ORDER BY (s.story_status = 3) ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
           [interaction.user.id, guildId, typed, typedPrefix]
         );
       }
@@ -476,7 +476,7 @@ async function handleAutocomplete(connection, interaction) {
          JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
          WHERE s.guild_id = ? AND sw.sw_status IN (1,2)
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-         ORDER BY s.story_status ASC, s.guild_story_id LIMIT 25`,
+         ORDER BY s.story_status ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
         [interaction.user.id, guildId, typed, typedPrefix]
       );
       return interaction.respond(
@@ -493,7 +493,7 @@ async function handleAutocomplete(connection, interaction) {
          JOIN turn t ON t.story_writer_id = sw.story_writer_id
          JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
          WHERE s.guild_id = ? AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-         ORDER BY s.guild_story_id LIMIT 25`,
+         ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
         [interaction.user.id, guildId, typed, typedPrefix]
       );
 
@@ -503,7 +503,7 @@ async function handleAutocomplete(connection, interaction) {
          JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
          WHERE s.guild_id = ? AND sw.sw_status = 1 AND s.story_status = 1
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-         ORDER BY s.guild_story_id LIMIT 25`,
+         ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
         [interaction.user.id, guildId, typed, typedPrefix]
       );
 

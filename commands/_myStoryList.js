@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, splitAtParagraphs } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, splitAtParagraphs, storyLastActivitySQL } from '../utilities.js';
 import { getStoriesPaginated } from '../story/list.js';
 import { ratingBadge } from '../story/_metadata.js';
 
@@ -103,13 +103,13 @@ async function fetchStoriesForView(connection, userId, guildId, view) {
 
   if (view === 'active') {
     whereExtra = `AND s.story_status = 1 AND sw.sw_status = 1`;
-    orderBy = `ORDER BY s.updated_at DESC`;
+    orderBy = `ORDER BY ${storyLastActivitySQL()} DESC`;
   } else if (view === 'paused') {
     whereExtra = `AND s.story_status IN (0, 2, 4) AND sw.sw_status != 0`;
-    orderBy = `ORDER BY CASE s.story_status WHEN 2 THEN 0 WHEN 4 THEN 1 ELSE 2 END ASC, s.updated_at DESC`;
+    orderBy = `ORDER BY CASE s.story_status WHEN 2 THEN 0 WHEN 4 THEN 1 ELSE 2 END ASC, ${storyLastActivitySQL()} DESC`;
   } else {
     whereExtra = `AND (s.story_status = 3 OR sw.sw_status = 0)`;
-    orderBy = `ORDER BY s.updated_at DESC`;
+    orderBy = `ORDER BY ${storyLastActivitySQL()} DESC`;
   }
 
   const [rows] = await connection.execute(

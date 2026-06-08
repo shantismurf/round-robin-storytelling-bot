@@ -601,3 +601,13 @@ export function splitAtParagraphs(text, maxLen = 4000) {
   if (remaining.length > 0) chunks.push(remaining);
   return chunks;
 }
+
+export function storyLastActivitySQL(storyAlias = 's') {
+  return `COALESCE(
+    (SELECT MAX(t.ended_at)
+     FROM turn t
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ${storyAlias}.story_id),
+    ${storyAlias}.created_at
+  )`;
+}

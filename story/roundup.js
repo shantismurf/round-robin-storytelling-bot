@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { getConfigValue, log } from '../utilities.js';
+import { getConfigValue, log, storyLastActivitySQL } from '../utilities.js';
 
 function writerBadge(entryCount) {
   if (entryCount <= 1) return '✨';
@@ -12,7 +12,7 @@ export async function generateRoundupStats(connection, guildId) {
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const [activeStories] = await connection.execute(
-    `SELECT guild_story_id, title FROM story WHERE guild_id = ? AND story_status = 1 ORDER BY updated_at DESC`,
+    `SELECT guild_story_id, title FROM story s WHERE s.guild_id = ? AND s.story_status = 1 ORDER BY ${storyLastActivitySQL()} DESC`,
     [guildId]
   );
 

@@ -16,7 +16,6 @@ CREATE TABLE IF NOT EXISTS story (
   story_status TINYINT(1) DEFAULT 1,
   closed_at TIMESTAMP NULL,
   created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-  updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   mode TINYINT(1) DEFAULT 0, -- 0=Normal, 1=Quick, 2=Slow
   turn_length_hours INT DEFAULT 24,
   reminder_timing INT DEFAULT 50, -- percent of turn in normal/quick; hours between reminders in slow; 0=disabled

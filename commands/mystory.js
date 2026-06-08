@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { log } from '../utilities.js';
+import { log, storyLastActivitySQL } from '../utilities.js';
 import { handleWriterHelp } from '../faq.js';
 import { handleList, handleListNavigation, handleViewToggle, handleCatchUp, handleCatchUpNavigation } from './_myStoryList.js';
 import { handleMyStoryManage, handleMyStoryManageButton, handlePanelPassConfirm, handlePanelPauseConfirm, handlePanelLeaveConfirm, handlePanelActionCancel, handleMyStoryManageModal } from './_myStoryManage.js';
@@ -105,7 +105,7 @@ async function handleAutocomplete(connection, interaction) {
            WHERE sw2.story_id = s.story_id AND se.entry_status = 'confirmed'
          )
          AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-       ORDER BY s.guild_story_id LIMIT 25`,
+       ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
       [interaction.user.id, guildId, typed, typedPrefix]
     );
 
@@ -116,7 +116,7 @@ async function handleAutocomplete(connection, interaction) {
        WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status IN (1, 2)
          AND s.story_status != 3
          AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-       ORDER BY s.guild_story_id LIMIT 25`,
+       ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
       [guildId, interaction.user.id, typed, typedPrefix]
     );
   }
