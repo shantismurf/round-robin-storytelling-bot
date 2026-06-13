@@ -76,6 +76,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblMetaCharacters', '🧑 Characters', 'en', 1),
 ('lblMetaTags', '🏷️ Tags', 'en', 1),
 ('lblMetaSummary', '📝 Summary', 'en', 1),
+('lblMetaSceneBreakDivider', '⁘ Scene Break Divider', 'en', 1),
+('txtMetaSceneBreakDividerPlaceholder', 'e.g. ⁘ ⁘ ⁘  or  * * *  or  ~ ◆ ~', 'en', 1),
 ('txtMetaMainRelationshipPlaceholder', 'ex. Bilbo Baggins/Thorin Oakenshield', 'en', 1),
 ('txtMetaPanelTitle', '🗂️ Story Metadata', 'en', 1),
 ('txtMetaSaveSuccess', '✅ Metadata saved.', 'en', 1),

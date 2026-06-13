@@ -12,6 +12,7 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaDynamic', 'lblMetaRating', 'lblMetaWarnings', 'txtManageWarningSelectInstructions',
     'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
+    'lblMetaSceneBreakDivider', 'txtMetaSceneBreakDividerPlaceholder',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
     'txtRatingNR',
     'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
@@ -35,6 +36,7 @@ export function buildMetadataPanel(cfg, state) {
   const charsDisplay = state.characters || cfg.txtNotSet;
   const tagsDisplay = state.tags || cfg.txtNotSet;
   const summaryDisplay = state.summary || cfg.txtNotSet;
+  const sceneBreakDividerDisplay = state.sceneBreakDivider || cfg.txtNotSet;
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtMetaPanelTitle)
@@ -48,6 +50,7 @@ export function buildMetadataPanel(cfg, state) {
       { name: cfg.lblMetaCharacters, value: charsDisplay, inline: false },
       { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
       { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
+      { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDividerDisplay, inline: false },
     );
 
   // Row 1: Dynamic select (single-select)
@@ -111,11 +114,15 @@ export function buildMetadataPanel(cfg, state) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  // Row 5: Summary | Save Settings
+  // Row 5: Summary | Scene Break Divider | Save Settings
   const row5 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_meta_set_summary')
       .setLabel(cfg.lblMetaSummary)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_add_meta_set_scenebreak')
+      .setLabel(cfg.lblMetaSceneBreakDivider)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_meta_save')
@@ -267,6 +274,23 @@ export async function handleMetadataButton(connection, interaction) {
           ))
       );
 
+    } else if (customId === 'story_add_meta_set_scenebreak') {
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_add_meta_scenebreak_modal')
+          .setTitle(cfg.lblMetaSceneBreakDivider)
+          .addComponents(new ActionRowBuilder().addComponents(
+            new TextInputBuilder()
+              .setCustomId('scene_break_divider')
+              .setLabel(cfg.lblMetaSceneBreakDivider)
+              .setStyle(TextInputStyle.Short)
+              .setRequired(false)
+              .setMaxLength(200)
+              .setValue(metaState.sceneBreakDivider ?? '')
+              .setPlaceholder(cfg.txtMetaSceneBreakDividerPlaceholder)
+          ))
+      );
+
     } else if (customId.startsWith('story_add_meta_rating_confirm_')) {
       const newRating = customId.replace('story_add_meta_rating_confirm_', '');
       const oldRating = metaState.originalRating ?? metaState.rating;
@@ -290,6 +314,7 @@ export async function handleMetadataButton(connection, interaction) {
         dynamic: metaState.dynamic,
         tags: metaState.tags,
         summary: metaState.summary,
+        sceneBreakDivider: metaState.sceneBreakDivider,
       };
       log(`handleMetadataButton: save metaFields=${JSON.stringify(metaFields)} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
@@ -357,6 +382,8 @@ export async function handleMetadataModal(connection, interaction) {
       metaState.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
     } else if (customId === 'story_add_meta_summary_modal') {
       metaState.summary = sanitizeModalInput(interaction.fields.getTextInputValue('summary'), 4000, true) || '';
+    } else if (customId === 'story_add_meta_scenebreak_modal') {
+      metaState.sceneBreakDivider = sanitizeModalInput(interaction.fields.getTextInputValue('scene_break_divider'), 200) || '';
     }
 
     await interaction.deferUpdate();

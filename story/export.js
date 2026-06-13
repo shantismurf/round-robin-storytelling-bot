@@ -2,10 +2,12 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'disc
 import { getConfigValue, log } from '../utilities.js';
 import { marked } from 'marked';
 import { ratingLabels, formatWarnings } from './_metadata.js';
+import { applyEntryMarkup, isSceneBreakLine } from './_entryMarkup.js';
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
-export async function discordMarkdownToHtml(text, guild = null) {
+// dividerText is optional — the story's Scene Break Divider text, used to render [[break]] lines
+export async function discordMarkdownToHtml(text, guild = null, dividerText = null) {
   // Custom emoji <:name:id> → Discord CDN img (static)
   text = text.replace(/<:([^:>]+):(\d+)>/g, (_, name, id) =>
     `<img src="https://cdn.discordapp.com/emojis/${id}.png" height="20" alt=":${name}:" style="vertical-align:middle">`
@@ -54,7 +56,13 @@ export async function discordMarkdownToHtml(text, guild = null) {
     const line = lines[i];
     // -# subtext → wrapped in a styled paragraph (HTML block, marked leaves it alone)
     if (line.startsWith('-# ')) {
-      processed.push(`<p class="subtext">${line.slice(3)}</p>`);
+      processed.push(`<p class="subtext"><small>${line.slice(3)}</small></p>`);
+      i++;
+      continue;
+    }
+    // [[break]] → story's Scene Break Divider, rendered as a centered paragraph
+    if (isSceneBreakLine(line, dividerText)) {
+      processed.push(`<p class="scene-break">${dividerText}</p>`);
       i++;
       continue;
     }
@@ -88,6 +96,8 @@ export async function discordMarkdownToHtml(text, guild = null) {
   text = text.replace(/__(.*?)__/gs, '<u>$1</u>');
   // Discord ||spoiler|| → styled span
   text = text.replace(/\|\|(.*?)\|\|/gs, '<span class="spoiler">$1</span>');
+  // [[text|translation]] → hover-tooltip span
+  text = applyEntryMarkup(text, { target: 'html' });
   // Strip any legacy ![]() image syntax so marked doesn't try to render it
   // (we'll handle image URLs after marked runs, to avoid marked escaping injected HTML)
   text = text.replace(/!\[\]\((https:\/\/cdn\.discordapp\.com\/attachments\/[^\s)]+)\)/g, '$1');
@@ -118,7 +128,7 @@ export async function discordMarkdownToHtml(text, guild = null) {
 export async function generateStoryExport(connection, storyId, guildId, guild = null) {
   const [storyRows] = await connection.execute(
     `SELECT story_id, guild_story_id, title, created_at, story_status, mode, closed_at, show_authors,
-            summary, tags, rating, warnings, main_pairing, other_relationships, characters, dynamic
+            summary, tags, rating, warnings, main_pairing, other_relationships, characters, dynamic, scene_break_divider
      FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
   );
@@ -173,7 +183,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
         : '';
       entriesHtml += `<div class="turn">${turnHeader}`;
     }
-    entriesHtml += await discordMarkdownToHtml(entry.content, guild);
+    entriesHtml += await discordMarkdownToHtml(entry.content, guild, story.scene_break_divider);
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
@@ -204,9 +214,47 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     p { margin: 0 0 1em; }
     .spoiler { background: #222; color: #222; border-radius: 3px; padding: 0 2px; cursor: pointer; }
     .spoiler:hover { color: #fff; }
-    .subtext { font-size: 0.75em; color: #888; margin: 0 0 0.5em; }
     .summary { font-style: italic; margin-bottom: 40px; border-top: 1px solid; padding-top: 20px; }
     .export-note { font-size: 0.8em; color: #999; border-top: 1px solid #eee; margin-top: 60px; padding-top: 16px; }
+
+    /* ---- Round Robin StoryBot Work Skin ----
+       Copy everything between these markers into an AO3 Work Skin
+       (Dashboard > My Work Skins > Create Work Skin) and apply it to
+       your works to get matching formatting on AO3. */
+    #workskin p {
+      position: relative;
+    }
+    #workskin .subtext { color: #888; margin: 0 0 0.5em; }
+    #workskin .scene-break { text-align: center; }
+    #workskin .tooltip {
+      display: inline;
+      border-bottom: 0.5px dotted #ccc;
+      outline: none;
+      cursor: help;
+    }
+    #workskin .tooltiptext {
+      display: none;
+      position: absolute;
+      left: 8px;
+      right: 8px;
+      max-width: 400px;
+      top: 50%;
+      z-index: 99999;
+      background-color: #f0f1f0;
+      color: #000;
+      padding: 10px;
+      border-radius: 5px;
+      text-align: left;
+      box-shadow: 2px 2px 10px rgba(0, 0, 0, 0.1);
+      white-space: normal;
+      overflow-wrap: break-word;
+      word-wrap: break-word;
+    }
+    #workskin .tooltip:hover .tooltiptext,
+    #workskin .tooltip:focus .tooltiptext {
+      display: block;
+    }
+    /* ---- End Round Robin StoryBot Work Skin ---- */
   </style>
 </head>
 <body>
@@ -218,7 +266,9 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     ${ao3MetaLines}
     <div class="meta">Exported: ${exportDate}</div>
   </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
+  <div id="workskin">
   ${entriesHtml}
+  </div>
   <div class="export-note">
     <p><strong>Export note:</strong> This file was generated by Round Robin StoryBot.
     Timestamps from Discord (e.g. turn deadlines in entries) are not included.

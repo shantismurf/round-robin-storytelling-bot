@@ -11,7 +11,7 @@ export { pendingReadData, lastReadPage };
 // Build the pages array for a read session from raw story entries.
 // editInfoMap: Map<story_entry_id, { editedByName, editedAt }> — populated by handleRead for footnotes
 // hasAnyEditSet: Set<story_entry_id> — entries with any edit history (before grace-period filter)
-export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAnyEditSet = new Set()) {
+export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAnyEditSet = new Set(), sceneBreakDivider = null) {
   const pages = [];
   const turnMap = new Map();
   for (const row of entries) {
@@ -35,6 +35,7 @@ export function buildPages(entries, showAuthors, editInfoMap = new Map(), hasAny
       showAuthors,
       storyEntryId: turn.storyEntryId,
       editInfo: editInfoMap.get(turn.storyEntryId) ?? null,
+      sceneBreakDivider,
     });
     for (const p of entryPages) {
       pages.push({
@@ -165,7 +166,7 @@ export async function handleRead(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT title, show_authors, guild_story_id, story_thread_id, rating FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT title, show_authors, guild_story_id, story_thread_id, rating, scene_break_divider FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
@@ -286,7 +287,7 @@ if (isConfigured) {
     ]);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
-    const pages = buildPages(entries, story.show_authors, editInfoMap, hasAnyEditSet);
+    const pages = buildPages(entries, story.show_authors, editInfoMap, hasAnyEditSet, story.scene_break_divider);
 
     const savedPage = lastReadPage.get(`${interaction.user.id}_${storyId}`) ?? 0;
     const startPage = Math.min(savedPage, pages.length - 1);

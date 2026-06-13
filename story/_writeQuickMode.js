@@ -114,7 +114,12 @@ export async function handleWriteModalSubmit(connection, interaction) {
     const expiresAt = new Date(Date.now() + (timeoutMinutes * 60 * 1000));
     const expiryTimestamp = `<t:${Math.floor(expiresAt.getTime() / 1000)}:R>`;
 
-    const previewPayload = await createPreviewEmbed(connection, content, guildId, expiryTimestamp, entryId);
+    const [[storyRow]] = await connection.execute(
+      `SELECT scene_break_divider FROM story WHERE story_id = ?`,
+      [storyId]
+    );
+
+    const previewPayload = await createPreviewEmbed(connection, content, guildId, expiryTimestamp, entryId, storyRow?.scene_break_divider ?? null);
     await interaction.editReply(previewPayload);
 
     const reminderTimeout = setTimeout(async () => {
@@ -176,7 +181,7 @@ export async function confirmEntry(connection, entryId, interaction) {
 
     const [entryInfo] = await txn.execute(`
       SELECT se.turn_id, se.content, sw.story_id, sw.discord_user_id, sw.discord_display_name,
-             s.story_thread_id, s.show_authors,
+             s.story_thread_id, s.show_authors, s.scene_break_divider,
              (SELECT COUNT(DISTINCT t2.turn_id)
               FROM turn t2
               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -193,7 +198,7 @@ export async function confirmEntry(connection, entryId, interaction) {
       throw new Error(`Entry not found for ID ${entryId}`);
     }
 
-    const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, turn_number } = entryInfo[0];
+    const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, scene_break_divider, turn_number } = entryInfo[0];
 
     const [turnCheck] = await txn.execute(
       `SELECT turn_status FROM turn WHERE turn_id = ?`,
@@ -220,7 +225,7 @@ export async function confirmEntry(connection, entryId, interaction) {
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
-      await postThreadEntry(storyThread, content, authorLine);
+      await postThreadEntry(storyThread, content, authorLine, scene_break_divider);
     } catch (threadError) {
       log(`Failed to post entry to story thread: ${threadError}`, { show: true, guildName: interaction?.guild?.name });
     }
@@ -264,7 +269,7 @@ export async function discardEntry(connection, entryId, interaction) {
   }
 }
 
-export async function createPreviewEmbed(connection, content, guildId, discordTimestamp, entryId) {
+export async function createPreviewEmbed(connection, content, guildId, discordTimestamp, entryId, sceneBreakDivider = null) {
   const [title, expiresLabel, statsLabel, statsTemplate, btnSubmit, btnDiscard] = await Promise.all([
     getConfigValue(connection, 'txtPreviewTitle', guildId),
     getConfigValue(connection, 'txtPreviewExpires', guildId),
@@ -288,7 +293,7 @@ export async function createPreviewEmbed(connection, content, guildId, discordTi
       .setStyle(ButtonStyle.Danger)
   );
 
-  const pages = buildEntryPages(content, { turnNumber: '—', writerName: null, showAuthors: false, storyEntryId: entryId });
+  const pages = buildEntryPages(content, { turnNumber: '—', writerName: null, showAuthors: false, storyEntryId: entryId, sceneBreakDivider });
   const page = pages[0];
 
   const result = buildEntryEmbed(page, {

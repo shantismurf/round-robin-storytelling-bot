@@ -166,7 +166,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       `SELECT story_id, guild_story_id, title, story_status, mode, turn_length_hours, reminder_timing,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy,
               rating, warnings, main_pairing, other_relationships, characters, dynamic,
-              story_thread_id
+              story_thread_id, scene_break_divider
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
@@ -255,6 +255,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       orderType: story.story_order_type,
       turnPrivacy: story.story_turn_privacy,
       summary: story.summary ?? '',
+      sceneBreakDivider: story.scene_break_divider ?? '',
       tags: story.tags ?? '',
       originalStatus: story.story_status,
       targetStatus: story.story_status,
@@ -371,7 +372,7 @@ async function handleManageButton(connection, interaction) {
       try {
         await connection.execute(
           `UPDATE story SET rating = ?, warnings = ?, main_pairing = ?,
-           other_relationships = ?, characters = ?, dynamic = ?, tags = ?, summary = ?
+           other_relationships = ?, characters = ?, dynamic = ?, tags = ?, summary = ?, scene_break_divider = ?
            WHERE story_id = ?`,
           [
             metaFields.rating, warningsStr || null,
@@ -379,6 +380,7 @@ async function handleManageButton(connection, interaction) {
             metaFields.otherRelationships || null, metaFields.characters || null,
             metaFields.dynamic || null, metaFields.tags || null,
             metaFields.summary || null,
+            metaFields.sceneBreakDivider || null,
             state.storyId
           ]
         );
