@@ -47,9 +47,10 @@ export async function handleFinalizeEntry(connection, interaction) {
     let turnInfo, writerId;
     if (isAdmin) {
       const [rows] = await connection.execute(
-        `SELECT t.turn_id, t.thread_id, sw.discord_user_id
+        `SELECT t.turn_id, t.thread_id, sw.discord_user_id, s.scene_break_divider
          FROM turn t
          JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+         JOIN story s ON sw.story_id = s.story_id
          WHERE sw.story_id = ? AND t.turn_status = 1 AND t.thread_id = ?`,
         [storyId, interaction.channel.id]
       );
@@ -57,9 +58,10 @@ export async function handleFinalizeEntry(connection, interaction) {
       writerId = rows[0]?.discord_user_id;
     } else {
       const [rows] = await connection.execute(
-        `SELECT t.turn_id, t.thread_id, sw.discord_user_id
+        `SELECT t.turn_id, t.thread_id, sw.discord_user_id, s.scene_break_divider
          FROM turn t
          JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+         JOIN story s ON sw.story_id = s.story_id
          WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
         [storyId, interaction.user.id]
       );
@@ -112,7 +114,7 @@ export async function handleFinalizeEntry(connection, interaction) {
       getConfigValue(connection, 'btnCancel', guildId),
     ]);
 
-    const pages = buildEntryPages(previewContent, { turnNumber: '—', writerName: null, showAuthors: false, storyEntryId: null });
+    const pages = buildEntryPages(previewContent, { turnNumber: '—', writerName: null, showAuthors: false, storyEntryId: null, sceneBreakDivider: turnInfo[0].scene_break_divider });
     const confirmRow = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId(`story_finalize_confirm_${storyId}`)
@@ -257,14 +259,14 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     log(`doFinalizeEntry: entry built — ${entryContent.length} chars, ${imagesForwarded} image(s) forwarded`, { show: false, guildName: interaction?.guild?.name });
 
     const [storyInfo] = await connection.execute(
-      `SELECT s.show_authors, s.story_thread_id, sw.discord_display_name
+      `SELECT s.show_authors, s.story_thread_id, s.scene_break_divider, sw.discord_display_name
        FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
        WHERE s.story_id = ?`,
       [writerId, storyId]
     );
     log(`doFinalizeEntry: story info fetched — show_authors=${storyInfo[0]?.show_authors}, story_thread=${storyInfo[0]?.story_thread_id}`, { show: false, guildName: interaction?.guild?.name });
-    const { show_authors, story_thread_id, discord_display_name } = storyInfo[0];
+    const { show_authors, story_thread_id, scene_break_divider, discord_display_name } = storyInfo[0];
 
     log(`doFinalizeEntry: beginning DB transaction — turn ${turn.turn_id}`, { show: false, guildName: interaction?.guild?.name });
     const txn = await connection.getConnection();
@@ -307,7 +309,7 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     try {
       const storyThread = await interaction.guild.channels.fetch(story_thread_id);
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
-      await postThreadEntry(storyThread, entryContent, authorLine);
+      await postThreadEntry(storyThread, entryContent, authorLine, scene_break_divider);
       log(`doFinalizeEntry: entry posted to story thread ${story_thread_id} as turn ${turn_number}`, { show: true, guildName: interaction?.guild?.name });
     } catch (embedError) {
       log(`doFinalizeEntry: failed to post entry to story thread: ${embedError}`, { show: true, guildName: interaction?.guild?.name });

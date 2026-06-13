@@ -108,6 +108,7 @@ Update to a component-based approach using ActionRows. Instead of passing compon
 - Series System
 - Reactions Kudos 
 - Hub Sharing 
+- Add an export help page with Work Skin creation instructions — walk users through copying the `#workskin` CSS block from their exported HTML into an AO3 Work Skin so entry formatting (tooltips, scene breaks, subtext) matches on AO3.
 
 ---
 

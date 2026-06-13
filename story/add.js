@@ -68,7 +68,8 @@ export async function handleAddStory(connection, interaction) {
       characters: '',
       dynamic: '',
       tags: '',
-      summary: ''
+      summary: '',
+      sceneBreakDivider: ''
     };
 
     pendingStoryData.set(interaction.user.id, {
@@ -589,7 +590,8 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
       characters: state.characters || null,
       dynamic: state.dynamic || null,
       tags: state.tags || null,
-      summary: state.summary || null
+      summary: state.summary || null,
+      sceneBreakDivider: state.sceneBreakDivider || null
     };
 
     const result = await CreateStory(connection, interaction, storyInput);

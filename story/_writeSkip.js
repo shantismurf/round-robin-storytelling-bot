@@ -24,7 +24,7 @@ export async function handleViewLastEntry(connection, interaction) {
     }
 
     const [rows] = await connection.execute(
-      `SELECT se.content, sw.discord_display_name, s.show_authors,
+      `SELECT se.content, sw.discord_display_name, s.show_authors, s.scene_break_divider,
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -41,9 +41,9 @@ export async function handleViewLastEntry(connection, interaction) {
 
     if (rows.length === 0) return;
 
-    const { content, discord_display_name, show_authors, turn_number } = rows[0];
+    const { content, discord_display_name, show_authors, scene_break_divider, turn_number } = rows[0];
     const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
-    await postThreadEntry(interaction.channel, content, authorLine);
+    await postThreadEntry(interaction.channel, content, authorLine, scene_break_divider);
 
   } catch (error) {
     log(`Error in handleViewLastEntry: ${error}`, { show: true, guildName: interaction?.guild?.name });

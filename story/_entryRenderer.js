@@ -11,6 +11,7 @@
 
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { splitAtParagraphs } from '../utilities.js';
+import { applyEntryMarkup } from './_entryMarkup.js';
 
 const IMAGES_PER_PAGE = 4;
 
@@ -36,10 +37,11 @@ function extractImageUrls(content) {
  * Split one entry's content into page objects compatible with buildEntryEmbed.
  *
  * @param {string} content
- * @param {{ turnNumber, writerName, showAuthors, storyEntryId, editInfo }} meta
+ * @param {{ turnNumber, writerName, showAuthors, storyEntryId, editInfo, sceneBreakDivider }} meta
  * @returns {Array} pages
  */
-export function buildEntryPages(content, { turnNumber, writerName, showAuthors, storyEntryId, editInfo = null } = {}) {
+export function buildEntryPages(content, { turnNumber, writerName, showAuthors, storyEntryId, editInfo = null, sceneBreakDivider = null } = {}) {
+  content = applyEntryMarkup(content, { dividerText: sceneBreakDivider, target: 'discord' });
   const imageUrls = extractImageUrls(content);
   const chunks = splitAtParagraphs(content);
   return chunks.map((chunk, i) => ({
@@ -160,8 +162,10 @@ export const NAV_PREFIX = {
  * @param {TextChannel} channel    — Discord channel or thread to post to
  * @param {string}      content    — full entry content
  * @param {string|null} authorLine — e.g. "Turn 3 — Dragonborn"; null if show_authors is false
+ * @param {string|null} sceneBreakDivider — story's Scene Break Divider text, or null if unset
  */
-export async function postThreadEntry(channel, content, authorLine = null) {
+export async function postThreadEntry(channel, content, authorLine = null, sceneBreakDivider = null) {
+  content = applyEntryMarkup(content, { dividerText: sceneBreakDivider, target: 'discord' });
   const chunks = splitAtParagraphs(content, 3800);
   for (let i = 0; i < chunks.length; i++) {
     const embed = new EmbedBuilder().setDescription(chunks[i]);

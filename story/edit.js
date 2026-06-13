@@ -633,7 +633,7 @@ async function handleRepostEntry(connection, interaction) {
   try {
     const [rows] = await connection.execute(
       `SELECT se.content, se.created_at, sw.discord_display_name, sw.discord_user_id AS original_author_id,
-              s.story_thread_id, s.show_authors,
+              s.story_thread_id, s.show_authors, s.scene_break_divider,
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -656,7 +656,7 @@ async function handleRepostEntry(connection, interaction) {
       });
     }
 
-    const { content, created_at, discord_display_name, original_author_id, story_thread_id, show_authors, turn_number, last_edited_at, last_editor_id } = rows[0];
+    const { content, created_at, discord_display_name, original_author_id, story_thread_id, show_authors, scene_break_divider, turn_number, last_edited_at, last_editor_id } = rows[0];
 
     if (!story_thread_id) {
       return await interaction.editReply({
@@ -687,7 +687,7 @@ async function handleRepostEntry(connection, interaction) {
     if (storyThread.locked) await storyThread.setLocked(false);
     if (storyThread.archived) await storyThread.setArchived(false);
     log(`handleRepostEntry: posting entry to thread ${story_thread_id}, content length=${content.length}`, { show: true, guildName: interaction?.guild?.name });
-    await postThreadEntry(storyThread, content, authorLine);
+    await postThreadEntry(storyThread, content, authorLine, scene_break_divider);
 
     const userId = interaction.user.id;
     const readSession = pendingReadData.get(userId);

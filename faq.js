@@ -32,6 +32,7 @@ const PAGE_DEFS = [
         { lbl: 'lblHelp2WriteNormal', txt: 'txtHelp2WriteNormal' },
         { lbl: 'lblHelp2WriteQuick',  txt: 'txtHelp2WriteQuick' },
         { lbl: 'lblHelp2WriteSlow',   txt: 'txtHelp2WriteSlow' },
+        { lbl: 'lblHelp2WriteTranslations', txt: 'txtHelp2WriteTranslations' },
       ]},
     ],
   },
