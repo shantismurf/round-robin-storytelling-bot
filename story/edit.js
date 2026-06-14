@@ -453,7 +453,7 @@ async function handleRestoreExecute(connection, interaction, editId) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const editMsg = buildEditMessage(state.chunks, 0, true, state.turnNumber, state.storyTitle, state.guildStoryId);
+  const editMsg = buildEditMessage(state.chunks, 0, true, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {});
   await state.originalInteraction.editReply({
     ...editMsg,
     content: txtEditRestoreSuccess,
@@ -577,7 +577,7 @@ async function handleEditModalSubmit(connection, interaction) {
 
   const editMsg = buildEditMessage(
     state.chunks, state.chunkPage, state.hasHistory,
-    state.turnNumber, state.storyTitle, state.guildStoryId
+    state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {}
   );
 
   const extraButtons = [];
