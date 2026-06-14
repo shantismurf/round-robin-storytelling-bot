@@ -83,7 +83,9 @@ export async function handleCloseConfirm(connection, interaction) {
     }
     const story = storyRows[0];
 
-    // End active turn if exists, delete its thread in normal mode
+    // End active turn if exists. Thread cleanup is deferred until after the
+    // final reply below, since endTurnThread may delete the thread the
+    // interaction itself was issued from.
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
@@ -91,15 +93,13 @@ export async function handleCloseConfirm(connection, interaction) {
        ORDER BY t.started_at DESC LIMIT 1`,
       [storyId]
     );
+    let activeTurn = null;
     if (activeTurnRows.length > 0) {
-      const activeTurn = activeTurnRows[0];
+      activeTurn = activeTurnRows[0];
       await connection.execute(
         `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
         [activeTurn.turn_id]
       );
-      if (story.mode !== 1) {
-        await endTurnThread(connection, interaction.guild, activeTurn.thread_id, activeTurn.discord_user_id, guildId);
-      }
     }
 
     // Close the story
@@ -156,6 +156,12 @@ export async function handleCloseConfirm(connection, interaction) {
     log(`handleCloseConfirm: story ${storyId} closed successfully`, { show: true, guildName: interaction?.guild?.name });
     // Clear confirmation buttons
     await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryCloseSuccess', guildId), components: [] });
+
+    // Clean up the active writer's turn thread now that the reply has been
+    // sent — this may delete the thread the interaction was issued from.
+    if (activeTurn && story.mode !== 1) {
+      await endTurnThread(connection, interaction.guild, activeTurn.thread_id, activeTurn.discord_user_id, guildId);
+    }
 
   } catch (error) {
     log(`Error in handleCloseConfirm: ${error}`, { show: true, guildName: interaction?.guild?.name });
