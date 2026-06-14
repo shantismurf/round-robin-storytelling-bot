@@ -408,7 +408,7 @@ async function handleSetupSave(connection, interaction) {
     `SELECT COUNT(*) as priorSetupCount FROM config WHERE config_key = 'cfgStoryFeedChannelId' AND guild_id = ?`,
     [guildId]
   );
-  const isFirstSetup = priorSetupCount === 0;
+  const isFirstSetup = Number(priorSetupCount) === 0;
   log(`handleSetupSave: isFirstSetup=${isFirstSetup} for guild ${guildId}`, { show: false, guildName: interaction.guild.name });
 
   const dayNames = await getConfigValue(connection, [
