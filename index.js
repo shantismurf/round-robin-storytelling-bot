@@ -133,6 +133,14 @@ async function main() {
     startJobRunner(connection, client);
     refreshAllStatusMessages(connection, client);
   });
+  client.on(Events.GuildDelete, async guild => {
+    log(`Bot removed from guild ${guild.name ?? 'unknown'} (${guild.id})`, { show: true, hub: true });
+    const [result] = await connection.execute(
+      `UPDATE job SET job_status = 3 WHERE job_status IN (0, 1) AND JSON_EXTRACT(payload, '$.guildId') = ?`,
+      [guild.id]
+    );
+    log(`Cancelled ${result.affectedRows} pending job(s) for removed guild ${guild.id}`, { show: true, hub: true });
+  });
   function formatCommandLog(interaction) {
     const subcommand = interaction.options.getSubcommand(false);
     const subOptions = subcommand
