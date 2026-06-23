@@ -1,6 +1,8 @@
 node_modules/
 .env
 config.json
+config*.json
+!config.example.json
 .DS_Store
 coverage/
 logs/
