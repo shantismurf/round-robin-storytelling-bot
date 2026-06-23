@@ -7,6 +7,23 @@ import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
 
 /**
+ * Mark every active/paused story in a guild as closed and cancel its pending jobs.
+ * Used when the bot discovers a guild no longer has it installed (DiscordAPIError
+ * 10004 "Unknown Guild"), whether via the GuildDelete event or a failed status refresh.
+ */
+async function closeOrphanedGuildStories(connection, guildId) {
+  const [storyResult] = await connection.execute(
+    `UPDATE story SET story_status = 3, closed_at = NOW() WHERE guild_id = ? AND story_status IN (1, 2, 4)`,
+    [guildId]
+  );
+  const [jobResult] = await connection.execute(
+    `UPDATE job SET job_status = 3 WHERE job_status IN (0, 1) AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    [String(guildId)]
+  );
+  log(`closeOrphanedGuildStories: closed ${storyResult.affectedRows} story/stories and cancelled ${jobResult.affectedRows} pending job(s) for guild ${guildId}`, { show: true, hub: true });
+}
+
+/**
  * On startup, refresh status embeds for all active/paused stories so buttons
  * and content never go stale after a bot restart.
  */
@@ -21,7 +38,12 @@ async function refreshAllStatusMessages(connection, client) {
         const guild = await client.guilds.fetch(story.guild_id);
         await updateStoryStatusMessage(connection, guild, story.story_id);
       } catch (err) {
-        log(`Failed to refresh status for story ${story.story_id}: ${err}`, { show: true });
+        if (err?.code === 10004) {
+          log(`refreshAllStatusMessages: guild ${story.guild_id} no longer has the bot installed; closing its stories`, { show: true, hub: true });
+          await closeOrphanedGuildStories(connection, story.guild_id);
+        } else {
+          log(`Failed to refresh status for story ${story.story_id}: ${err}`, { show: true });
+        }
       }
     }
     log('Status message refresh complete.', { show: false });
@@ -135,11 +157,7 @@ async function main() {
   });
   client.on(Events.GuildDelete, async guild => {
     log(`Bot removed from guild ${guild.name ?? 'unknown'} (${guild.id})`, { show: true, hub: true });
-    const [result] = await connection.execute(
-      `UPDATE job SET job_status = 3 WHERE job_status IN (0, 1) AND JSON_EXTRACT(payload, '$.guildId') = ?`,
-      [guild.id]
-    );
-    log(`Cancelled ${result.affectedRows} pending job(s) for removed guild ${guild.id}`, { show: true, hub: true });
+    await closeOrphanedGuildStories(connection, guild.id);
   });
   function formatCommandLog(interaction) {
     const subcommand = interaction.options.getSubcommand(false);
