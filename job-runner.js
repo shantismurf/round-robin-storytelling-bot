@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, discordTimestamp } from './utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, discordTimestamp, closeOrphanedGuildStories } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread } from './story/_turn.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
@@ -37,9 +37,9 @@ async function processJob(connection, client, job) {
   if (claimed.affectedRows === 0) return;
 
   const attemptNumber = job.attempts + 1;
+  const payload = JSON.parse(job.payload);
 
   try {
-    const payload = JSON.parse(job.payload);
     switch (job.job_type) {
       case 'checkStoryDelay':
         await handleCheckStoryDelay(connection, client, payload);
@@ -63,6 +63,11 @@ async function processJob(connection, client, job) {
         log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
     }
   } catch (err) {
+    if (err?.code === 10004 && payload.guildId) {
+      log(`Job ${job.job_id} (${job.job_type}): guild ${payload.guildId} no longer has the bot installed; closing its stories`, { show: true, hub: true });
+      await closeOrphanedGuildStories(connection, payload.guildId);
+      return;
+    }
     log(`Job ${job.job_id} (${job.job_type}) failed on attempt ${attemptNumber}: ${err}`, { show: true });
     if (attemptNumber < JOB_MAX_ATTEMPTS) {
       const retryAt = new Date(Date.now() + JOB_RETRY_DELAY_MS);

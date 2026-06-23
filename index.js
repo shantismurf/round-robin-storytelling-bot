@@ -1,27 +1,10 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
 import { StoryBot } from './storybot.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
-import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient } from './utilities.js';
+import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories } from './utilities.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
-
-/**
- * Mark every active/paused story in a guild as closed and cancel its pending jobs.
- * Used when the bot discovers a guild no longer has it installed (DiscordAPIError
- * 10004 "Unknown Guild"), whether via the GuildDelete event or a failed status refresh.
- */
-async function closeOrphanedGuildStories(connection, guildId) {
-  const [storyResult] = await connection.execute(
-    `UPDATE story SET story_status = 3, closed_at = NOW() WHERE guild_id = ? AND story_status IN (1, 2, 4)`,
-    [guildId]
-  );
-  const [jobResult] = await connection.execute(
-    `UPDATE job SET job_status = 3 WHERE job_status IN (0, 1) AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-    [String(guildId)]
-  );
-  log(`closeOrphanedGuildStories: closed ${storyResult.affectedRows} story/stories and cancelled ${jobResult.affectedRows} pending job(s) for guild ${guildId}`, { show: true, hub: true });
-}
 
 /**
  * On startup, refresh status embeds for all active/paused stories so buttons

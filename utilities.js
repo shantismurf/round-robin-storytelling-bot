@@ -248,6 +248,24 @@ export async function isGuildConfigured(connection, guildId) {
   return rows.length > 0 && !!rows[0].config_value;
 }
 
+/**
+ * Mark every active/paused story in a guild as closed and cancel its pending jobs.
+ * Used when the bot discovers a guild no longer has it installed (DiscordAPIError
+ * 10004 "Unknown Guild"), whether via the GuildDelete event, a failed status refresh,
+ * or a job that fails because its guild is gone.
+ */
+export async function closeOrphanedGuildStories(connection, guildId) {
+  const [storyResult] = await connection.execute(
+    `UPDATE story SET story_status = 3, closed_at = NOW() WHERE guild_id = ? AND story_status IN (1, 2, 4)`,
+    [guildId]
+  );
+  const [jobResult] = await connection.execute(
+    `UPDATE job SET job_status = 3 WHERE job_status IN (0, 1) AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    [String(guildId)]
+  );
+  log(`closeOrphanedGuildStories: closed ${storyResult.affectedRows} story/stories and cancelled ${jobResult.affectedRows} pending job(s) for guild ${guildId}`, { show: true, hub: true });
+}
+
 export async function getConfigValue(connection, key, guildId = 1) {
   try {
     if (Array.isArray(key)) {
