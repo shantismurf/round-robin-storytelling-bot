@@ -9,7 +9,7 @@ export { pendingEditData };
 async function handleEdit(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
   if (!storyId) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }

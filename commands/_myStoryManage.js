@@ -62,7 +62,7 @@ export async function handleMyStoryManage(connection, interaction) {
   log(`handleMyStoryManage: entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
 
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
@@ -105,6 +105,7 @@ export async function handleMyStoryManage(connection, interaction) {
       'btnManageUserSwitchMention', 'btnManageUserSwitchDM',
       'btnManageUserMakePublic', 'btnManageUserMakePrivate',
       'lblJoinSetAO3ModalTitle', 'lblMyStoryManageAO3', 'txtAdminMUAO3Placeholder',
+      'txtMyPauseConfirm', 'txtMyPassConfirm', 'btnMyPauseConfirm', 'btnMyPassConfirm', 'txtMyResumeSuccess',
     ], guildId);
 
     const state = {

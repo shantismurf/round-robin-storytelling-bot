@@ -64,7 +64,7 @@ function buildManageUserPanel(state) {
 export async function handleManageUser(connection, interaction) {
   log(`handleManageUser: entry for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
   const targetUser = interaction.options.getUser('user');
 
   log(`handleManageUser: storyId=${storyId} targetUser=${targetUser?.username}`, { show: false, guildName: interaction?.guild?.name });

@@ -730,7 +730,7 @@ async function handleFaqSync(connection, interaction) {
 async function handleDelete(connection, interaction) {
   log(`handleDelete entry user=${interaction.user.username} story_id=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }

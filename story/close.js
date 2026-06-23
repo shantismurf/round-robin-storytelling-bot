@@ -9,7 +9,7 @@ export async function handleClose(connection, interaction) {
   log(`handleClose entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }

@@ -520,7 +520,7 @@ async function handleAutocomplete(connection, interaction) {
   }
 
   if (focusedOption.name === 'turn') {
-    const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+    const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
     if (!storyId) return interaction.respond([]);
 
     const typed = String(focusedOption.value);

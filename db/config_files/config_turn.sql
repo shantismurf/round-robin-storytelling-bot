@@ -17,7 +17,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtWritePlaceholder', 'Paste your entry here...', 'en', 1),
 ('txtStoryNotActive', 'This story is not active. You cannot write entries for paused or closed stories.', 'en', 1),
 ('txtPendingEntryExists', 'You already have a pending entry. This will overwrite it. Continue?', 'en', 1),
-('txtStoryNotFound', 'Story not found.', 'en', 1),
+('txtStoryNotFound', 'Story not found. This can happen if autocomplete didn''t fully register your selection — please try the command again.', 'en', 1),
 ('txtStoryWrongGuild', 'Story not found in this server.', 'en', 1),
 ('txtWriteFormFailed', 'Failed to open write form. Please try again.', 'en', 1),
 ('txtEntryProcessFailed', 'Failed to process entry. Please try again.', 'en', 1),

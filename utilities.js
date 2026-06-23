@@ -205,22 +205,37 @@ export function log(content, { show = false, guildName = null, hub = false } = {
 }
 
 /**
+ * Extract a guild-local story number from a submitted story_id option value.
+ * Handles the normal case (a bare numeric string) and the case where Discord's
+ * client submitted the autocomplete label instead of its value (e.g. "Title (#5)").
+ * Returns an integer, or NaN if no number can be recovered.
+ */
+export function parseGuildStoryId(rawValue) {
+  if (rawValue == null) return NaN;
+  const str = String(rawValue);
+  const labelMatch = str.match(/\(#(\d+)\)\s*$/);
+  if (labelMatch) return parseInt(labelMatch[1], 10);
+  return parseInt(str, 10);
+}
+
+/**
  * Resolve a guild-local story number (guild_story_id) to the internal PK (story_id).
  * Returns the internal story_id, or null if not found.
  */
 export async function resolveStoryId(connection, guildId, guildStoryId) {
+  const numericId = parseGuildStoryId(guildStoryId);
   try {
     const [rows] = await connection.execute(
       `SELECT story_id FROM story WHERE guild_id = ? AND guild_story_id = ?`,
-      [guildId, guildStoryId]
+      [guildId, numericId]
     );
     if (rows.length === 0) {
-      log(`resolveStoryId: no story found for guild_story_id=${guildStoryId} in guild ${guildId}`, { show: true });
+      log(`resolveStoryId: no story found for guild_story_id=${numericId} (raw="${guildStoryId}") in guild ${guildId}`, { show: true });
       return null;
     }
     return rows[0].story_id;
   } catch (err) {
-    log(`resolveStoryId failed for guild_story_id=${guildStoryId} guild ${guildId}: ${err?.stack ?? err}`, { show: true });
+    log(`resolveStoryId failed for guild_story_id=${numericId} (raw="${guildStoryId}") guild ${guildId}: ${err?.stack ?? err}`, { show: true });
     return null;
   }
 }

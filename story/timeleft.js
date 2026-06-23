@@ -4,7 +4,7 @@ import { getConfigValue, log, resolveStoryId } from '../utilities.js';
 export async function handleTimeleft(connection, interaction) {
   log(`handleTimeleft entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
   if (!storyId) {
     return interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
   }

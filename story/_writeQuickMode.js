@@ -9,7 +9,7 @@ export async function handleWrite(connection, interaction) {
   log(`handleWrite entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   try {
     const guildId = interaction.guild.id;
-    const storyId = await resolveStoryId(connection, guildId, parseInt(interaction.options.getString('story_id') ?? '', 10));
+    const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
     if (storyId === null) {
       await interaction.reply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId), flags: MessageFlags.Ephemeral });
       return;
