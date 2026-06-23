@@ -16,13 +16,16 @@ async function refreshAllStatusMessages(connection, client) {
       `SELECT story_id, guild_id FROM story WHERE story_status IN (1, 2) AND story_thread_id IS NOT NULL`
     );
     log(`Refreshing status messages for ${stories.length} active/paused story/stories...`, { show: false });
+    const orphanedGuildIds = new Set();
     for (const story of stories) {
+      if (orphanedGuildIds.has(story.guild_id)) continue;
       try {
         const guild = await client.guilds.fetch(story.guild_id);
         await updateStoryStatusMessage(connection, guild, story.story_id);
       } catch (err) {
         if (err?.code === 10004) {
           log(`refreshAllStatusMessages: guild ${story.guild_id} no longer has the bot installed; closing its stories`, { show: true, hub: true });
+          orphanedGuildIds.add(story.guild_id);
           await closeOrphanedGuildStories(connection, story.guild_id);
         } else {
           log(`Failed to refresh status for story ${story.story_id}: ${err}`, { show: true });
