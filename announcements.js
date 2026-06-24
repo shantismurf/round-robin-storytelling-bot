@@ -1,5 +1,5 @@
 import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
-import { resolveFeedChannelId, ratingBadge } from './story/_metadata.js';
+import { resolveFeedChannelId, ratingBadgeKey } from './story/_metadata.js';
 /**
  * All announcements sent to story feed channel are handled here
  * Join is called from commands/story.js
@@ -123,8 +123,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
       ...delayParts
     ];
 
-    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
-    const ratingBadgeDisplay = await getConfigValue(connection, ratingBadgeCfgKey, guildId);
+    const ratingBadgeDisplay = await getConfigValue(connection, ratingBadgeKey(story.rating ?? 'NR'), guildId);
     const message = `# 📚 New Story Created by ${creatorName}: "${story.title}" ${ratingBadgeDisplay}\n-# ${metaParts.join(' · ')}`;
 
     const targetChannelId = await resolveFeedChannelId(connection, guildId, story.rating ?? 'NR');

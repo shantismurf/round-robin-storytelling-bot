@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, storyLastActivitySQL } from '../utilities.js';
-import { ratingBadge } from './_metadata.js';
+import { ratingCodes, ratingBadgeKey } from './_metadata.js';
 
 export async function handleListStories(connection, interaction) {
   const guildId = interaction.guild.id;
@@ -76,7 +76,7 @@ export async function renderStoryListReply(connection, interaction, filter, page
       'txtTurnWaiting', 'txtTurnOverdue', 'txtTurnTimeLeft',
       'btnPrev', 'btnNext', 'btnFilter',
       'txtQuickJoinPlaceholder', 'txtQuickJoinDesc',
-      ...Object.values(ratingBadge),
+      ...ratingCodes.map(ratingBadgeKey),
     ], guildId),
   ]);
 
@@ -138,7 +138,7 @@ export async function renderStoryListReply(connection, interaction, filter, page
       }
     }
 
-    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const ratingBadgeCfgKey = ratingBadgeKey(story.rating ?? 'NR');
     embed.addFields({
       name: `${statusIcon} "${story.title}" (#${story.guild_story_id}) ${cfg[ratingBadgeCfgKey] ?? story.rating ?? ''}`,
       value: `├ ${cfg.lblStoryStatus} ${statusText} • ${cfg.lblStoryTurn} ${currentTurn}

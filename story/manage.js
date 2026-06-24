@@ -3,7 +3,7 @@ import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, reso
 import { PickNextWriter, NextTurn } from './_turn.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
-import { ratingLabels, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
@@ -19,10 +19,10 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const isPaused = state.targetStatus === 2;
   const isSlowMode = state.storyMode === 2;
 
-  const ratingLabel = cfg[ratingLabels[state.rating ?? 'NR']] ?? state.rating;
+  const ratingLabel = cfg[ratingLabelKey(state.rating ?? 'NR')] ?? state.rating;
   const warningsDisplay = state.warnings?.length
     ? (Array.isArray(state.warnings) ? state.warnings : state.warnings.split(',').map(w => w.trim())).join(', ')
-    : cfg.txtNone;
+    : cfg.optWarnAllClear;
 
   const sectionLine = cfg.txtSectionBreakLine;
   const statusDisplay = isPaused
@@ -217,7 +217,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtTurnExtendPlaceholder', 'txtTurnDeleteEntryModalTitle', 'lblTurnDeleteEntryTurn',
       'txtTurnDeleteEntryPlaceholder', 'txtTurnRestoreEntryModalTitle', 'lblTurnRestoreEntryId',
       'txtTurnRestoreEntryPlaceholder', 'txtTurnNextSelectWrite',
-      ...Object.values(ratingLabels),
+      ...ratingCodes.map(ratingLabelKey),
       ...dynamicOptions,
       ...warningOptions,
       'txtManageWarningSelectInstructions',

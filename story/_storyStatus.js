@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
-import { ratingBadge, warningOptions, formatWarnings } from './_metadata.js';
+import { ratingCodes, ratingBadgeKey, warningOptions, formatWarnings } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
 
 /**
@@ -77,7 +77,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       wordCount += textOnly.split(/\s+/).filter(w => w.length > 0).length;
     }
 
-    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const ratingBadgeCfgKey = ratingBadgeKey(story.rating ?? 'NR');
     const cfg = await getConfigValue(connection, [
       'txtActive', 'txtPaused', 'txtClosed', 'txtDelayed',
       'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',

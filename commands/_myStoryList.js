@@ -1,7 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, splitAtParagraphs, storyLastActivitySQL } from '../utilities.js';
 import { getStoriesPaginated } from '../story/list.js';
-import { ratingBadge } from '../story/_metadata.js';
+import { ratingCodes, ratingBadgeKey } from '../story/_metadata.js';
 
 const LIST_PAGE_SIZE = 5;
 const WIDE_SPACE = '　'; // unicode full-width space for field value indent
@@ -33,7 +33,7 @@ export async function handleList(connection, interaction, view = 'active') {
       'txtMyListStats', 'txtMyListNoEntries', 'txtMyListPausedSuffix',
       'btnMyListViewActive', 'btnMyListViewPaused', 'btnMyListViewClosed', 'btnMyListViewJoinable',
       'btnPrev', 'btnNext',
-      ...Object.values(ratingBadge),
+      ...ratingCodes.map(ratingBadgeKey),
     ], guildId);
 
     await renderListView(connection, interaction, view, page, guildId, userId, listCfg);
@@ -255,7 +255,7 @@ export async function handleViewToggle(connection, interaction) {
       'txtMyListStats', 'txtMyListNoEntries', 'txtMyListPausedSuffix',
       'btnMyListViewActive', 'btnMyListViewPaused', 'btnMyListViewClosed', 'btnMyListViewJoinable',
       'btnPrev', 'btnNext',
-      ...Object.values(ratingBadge),
+      ...ratingCodes.map(ratingBadgeKey),
     ], guildId);
 
     await renderListView(connection, interaction, view, 1, guildId, userId, listCfg);
@@ -328,7 +328,7 @@ async function renderJoinableView(connection, interaction, page, guildId, userId
   const statusTextMap = { 1: listCfg.txtActive, 2: listCfg.txtPaused, 3: listCfg.txtClosed, 4: listCfg.txtDelayed };
   for (const story of stories.data) {
     const modeText = story.mode === 1 ? listCfg.txtModeQuick : story.mode === 2 ? listCfg.txtModeSlow : listCfg.txtModeNormal;
-    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
+    const ratingBadgeCfgKey = ratingBadgeKey(story.rating ?? 'NR');
     const turn = activeTurnMap.get(story.story_id);
     let turnLine;
     if (!turn) {

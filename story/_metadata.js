@@ -6,21 +6,10 @@
 
 export const restrictedRatings = new Set(['M', 'E']);
 
-export const ratingLabels = {
-  NR: 'txtRatingNR',
-  G:  'txtRatingG',
-  T:  'txtRatingT',
-  M:  'txtRatingM',
-  E:  'txtRatingE',
-};
+export const ratingCodes = ['NR', 'G', 'T', 'M', 'E'];
 
-export const ratingBadge = {
-  NR: 'txtRatingBadgeNR',
-  G:  'txtRatingBadgeG',
-  T:  'txtRatingBadgeT',
-  M:  'txtRatingBadgeM',
-  E:  'txtRatingBadgeE',
-};
+export const ratingLabelKey = code => `txtRating${code}`;
+export const ratingBadgeKey = code => `txtRatingBadge${code}`;
 
 export const warningOptions = [
   'optWarnAllClear',
@@ -71,8 +60,8 @@ export function formatWarnings(warningsStr, warningLabels = {}) {
 export function buildMetadataFields(story, cfg = {}) {
   const fields = [];
 
-  const badge = cfg[ratingBadge[story.rating]] ?? story.rating ?? '';
-  const label = cfg[ratingLabels[story.rating]] ?? story.rating ?? '';
+  const badge = cfg[ratingBadgeKey(story.rating)] ?? story.rating;
+  const label = cfg[ratingLabelKey(story.rating)] ?? story.rating;
   fields.push({ name: cfg.lblRating, value: `${badge} ${label}`.trim(), inline: true });
 
   if (story.dynamic) {

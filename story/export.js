@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log } from '../utilities.js';
 import { marked } from 'marked';
-import { ratingLabels, formatWarnings } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, formatWarnings, warningOptions } from './_metadata.js';
 import { applyEntryMarkup, isSceneBreakLine } from './_entryMarkup.js';
 
 // Convert Discord markdown to HTML for export
@@ -187,16 +187,23 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
-  const ratingLabel = ratingLabels[story.rating] ?? story.rating;
-  const warningsText = story.warnings ? formatWarnings(story.warnings) : 'Creator Chose Not To Warn';
+  const cfg = await getConfigValue(connection, [
+    ...ratingCodes.map(ratingLabelKey),
+    ...warningOptions,
+  ], guildId);
+
+  const ratingLabel = cfg[ratingLabelKey(story.rating)] ?? story.rating;
+  const warningsText = story.warnings
+    ? formatWarnings(story.warnings, Object.fromEntries(warningOptions.map(k => [k, cfg[k] ?? k])))
+    : cfg.optWarnAllClear;
   const ao3MetaLines = [
-    story.dynamic          ? `<div class="meta"><strong>Dynamic:</strong> ${story.dynamic}</div>` : '',
-    `<div class="meta"><strong>Rating:</strong> ${ratingLabel}</div>`,
-    `<div class="meta"><strong>Warnings:</strong> ${warningsText}</div>`,
-    story.main_pairing     ? `<div class="meta"><strong>Relationship:</strong> ${story.main_pairing}</div>` : '',
-    story.other_relationships ? `<div class="meta"><strong>Additional Relationships:</strong> ${story.other_relationships}</div>` : '',
-    story.characters       ? `<div class="meta"><strong>Characters:</strong> ${story.characters}</div>` : '',
-    story.tags             ? `<div class="meta"><strong>Tags:</strong> ${story.tags}</div>` : '',
+    story.dynamic          ? `<div class="meta"><span class="meta-label">Dynamic:</span> ${story.dynamic}</div>` : '',
+    `<div class="meta"><span class="meta-label">Rating:</span> ${ratingLabel}</div>`,
+    `<div class="meta"><span class="meta-label">Warnings:</span> ${warningsText}</div>`,
+    story.main_pairing     ? `<div class="meta"><span class="meta-label">Relationship:</span> ${story.main_pairing}</div>` : '',
+    story.other_relationships ? `<div class="meta"><span class="meta-label">Additional Relationships:</span> ${story.other_relationships}</div>` : '',
+    story.characters       ? `<div class="meta"><span class="meta-label">Characters:</span> ${story.characters}</div>` : '',
+    story.tags             ? `<div class="meta"><span class="meta-label">Tags:</span> ${story.tags}</div>` : '',
   ].filter(Boolean).join('\n    ');
 
   const html = `<!DOCTYPE html>
@@ -206,29 +213,48 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   <title>${story.title}</title>
   <link rel="stylesheet" href="https://cdn.simplecss.org/simple.min.css">
   <style>
-    body { font-family: Georgia, serif; max-width: 800px; margin: 40px auto; padding: 0 20px; line-height: 1.7; }
+    body { font-family: Georgia, serif; max-width: 1000px; margin: 40px auto; padding: 0 20px; line-height: 1.7; }
     h1 { font-size: 2em; margin-bottom: 8px; }
-    .meta { font-size: 0.9em; margin-bottom: 8px; }
-    .meta-block { border-bottom: 1px solid; padding-bottom: 24px; margin-bottom: 40px; }
-    .turn { margin-bottom: 40px; border-top: 1px solid; padding-top: 20px; }
-    p { margin: 0 0 1em; }
-    .spoiler { background: #222; color: #222; border-radius: 3px; padding: 0 2px; cursor: pointer; }
-    .spoiler:hover { color: #fff; }
-    .summary { font-style: italic; margin-bottom: 40px; border-top: 1px solid; padding-top: 20px; }
-    .export-note { font-size: 0.8em; color: #999; border-top: 1px solid #eee; margin-top: 60px; padding-top: 16px; }
+    .meta { font-size: 0.9em; margin: 8px 0; }
+    .meta-label { font-weight: 800; }
+    .meta-stats { font-size: 0.7em; }
+    .summary { font-style: italic; margin: 10px 0; border-top: 1px solid; border-bottom: 1px solid; padding-top: 10px; }
+    .export-note { font-size: 0.7em; opacity: 0.7; border-top: 1px solid; margin-top: 60px; padding-top: 16px; }
 
     /* ---- Round Robin StoryBot Work Skin ----
        Copy everything between these markers into an AO3 Work Skin
        (Dashboard > My Work Skins > Create Work Skin) and apply it to
        your works to get matching formatting on AO3. */
+	  #workskin h2 {
+  	  font-size: 0.7em;
+  	  opacity: 0.7;
+  	  font-style: italic;
+	}
     #workskin p {
       position: relative;
-    }
-    #workskin .subtext { color: #888; margin: 0 0 0.5em; }
-    #workskin .scene-break { text-align: center; }
+  	  margin: 0 0 1em;
+  }
+    #workskin .spoiler { 
+  	  background: #222; 
+  	  color: #222; 
+  	  border-radius: 3px; 
+  	  padding: 0 2px; 
+  	  cursor: pointer; 
+	}
+    #workskin .spoiler:hover { 
+	    color: #fff; 
+	}
+    #workskin .subtext { 
+	    color: #888; 
+	    margin: 0 0 0.5em; 
+	}
+    #workskin .scene-break { 
+	    text-align: center;
+      padding: 10px 0;
+	}
     #workskin .tooltip {
       display: inline;
-      border-bottom: 0.5px dotted #ccc;
+      border-bottom: 0.5px dotted;
       outline: none;
       cursor: help;
     }
@@ -260,17 +286,17 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
 <body>
   <div class="meta-block">
     <h1>${story.title}</h1>
-    <div class="meta">Started: ${publishedDate} &nbsp; ${secondDateLabel}: ${secondDate}</div>
-    <div class="meta">Story #${story.guild_story_id} &nbsp;·&nbsp; ${modeLabel} &nbsp;·&nbsp; ${turnCount} turn(s) &nbsp;·&nbsp; ~${wordCount.toLocaleString()} words</div>
-    <div class="meta">Writers: ${writersList}</div>
+    <div class="meta-stats">Started: ${publishedDate} &nbsp; ${secondDateLabel}: ${secondDate}</div>
+    <div class="meta-stats">Story #${story.guild_story_id} &nbsp;·&nbsp; ${modeLabel} &nbsp;·&nbsp; ${turnCount} turn(s) &nbsp;·&nbsp; ~${wordCount.toLocaleString()} words</div>
+    <div class="meta"><span class="meta-label">Writers: ${writersList}</span></div>
     ${ao3MetaLines}
-    <div class="meta">Exported: ${exportDate}</div>
+    <div class="meta"><span class="meta-label">Exported: ${exportDate}</span></div>
   </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
   <div id="workskin">
   ${entriesHtml}
   </div>
   <div class="export-note">
-    <p><strong>Export note:</strong> This file was generated by Round Robin StoryBot.
+    <p><span class="meta-label">Export note:</span> This file was generated by Round Robin StoryBot.
     Timestamps from Discord (e.g. turn deadlines in entries) are not included.
     Story images are hosted on Discord's CDN — if you need them to persist long-term,
     download and re-upload them to a permanent image host and update the links in this file.</p>

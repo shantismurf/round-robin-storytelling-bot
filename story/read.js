@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, checkIsCreator, discordTimestamp } from '../utilities.js';
 import { generateStoryExport } from './export.js';
-import { isRestricted, ratingBadge } from './_metadata.js';
+import { isRestricted, ratingBadgeKey } from './_metadata.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './_state.js';
 import { buildEditMessage } from './edit.js';
 import { buildEntryEmbed, buildEntryPages } from './_entryRenderer.js';
@@ -278,12 +278,11 @@ if (isConfigured) {
       [storyId]
     );
 
-    const ratingBadgeCfgKey = ratingBadge[story.rating] ?? 'txtRatingBadgeNR';
     const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay] = await Promise.all([
       getConfigValue(connection, 'btnSubmitTagRead', guildId),
       getConfigValue(connection, 'btnViewProposedTags', guildId),
       getConfigValue(connection, 'btnManageTags', guildId),
-      getConfigValue(connection, ratingBadgeCfgKey, guildId),
+      getConfigValue(connection, ratingBadgeKey(story.rating ?? 'NR'), guildId),
     ]);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);

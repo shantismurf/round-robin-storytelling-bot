@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput } from '../utilities.js';
-import { ratingLabels, dynamicOptions, warningOptions, crossesBarrier } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions, crossesBarrier } from './_metadata.js';
 import { pendingStoryData, buildStoryAddMessage } from './add.js';
 
 // Keyed by userId — tracks which interaction opened the metadata panel
@@ -14,10 +14,9 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary',
     'lblMetaSceneBreakDivider', 'txtMetaSceneBreakDividerPlaceholder',
     'txtMetaMainRelationshipPlaceholder', 'txtNotSet',
-    'txtRatingNR',
     'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
     'btnRatingChangeConfirm', 'btnRatingChangeRevert',
-    ...Object.values(ratingLabels),
+    ...ratingCodes.map(ratingLabelKey),
     ...dynamicOptions,
     ...warningOptions,
   ], guildId);
@@ -25,12 +24,11 @@ export async function getMetaCfg(connection, guildId) {
 
 export function buildMetadataPanel(cfg, state) {
   log(`buildMetadataPanel started`, { show: false, guildName: 'system' });
-  const ratingKey = ratingLabels[state.rating] ?? 'txtRatingNR';
-  const ratingLabel = cfg[ratingKey] ?? state.rating;
+  const ratingLabel = cfg[ratingLabelKey(state.rating ?? 'NR')] ?? state.rating;
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
   const warningsDisplay = state.warnings?.length
     ? state.warnings.map(k => cfg[k] ?? k).join(', ')
-    : cfg.txtNotSet;
+    : cfg.optWarnAllClear;
   const mainRelDisplay = state.mainPairing || cfg.txtNotSet;
   const otherRelDisplay = state.otherRelationships || cfg.txtNotSet;
   const charsDisplay = state.characters || cfg.txtNotSet;
@@ -74,10 +72,10 @@ export function buildMetadataPanel(cfg, state) {
       .setPlaceholder(cfg.lblMetaRating)
       .setMinValues(1)
       .setMaxValues(1)
-      .addOptions(Object.entries(ratingLabels).map(([key, cfgKey]) => ({
-        label: cfg[cfgKey] ?? key,
-        value: key,
-        default: (state.rating ?? 'NR') === key,
+      .addOptions(ratingCodes.map(code => ({
+        label: cfg[ratingLabelKey(code)] ?? code,
+        value: code,
+        default: (state.rating ?? 'NR') === code,
       })))
   );
 
@@ -171,9 +169,8 @@ export async function handleMetadataButton(connection, interaction) {
       await interaction.update(buildMetadataPanel(cfg, metaState));
 
     } else if (customId === 'story_add_meta_cycle_rating') {
-      const ratingKeys = Object.keys(ratingLabels);
-      const idx = ratingKeys.indexOf(metaState.rating ?? 'NR');
-      metaState.rating = ratingKeys[(idx + 1) % ratingKeys.length];
+      const idx = ratingCodes.indexOf(metaState.rating ?? 'NR');
+      metaState.rating = ratingCodes[(idx + 1) % ratingCodes.length];
       log(`handleMetadataButton: rating changed to '${metaState.rating}' for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       await interaction.update(buildMetadataPanel(cfg, metaState));
 
@@ -425,8 +422,8 @@ export async function handleMetadataSelectMenu(connection, interaction) {
     const currentRating = metaState.originalRating ?? metaState.rating;
 
     if (metaEntry.onSave && crossesBarrier(currentRating, newRating)) {
-      const oldLabel = cfg[ratingLabels[currentRating]] ?? currentRating;
-      const newLabel = cfg[ratingLabels[newRating]] ?? newRating;
+      const oldLabel = cfg[ratingLabelKey(currentRating)] ?? currentRating;
+      const newLabel = cfg[ratingLabelKey(newRating)] ?? newRating;
       const body = cfg.txtRatingChangeConfirmBody
         .replace('[old_rating]', oldLabel)
         .replace('[new_rating]', newLabel);
