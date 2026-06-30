@@ -83,7 +83,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
       'txtModeQuick', 'txtModeNormal', 'txtModeSlow',
       'txtStatusSlowModeNoTimer', 'txtStatusReminderSuffixSlow',
-      'txtYes', 'txtNo', 'txtOpen',
+      'txtYes', 'txtNo', 'txtOpen', 'txtNA',
       'txtStatusLegendCreator', 'txtStatusLegendCurrentTurn', 'txtStatusLegendNextUp', 'txtStatusLegendPaused',
       'txtStatusNoActiveTurn',
       'txtStatusNextManual', 'txtStatusNextFixed', 'txtStatusNextRoundRobin', 'txtStatusNextRandom',
