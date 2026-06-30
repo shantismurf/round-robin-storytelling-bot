@@ -288,6 +288,6 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       }
     }
   } catch (err) {
-    log(`Failed to update story status message for story ${storyId}: ${err}`, { show: true, guildName: guild?.name });
+    log(`updateStoryStatusMessage failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: guild?.name });
   }
 }
