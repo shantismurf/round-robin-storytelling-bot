@@ -83,7 +83,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
       'txtModeQuick', 'txtModeNormal', 'txtModeSlow',
       'txtStatusSlowModeNoTimer', 'txtStatusReminderSuffixSlow',
-      'txtYes', 'txtNo', 'txtOpen',
+      'txtYes', 'txtNo', 'txtOpen', 'txtNA',
       'txtStatusLegendCreator', 'txtStatusLegendCurrentTurn', 'txtStatusLegendNextUp', 'txtStatusLegendPaused',
       'txtStatusNoActiveTurn',
       'txtStatusNextManual', 'txtStatusNextFixed', 'txtStatusNextRoundRobin', 'txtStatusNextRandom',
@@ -288,6 +288,6 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       }
     }
   } catch (err) {
-    log(`Failed to update story status message for story ${storyId}: ${err}`, { show: true, guildName: guild?.name });
+    log(`updateStoryStatusMessage failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: guild?.name });
   }
 }
