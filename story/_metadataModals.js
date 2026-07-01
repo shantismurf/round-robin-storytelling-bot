@@ -99,7 +99,7 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     embed.setDescription(cfg.txtStoryAddIntro);
   }
 
-  const compactBlock = (...pairs) => pairs.map(([lbl, val]) => `${lbl}\n${val}`).join('\n');
+  const compactBlock = (...pairs) => pairs.map(([lbl, val]) => `${lbl}\n${val}`).join('\n\n');
 
   embed.addFields(
     { name: sectionLine, value: '​', inline: true },
