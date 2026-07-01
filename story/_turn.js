@@ -501,9 +501,11 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
   const cfg = await getConfigValue(connection, cfgKeys, guild_id);
   const welcomeMsg = welcomeKey.map(key => cfg[key]).join('\n\n');
 
+  const storyThreadLink = `https://discord.com/channels/${guild_id}/${getActiveThreadId(writer)}`;
   let welcomeContent = welcomeMsg
     .replace('[story_title]', writer.title)
-    .replace('[story_id]', writer.guild_story_id);
+    .replace('[story_id]', writer.guild_story_id)
+    .replace('[story_thread_link]', storyThreadLink);
 
   if (!isSlowMode && turnEndTime) {
     const unixTs = Math.floor(turnEndTime.getTime() / 1000);
