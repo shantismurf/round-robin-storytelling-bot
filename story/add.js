@@ -94,7 +94,11 @@ export function buildStoryAddMessage(cfg, state) {
     new ButtonBuilder()
       .setCustomId('story_add_open_titlesummary')
       .setLabel(cfg.btnAddTitleAndSummary)
-      .setStyle(ButtonStyle.Primary),
+      .setStyle(ButtonStyle.Primary)
+  );
+
+  // Row 2: Show Names: <> | Hide Threads: <>
+  const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_cycle_mode')
       .setLabel(`${cfg.lblModeToggle}: ${modeLabel}`)
@@ -103,10 +107,6 @@ export function buildStoryAddMessage(cfg, state) {
       .setCustomId('story_add_cycle_order')
       .setLabel(`${cfg.lblWriterOrder}: ${orderLabel}`)
       .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Row 2: Show Names: <> | Hide Threads: <>
-  const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_toggle_authors')
       .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? cfg.txtYes : cfg.txtNo}`)
@@ -117,28 +117,24 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Secondary),
   );
 
-  // Row 3: Story Metadata | Story Tags
+  // Row 3: Story Metadata | Story Tags | Story Settings | My Settings
   const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_add_open_metadata')
-      .setLabel(cfg.btnAddMetadata)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_add_open_tags')
-      .setLabel(cfg.btnAddTags)
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Row 4: Story Settings | My Settings
-  const row4 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_add_open_settings')
-      .setLabel(cfg.btnAddSettings)
-      .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_open_mysettings')
       .setLabel(cfg.btnAddMySettings)
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_add_open_metadata')
+      .setLabel(cfg.btnAddMetadata)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_add_open_tags')
+      .setLabel(cfg.btnAddTags)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_add_open_settings')
+      .setLabel(cfg.btnAddSettings)
+      .setStyle(ButtonStyle.Primary)
   );
 
   // Row 5: Create Story
@@ -149,7 +145,7 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Success)
   );
 
-  return { embeds: [embed], components: [row1, row2, row3, row4, row5] };
+  return { embeds: [embed], components: [row1, row2, row3, row5] };
 }
 
 export async function handleAddStoryModalSubmit(connection, interaction) {

@@ -30,7 +30,7 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary', 'lblMetaSceneBreakDivider',
     'txtMetaMainRelationshipPlaceholder', 'txtMetaSceneBreakDividerPlaceholder',
     'txtManageWarningSelectInstructions',
-    'btnAddTitleAndSummary', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
+    'btnAddTitleAndSummary', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings', 'btnAddHideToggle',
     'btnSaveSettings', 'btnCreateStory',
     'optWarnAllClear',
     ...ratingCodes.map(ratingLabelKey),
@@ -99,8 +99,12 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     embed.setDescription(cfg.txtStoryAddIntro);
   }
 
+  const compactBlock = (...pairs) => pairs.map(([lbl, val]) => `${lbl}\n${val}`).join('\n');
+
   embed.addFields(
-    { name: sectionLine, value: cfg.txtStoryAddSectionBreakSettings, inline: false },
+    { name: sectionLine, value: '​', inline: true },
+    { name: cfg.txtStoryAddSectionBreakSettings, value: '​', inline: true },
+    { name: sectionLine, value: '​', inline: true },
     { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
     { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
     { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
@@ -110,21 +114,27 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
     { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
     { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
-    { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: false },
+    { name: sectionLine, value: '​', inline: true },
+    { name: cfg.txtStoryAddSectionBreakMeta, value: '​', inline: true },
+    { name: sectionLine, value: '​', inline: true },
     { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
     { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
     { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false },
     { name: cfg.lblMetaMainRelationship, value: mainPairingDisplay, inline: true },
     { name: cfg.lblMetaOtherRelationships, value: otherRelDisplay, inline: true },
-    { name: cfg.lblMetaCharacters, value: charsDisplay, inline: false },
-    { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
-    { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
-    { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
+    { name: '​', value: compactBlock(
+        [cfg.lblMetaCharacters, charsDisplay],
+        [cfg.lblMetaTags, tagsDisplay],
+        [cfg.lblMetaSummary, summaryDisplay],
+        [cfg.lblMetaSceneBreakDivider, sceneBreakDisplay],
+      ), inline: false },
   );
 
   if (showJoinSettings) {
     embed.addFields(
-      { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin, inline: false },
+      { name: sectionLine, value: '​', inline: true },
+      { name: cfg.txtStoryAddSectionBreakJoin, value: '​', inline: true },
+      { name: sectionLine, value: '​', inline: true },
       { name: cfg.lblYourPenName, value: state.penName || cfg.txtNotSet, inline: true },
       { name: cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
       { name: cfg.lblJoinNotifications ?? cfg.lblMyNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
