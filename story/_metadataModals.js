@@ -48,6 +48,8 @@ export async function getMetaCfg(connection, guildId) {
  * options.isManage      — suppresses My Join Settings section and intro description
  * options.showJoinSettings — explicit false also suppresses join section
  */
+const s = v => (v == null ? '' : String(v));
+
 export function buildStoryEmbed(cfg, state, options = {}) {
   const showJoinSettings = options.showJoinSettings !== false && !options.isManage;
   const title = options.title ?? cfg.txtCreateStoryTitle;
@@ -100,39 +102,39 @@ export function buildStoryEmbed(cfg, state, options = {}) {
   }
 
   embed.addFields(
-    { name: sectionLine, value: cfg.txtStoryAddSectionBreakSettings, inline: true },
-    { name: sectionLine, value: ' ', inline: true },
-    { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
-    { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
-    { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-    { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
-    { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: cfg.lblHideToggle, value: state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc, inline: true },
-    { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
-    { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
-    { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+    { name: s(sectionLine) || ' ', value: s(cfg.txtStoryAddSectionBreakSettings) || ' ', inline: true },
+    { name: s(sectionLine) || ' ', value: ' ', inline: true },
+    { name: s(cfg.lblStoryTitle) || ' ', value: s(titleDisplay) || ' ', inline: false },
+    { name: s(`${modeEmoji} ${cfg.lblModeToggle}`) || ' ', value: s(`${modeLabel} — ${modeDesc}`) || ' ', inline: true },
+    { name: s(`${orderEmoji} ${cfg.lblWriterOrder}`) || ' ', value: s(`${orderLabel} — ${orderDesc}`) || ' ', inline: true },
+    { name: s(cfg.lblTurnLength) || ' ', value: s(isSlowMode ? cfg.txtNA : formatDuration(state.turnLength)) || ' ', inline: true },
+    { name: s(isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder) || ' ', value: s(timeoutDisplay) || ' ', inline: true },
+    { name: s(cfg.lblHideToggle) || ' ', value: s(state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc) || ' ', inline: true },
+    { name: s(cfg.lblShowAuthors) || ' ', value: s(`${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`) || ' ', inline: true },
+    { name: s(cfg.lblMaxWriters) || ' ', value: s(maxWritersDisplay) || ' ', inline: true },
+    { name: s(cfg.lblDelayStart) || ' ', value: s(`*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`) || ' ', inline: true },
     { name: ' ', value: ' ', inline: false },
-    { name: sectionLine, value: cfg.txtStoryAddSectionBreakMeta, inline: true },
-    { name: sectionLine, value: ' ', inline: true },
-    { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
-    { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
-    { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false },
-    { name: cfg.lblMetaMainRelationship, value: mainPairingDisplay, inline: true },
-    { name: cfg.lblMetaOtherRelationships, value: otherRelDisplay, inline: true },
-    { name: cfg.lblMetaCharacters, value: charsDisplay, inline: false },
-    { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
-    { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
-    { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
+    { name: s(sectionLine) || ' ', value: s(cfg.txtStoryAddSectionBreakMeta) || ' ', inline: true },
+    { name: s(sectionLine) || ' ', value: ' ', inline: true },
+    { name: s(cfg.lblMetaRating) || ' ', value: s(ratingLabel) || ' ', inline: true },
+    { name: s(cfg.lblMetaDynamic) || ' ', value: s(dynamicDisplay) || ' ', inline: true },
+    { name: s(cfg.lblMetaWarnings) || ' ', value: s(warningsDisplay) || ' ', inline: false },
+    { name: s(cfg.lblMetaMainRelationship) || ' ', value: s(mainPairingDisplay) || ' ', inline: true },
+    { name: s(cfg.lblMetaOtherRelationships) || ' ', value: s(otherRelDisplay) || ' ', inline: true },
+    { name: s(cfg.lblMetaCharacters) || ' ', value: s(charsDisplay) || ' ', inline: false },
+    { name: s(cfg.lblMetaTags) || ' ', value: s(tagsDisplay) || ' ', inline: false },
+    { name: s(cfg.lblMetaSummary) || ' ', value: s(summaryDisplay) || ' ', inline: false },
+    { name: s(cfg.lblMetaSceneBreakDivider) || ' ', value: s(sceneBreakDisplay) || ' ', inline: true },
   );
 
   if (showJoinSettings) {
     embed.addFields(
       { name: ' ', value: ' ', inline: false },
-      { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin, inline: true },
-      { name: sectionLine, value: ' ', inline: true },
-      { name: cfg.lblYourPenName, value: state.penName || cfg.txtNotSet, inline: true },
-      { name: cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
-      { name: cfg.lblJoinNotifications ?? cfg.lblMyNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
+      { name: s(sectionLine) || ' ', value: s(cfg.txtStoryAddSectionBreakJoin) || ' ', inline: true },
+      { name: s(sectionLine) || ' ', value: ' ', inline: true },
+      { name: s(cfg.lblYourPenName) || ' ', value: s(state.penName || cfg.txtNotSet) || ' ', inline: true },
+      { name: s(cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle) || ' ', value: s(state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic) || ' ', inline: true },
+      { name: s(cfg.lblJoinNotifications ?? cfg.lblMyNotifications) || ' ', value: s(state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)) || ' ', inline: true },
     );
   }
 
