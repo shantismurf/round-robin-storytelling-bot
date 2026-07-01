@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { marked } from 'marked';
-import { ratingCodes, ratingLabelKey, formatWarnings, warningOptions } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, formatWarnings, warningOptions, dynamicOptions } from './_metadata.js';
 import { applyEntryMarkup, isSceneBreakLine } from './_entryMarkup.js';
 
 // Convert Discord markdown to HTML for export
@@ -172,6 +172,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     'txtExportLblCharacters', 'txtExportLblTags',
     'txtExportLblStarted', 'txtExportLblWriters', 'txtExportLblExported',
     'txtExportNoteBody', 'txtExportStatsLine',
+    ...dynamicOptions,
   ], guildId);
 
   const fmt = d => new Date(d).toISOString().slice(0, 10);
@@ -205,7 +206,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     ? formatWarnings(story.warnings, Object.fromEntries(warningOptions.map(k => [k, cfg[k] ?? k])))
     : cfg.optWarnAllClear;
   const ao3MetaLines = [
-    story.dynamic          ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblDynamic}:</span> ${story.dynamic}</div>` : '',
+    story.dynamic          ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblDynamic}:</span> ${cfg[story.dynamic] ?? story.dynamic}</div>` : '',
     `<div class="meta"><span class="meta-label">${cfg.txtExportLblRating}:</span> ${ratingLabel}</div>`,
     `<div class="meta"><span class="meta-label">${cfg.txtExportLblWarnings}:</span> ${warningsText}</div>`,
     story.main_pairing     ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblRelationship}:</span> ${story.main_pairing}</div>` : '',

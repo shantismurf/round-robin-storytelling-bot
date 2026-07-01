@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
-import { ratingCodes, ratingBadgeKey, warningOptions, formatWarnings } from './_metadata.js';
+import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
 
 /**
@@ -92,8 +92,10 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
+      'lblMetaDynamic',
       ratingBadgeCfgKey,
       ...warningOptions,
+      ...dynamicOptions,
     ], story.guild_id);
     const txtActive = cfg.txtActive;
     const txtPaused = cfg.txtPaused;
@@ -188,6 +190,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     if (story.rating && story.rating !== 'NR') {
       metadataFields.push({ name: cfg.lblMetaRating, value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
     }
+    if (story.dynamic)       metadataFields.push({ name: cfg.lblMetaDynamic, value: cfg[story.dynamic] ?? story.dynamic, inline: true });
     if (story.main_pairing)  metadataFields.push({ name: cfg.lblMetaMainRelationship, value: story.main_pairing, inline: true });
     if (warningsDisplay)     metadataFields.push({ name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false });
     if (story.characters)    metadataFields.push({ name: cfg.lblMetaCharacters, value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
