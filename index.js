@@ -6,6 +6,10 @@ import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
 
+// Hub broadcast state — populated at ClientReady from config
+let _hubServerId = null;
+let _hubAnnouncementsChannelId = null;
+
 /**
  * On startup, refresh status embeds for all active/paused stories so buttons
  * and content never go stale after a bot restart.
@@ -132,8 +136,14 @@ async function main() {
     }).join('\n');
     log(`Installed on ${client.guilds.cache.size} server(s):\n${guildList}`, { show: true });
 
-    const hubLogChannelId = await getConfigValue(connection, 'cfgHubLogChannelId');
+    const [hubLogChannelId, hubServerId, hubAnnouncementsChannelId] = await Promise.all([
+      getConfigValue(connection, 'cfgHubLogChannelId'),
+      getConfigValue(connection, 'cfgHubServerId'),
+      getConfigValue(connection, 'cfgHubAnnouncementsChannelId'),
+    ]);
     setHubLogClient(client, hubLogChannelId);
+    _hubServerId = hubServerId;
+    _hubAnnouncementsChannelId = hubAnnouncementsChannelId;
     const { version } = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
     log(`✅ Bot online — v${version} on ${client.guilds.cache.size} server(s)`, { show: true, hub: true });
     await bot.start();
@@ -144,6 +154,45 @@ async function main() {
   client.on(Events.GuildDelete, async guild => {
     log(`Bot removed from guild ${guild.name ?? 'unknown'} (${guild.id})`, { show: true, hub: true });
     await closeOrphanedGuildStories(connection, guild.id);
+  });
+  client.on(Events.MessageCreate, async message => {
+    if (message.author.bot) return;
+    if (!_hubServerId || !_hubAnnouncementsChannelId) return;
+    if (message.guildId !== _hubServerId) return;
+    if (message.channelId !== _hubAnnouncementsChannelId) return;
+    if (!message.content.startsWith('# 📢')) return;
+
+    log(`Hub announcement broadcast triggered by ${message.author.username}`, { show: true });
+
+    const [announcementTitle, announcementFooter] = await Promise.all([
+      getConfigValue(connection, 'txtHubAnnouncementTitle'),
+      getConfigValue(connection, 'txtHubAnnouncementFooter'),
+    ]);
+
+    const embed = new EmbedBuilder()
+      .setTitle(announcementTitle)
+      .setDescription(message.content.slice(0, 4096))
+      .setColor(0xe91e63)
+      .setFooter({ text: announcementFooter });
+
+    let sent = 0;
+    let skipped = 0;
+    for (const guild of client.guilds.cache.values()) {
+      try {
+        const changelogEnabled = await getConfigValue(connection, 'cfgChangelogEnabled', guild.id);
+        if (changelogEnabled === '0') { skipped++; continue; }
+        const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guild.id);
+        if (!feedChannelId || feedChannelId === 'cfgStoryFeedChannelId') { skipped++; continue; }
+        const channel = await guild.channels.fetch(feedChannelId);
+        if (!channel) { skipped++; continue; }
+        await channel.send({ embeds: [embed] });
+        sent++;
+      } catch (err) {
+        log(`Hub broadcast failed for guild ${guild.name} (${guild.id}): ${err?.stack ?? err}`, { show: true });
+        skipped++;
+      }
+    }
+    log(`Hub broadcast complete — sent to ${sent} guild(s), skipped ${skipped}`, { show: true });
   });
   function formatCommandLog(interaction) {
     const subcommand = interaction.options.getSubcommand(false);
