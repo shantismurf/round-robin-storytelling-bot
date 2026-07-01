@@ -136,12 +136,12 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   const story = storyRows[0];
 
   const [writers] = await connection.execute(
-    `SELECT discord_display_name, AO3_name FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC`,
+    `SELECT discord_display_name, pen_name FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC`,
     [storyId]
   );
 
   const [entries] = await connection.execute(
-    `SELECT se.content, se.created_at, sw.discord_display_name, sw.AO3_name,
+    `SELECT se.content, se.created_at, sw.discord_display_name, sw.pen_name,
             (SELECT COUNT(DISTINCT t2.turn_id) FROM turn t2
              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
@@ -182,7 +182,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   const secondDate = isClosed && story.closed_at ? fmt(story.closed_at) : fmt(entries[entries.length - 1].created_at);
   const exportDate = fmt(new Date());
 
-  const writersList = writers.map(w => `${w.AO3_name || w.discord_display_name} (${w.discord_display_name})`).join(', ');
+  const writersList = writers.map(w => `${w.pen_name || w.discord_display_name} (${w.discord_display_name})`).join(', ');
   const modeLabel = story.mode === 1 ? cfg.txtExportModeQuick : story.mode === 2 ? cfg.txtExportModeSlow : cfg.txtExportModeNormal;
 
   let entriesHtml = '';
@@ -191,7 +191,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     if (entry.turn_number !== currentTurn) {
       if (currentTurn !== null) entriesHtml += `</div>`;
       currentTurn = entry.turn_number;
-      const writerName = entry.AO3_name || entry.discord_display_name;
+      const writerName = entry.pen_name || entry.discord_display_name;
       const turnHeader = story.show_authors && !suppressBreaks
         ? `<div class="turn-label">Turn ${entry.turn_number} — ${writerName}</div>`
         : '';

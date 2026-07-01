@@ -42,7 +42,7 @@ CREATE TABLE IF NOT EXISTS story_writer (
   FOREIGN KEY (story_id) REFERENCES story(story_id) ON DELETE CASCADE,
   discord_user_id BIGINT NOT NULL,
   discord_display_name VARCHAR(255),
-  AO3_name VARCHAR(255),
+  pen_name VARCHAR(255),
   turn_privacy TINYINT(1) DEFAULT 0,
   sw_status TINYINT(1) DEFAULT 1,
   joined_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,

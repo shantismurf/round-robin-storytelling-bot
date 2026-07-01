@@ -8,13 +8,13 @@ import { postStoryFeedJoinAnnouncement } from '../announcements.js';
 // Pending join sessions keyed by userId
 export const pendingJoinData = new Map();
 
-async function getPreviousAO3Name(connection, userId) {
+async function getPreviousPenName(connection, userId) {
   try {
     const [rows] = await connection.execute(
-      `SELECT AO3_name FROM story_writer WHERE discord_user_id = ? AND AO3_name IS NOT NULL AND AO3_name != '' ORDER BY joined_at DESC LIMIT 1`,
+      `SELECT pen_name FROM story_writer WHERE discord_user_id = ? AND pen_name IS NOT NULL AND pen_name != '' ORDER BY joined_at DESC LIMIT 1`,
       [userId]
     );
-    return rows[0]?.AO3_name ?? null;
+    return rows[0]?.pen_name ?? null;
   } catch { return null; }
 }
 
@@ -71,11 +71,11 @@ export async function validateJoinEligibility(connection, storyId, guildId, user
 }
 
 export async function buildJoinEmbed(connection, state, threadMode = false) {
-  const { storyId, guildId, storyTitle, privacy, notificationPrefs, ao3Name, displayName, threadMode: stateThreadMode } = state;
+  const { storyId, guildId, storyTitle, privacy, notificationPrefs, penName, displayName, threadMode: stateThreadMode } = state;
   const isThreadMode = threadMode || stateThreadMode;
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacySelect', 'lblJoinNotifSelect',
-    'lblJoinAO3Name', 'txtJoinAO3NotSet', 'btnJoinSetAO3', 'btnJoinConfirm', 'btnCancel'
+    'lblJoinPenName', 'txtJoinPenNameNotSet', 'btnJoinSetPenName', 'btnJoinConfirm', 'btnCancel'
   ], guildId);
 
   const embed = new EmbedBuilder()
@@ -84,7 +84,7 @@ export async function buildJoinEmbed(connection, state, threadMode = false) {
     .addFields(
       { name: cfg.lblJoinPrivacySelect, value: privacy === 'private' ? '🔒 Private' : '🌐 Public', inline: true },
       { name: cfg.lblJoinNotifSelect, value: notificationPrefs === 'dm' ? '💬 DM' : '📢 Mention in channel', inline: true },
-      { name: cfg.lblJoinAO3Name, value: ao3Name || (displayName ? `${displayName} (Discord display name)` : cfg.txtJoinAO3NotSet), inline: false }
+      { name: cfg.lblJoinPenName, value: penName || (displayName ? `${displayName} (Discord display name)` : cfg.txtJoinPenNameNotSet), inline: false }
     );
 
   const privacyRow = new ActionRowBuilder().addComponents(
@@ -107,8 +107,8 @@ export async function buildJoinEmbed(connection, state, threadMode = false) {
 
   const buttonRow = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`story_join_set_ao3_${storyId}`)
-      .setLabel(cfg.btnJoinSetAO3)
+      .setCustomId(`story_join_set_penname_${storyId}`)
+      .setLabel(cfg.btnJoinSetPenName)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId(`story_join_confirm_${storyId}`)
@@ -148,9 +148,9 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     }
 
     log(`handleJoin: building embed`, { show: false, guildName: interaction?.guild?.name });
-    const existingAO3Name = await getPreviousAO3Name(connection, interaction.user.id);
+    const existingPenName = await getPreviousPenName(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', ao3Name: existingAO3Name, displayName, threadMode: buttonStoryId !== null };
+    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', penName: existingPenName, displayName, threadMode: buttonStoryId !== null };
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
@@ -176,22 +176,22 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
  */
 export async function handleJoinSetAO3Button(connection, interaction) {
   const storyId = interaction.customId.split('_').at(-1);
-  const cfg = await getConfigValue(connection, ['lblJoinAO3Name', 'txtJoinAO3Placeholder', 'lblJoinSetAO3ModalTitle'], interaction.guild.id);
+  const cfg = await getConfigValue(connection, ['lblJoinPenName', 'txtJoinPenNamePlaceholder', 'lblJoinSetPenNameModalTitle'], interaction.guild.id);
   const state = pendingJoinData.get(interaction.user.id);
 
   const modal = new ModalBuilder()
-    .setCustomId(`story_join_ao3_${storyId}`)
-    .setTitle(cfg.lblJoinSetAO3ModalTitle);
+    .setCustomId(`story_join_penname_${storyId}`)
+    .setTitle(cfg.lblJoinSetPenNameModalTitle);
 
   const input = new TextInputBuilder()
-    .setCustomId('ao3_name')
-    .setLabel(cfg.lblJoinAO3Name)
+    .setCustomId('pen_name')
+    .setLabel(cfg.lblJoinPenName)
     .setStyle(TextInputStyle.Short)
     .setRequired(false)
-    .setPlaceholder(cfg.txtJoinAO3Placeholder)
+    .setPlaceholder(cfg.txtJoinPenNamePlaceholder)
     .setMaxLength(255);
 
-  if (state?.ao3Name) input.setValue(state.ao3Name);
+  if (state?.penName) input.setValue(state.penName);
 
   modal.addComponents(new ActionRowBuilder().addComponents(input));
   await interaction.showModal(modal);
@@ -204,7 +204,7 @@ export async function handleJoinAO3ModalSubmit(connection, interaction) {
     await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', interaction.guild.id), flags: MessageFlags.Ephemeral });
     return;
   }
-  state.ao3Name = sanitizeModalInput(interaction.fields.getTextInputValue('ao3_name'), 255) || '';
+  state.penName = sanitizeModalInput(interaction.fields.getTextInputValue('pen_name'), 255) || '';
   pendingJoinData.set(interaction.user.id, state);
 
   await interaction.deferUpdate();
@@ -232,7 +232,7 @@ export async function handleJoinConfirm(connection, interaction) {
   }
 
   const joinInput = {
-    ao3Name: state.ao3Name || null,
+    penName: state.penName || null,
     turnPrivacy: state.privacy === 'private' ? 1 : 0,
     notificationPrefs: state.notificationPrefs
   };

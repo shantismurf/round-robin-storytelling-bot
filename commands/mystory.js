@@ -75,7 +75,7 @@ async function handleButtonInteraction(connection, interaction) {
 }
 
 async function handleModalSubmit(connection, interaction) {
-  if (interaction.customId === 'mystory_manage_ao3_modal') {
+  if (interaction.customId === 'mystory_manage_penname_modal') {
     await handleMyStoryManageModal(connection, interaction);
   }
 }

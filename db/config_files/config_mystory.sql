@@ -1,6 +1,6 @@
 -- Context: config_mystory
 INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
-('lblYourAO3Name', 'Your Pen Name:', 'en', 1),
+('lblYourPenName', 'Your Pen Name:', 'en', 1),
 ('txtMyStoryNone', '🤷 You''re not currently a writer in any active stories. Use /story join to get started!', 'en', 1),
 ('txtMyTurnQuick', '🎯 **Your turn!** Use `/story write [story_id]`', 'en', 1),
 ('txtMyTurnNormal', '🎯 **Your turn!**', 'en', 1),
@@ -10,7 +10,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtCatchupNoEntries', 'No new entries since your last turn.', 'en', 1),
 ('txtCatchupSessionExpired', 'Session expired. Please run `/mystory catchup` again.', 'en', 1),
 ('txtMyStoryManageTitle', 'My Settings — **[story_title]**', 'en', 1),
-('lblMyStoryManageAO3', 'Pen Name', 'en', 1),
+('lblMyStoryManagePenName', 'Pen Name', 'en', 1),
 ('lblMyStoryManageNotif', 'Notifications', 'en', 1),
 ('lblMyStoryManagePrivacy', 'Turn Privacy', 'en', 1),
 ('txtMyStoryManageSaved', '✅ Your settings have been saved.', 'en', 1),
@@ -20,7 +20,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtLeaveConfirmLastWriter', '⚠️ You are the **last active writer** in **[story_title]**. Leaving will automatically close the story. Are you sure?', 'en', 1),
 ('txtLeftStorySuccess', '✅ You have left the story.', 'en', 1),
 ('txtPassSuccess', '✅ Your turn has been passed.', 'en', 1),
-('txtAO3NamePlaceholder', 'Your pen name (optional)', 'en', 1),
+('txtPenNamePlaceholder', 'Your pen name (optional)', 'en', 1),
 ('txtMyListTitle', '📚 Your Stories (Page [page]/[total])', 'en', 1),
 ('txtMyListNone', 'You have no story history yet. Use `/story join` to get started!', 'en', 1),
 ('btnMyStoryManagePause', '⏸️ Pause Participation', 'en', 1),

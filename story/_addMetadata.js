@@ -317,12 +317,11 @@ export async function handleMetadataButton(connection, interaction) {
 
       const { onSave, panelInteraction } = metaEntry;
       log(`handleMetadataButton: hasOnSave=${!!onSave} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-      pendingMetaPanelData.delete(userId);
-      log(`handleMetadataButton: metadata saved for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
       if (onSave) {
         log(`handleMetadataButton: invoking onSave for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await onSave(interaction, metaFields, cfg);
         log(`handleMetadataButton: onSave resolved for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+        pendingMetaPanelData.delete(userId);
         if (panelInteraction && panelInteraction !== interaction) {
           await panelInteraction.editReply({ content: cfg.txtMetaApplied, embeds: [], components: [] }).catch(() => {});
         }
@@ -335,6 +334,7 @@ export async function handleMetadataButton(connection, interaction) {
         }
         log(`handleMetadataButton: applying metaFields to addState for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         Object.assign(addState, metaFields);
+        pendingMetaPanelData.delete(userId);
         log(`handleMetadataButton: calling interaction.update (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
         await interaction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
         log(`handleMetadataButton: calling editReply (add flow) for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });

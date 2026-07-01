@@ -198,7 +198,7 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
     const guild_id = interaction.guild.id;
     const userId = interaction.user.id;
     const displayName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
-    const ao3Name = storyInput.ao3Name || displayName;
+    const penName = storyInput.penName || displayName;
 
     // Check if user already joined this story
     const [existingWriter] = await connection.execute(
@@ -226,9 +226,9 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
     const writerOrder = countResult[0].count + 1;
 
     const [writerResult] = await connection.execute(
-      `INSERT INTO story_writer (story_id, discord_user_id, discord_display_name, AO3_name, turn_privacy, notification_prefs, writer_order)
+      `INSERT INTO story_writer (story_id, discord_user_id, discord_display_name, pen_name, turn_privacy, notification_prefs, writer_order)
        VALUES (?, ?, ?, ?, ?, ?, ?)`,
-      [storyId, userId, displayName, ao3Name, turnPrivacy, notificationPrefs, writerOrder]
+      [storyId, userId, displayName, penName, turnPrivacy, notificationPrefs, writerOrder]
     );
 
     const storyWriterId = writerResult.insertId;

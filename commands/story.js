@@ -204,7 +204,7 @@ async function handleModalSubmit(connection, interaction) {
     await handleAddStoryModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_write_')) {
     await handleWriteModalSubmit(connection, interaction);
-  } else if (interaction.customId.startsWith('story_join_ao3_')) {
+  } else if (interaction.customId.startsWith('story_join_penname_')) {
     await handleJoinAO3ModalSubmit(connection, interaction);
   } else if (interaction.customId === 'story_manage_entries_filter_modal') {
     await handleManageEntriesModal(connection, interaction);
@@ -263,7 +263,7 @@ async function handleButtonInteraction(connection, interaction) {
     await handleManageButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_confirm_')) {
     await handleJoinConfirm(connection, interaction);
-  } else if (interaction.customId.startsWith('story_join_set_ao3_')) {
+  } else if (interaction.customId.startsWith('story_join_set_penname_')) {
     await handleJoinSetAO3Button(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_thread_cancel_')) {
     await interaction.message.delete().catch(() => {});

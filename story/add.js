@@ -7,13 +7,13 @@ import { buildMetadataPanel, handleMetadataButton, handleMetadataModal, handleMe
 // Temporary storage for story add session state
 export const pendingStoryData = new Map();
 
-async function getPreviousAO3Name(connection, userId) {
+async function getPreviousPenName(connection, userId) {
   try {
     const [rows] = await connection.execute(
-      `SELECT AO3_name FROM story_writer WHERE discord_user_id = ? AND AO3_name IS NOT NULL AND AO3_name != '' ORDER BY joined_at DESC LIMIT 1`,
+      `SELECT pen_name FROM story_writer WHERE discord_user_id = ? AND pen_name IS NOT NULL AND pen_name != '' ORDER BY joined_at DESC LIMIT 1`,
       [userId]
     );
-    return rows[0]?.AO3_name ?? null;
+    return rows[0]?.pen_name ?? null;
   } catch { return null; }
 }
 
@@ -31,10 +31,10 @@ export async function handleAddStory(connection, interaction) {
       'txtNormalModeDesc', 'txtQuickModeDesc', 'txtSlowModeDesc',
       'txtHideThreadsOffDesc', 'txtHideThreadsOnDesc',
       'btnSetTitle', 'btnSetTurnLength', 'btnSetTimeout',
-      'btnSetAO3Name', 'btnSetDelayHours', 'btnSetDelayWriters', 'btnCreateStory',
+      'btnSetPenName', 'btnSetDelayHours', 'btnSetDelayWriters', 'btnCreateStory',
       'lblModeToggle', 'lblHideToggle', 'btnAddHideToggle', 'lblPrivateToggle', 'txtPrivateOffDesc', 'txtPrivateOnDesc',
       'lblStoryTitle', 'lblTurnLength', 'lblTimeoutReminder', 'lblTimeoutReminderSlow',
-      'lblDelayStart', 'txtDelayHint', 'lblYourAO3Name',
+      'lblDelayStart', 'txtDelayHint', 'lblYourPenName',
       'lblNoHours', 'lblNoWriters',
       'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
       'txtOrderRandomDesc', 'txtOrderRoundRobinDesc', 'txtOrderFixedDesc',
@@ -53,7 +53,7 @@ export async function handleAddStory(connection, interaction) {
       hideThreads: 0,
       turnLength: 24,
       timeoutReminder: 50,
-      ao3Name: (await getPreviousAO3Name(connection, interaction.user.id)) || interaction.member?.displayName || interaction.user.displayName,
+      penName: (await getPreviousPenName(connection, interaction.user.id)) || interaction.member?.displayName || interaction.user.displayName,
       keepPrivate: 0,
       notifications: 1,
       delayHours: null,
@@ -152,7 +152,7 @@ export function buildStoryAddMessage(cfg, state) {
       { name: sectionLine, value: cfg.txtStoryAddSectionBreakJoin, inline: true },
       { name: sectionLine, value: '\u0020', inline: true },
       //{ name: sectionLine, value: '\u0020', inline: true },
-      { name: cfg.lblYourAO3Name, value: state.ao3Name, inline: true },
+      { name: cfg.lblYourPenName, value: state.penName, inline: true },
       { name: cfg.lblHideToggle, value: `${privateLabel} — ${privateDesc}`, inline: true },
       { name: cfg.lblMyNotifications, value: state.notifications ? cfg.txtOn : cfg.txtOff, inline: true },
     )
@@ -225,8 +225,8 @@ export function buildStoryAddMessage(cfg, state) {
       .setLabel(`${cfg.lblPrivateToggle}: ${privateLabel}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
-      .setCustomId('story_add_set_ao3')
-      .setLabel(cfg.btnSetAO3Name)
+      .setCustomId('story_add_set_penname')
+      .setLabel(cfg.btnSetPenName)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_toggle_notifications')
@@ -299,8 +299,8 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       }
       state.timeoutReminder = val;
 
-    } else if (customId === 'story_add_ao3_modal') {
-      state.ao3Name = sanitizeModalInput(interaction.fields.getTextInputValue('ao3_name'), 255) || null;
+    } else if (customId === 'story_add_penname_modal') {
+      state.penName = sanitizeModalInput(interaction.fields.getTextInputValue('pen_name'), 255) || null;
 
     } else if (customId === 'story_add_delayhours_modal') {
       const raw = sanitizeModalInput(interaction.fields.getTextInputValue('delay_hours'), 10);
@@ -473,19 +473,19 @@ export async function handleAddStoryButton(connection, interaction) {
         )
     );
 
-  } else if (customId === 'story_add_set_ao3') {
+  } else if (customId === 'story_add_set_penname') {
     await interaction.showModal(
       new ModalBuilder()
-        .setCustomId('story_add_ao3_modal')
-        .setTitle(state.cfg.lblYourAO3Name)
+        .setCustomId('story_add_penname_modal')
+        .setTitle(state.cfg.lblYourPenName)
         .addComponents(
           new ActionRowBuilder().addComponents(
             new TextInputBuilder()
-              .setCustomId('ao3_name')
-              .setLabel(state.cfg.lblYourAO3Name)
+              .setCustomId('pen_name')
+              .setLabel(state.cfg.lblYourPenName)
               .setStyle(TextInputStyle.Short)
               .setRequired(false)
-              .setValue(state.ao3Name || '')
+              .setValue(state.penName || '')
               .setPlaceholder('Your pen name (optional)')
           )
         )
@@ -575,7 +575,7 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
       hideTurnThreads: state.hideThreads,
       turnLength: state.turnLength,
       timeoutReminder: state.timeoutReminder,
-      ao3Name: state.ao3Name,
+      penName: state.penName,
       keepPrivate: state.keepPrivate,
       notifications: state.notifications ?? 1,
       delayHours: state.delayHours,

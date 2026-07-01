@@ -43,7 +43,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const story = storyRows[0];
 
     const [writers] = await connection.execute(
-      `SELECT story_writer_id, discord_display_name, AO3_name, sw_status, writer_order
+      `SELECT story_writer_id, discord_display_name, pen_name, sw_status, writer_order
        FROM story_writer WHERE story_id = ? ORDER BY joined_at ASC`,
       [storyId]
     );
@@ -125,14 +125,14 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         const isCurrent = activeTurn?.story_writer_id === w.story_writer_id;
         const isCreator = w.story_writer_id === creatorId;
         const isPinnedNext = story.next_writer_id && w.story_writer_id === story.next_writer_id;
-        const ao3 = w.AO3_name && w.AO3_name !== w.discord_display_name ? ` (${w.AO3_name})` : '';
+        const penName = w.pen_name && w.pen_name !== w.discord_display_name ? ` (${w.pen_name})` : '';
         const emojis = [isCreator ? '⭐' : '', isCurrent ? '✍️' : '', isPinnedNext ? '📌' : ''].filter(Boolean).join('');
         const prefix = emojis ? `${emojis} ` : '';
-        return `${prefix}**${w.discord_display_name}**${ao3}`;
+        return `${prefix}**${w.discord_display_name}**${penName}`;
       }),
       ...pausedWriters.map(w => {
-        const ao3 = w.AO3_name && w.AO3_name !== w.discord_display_name ? ` (${w.AO3_name})` : '';
-        return `⏸️ ${w.discord_display_name}${ao3}`;
+        const penName = w.pen_name && w.pen_name !== w.discord_display_name ? ` (${w.pen_name})` : '';
+        return `⏸️ ${w.discord_display_name}${penName}`;
       }),
       ...leftWriters.map(w => `*${w.discord_display_name}*`),
       '',

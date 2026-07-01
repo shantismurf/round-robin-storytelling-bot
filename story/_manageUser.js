@@ -33,7 +33,7 @@ function buildManageUserPanel(state) {
     .setColor(0x5865f2)
     .addFields(
       { name: cfg.lblManageUserStatus, value: statusLabel,                   inline: true },
-      { name: cfg.lblManageUserAO3,    value: state.ao3Name || cfg.txtNotSet, inline: true },
+      { name: cfg.lblManageUserPenName, value: state.penName || cfg.txtNotSet, inline: true },
       { name: cfg.lblAdminMUNotif,     value: notifLabel,                    inline: true },
       { name: cfg.lblAdminMUPrivacy,   value: privacyLabel,                  inline: true }
     )
@@ -47,7 +47,7 @@ function buildManageUserPanel(state) {
       ? new ButtonBuilder().setCustomId('storyadmin_mu_pause').setLabel(cfg.btnAdminMUPause).setStyle(ButtonStyle.Danger)
       : new ButtonBuilder().setCustomId('storyadmin_mu_unpause').setLabel(cfg.btnAdminMUUnpause).setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('storyadmin_mu_remove').setLabel(cfg.btnAdminMURemove).setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('storyadmin_mu_ao3name').setLabel(cfg.btnAdminMUAO3Name).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('storyadmin_mu_penname').setLabel(cfg.btnAdminMUPenName).setStyle(ButtonStyle.Secondary)
   );
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('storyadmin_mu_toggle_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
@@ -86,7 +86,7 @@ export async function handleManageUser(connection, interaction) {
     log(`handleManageUser: story found — "${story.title}"`, { show: false, guildName: interaction?.guild?.name });
 
     const [writerRows] = await connection.execute(
-      `SELECT story_writer_id, sw_status, AO3_name, notification_prefs, turn_privacy
+      `SELECT story_writer_id, sw_status, pen_name, notification_prefs, turn_privacy
        FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (1, 2)`,
       [storyId, targetUser.id]
     );
@@ -116,9 +116,9 @@ export async function handleManageUser(connection, interaction) {
 
     const cfg = await getConfigValue(connection, [
       'txtManageUserPanelTitle', 'txtManageUserPanelDesc',
-      'lblManageUserStatus', 'lblManageUserAO3',
+      'lblManageUserStatus', 'lblManageUserPenName',
       'lblAdminMUNotif', 'lblAdminMUPrivacy', 'btnManageUserClose',
-      'btnAdminMUPause', 'btnAdminMUUnpause', 'btnAdminMURemove', 'btnAdminMUAO3Name',
+      'btnAdminMUPause', 'btnAdminMUUnpause', 'btnAdminMURemove', 'btnAdminMUPenName',
       'btnAdminMUToggleNotif', 'btnAdminMUTogglePrivacy',
       'btnAdminMUSave', 'txtAdminMUSaved',
       'txtAdminMUPauseConfirmDesc', 'txtAdminMUActiveTurnWarning',
@@ -132,7 +132,7 @@ export async function handleManageUser(connection, interaction) {
       'btnManageUserMakePublic', 'btnManageUserMakePrivate',
       'txtAdminMUPauseConfirmTitle', 'txtAdminMUUnpauseConfirmTitle',
       'txtAdminMURemoveConfirmTitle', 'txtAdminRemoveAutoClose',
-      'lblJoinSetAO3ModalTitle', 'txtAdminMUAO3Placeholder',
+      'lblJoinSetPenNameModalTitle', 'txtAdminMUPenNamePlaceholder',
     ], guildId);
 
     const isActiveTurn = activeTurnRows.length > 0;
@@ -148,7 +148,7 @@ export async function handleManageUser(connection, interaction) {
       writerId: writer.story_writer_id,
       writerName,
       writerStatus: writer.sw_status,
-      ao3Name: writer.AO3_name,
+      penName: writer.pen_name,
       notificationPrefs: writer.notification_prefs,
       turnPrivacy: writer.turn_privacy,
       // Stage copies for save
@@ -263,20 +263,20 @@ export async function handleManageUserButton(connection, interaction) {
     );
     await interaction.editReply({ embeds: [embed], components: [row] });
 
-  } else if (customId === 'storyadmin_mu_ao3name') {
-    log(`handleManageUserButton: showing AO3 name modal`, { show: false, guildName: interaction?.guild?.name });
+  } else if (customId === 'storyadmin_mu_penname') {
+    log(`handleManageUserButton: showing pen name modal`, { show: false, guildName: interaction?.guild?.name });
     const modal = new ModalBuilder()
-      .setCustomId('storyadmin_mu_ao3name_modal')
-      .setTitle(pending.cfg.lblJoinSetAO3ModalTitle)
+      .setCustomId('storyadmin_mu_penname_modal')
+      .setTitle(pending.cfg.lblJoinSetPenNameModalTitle)
       .addComponents(
         new ActionRowBuilder().addComponents(
           new TextInputBuilder()
-            .setCustomId('ao3_name_input')
-            .setLabel(pending.cfg.lblManageUserAO3)
+            .setCustomId('pen_name_input')
+            .setLabel(pending.cfg.lblManageUserPenName)
             .setStyle(TextInputStyle.Short)
             .setRequired(false)
-            .setPlaceholder(pending.cfg.txtAdminMUAO3Placeholder)
-            .setValue(pending.ao3Name ?? '')
+            .setPlaceholder(pending.cfg.txtAdminMUPenNamePlaceholder)
+            .setValue(pending.penName ?? '')
         )
       );
     await interaction.showModal(modal);
@@ -400,12 +400,12 @@ export async function handleManageUserModalSubmit(connection, interaction) {
     return await interaction.reply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), flags: MessageFlags.Ephemeral });
   }
   try {
-    const rawName = interaction.fields.getTextInputValue('ao3_name_input');
+    const rawName = interaction.fields.getTextInputValue('pen_name_input');
     const newName = sanitizeModalInput(rawName, 100) || null;
-    log(`handleManageUserModalSubmit: new AO3 name="${newName}" for writerId=${pending.writerId}`, { show: false, guildName: interaction?.guild?.name });
-    await connection.execute(`UPDATE story_writer SET AO3_name = ? WHERE story_writer_id = ?`, [newName, pending.writerId]);
-    await logAdminAction(connection, adminId, 'ao3name', pending.storyId, pending.targetUserId, newName);
-    pending.ao3Name = newName;
+    log(`handleManageUserModalSubmit: new pen name="${newName}" for writerId=${pending.writerId}`, { show: false, guildName: interaction?.guild?.name });
+    await connection.execute(`UPDATE story_writer SET pen_name = ? WHERE story_writer_id = ?`, [newName, pending.writerId]);
+    await logAdminAction(connection, adminId, 'penname', pending.storyId, pending.targetUserId, newName);
+    pending.penName = newName;
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await pending.originalInteraction.editReply(buildManageUserPanel(pending));
     await interaction.deleteReply();

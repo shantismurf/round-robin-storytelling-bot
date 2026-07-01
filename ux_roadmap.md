@@ -18,7 +18,7 @@ For system architecture and routing, see `system_roadmap.md`.
 
 /story join [story_id]
   → JoinPanel embed
-  → story_join_ao3_* (AO3 name modal if needed)
+  → story_join_penname_* (pen name modal if needed)
   → story_join_confirm_* → StoryJoin()
   → story_join_cancel_*
 
@@ -75,7 +75,7 @@ Tag Submission Thread Post (in story thread)
   → storyadmin_setup_* modal → guild config saved
 
 /storyadmin user [story_id] [user]
-  → ManageUser panel (pause, remove, AO3 name, notif prefs, turn privacy)
+  → ManageUser panel (pause, remove, pen name, notif prefs, turn privacy)
   → storyadmin_mu_* buttons → confirm embed → storyadmin_mu_confirm_* / storyadmin_mu_cancel_*
 
 /storyadmin faqsync
