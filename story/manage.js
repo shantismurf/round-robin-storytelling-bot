@@ -324,6 +324,16 @@ async function handleManageButton(connection, interaction) {
                 .setMaxLength(4000)
                 .setValue(state.summary || '')
             ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('scene_break_divider')
+                .setLabel(cfg.lblMetaSceneBreakDivider)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+                .setMaxLength(200)
+                .setValue(state.sceneBreakDivider || '')
+                .setPlaceholder(cfg.txtMetaSceneBreakDividerPlaceholder ?? '')
+            ),
           )
       );
 
@@ -513,6 +523,7 @@ async function handleManageModalSubmit(connection, interaction) {
       state.title = value;
       state.storyTitle = value;
       state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('story_summary'), 4000, true) || '';
+      state.sceneBreakDivider = sanitizeModalInput(interaction.fields.getTextInputValue('scene_break_divider'), 200, true) || '';
 
     } else if (customId === 'story_manage_settings_modal') {
       const cfg = state.cfg;

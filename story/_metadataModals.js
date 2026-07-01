@@ -100,10 +100,10 @@ export function buildStoryEmbed(cfg, state, options = {}) {
   }
 
   embed.addFields(
+    { name: '​', value: `${cfg.lblStoryTitle}\n${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}\n\n${cfg.lblMetaSceneBreakDivider}\n${sceneBreakDisplay}`, inline: false },
     { name: sectionLine, value: '​', inline: true },
     { name: cfg.txtStoryAddSectionBreakSettings, value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
-    { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
     { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
     { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
     { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
@@ -111,7 +111,8 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblHideToggle, value: state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc, inline: true },
     { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
     { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
-    { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: false },
+    { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+    { name: '​', value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
     { name: cfg.txtStoryAddSectionBreakMeta, value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
@@ -120,7 +121,6 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
     { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
     { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: true },
-    { name: '​', value: `${cfg.lblMetaSummary}\n${summaryDisplay}\n\n${cfg.lblMetaSceneBreakDivider}\n${sceneBreakDisplay}`, inline: false },
   );
 
   if (showJoinSettings) {
@@ -235,16 +235,6 @@ export function buildTagsModal(cfg, state, namespace) {
           .setRequired(false)
           .setMaxLength(1000)
           .setValue(state.tags ?? '')
-      ),
-      new ActionRowBuilder().addComponents(
-        new TextInputBuilder()
-          .setCustomId('scene_break_divider')
-          .setLabel(cfg.lblMetaSceneBreakDivider)
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setMaxLength(200)
-          .setValue(state.sceneBreakDivider ?? '')
-          .setPlaceholder(cfg.txtMetaSceneBreakDividerPlaceholder ?? '')
       ),
     );
 }

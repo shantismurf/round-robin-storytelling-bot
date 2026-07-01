@@ -58,7 +58,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHideThreadsOnDesc', 'Turn threads are private to the current writer only.', 'en', 1),
 ('txtStoryAddSessionExpired', 'Your story creation session has expired. Please run /story add again.', 'en', 1),
 ('btnSetTitle', 'Set Story Title', 'en', 1),
-('btnAddTitleAndSummary', 'Set Title & Summary', 'en', 1),
+('btnAddTitleAndSummary', 'Title, Summary, & Scene Break', 'en', 1),
 ('btnAddSettings', 'Story Settings', 'en', 1),
 ('btnAddMetadata', 'Story Metadata', 'en', 1),
 ('btnAddTags', 'Story Tags', 'en', 1),
