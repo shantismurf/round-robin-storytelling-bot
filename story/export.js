@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { marked } from 'marked';
 import { ratingCodes, ratingLabelKey, formatWarnings, warningOptions } from './_metadata.js';
 import { applyEntryMarkup, isSceneBreakLine } from './_entryMarkup.js';
@@ -125,7 +125,7 @@ export async function discordMarkdownToHtml(text, guild = null, dividerText = nu
  * Used by both /story read and /story close.
  * Returns null if story not found, or an object with { hasEntries, buffer, filename, title, turnCount, wordCount, writerCount }.
  */
-export async function generateStoryExport(connection, storyId, guildId, guild = null) {
+export async function generateStoryExport(connection, storyId, guildId, guild = null, { suppressBreaks = false } = {}) {
   const [storyRows] = await connection.execute(
     `SELECT story_id, guild_story_id, title, created_at, story_status, mode, closed_at, show_authors,
             summary, tags, rating, warnings, main_pairing, other_relationships, characters, dynamic, scene_break_divider
@@ -141,7 +141,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   );
 
   const [entries] = await connection.execute(
-    `SELECT se.content, se.created_at, sw.discord_display_name,
+    `SELECT se.content, se.created_at, sw.discord_display_name, sw.AO3_name,
             (SELECT COUNT(DISTINCT t2.turn_id) FROM turn t2
              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
@@ -162,15 +162,27 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
   const turnCount = entries[entries.length - 1].turn_number;
 
+  const cfg = await getConfigValue(connection, [
+    ...ratingCodes.map(ratingLabelKey),
+    ...warningOptions,
+    'txtExportCompletedLabel', 'txtExportUpdatedLabel',
+    'txtExportModeQuick', 'txtExportModeSlow', 'txtExportModeNormal',
+    'txtExportLblDynamic', 'txtExportLblRating', 'txtExportLblWarnings',
+    'txtExportLblRelationship', 'txtExportLblAdditionalRelationships',
+    'txtExportLblCharacters', 'txtExportLblTags',
+    'txtExportLblStarted', 'txtExportLblWriters', 'txtExportLblExported',
+    'txtExportNoteBody', 'txtExportStatsLine',
+  ], guildId);
+
   const fmt = d => new Date(d).toISOString().slice(0, 10);
   const publishedDate = fmt(story.created_at);
   const isClosed = story.story_status === 3;
-  const secondDateLabel = isClosed ? 'Completed' : 'Updated';
+  const secondDateLabel = isClosed ? cfg.txtExportCompletedLabel : cfg.txtExportUpdatedLabel;
   const secondDate = isClosed && story.closed_at ? fmt(story.closed_at) : fmt(entries[entries.length - 1].created_at);
   const exportDate = fmt(new Date());
 
   const writersList = writers.map(w => `${w.AO3_name || w.discord_display_name} (${w.discord_display_name})`).join(', ');
-  const modeLabel = story.mode === 1 ? 'Quick Mode' : story.mode === 2 ? 'Slow Mode' : 'Normal Mode';
+  const modeLabel = story.mode === 1 ? cfg.txtExportModeQuick : story.mode === 2 ? cfg.txtExportModeSlow : cfg.txtExportModeNormal;
 
   let entriesHtml = '';
   let currentTurn = null;
@@ -178,8 +190,9 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     if (entry.turn_number !== currentTurn) {
       if (currentTurn !== null) entriesHtml += `</div>`;
       currentTurn = entry.turn_number;
-      const turnHeader = story.show_authors
-        ? `<h2>Turn ${entry.turn_number} — ${entry.discord_display_name}</h2>`
+      const writerName = entry.AO3_name || entry.discord_display_name;
+      const turnHeader = story.show_authors && !suppressBreaks
+        ? `<div class="turn-label">Turn ${entry.turn_number} — ${writerName}</div>`
         : '';
       entriesHtml += `<div class="turn">${turnHeader}`;
     }
@@ -187,23 +200,18 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
-  const cfg = await getConfigValue(connection, [
-    ...ratingCodes.map(ratingLabelKey),
-    ...warningOptions,
-  ], guildId);
-
   const ratingLabel = cfg[ratingLabelKey(story.rating)] ?? story.rating;
   const warningsText = story.warnings
     ? formatWarnings(story.warnings, Object.fromEntries(warningOptions.map(k => [k, cfg[k] ?? k])))
     : cfg.optWarnAllClear;
   const ao3MetaLines = [
-    story.dynamic          ? `<div class="meta"><span class="meta-label">Dynamic:</span> ${story.dynamic}</div>` : '',
-    `<div class="meta"><span class="meta-label">Rating:</span> ${ratingLabel}</div>`,
-    `<div class="meta"><span class="meta-label">Warnings:</span> ${warningsText}</div>`,
-    story.main_pairing     ? `<div class="meta"><span class="meta-label">Relationship:</span> ${story.main_pairing}</div>` : '',
-    story.other_relationships ? `<div class="meta"><span class="meta-label">Additional Relationships:</span> ${story.other_relationships}</div>` : '',
-    story.characters       ? `<div class="meta"><span class="meta-label">Characters:</span> ${story.characters}</div>` : '',
-    story.tags             ? `<div class="meta"><span class="meta-label">Tags:</span> ${story.tags}</div>` : '',
+    story.dynamic          ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblDynamic}:</span> ${story.dynamic}</div>` : '',
+    `<div class="meta"><span class="meta-label">${cfg.txtExportLblRating}:</span> ${ratingLabel}</div>`,
+    `<div class="meta"><span class="meta-label">${cfg.txtExportLblWarnings}:</span> ${warningsText}</div>`,
+    story.main_pairing     ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblRelationship}:</span> ${story.main_pairing}</div>` : '',
+    story.other_relationships ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblAdditionalRelationships}:</span> ${story.other_relationships}</div>` : '',
+    story.characters       ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblCharacters}:</span> ${story.characters}</div>` : '',
+    story.tags             ? `<div class="meta"><span class="meta-label">${cfg.txtExportLblTags}:</span> ${story.tags}</div>` : '',
   ].filter(Boolean).join('\n    ');
 
   const html = `<!DOCTYPE html>
@@ -225,7 +233,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
        Copy everything between these markers into an AO3 Work Skin
        (Dashboard > My Work Skins > Create Work Skin) and apply it to
        your works to get matching formatting on AO3. */
-	  #workskin h2 {
+	  #workskin .turn-label {
   	  font-size: 0.7em;
   	  opacity: 0.7;
   	  font-style: italic;
@@ -286,20 +294,17 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
 <body>
   <div class="meta-block">
     <h1>${story.title}</h1>
-    <div class="meta-stats">Started: ${publishedDate} &nbsp; ${secondDateLabel}: ${secondDate}</div>
-    <div class="meta-stats">Story #${story.guild_story_id} &nbsp;·&nbsp; ${modeLabel} &nbsp;·&nbsp; ${turnCount} turn(s) &nbsp;·&nbsp; ~${wordCount.toLocaleString()} words</div>
-    <div class="meta"><span class="meta-label">Writers: ${writersList}</span></div>
+    <div class="meta-stats">${cfg.txtExportLblStarted}: ${publishedDate} &nbsp; ${secondDateLabel}: ${secondDate}</div>
+    <div class="meta-stats">${replaceTemplateVariables(cfg.txtExportStatsLine, { story_num: story.guild_story_id, mode: modeLabel, turn_count: turnCount, word_count: wordCount.toLocaleString() })}</div>
+    <div class="meta"><span class="meta-label">${cfg.txtExportLblWriters}: ${writersList}</span></div>
     ${ao3MetaLines}
-    <div class="meta"><span class="meta-label">Exported: ${exportDate}</span></div>
+    <div class="meta"><span class="meta-label">${cfg.txtExportLblExported}: ${exportDate}</span></div>
   </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
   <div id="workskin">
   ${entriesHtml}
   </div>
   <div class="export-note">
-    <p><span class="meta-label">Export note:</span> This file was generated by Round Robin StoryBot.
-    Timestamps from Discord (e.g. turn deadlines in entries) are not included.
-    Story images are hosted on Discord's CDN — if you need them to persist long-term,
-    download and re-upload them to a permanent image host and update the links in this file.</p>
+    <p>${cfg.txtExportNoteBody}</p>
   </div>
 </body>
 </html>`;
@@ -312,6 +317,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
 export async function handleExportPostPublic(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   const storyId = parseInt(interaction.customId.split('_').at(-1));
+  const suppressBreaks = interaction.customId.includes('_noturns_');
   const guildId = interaction.guild.id;
 
   const [storyRows] = await connection.execute(
@@ -322,7 +328,7 @@ export async function handleExportPostPublic(connection, interaction) {
     return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 
-  const result = await generateStoryExport(connection, storyId, guildId, interaction.guild);
+  const result = await generateStoryExport(connection, storyId, guildId, interaction.guild, { suppressBreaks });
   if (!result?.hasEntries) {
     return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }

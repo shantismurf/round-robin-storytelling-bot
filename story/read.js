@@ -96,8 +96,12 @@ export function buildReadEmbed(session, pageIndex) {
   }
   utilityButtons.push(
     new ButtonBuilder()
-      .setCustomId('story_read_download')
-      .setLabel('⬇ Export Story')
+      .setCustomId('story_read_download_noturns')
+      .setLabel(session.btnExportNoBreaks)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_read_download_withturns')
+      .setLabel(session.btnExportWithBreaks)
       .setStyle(ButtonStyle.Secondary)
   );
   if (session.pendingRepostEntryId && session.pendingRepostEntryId === page.storyEntryId && page.isFirstChunk) {
@@ -278,11 +282,13 @@ if (isConfigured) {
       [storyId]
     );
 
-    const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay] = await Promise.all([
+    const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay, btnExportNoBreaks, btnExportWithBreaks] = await Promise.all([
       getConfigValue(connection, 'btnSubmitTagRead', guildId),
       getConfigValue(connection, 'btnViewProposedTags', guildId),
       getConfigValue(connection, 'btnManageTags', guildId),
       getConfigValue(connection, ratingBadgeKey(story.rating ?? 'NR'), guildId),
+      getConfigValue(connection, 'btnExportNoBreaks', guildId),
+      getConfigValue(connection, 'btnExportWithBreaks', guildId),
     ]);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
@@ -298,6 +304,7 @@ if (isConfigured) {
       isAdmin, isAdminOrCreator: isAdmin || isCreator, isActiveWriter,
       pendingTagCount: Number(pendingTagCount),
       btnSubmitTagRead, btnViewProposedTags, btnManageTags,
+      btnExportNoBreaks, btnExportWithBreaks,
       storyThreadId: story.story_thread_id, imagePageIndex: 0
     };
     pendingReadData.set(interaction.user.id, session);
@@ -399,17 +406,19 @@ export async function handleReadNav(connection, interaction) {
     return;
   }
 
-  if (interaction.customId === 'story_read_download') {
+  if (interaction.customId === 'story_read_download_noturns' || interaction.customId === 'story_read_download_withturns') {
     await interaction.deferUpdate();
+    const suppressBreaks = interaction.customId === 'story_read_download_noturns';
     try {
-      const result = await generateStoryExport(connection, session.storyId, session.guildId, interaction.guild);
+      const result = await generateStoryExport(connection, session.storyId, session.guildId, interaction.guild, { suppressBreaks });
       if (result?.hasEntries) {
         const [ao3Instructions, btnPostLabel] = await Promise.all([
           getConfigValue(connection, 'txtExportAO3Instructions', session.guildId),
           getConfigValue(connection, 'btnExportPostPublicly', session.guildId),
         ]);
+        const flagSegment = suppressBreaks ? 'noturns' : 'withturns';
         const postBtn = new ButtonBuilder()
-          .setCustomId(`story_read_post_public_${session.storyId}`)
+          .setCustomId(`story_read_post_public_${flagSegment}_${session.storyId}`)
           .setLabel(btnPostLabel)
           .setStyle(ButtonStyle.Secondary);
         const btnRow = new ActionRowBuilder().addComponents(postBtn);

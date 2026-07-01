@@ -140,7 +140,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
  * function postStoryFeedClosedAnnouncement
  * Post congratulatory announcement when a story is closed
  */
-export async function postStoryFeedClosedAnnouncement(connection, interaction, storyTitle, turnCount, wordCount, writerCount, exportResult = null) {
+export async function postStoryFeedClosedAnnouncement(connection, interaction, storyTitle, turnCount, wordCount, writerCount) {
   const guildId = interaction.guild.id;
   try {
     const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
@@ -157,9 +157,7 @@ export async function postStoryFeedClosedAnnouncement(connection, interaction, s
     });
     const feedChannel = await interaction.guild.channels.fetch(feedChannelId);
     if (feedChannel) {
-      const messageOptions = { content: announcement };
-      if (exportResult?.hasEntries) messageOptions.files = [{ attachment: exportResult.buffer, name: exportResult.filename }];
-      await feedChannel.send(messageOptions);
+      await feedChannel.send({ content: announcement });
     }
     log('Story feed closed announcement sent', { show: true, guildName: interaction?.guild?.name });
   } catch (error) {

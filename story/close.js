@@ -5,6 +5,30 @@ import { endTurnThread } from './_turn.js';
 import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
 
+// Direct stats query — independent of export generation, since export is now a manual, optional step after close.
+async function getStoryStats(connection, storyId) {
+  const [writerRows] = await connection.execute(
+    `SELECT COUNT(*) AS writerCount FROM story_writer WHERE story_id = ? AND sw_status = 1`,
+    [storyId]
+  );
+  const [entryRows] = await connection.execute(
+    `SELECT se.content,
+            (SELECT COUNT(DISTINCT t2.turn_id) FROM turn t2
+             JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+             JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+             WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
+     FROM story_entry se
+     JOIN turn t ON se.turn_id = t.turn_id
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+     ORDER BY t.started_at`,
+    [storyId]
+  );
+  const turnCount = entryRows.length ? entryRows[entryRows.length - 1].turn_number : 0;
+  const wordCount = entryRows.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
+  return { turnCount, wordCount, writerCount: writerRows[0].writerCount };
+}
+
 export async function handleClose(connection, interaction) {
   log(`handleClose entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -108,11 +132,8 @@ export async function handleCloseConfirm(connection, interaction) {
       [storyId]
     );
 
-    // Generate export (story is now marked closed so closed_at will be set in the file)
-    const exportResult = await generateStoryExport(connection, storyId, guildId, interaction.guild);
-    const turnCount = exportResult?.turnCount ?? 0;
-    const wordCount = exportResult?.wordCount ?? 0;
-    const writerCount = exportResult?.writerCount ?? 0;
+    // Story is now marked closed — gather stats directly (export is now a manual, optional step)
+    const { turnCount, wordCount, writerCount } = await getStoryStats(connection, storyId);
 
     // Update story thread title and post close message (if thread still exists)
     if (story.story_thread_id) {
@@ -137,9 +158,7 @@ export async function handleCloseConfirm(connection, interaction) {
             turn_count: turnCount,
             word_count: wordCount.toLocaleString()
           });
-          const messageOptions = { content: closedMsg };
-          if (exportResult?.hasEntries) messageOptions.files = [{ attachment: exportResult.buffer, name: exportResult.filename }];
-          await storyThread.send(messageOptions);
+          await storyThread.send({ content: closedMsg });
         }
       } catch (err) {
         log(`Story thread not available for close post (story ${storyId})`, { show: false, guildName: interaction?.guild?.name });
@@ -148,14 +167,30 @@ export async function handleCloseConfirm(connection, interaction) {
 
     // Feed announcement — only if there are confirmed entries
     if (turnCount > 0) {
-      await postStoryFeedClosedAnnouncement(connection, interaction, story.title, turnCount, wordCount, writerCount, exportResult);
+      await postStoryFeedClosedAnnouncement(connection, interaction, story.title, turnCount, wordCount, writerCount);
     }
 
     updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
 
     log(`handleCloseConfirm: story ${storyId} closed successfully`, { show: true, guildName: interaction?.guild?.name });
-    // Clear confirmation buttons
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryCloseSuccess', guildId), components: [] });
+
+    // Export is now manual — offer both options on the success message
+    const [txtStoryCloseSuccess, btnExportNoBreaks, btnExportWithBreaks] = await Promise.all([
+      getConfigValue(connection, 'txtStoryCloseSuccess', guildId),
+      getConfigValue(connection, 'btnExportNoBreaks', guildId),
+      getConfigValue(connection, 'btnExportWithBreaks', guildId),
+    ]);
+    const exportRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`story_export_close_noturns_${storyId}`)
+        .setLabel(btnExportNoBreaks)
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`story_export_close_withturns_${storyId}`)
+        .setLabel(btnExportWithBreaks)
+        .setStyle(ButtonStyle.Secondary)
+    );
+    await interaction.editReply({ content: txtStoryCloseSuccess, components: [exportRow] });
 
     // Clean up the active writer's turn thread now that the reply has been
     // sent — this may delete the thread the interaction was issued from.
@@ -172,4 +207,37 @@ export async function handleCloseConfirm(connection, interaction) {
 export async function handleCloseCancel(connection, interaction) {
   await interaction.deferUpdate();
   await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), components: [] });
+}
+
+// story_export_close_noturns_<storyId> / story_export_close_withturns_<storyId> —
+// manual export buttons offered on the close-success message (export is no longer automatic on close).
+export async function handleCloseExportButton(connection, interaction) {
+  await interaction.deferUpdate();
+  const suppressBreaks = interaction.customId.startsWith('story_export_close_noturns_');
+  const storyId = parseInt(interaction.customId.split('_').at(-1));
+  const guildId = interaction.guild.id;
+
+  try {
+    const result = await generateStoryExport(connection, storyId, guildId, interaction.guild, { suppressBreaks });
+    if (result?.hasEntries) {
+      const [ao3Instructions, btnPostLabel] = await Promise.all([
+        getConfigValue(connection, 'txtExportAO3Instructions', guildId),
+        getConfigValue(connection, 'btnExportPostPublicly', guildId),
+      ]);
+      const flagSegment = suppressBreaks ? 'noturns' : 'withturns';
+      const postBtn = new ButtonBuilder()
+        .setCustomId(`story_read_post_public_${flagSegment}_${storyId}`)
+        .setLabel(btnPostLabel)
+        .setStyle(ButtonStyle.Secondary);
+      const btnRow = new ActionRowBuilder().addComponents(postBtn);
+      await interaction.followUp({
+        content: ao3Instructions,
+        files: [{ attachment: result.buffer, name: result.filename }],
+        components: [btnRow],
+        flags: MessageFlags.Ephemeral,
+      });
+    }
+  } catch (err) {
+    log(`Error generating HTML export from close flow: ${err}`, { show: true, guildName: interaction?.guild?.name });
+  }
 }

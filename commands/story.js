@@ -13,7 +13,7 @@ import { handleListStories, handleListNavigation, handleFilterButton, renderStor
 import { handleManage, handleManageButton, handleManageSelectMenu, handleTurnActionSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu, handleManageEntriesActionButton, handleManageEntriesModal } from '../story/_manageEntries.js';
 import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton, handleTagReviewNav } from '../story/tags.js';
-import { handleClose, handleCloseConfirm, handleCloseCancel } from '../story/close.js';
+import { handleClose, handleCloseConfirm, handleCloseCancel, handleCloseExportButton } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
 import { handleHelp, handleHelpSelect } from '../faq.js';
@@ -253,6 +253,8 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_close_cancel_')) {
     await handleCloseCancel(connection, interaction);
+  } else if (interaction.customId.startsWith('story_export_close_')) {
+    await handleCloseExportButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_review_tags_read_')) {
     await handleEditTagsButton(connection, interaction);
   } else if (interaction.customId === 'story_manage_entries_delete' || interaction.customId === 'story_manage_entries_restore') {
