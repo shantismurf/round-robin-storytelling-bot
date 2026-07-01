@@ -6,6 +6,8 @@
 - Code review: inline `.replace()` calls on config strings (replaceTemplateVariables compliance)
 - Create `style_roadmap.md` and link from CLAUDE.md
 - `/story list` overhaul — see [docs/PLAN-story-list-overhaul.md](docs/PLAN-story-list-overhaul.md)
+- formatDuration sweep: apply to `story/_storyStatus.js` line 210 (`${turn_length_hours}h`) and `announcements.js` line 105 (`${turn_length_hours}h Turns`) — these are different UX contexts and need separate review before changing displayed format
+- UX v3 Phases 3–5: `/storyadmin user` collapse, `/mystory manage` collapse + resume confirm, pending-indicator sweep (see plan file)
 
 ---
 

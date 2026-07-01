@@ -635,6 +635,44 @@ export function splitAtParagraphs(text, maxLen = 4000) {
   return chunks;
 }
 
+/**
+ * Parses a duration string into integer hours (rounded to nearest).
+ * Supports d/h/m suffixes, combinations (2d6h), decimals (1.5d), bare numbers (treated as hours).
+ */
+export function parseDuration(input) {
+  if (!input || typeof input !== 'string') return NaN;
+  const trimmed = input.trim();
+  if (!trimmed) return NaN;
+
+  const combinedPattern = /^\s*(?:(\d+(?:\.\d+)?)\s*d)?\s*(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m)?\s*$/i;
+  const match = trimmed.match(combinedPattern);
+  if (match && (match[1] || match[2] || match[3])) {
+    const days = parseFloat(match[1] || 0);
+    const hours = parseFloat(match[2] || 0);
+    const mins = parseFloat(match[3] || 0);
+    return Math.round(days * 24 + hours + mins / 60);
+  }
+
+  const bare = parseFloat(trimmed);
+  if (!isNaN(bare) && /^\d+(?:\.\d+)?$/.test(trimmed)) return Math.round(bare);
+
+  return NaN;
+}
+
+/**
+ * Formats an integer number of hours into a human-readable duration string.
+ * < 24h → "X hours"; >= 24h → "X hours (Y days)" or "X hours (Y days, Z hours)"
+ */
+export function formatDuration(hours) {
+  if (!hours && hours !== 0) return String(hours);
+  const h = Math.round(hours);
+  if (h < 24) return `${h} hours`;
+  const days = Math.floor(h / 24);
+  const remainder = h % 24;
+  if (remainder === 0) return `${h} hours (${days} days)`;
+  return `${h} hours (${days} days, ${remainder} hours)`;
+}
+
 export function storyLastActivitySQL(storyAlias = 's') {
   return `COALESCE(
     (SELECT MAX(t.ended_at)

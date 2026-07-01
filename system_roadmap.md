@@ -10,7 +10,7 @@ For config string keys, see `db/config_roadmap.md`.
 | File | Purpose | Lines |
 |------|---------|-------|
 | `index.js` | Entry point, Discord client, interaction router | ~250 |
-| `utilities.js` | Shared helpers: DB, logging, config, validators | ~570 |
+| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration | ~680 |
 | `storybot.js` | Core story engine: CreateStory, NextTurn, PickNextWriter | — |
 | `job-runner.js` | Background job polling and execution | ~250 |
 | `deploy.js` | CLI deploy: migrations, config sync, command registration | ~80 |
@@ -21,6 +21,7 @@ For config string keys, see `db/config_roadmap.md`.
 | `commands/storyadmin.js` | `/storyadmin` command handler | — |
 | `commands/mystory.js` | `/mystory` command handler | — |
 | `story/` | Per-subcommand modules: add, close, edit, help, join, list, manage, ping, read, timeleft, write, roundup | — |
+| `story/_metadataModals.js` | Shared embed/modal builders for /story add and /story manage: getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal | ~255 |
 
 ---
 

@@ -11,10 +11,13 @@ For system architecture and routing, see `system_roadmap.md`.
 
 ```
 /story add
-  → StoryAddPanel embed (select menus: mode, order, rating, privacy)
-  → story_add_meta_* buttons (AO3 metadata, tags)
-  → story_add_meta_save button → story.handleButtonInteraction
-  → Confirm/Cancel → CreateStory()
+  → StoryAddPanel embed (toggle buttons: mode, order, show names, hide threads)
+  → story_add_open_titlesummary → modal: title + summary
+  → story_add_open_settings → modal: turn length, reminder, delay hours, delay writers, max writers
+  → story_add_open_metadata → modal: dynamic, rating, warnings (select menus)
+  → story_add_open_tags → modal: main pairing, other rels, characters, tags, scene break
+  → story_add_open_mysettings → modal: pen name, privacy select, notifications select
+  → story_add_create → CreateStory()
 
 /story join [story_id]
   → JoinPanel embed
@@ -34,10 +37,15 @@ For system architecture and routing, see `system_roadmap.md`.
   → story_repost_entry_*
 
 /story manage [story_id]
-  → ManagePanel embed
-  → story_manage_* (edit, skip, close, tags)
-  → story_skip_confirm_* / story_close_confirm_*
-  → skip_turn_* → PickNextWriter → NextTurn
+  → ManagePanel embed (shared embed builder, toggle buttons: mode, order, joins, show names, privacy)
+  → story_manage_open_titlesummary → modal: title + summary
+  → story_manage_open_settings → modal: turn length, reminder, max writers
+  → story_manage_open_metadata → modal: dynamic, rating, warnings (select menus)
+  → story_manage_open_tags → modal: main pairing, other rels, characters, tags, scene break
+  → story_manage_toggle_pauseresume → toggles pause/resume state (staged until save)
+  → story_manage_save → writes all staged fields + barrier check + pause/resume actions
+  → story_manage_entries_open → Manage Entries panel
+  → story_manage_turns_open → Manage Turns panel
   → story_manage_review_tags (when pending tags > 0) → Manage Tags panel (approve/reject queue)
 
 Tag Submission Thread Post (in story thread)
@@ -131,7 +139,7 @@ turnSlowReminder job (slow mode only)
 ## Known Flow Gaps & Issues
 
 ### Critical
-- **metadata save bug** (`story_add_meta_save`): pendingStoryData null check fires before save completes. Story metadata is not saved. Tracked in TODO.md.
+*(none — metadata panel replaced with inline modals in v3.0.0)*
 
 ### Unimplemented / Deferred
 - **Request More Time** (`story_request_more_time_*`): button exists but scheduling extension is not implemented. Requires job scheduler update.

@@ -1,9 +1,9 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, getTurnNumber, checkIsAdmin, checkIsCreator } from '../utilities.js';
-import { PickNextWriter, NextTurn } from './_turn.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
+import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
-import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier } from './_metadata.js';
+import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
@@ -12,52 +12,21 @@ import { applyPauseActions, applyResumeActions, handleReopenStory } from './_man
 const pendingManageData = new Map();
 
 function buildManageMessage(cfg, state, activeTurn = null) {
-  const orderEmojis = { 1: '\u{1F3B2}', 2: '\u{1F504}', 3: '\u{1F4CB}' };
   const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
-  const orderEmoji = orderEmojis[state.orderType];
   const orderLabel = orderLabels[state.orderType];
   const isPaused = state.targetStatus === 2;
+  const isClosed = state.targetStatus === 3;
   const isSlowMode = state.storyMode === 2;
-
-  const ratingLabel = cfg[ratingLabelKey(state.rating ?? 'NR')] ?? state.rating;
-  const warningsDisplay = state.warnings?.length
-    ? (Array.isArray(state.warnings) ? state.warnings : state.warnings.split(',').map(w => w.trim())).join(', ')
-    : cfg.optWarnAllClear;
-
-  const sectionLine = cfg.txtSectionBreakLine;
-  const statusDisplay = isPaused
-    ? (cfg.txtManageStoryStatusPaused ?? `⏸️ ${cfg.txtPaused}`)
-    : (cfg.txtManageStoryStatusActive ?? `▶️ ${cfg.Active}`);
-  const joinDisplay = state.allowJoins
-    ? (cfg.txtManageJoinOpen ?? `\u{1F513} ${cfg.txtOpen}`)
-    : (cfg.txtManageJoinClosed ?? `\u{1F512} ${cfg.txtClosed}`);
-
-  const embed = new EmbedBuilder()
-    .setTitle(cfg.txtManageEmbedTitle)
-    .setColor(0x5865f2)
-    .addFields(
-      { name: cfg.lblManageStoryTitle, value: state.title, inline: false },
-      { name: cfg.lblManageStoryStatus, value: statusDisplay, inline: true },
-      { name: cfg.lblManageJoinStatus, value: joinDisplay, inline: true },
-      { name: cfg.lblWriterOrder, value: `${orderEmoji} ${orderLabel}`, inline: true },
-      { name: cfg.lblMaxWriters, value: state.maxWriters ? String(state.maxWriters) : cfg.txtInfinity, inline: true },
-      { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : `${state.turnLength} hours`, inline: true },
-      { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: state.timeoutReminder > 0 ? (isSlowMode ? `${state.timeoutReminder}h` : `${state.timeoutReminder}%`) : cfg.txtOff, inline: true },
-      { name: cfg.lblPrivateToggle, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic, inline: true },
-      { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtYes : cfg.txtNo, inline: true },
-      { name: sectionLine, value: cfg.txtManageSectionBreakMeta, inline: false },
-      { name: cfg.lblRating, value: ratingLabel, inline: true },
-      { name: cfg.lblDynamic, value: state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet, inline: true },
-      { name: cfg.lblWarnings, value: warningsDisplay, inline: false },
-      { name: cfg.lblTags, value: state.tags || cfg.txtNotSet, inline: false },
-    );
-
   const modeLabelManage = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC }[state.storyMode] ?? cfg.txtNormalUC;
-  // Row 1 (4): Set Title | Mode: <> | Writer Order: <> | Join Status: <>
+
+  const embed = buildStoryEmbed(cfg, state, { title: cfg.txtManageEmbedTitle, isManage: true });
+
+  // Row 1 (4): Set Title & Summary | Mode: <> | Order: <> | Pause/Resume or Reopen
+  const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId('story_manage_set_title')
-      .setLabel(cfg.txtManageSetTitleModalTitle)
+      .setCustomId('story_manage_open_titlesummary')
+      .setLabel(cfg.btnAddTitleAndSummary)
       .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('story_manage_cycle_mode')
@@ -67,44 +36,6 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setCustomId('story_manage_cycle_order')
       .setLabel(`${cfg.lblWriterOrder}: ${orderLabel}`)
       .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_toggle_latejoins')
-      .setLabel(`Join: ${state.allowJoins ? cfg.txtOpen : cfg.txtClosed}`)
-      .setStyle(ButtonStyle.Secondary)
-  );
-
-  // Row 2 (3): Max Writers: <> | Turn Length: <> | Reminder: <> |
-  const reminderBtnLabel = isSlowMode
-    ? replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}h` : cfg.txtNone })
-    : replaceTemplateVariables(cfg.btnSetTimeout, { reminder_interval: state.timeoutReminder > 0 ? `${state.timeoutReminder}%` : cfg.txtNone });
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_set_maxwriters')
-      .setLabel(replaceTemplateVariables(cfg.btnSetMaxWriters, { max_writers: state.maxWriters ?? cfg.txtInfinity }))
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_set_turnlength')
-      .setLabel(isSlowMode ? cfg.txtNA : replaceTemplateVariables(cfg.btnSetTurnLength, { turn_length: `${state.turnLength} ${cfg.txtHrs}` }))
-      .setStyle(ButtonStyle.Secondary)
-      .setDisabled(isSlowMode),
-    new ButtonBuilder()
-      .setCustomId('story_manage_set_reminder')
-      .setLabel(reminderBtnLabel)
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Row 3 (3): Show Names: <> | Hide Threads: <> | Pause/Resume or Reopen
-  const isClosed = state.targetStatus === 3;
-  const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_toggle_authors')
-      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? cfg.txtYes : cfg.txtNo}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_toggle_privacy')
-      .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`)
-      .setStyle(ButtonStyle.Secondary),
     isClosed
       ? new ButtonBuilder()
           .setCustomId('story_manage_reopen')
@@ -113,15 +44,43 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       : new ButtonBuilder()
           .setCustomId('story_manage_toggle_pauseresume')
           .setLabel(pauseResumeLabel)
-          .setStyle(ButtonStyle.Secondary)
-    );
+          .setStyle(ButtonStyle.Secondary),
+  );
 
-  // Row 4 (3-4): Metadata | Manage Entries | Manage Turns | [Review Tags if pending]
-  const row4Components = [
+  // Row 2 (3): Joins: <> | Show Names: <> | Hide Threads: <>
+  const row2 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_latejoins')
+      .setLabel(`${cfg.lblManageJoinStatus ?? cfg.lblJoinStatus}: ${state.allowJoins ? cfg.txtOpen : cfg.txtClosed}`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_authors')
+      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? cfg.txtYes : cfg.txtNo}`)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_toggle_privacy')
+      .setLabel(`${cfg.lblPrivateToggle}: ${state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`)
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Row 3 (3): Story Metadata | Story Tags | Story Settings
+  const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_open_metadata')
-      .setLabel(cfg.btnSetMetadata)
-      .setStyle(ButtonStyle.Primary),
+      .setLabel(cfg.btnAddMetadata)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_open_tags')
+      .setLabel(cfg.btnAddTags)
+      .setStyle(ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_open_settings')
+      .setLabel(cfg.btnAddSettings)
+      .setStyle(ButtonStyle.Secondary),
+  );
+
+  // Row 4 (3-4): Manage Entries | Manage Turns | [Review Tags if pending]
+  const row4Components = [
     new ButtonBuilder()
       .setCustomId('story_manage_entries_open')
       .setLabel(cfg.btnManageEntries)
@@ -129,8 +88,8 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     new ButtonBuilder()
       .setCustomId('story_manage_turns_open')
       .setLabel(cfg.btnManageTurns)
-      .setStyle(ButtonStyle.Secondary)
-    ];
+      .setStyle(ButtonStyle.Secondary),
+  ];
   if (state.pendingTagCount > 0) {
     row4Components.push(
       new ButtonBuilder()
@@ -141,7 +100,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   }
   const row4 = new ActionRowBuilder().addComponents(...row4Components);
 
-  // Row 5 (1): Save Settings
+  // Row 5: Save Settings
   const row5 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_save')
@@ -182,32 +141,27 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtManageNotAuthorized', guildId) });
     }
 
-    const cfg = await getConfigValue(connection, [
-      'txtYes','txtNo','txtOn','txtOff','txtNone','txtPublic','txtPrivate','txtInfinity','txtNA',
-      'txtHoursLC','txtHoursUC','txtWritersLC','txtWritersUC',
-      'txtQuickLC','txtQuickUC','txtNormalLC','txtNormalUC','txtSlowTC',
-      'txtOpen','txtClosed','txtActive','txtPaused','txtHrs',
-      'txtStory','txtPause','txtResume','txtRatingNR','txtNotSet',
-      'txtManageEmbedTitle', 'btnAdminConfigSave', 'btnSaveSettings', 'btnCancel',
-      'lblTurnLength', 'btnSetTurnLength',
-      'lblTimeoutReminder', 'lblTimeoutReminderSlow', 'btnSetTimeout',
-      'txtTimeoutReminderSlowPlaceholder', 'txtManageValidationSlowReminder',
-      'lblMaxWriters', 'btnSetMaxWriters',
-      'lblOpenToWriters', 'lblShowAuthors',
-      'lblModeToggle',
-      'lblWriterOrder', 'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
-      'lblTags', 'btnSetTags',
-      'lblPrivateToggle',
+    const cfg = await getMetaCfg(connection, guildId);
+
+    const extraCfg = await getConfigValue(connection, [
+      'txtOpen', 'txtClosed', 'txtActive', 'txtPaused', 'txtHrs',
+      'txtStory', 'txtPause', 'txtResume', 'txtNotSet',
+      'btnAdminConfigSave', 'btnCancel',
+      'lblJoinStatus', 'lblOpenToWriters', 'lblTags', 'btnSetTags',
       'lblRating', 'lblWarnings', 'lblDynamic',
-      'btnSetMetadata', 'btnReviewTags',
+      'btnReviewTags',
       'txtSelectionStaged',
       'txtSectionBreakLine', 'txtManageSectionBreakMeta',
       'lblManageStoryTitle', 'lblManageStoryStatus', 'lblManageJoinStatus',
       'txtManageStoryStatusActive', 'txtManageStoryStatusPaused',
       'txtManageJoinOpen', 'txtManageJoinClosed',
       'txtManageSetTitleModalTitle', 'lblManageSetTitleField', 'txtManageSetTitlePlaceholder',
-      'txtTurnLengthPlaceholder', 'txtTimeoutReminderPlaceholder',
+      'txtTurnLengthPlaceholder', 'txtTimeoutReminderPlaceholder', 'txtTimeoutReminderSlowPlaceholder',
       'txtManageMaxWritersPlaceholder', 'txtManageTagsPlaceholder',
+      'txtManageValidationTurnLength', 'txtManageValidationSlowReminder',
+      'txtManageValidationTimeout', 'txtManageValidationMaxWriters',
+      'txtMustBeNo', 'txtTimeoutReminderValidation',
+      'txtAddValidationTitleEmpty',
       'btnManageTurns', 'btnManageEntries',
       'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount',
       'txtManageTurnsPanelTitle', 'txtManageTurnsNoTurn', 'txtManageTurnsActiveTurn',
@@ -217,12 +171,13 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtTurnExtendPlaceholder', 'txtTurnDeleteEntryModalTitle', 'lblTurnDeleteEntryTurn',
       'txtTurnDeleteEntryPlaceholder', 'txtTurnRestoreEntryModalTitle', 'lblTurnRestoreEntryId',
       'txtTurnRestoreEntryPlaceholder', 'txtTurnNextSelectWrite',
-      ...ratingCodes.map(ratingLabelKey),
-      ...dynamicOptions,
-      ...warningOptions,
-      'txtManageWarningSelectInstructions',
-      'txtReopenStory'
+      'txtReopenStory',
+      'txtAdminConfigSaved', 'errProcessingRequest', 'txtActionCancelled', 'txtActionSessionExpired',
+      'txtManageNotAuthorized', 'txtStoryNotFound',
     ], guildId);
+
+    Object.assign(cfg, extraCfg);
+
     log(`handleManage: cfg loaded`, { show: false, guildName: interaction?.guild?.name });
 
     const [[{ pendingTagCount }]] = await connection.execute(
@@ -246,7 +201,9 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       guildStoryId: story.guild_story_id,
       guildId,
       title: story.title,
+      storyTitle: story.title,
       storyMode: story.mode ?? 0,
+      hideThreads: 0,
       turnLength: story.turn_length_hours,
       timeoutReminder: story.reminder_timing ?? 50,
       maxWriters: story.max_writers,
@@ -271,7 +228,9 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
       guildName: interaction.guild.name,
-      activeTurn
+      activeTurn,
+      delayHours: null,
+      delayWriters: null,
     };
 
     pendingManageData.set(interaction.user.id, state);
@@ -279,7 +238,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     await interaction.editReply(buildManageMessage(cfg, state, activeTurn));
 
   } catch (error) {
-    log(`Error in handleManage: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`Error in handleManage: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 }
@@ -298,242 +257,195 @@ async function handleManageButton(connection, interaction) {
 
   const customId = interaction.customId;
 
-  if (customId === 'story_manage_toggle_latejoins') {
-    state.allowJoins = state.allowJoins ? 0 : 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+  try {
+    if (customId === 'story_manage_toggle_latejoins') {
+      state.allowJoins = state.allowJoins ? 0 : 1;
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
-  } else if (customId === 'story_manage_toggle_authors') {
-    state.showAuthors = state.showAuthors ? 0 : 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+    } else if (customId === 'story_manage_toggle_authors') {
+      state.showAuthors = state.showAuthors ? 0 : 1;
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
-  } else if (customId === 'story_manage_toggle_privacy') {
-    state.turnPrivacy = state.turnPrivacy ? 0 : 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+    } else if (customId === 'story_manage_toggle_privacy') {
+      state.turnPrivacy = state.turnPrivacy ? 0 : 1;
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
-  } else if (customId === 'story_manage_cycle_mode') {
-    state.storyMode = state.storyMode === 2 ? 0 : state.storyMode + 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+    } else if (customId === 'story_manage_cycle_mode') {
+      state.storyMode = state.storyMode === 2 ? 0 : state.storyMode + 1;
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
-  } else if (customId === 'story_manage_cycle_order') {
-    state.orderType = state.orderType === 3 ? 1 : state.orderType + 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+    } else if (customId === 'story_manage_cycle_order') {
+      state.orderType = state.orderType === 3 ? 1 : state.orderType + 1;
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
-  } else if (customId === 'story_manage_reopen') {
-    try {
-      const { reopenMsg } = await handleReopenStory(connection, interaction, state);
-      pendingManageData.set(interaction.user.id, state);
-      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, null));
-      await interaction.followUp({ content: reopenMsg, flags: MessageFlags.Ephemeral });
-    } catch (err) {
-      await interaction.followUp({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
-    }
-
-  } else if (customId === 'story_manage_toggle_pauseresume') {
-    state.targetStatus = state.targetStatus === 1 ? 2 : 1;
-    await interaction.deferUpdate();
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-
-  } else if (customId === 'story_manage_set_title') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_manage_title_modal')
-        .setTitle(state.cfg.txtManageSetTitleModalTitle)
-        .addComponents(new ActionRowBuilder().addComponents(
-          new TextInputBuilder()
-            .setCustomId('story_title')
-            .setLabel(state.cfg.lblManageSetTitleField)
-            .setStyle(TextInputStyle.Short)
-            .setRequired(true)
-            .setMaxLength(500)
-            .setValue(state.title || '')
-            .setPlaceholder(state.cfg.txtManageSetTitlePlaceholder)
-        ))
-    );
-
-  } else if (customId === 'story_manage_turns_open') {
-    await interaction.reply(buildTurnActionsPanel(state, state.activeTurn, state.cfg));
-
-  } else if (customId === 'story_manage_entries_open') {
-    await handleManageEntriesButton(connection, interaction, state);
-
-  } else if (customId === 'story_manage_open_metadata') {
-    const { buildMetadataPanel, getMetaCfg, registerMetaSession } = await import('./_addMetadata.js');
-    const cfg2 = await getMetaCfg(connection, interaction.guild.id);
-    log(`handleManageButton: registering meta session storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-    registerMetaSession(interaction.user.id, { ...state }, interaction.guild.id, async (saveInteraction, metaFields, cfg) => {
-      log(`manage onSave: entered for user=${saveInteraction.user.username} storyId=${state.storyId}`, { show: false, guildName: state.guildName });
-      log(`manage onSave: metaFields=${JSON.stringify(metaFields)}`, { show: false, guildName: state.guildName });
-      const warningsStr = Array.isArray(metaFields.warnings) ? metaFields.warnings.join(', ') : (metaFields.warnings || null);
+    } else if (customId === 'story_manage_reopen') {
       try {
-        await connection.execute(
-          `UPDATE story SET rating = ?, warnings = ?, main_pairing = ?,
-           other_relationships = ?, characters = ?, dynamic = ?, tags = ?, summary = ?, scene_break_divider = ?
-           WHERE story_id = ?`,
-          [
-            metaFields.rating, warningsStr || null,
-            metaFields.mainPairing || null,
-            metaFields.otherRelationships || null, metaFields.characters || null,
-            metaFields.dynamic || null, metaFields.tags || null,
-            metaFields.summary || null,
-            metaFields.sceneBreakDivider || null,
-            state.storyId
-          ]
-        );
-        log(`manage onSave: metadata written to DB for storyId=${state.storyId}`, { show: true, guildName: state.guildName });
-
-        if (metaFields.oldRating && crossesBarrier(metaFields.oldRating, metaFields.rating)) {
-          const migResult = await migrateStoryThread(connection, saveInteraction.guild, state.storyId, metaFields.rating, metaFields.oldRating);
-          if (!migResult.success) {
-            log(`manage onSave: thread migration failed for storyId=${state.storyId}: ${migResult.error}`, { show: true, guildName: state.guildName });
-          } else {
-            await updateStoryStatusMessage(connection, saveInteraction.guild, state.storyId);
-            const migratedThread = await saveInteraction.guild.channels.fetch(migResult.newThreadId).catch(() => null);
-            if (migratedThread) await migratedThread.send({ embeds: [migResult.migratedInEmbed] }).catch(() => {});
-          }
-        } else {
-          updateStoryStatusMessage(connection, saveInteraction.guild, state.storyId).catch(() => {});
-        }
-
-        Object.assign(state, metaFields);
-        state.originalRating = metaFields.rating;
-
-        await saveInteraction.update({ content: cfg.txtMetaSaveSuccess, embeds: [], components: [] });
-        await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-        log(`manage onSave: complete for storyId=${state.storyId}`, { show: false, guildName: state.guildName });
-      } catch (error) {
-        log(`manage onSave: failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
-        await saveInteraction.update({ content: await getConfigValue(connection, 'errProcessingRequest', saveInteraction.guild.id), embeds: [], components: [] }).catch(() => {});
+        const { reopenMsg } = await handleReopenStory(connection, interaction, state);
+        pendingManageData.set(userId, state);
+        await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, null));
+        await interaction.followUp({ content: reopenMsg, flags: MessageFlags.Ephemeral });
+      } catch (err) {
+        await interaction.followUp({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
       }
-    }, interaction);
-    await interaction.reply({ ...buildMetadataPanel(cfg2, state), flags: MessageFlags.Ephemeral });
 
-  } else if (customId === 'story_manage_set_turnlength') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_manage_turnlength_modal')
-        .setTitle(state.cfg.lblTurnLength)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('turn_length')
-              .setLabel(state.cfg.lblTurnLength)
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true)
-              .setValue(String(state.turnLength))
-              .setPlaceholder(state.cfg.txtTurnLengthPlaceholder)
+    } else if (customId === 'story_manage_toggle_pauseresume') {
+      state.targetStatus = state.targetStatus === 1 ? 2 : 1;
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+    } else if (customId === 'story_manage_open_titlesummary') {
+      const cfg = state.cfg;
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_manage_titlesummary_modal')
+          .setTitle(cfg.btnAddTitleAndSummary)
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('story_title')
+                .setLabel(cfg.lblStoryTitle)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true)
+                .setMaxLength(500)
+                .setValue(state.title || '')
+                .setPlaceholder(cfg.txtManageSetTitlePlaceholder ?? '')
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('story_summary')
+                .setLabel(cfg.lblMetaSummary)
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(false)
+                .setMaxLength(4000)
+                .setValue(state.summary || '')
+            ),
           )
-        )
-    );
+      );
 
-  } else if (customId === 'story_manage_set_reminder') {
-    const isSlowMode = state.storyMode === 2;
-    const reminderLabel = isSlowMode ? state.cfg.lblTimeoutReminderSlow : state.cfg.lblTimeoutReminder;
-    const reminderPlaceholder = isSlowMode ? state.cfg.txtTimeoutReminderSlowPlaceholder : state.cfg.txtTimeoutReminderPlaceholder;
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_manage_reminder_modal')
-        .setTitle(reminderLabel)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('timeout_reminder')
-              .setLabel(reminderLabel)
-              .setStyle(TextInputStyle.Short)
-              .setRequired(true)
-              .setValue(String(state.timeoutReminder))
-              .setPlaceholder(reminderPlaceholder)
+    } else if (customId === 'story_manage_open_settings') {
+      const cfg = state.cfg;
+      const isSlowMode = state.storyMode === 2;
+      const turnLengthLabel = isSlowMode ? cfg.txtNA : cfg.lblTurnLength;
+      const reminderLabel = isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder;
+      const reminderPlaceholder = isSlowMode ? cfg.txtTimeoutReminderSlowPlaceholder : (cfg.txtTimeoutReminderPlaceholder ?? 'Enter 0–100 (0 = no reminder)');
+
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_manage_settings_modal')
+          .setTitle(cfg.btnAddSettings)
+          .addComponents(
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('turn_length')
+                .setLabel(turnLengthLabel)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(!isSlowMode)
+                .setMaxLength(20)
+                .setValue(isSlowMode ? '' : formatDuration(state.turnLength))
+                .setPlaceholder(cfg.txtTurnLengthPlaceholder ?? 'e.g. 24h, 2d, 1d12h')
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('timeout_reminder')
+                .setLabel(reminderLabel)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+                .setMaxLength(10)
+                .setValue(state.timeoutReminder > 0 ? String(state.timeoutReminder) : '')
+                .setPlaceholder(reminderPlaceholder)
+            ),
+            new ActionRowBuilder().addComponents(
+              new TextInputBuilder()
+                .setCustomId('max_writers')
+                .setLabel(cfg.lblMaxWriters)
+                .setStyle(TextInputStyle.Short)
+                .setRequired(false)
+                .setMaxLength(10)
+                .setValue(state.maxWriters != null ? String(state.maxWriters) : '')
+                .setPlaceholder(cfg.txtManageMaxWritersPlaceholder ?? 'Enter a number, or leave blank for no limit')
+            ),
           )
-        )
-    );
+      );
 
-  } else if (customId === 'story_manage_set_maxwriters') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_manage_maxwriters_modal')
-        .setTitle(state.cfg.lblMaxWriters)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('max_writers')
-              .setLabel(state.cfg.lblMaxWriters)
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(state.maxWriters != null ? String(state.maxWriters) : '')
-              .setPlaceholder(state.cfg.txtManageMaxWritersPlaceholder)
-          )
-        )
-    );
+    } else if (customId === 'story_manage_open_metadata') {
+      await interaction.showModal(buildMetadataModal(state.cfg, state, 'story_manage'));
 
-  } else if (customId === 'story_manage_set_tags') {
-    await interaction.showModal(
-      new ModalBuilder()
-        .setCustomId('story_manage_tags_modal')
-        .setTitle(state.cfg.lblTags)
-        .addComponents(
-          new ActionRowBuilder().addComponents(
-            new TextInputBuilder()
-              .setCustomId('tags')
-              .setLabel(state.cfg.lblTags)
-              .setStyle(TextInputStyle.Short)
-              .setRequired(false)
-              .setValue(state.tags)
-              .setPlaceholder(state.cfg.txtManageTagsPlaceholder)
-          )
-        )
-    );
+    } else if (customId === 'story_manage_open_tags') {
+      await interaction.showModal(buildTagsModal(state.cfg, state, 'story_manage'));
 
-  } else if (customId === 'story_manage_review_tags') {
-    await handleReviewTags(connection, interaction, state);
-    return;
+    } else if (customId === 'story_manage_turns_open') {
+      await interaction.reply(buildTurnActionsPanel(state, state.activeTurn, state.cfg));
 
-  } else if (customId === 'story_manage_ta_confirm') {
-    await handleTurnActionConfirm(connection, interaction);
-    return;
+    } else if (customId === 'story_manage_entries_open') {
+      await handleManageEntriesButton(connection, interaction, state);
 
-  } else if (customId === 'story_manage_ta_confirmcancel') {
-    await handleTurnActionCancel(connection, interaction);
-    return;
+    } else if (customId === 'story_manage_review_tags') {
+      await handleReviewTags(connection, interaction, state);
+      return;
 
-  } else if (customId.startsWith('story_manage_ta_')) {
-    await handleTurnActionButton(connection, interaction, state);
-    return;
+    } else if (customId === 'story_manage_ta_confirm') {
+      await handleTurnActionConfirm(connection, interaction);
+      return;
 
-  } else if (customId === 'story_manage_save') {
-    await interaction.deferUpdate();
-    await handleManageSave(connection, interaction, state);
+    } else if (customId === 'story_manage_ta_confirmcancel') {
+      await handleTurnActionCancel(connection, interaction);
+      return;
 
-  } else if (customId === 'story_manage_cancel') {
-    await interaction.deferUpdate();
-    pendingManageData.delete(userId);
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
-      embeds: [],
-      components: []
-    });
+    } else if (customId.startsWith('story_manage_ta_')) {
+      await handleTurnActionButton(connection, interaction, state);
+      return;
+
+    } else if (customId === 'story_manage_save') {
+      await interaction.deferUpdate();
+      await handleManageSave(connection, interaction, state);
+
+    } else if (customId === 'story_manage_cancel') {
+      await interaction.deferUpdate();
+      pendingManageData.delete(userId);
+      await state.originalInteraction.editReply({
+        content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
+        embeds: [],
+        components: []
+      });
+    }
+  } catch (error) {
+    log(`handleManageButton failed: customId=${customId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+    }
   }
 }
 
 async function handleManageSave(connection, interaction, state) {
   const guildId = interaction.guild.id;
   try {
-    log(`handleManageSave: storyId=${state.storyId} title=${state.title} mode=${state.storyMode} turnLength=${state.turnLength} reminder=${state.timeoutReminder}`, { show: false, guildName: state.guildName });
+    const warningsStr = Array.isArray(state.warnings) ? state.warnings.join(', ') : (state.warnings || null);
+    log(`handleManageSave: storyId=${state.storyId} title=${state.title} mode=${state.storyMode} rating=${state.rating} originalRating=${state.originalRating}`, { show: false, guildName: state.guildName });
+
     await connection.execute(
-      `UPDATE story SET title = ?, mode = ?, turn_length_hours = ?, reminder_timing = ?, max_writers = ?,
-       allow_joins = ?, show_authors = ?, story_order_type = ?, story_turn_privacy = ?, tags = ?
+      `UPDATE story SET
+         title = ?, mode = ?, turn_length_hours = ?, reminder_timing = ?, max_writers = ?,
+         allow_joins = ?, show_authors = ?, story_order_type = ?, story_turn_privacy = ?,
+         rating = ?, warnings = ?, main_pairing = ?, other_relationships = ?,
+         characters = ?, dynamic = ?, tags = ?, summary = ?, scene_break_divider = ?
        WHERE story_id = ?`,
       [
         state.title,
         state.storyMode, state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
-        state.allowJoins, state.showAuthors, state.orderType,
-        state.turnPrivacy, state.tags || null,
+        state.allowJoins, state.showAuthors, state.orderType, state.turnPrivacy,
+        state.rating, warningsStr || null,
+        state.mainPairing || null, state.otherRelationships || null,
+        state.characters || null, state.dynamic || null, state.tags || null,
+        state.summary || null, state.sceneBreakDivider || null,
         state.storyId
       ]
     );
+    log(`handleManageSave: story fields written for storyId=${state.storyId}`, { show: true, guildName: state.guildName });
 
     if (state.targetStatus !== state.originalStatus) {
       await connection.execute(`UPDATE story SET story_status = ? WHERE story_id = ?`, [state.targetStatus, state.storyId]);
@@ -545,8 +457,21 @@ async function handleManageSave(connection, interaction, state) {
       }
     }
 
+    if (crossesBarrier(state.originalRating, state.rating)) {
+      log(`handleManageSave: rating barrier crossed ${state.originalRating}→${state.rating} for storyId=${state.storyId}`, { show: true, guildName: state.guildName });
+      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, state.rating, state.originalRating);
+      if (!migResult.success) {
+        log(`handleManageSave: thread migration failed for storyId=${state.storyId}: ${migResult.error}`, { show: true, guildName: state.guildName });
+      } else {
+        await updateStoryStatusMessage(connection, interaction.guild, state.storyId);
+        const migratedThread = await interaction.guild.channels.fetch(migResult.newThreadId).catch(() => null);
+        if (migratedThread) await migratedThread.send({ embeds: [migResult.migratedInEmbed] }).catch(() => {});
+      }
+    } else {
+      updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
+    }
+
     pendingManageData.delete(interaction.user.id);
-    updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
 
     await state.originalInteraction.editReply({
       content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
@@ -554,7 +479,7 @@ async function handleManageSave(connection, interaction, state) {
       components: []
     });
   } catch (error) {
-    log(`Error saving manage settings: ${error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleManageSave failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
     await state.originalInteraction.editReply({
       content: await getConfigValue(connection, 'errProcessingRequest', guildId),
       embeds: [],
@@ -578,39 +503,48 @@ async function handleManageModalSubmit(connection, interaction) {
     });
   }
 
+  const customId = interaction.customId;
   try {
-    if (interaction.customId === 'story_manage_title_modal') {
+    if (customId === 'story_manage_titlesummary_modal') {
       const value = sanitizeModalInput(interaction.fields.getTextInputValue('story_title'), 500);
       if (!value) {
         return await interaction.reply({ content: await getConfigValue(connection, 'txtAddValidationTitleEmpty', interaction.guild.id), flags: MessageFlags.Ephemeral });
       }
       state.title = value;
+      state.storyTitle = value;
+      state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('story_summary'), 4000, true) || '';
 
-    } else if (interaction.customId === 'story_manage_turnlength_modal') {
-      const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('turn_length'), 10));
-      if (isNaN(val) || val < 1) {
-        return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id), flags: MessageFlags.Ephemeral });
-      }
-      state.turnLength = val;
-
-    } else if (interaction.customId === 'story_manage_reminder_modal') {
-      const val = parseInt(sanitizeModalInput(interaction.fields.getTextInputValue('timeout_reminder'), 10));
+    } else if (customId === 'story_manage_settings_modal') {
+      const cfg = state.cfg;
       const isSlowMode = state.storyMode === 2;
-      if (isSlowMode) {
-        if (isNaN(val) || val < 0) {
-          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id), flags: MessageFlags.Ephemeral });
-        }
-      } else {
-        if (isNaN(val) || val < 0 || val > 100) {
-          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id), flags: MessageFlags.Ephemeral });
-        }
-      }
-      state.timeoutReminder = val;
 
-    } else if (interaction.customId === 'story_manage_maxwriters_modal') {
-      const raw = sanitizeModalInput(interaction.fields.getTextInputValue('max_writers'), 10);
-      if (raw) {
-        const val = parseInt(raw);
+      const rawTurnLength = sanitizeModalInput(interaction.fields.getTextInputValue('turn_length'), 20);
+      if (!isSlowMode && rawTurnLength) {
+        const parsedTurnLength = parseDuration(rawTurnLength);
+        if (isNaN(parsedTurnLength) || parsedTurnLength < 1) {
+          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id), flags: MessageFlags.Ephemeral });
+        }
+        state.turnLength = parsedTurnLength;
+      }
+
+      const rawReminder = sanitizeModalInput(interaction.fields.getTextInputValue('timeout_reminder'), 10);
+      if (rawReminder) {
+        const val = parseInt(rawReminder);
+        if (isSlowMode) {
+          if (isNaN(val) || val < 0) {
+            return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          }
+        } else {
+          if (isNaN(val) || val < 0 || val > 100) {
+            return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          }
+        }
+        state.timeoutReminder = val;
+      }
+
+      const rawMaxWriters = sanitizeModalInput(interaction.fields.getTextInputValue('max_writers'), 10);
+      if (rawMaxWriters) {
+        const val = parseInt(rawMaxWriters);
         if (isNaN(val) || val < 0) {
           return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationMaxWriters', interaction.guild.id), flags: MessageFlags.Ephemeral });
         }
@@ -619,19 +553,36 @@ async function handleManageModalSubmit(connection, interaction) {
         state.maxWriters = null;
       }
 
-    } else if (interaction.customId === 'story_manage_tags_modal') {
-      state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 500) ?? '';
+    } else if (customId === 'story_manage_metadata_modal') {
+      const dynamic = interaction.fields.getStringSelectValues?.('story_manage_metadata_dynamic')?.[0]
+        ?? interaction.fields.getField?.('story_manage_metadata_dynamic')?.values?.[0];
+      const rating = interaction.fields.getStringSelectValues?.('story_manage_metadata_rating')?.[0]
+        ?? interaction.fields.getField?.('story_manage_metadata_rating')?.values?.[0];
+      const warningsRaw = interaction.fields.getStringSelectValues?.('story_manage_metadata_warnings')
+        ?? interaction.fields.getField?.('story_manage_metadata_warnings')?.values ?? [];
+
+      if (dynamic) state.dynamic = dynamic;
+      if (rating) state.rating = rating;
+      state.warnings = (warningsRaw ?? []).filter(v => v !== '__dismiss__');
+      log(`handleManageModalSubmit: metadata staged dynamic=${state.dynamic} rating=${state.rating} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+
+    } else if (customId === 'story_manage_tags_modal') {
+      state.mainPairing = sanitizeModalInput(interaction.fields.getTextInputValue('main_pairing'), 200) || '';
+      state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
+      state.characters = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
+      state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
+      state.sceneBreakDivider = sanitizeModalInput(interaction.fields.getTextInputValue('scene_break_divider'), 200) || '';
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-    const stagedMsg = state.cfg.txtSelectionStaged;
-    await interaction.editReply({ content: stagedMsg });
-    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
     await interaction.deleteReply();
+    await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
   } catch (error) {
-    log(`Error in handleManageModalSubmit: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+    log(`handleManageModalSubmit failed: customId=${customId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    if (!interaction.replied && !interaction.deferred) {
+      await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+    }
   }
 }
 
@@ -675,7 +626,6 @@ export {
   applyPauseActions,
   applyResumeActions,
   handleManageModalSubmit,
-  // Re-export turn action handlers for routing in story.js / storyadmin.js
   handleTurnActionConfirm,
   handleTurnActionCancel,
   handleTurnActionSelectMenu,

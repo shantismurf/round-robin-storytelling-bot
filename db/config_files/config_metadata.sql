@@ -29,7 +29,6 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblCharacters', 'Characters', 'en', 1),
 ('lblDynamic', 'Dynamic', 'en', 1),
 ('lblAdditionalTags', 'Additional Tags', 'en', 1),
-('btnSetMetadata', 'Open Metadata Panel', 'en', 1),
 ('txtRatingBadgeNR', '[NR]', 'en', 1),
 ('txtRatingBadgeG', '[G]', 'en', 1),
 ('txtRatingBadgeT', '[T]', 'en', 1),

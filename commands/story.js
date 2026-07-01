@@ -2,8 +2,7 @@ import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
 
 // Sub-command handlers
-import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton, handleAddStorySelectMenu } from '../story/add.js';
-import { handleMetadataButton, handleMetadataModal, handleMetadataSelectMenu } from '../story/_addMetadata.js';
+import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton } from '../story/add.js';
 import { handleJoin, handleJoinSetAO3Button, handleJoinAO3ModalSubmit, handleJoinConfirm, buildJoinEmbed, pendingJoinData } from '../story/join.js';
 import { handleWrite, handleWriteModalSubmit, handleEntryConfirmation, handleViewLastEntry, handleFinalizeEntry, handleFinalizeConfirm, handleFinalizeImageConfirm, handlePreviewNav, handleSkipTurn, handleSkipConfirm, handleThreadDeleteNow } from '../story/write.js';
 import { pendingPreviewData } from '../story/_state.js';
@@ -198,9 +197,7 @@ async function execute(connection, interaction) {
 }
 
 async function handleModalSubmit(connection, interaction) {
-  if (interaction.customId.startsWith('story_add_meta_')) {
-    await handleMetadataModal(connection, interaction);
-  } else if (interaction.customId.startsWith('story_add_')) {
+  if (interaction.customId.startsWith('story_add_')) {
     await handleAddStoryModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_write_')) {
     await handleWriteModalSubmit(connection, interaction);
@@ -218,9 +215,7 @@ async function handleModalSubmit(connection, interaction) {
 }
 
 async function handleButtonInteraction(connection, interaction) {
-  if (interaction.customId.startsWith('story_add_meta_')) {
-    await handleMetadataButton(connection, interaction);
-  } else if (interaction.customId.startsWith('story_add_')) {
+  if (interaction.customId.startsWith('story_add_')) {
     await handleAddStoryButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_list_')) {
     await handleListNavigation(connection, interaction);
@@ -339,9 +334,6 @@ async function handleSelectMenuInteraction(connection, interaction) {
 
   } else if (interaction.customId === 'story_read_jump') {
     await handleReadNav(connection, interaction);
-
-  } else if (interaction.customId.startsWith('story_add_') && interaction.customId.endsWith('_select')) {
-    await handleAddStorySelectMenu(connection, interaction);
 
   } else if (interaction.customId === 'story_manage_entries_writer_select' || interaction.customId === 'story_manage_entries_entry_select') {
     await handleManageEntriesSelectMenu(connection, interaction);
