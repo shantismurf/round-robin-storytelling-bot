@@ -91,7 +91,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'lblStatusTags', 'lblStatusStatus', 'lblStatusMode', 'lblStatusWriterOrder',
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusClosed',
-      'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
+      'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
       'lblMetaDynamic',
       ratingBadgeCfgKey,
       ...warningOptions,
@@ -190,9 +190,10 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     if (story.rating && story.rating !== 'NR') {
       metadataFields.push({ name: cfg.lblMetaRating, value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
     }
-    if (story.dynamic)       metadataFields.push({ name: cfg.lblMetaDynamic, value: cfg[story.dynamic] ?? story.dynamic, inline: true });
-    if (story.main_pairing)  metadataFields.push({ name: cfg.lblMetaMainRelationship, value: story.main_pairing, inline: true });
-    if (warningsDisplay)     metadataFields.push({ name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false });
+    if (story.dynamic)            metadataFields.push({ name: cfg.lblMetaDynamic, value: cfg[story.dynamic] ?? story.dynamic, inline: true });
+    if (story.main_pairing)       metadataFields.push({ name: cfg.lblMetaMainRelationship, value: story.main_pairing, inline: true });
+    if (story.other_relationships) metadataFields.push({ name: cfg.lblMetaOtherRelationships, value: story.other_relationships, inline: true });
+    if (warningsDisplay)          metadataFields.push({ name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false });
     if (story.characters)    metadataFields.push({ name: cfg.lblMetaCharacters, value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
     if (story.tags) metadataFields.push({ name: cfg.lblMetaTags, value: story.tags.length > 500 ? story.tags.slice(0, 497) + '...' : story.tags, inline: false });
 
