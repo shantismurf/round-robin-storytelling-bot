@@ -120,9 +120,9 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
     { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
     { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false },
-    { name: cfg.lblMetaMainRelationship, value: mainPairingDisplay, inline: true },
-    { name: cfg.lblMetaOtherRelationships, value: otherRelDisplay, inline: true },
     { name: '​', value: compactBlock(
+        [cfg.lblMetaMainRelationship, mainPairingDisplay],
+        [cfg.lblMetaOtherRelationships, otherRelDisplay],
         [cfg.lblMetaCharacters, charsDisplay],
         [cfg.lblMetaTags, tagsDisplay],
         [cfg.lblMetaSummary, summaryDisplay],
