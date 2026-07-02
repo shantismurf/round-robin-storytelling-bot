@@ -47,6 +47,8 @@ For system architecture and routing, see `system_roadmap.md`.
   → story_manage_entries_open → Manage Entries panel
   → story_manage_turns_open → Manage Turns panel
   → story_manage_review_tags (when pending tags > 0) → Manage Tags panel (approve/reject queue)
+  → story_manage_close_open → reuses /story close confirm/cancel flow (story_close_confirm_*/story_close_cancel_*)
+  → story_manage_reopen (when closed) → immediate reopen, no confirmation
 
 Tag Submission Thread Post (in story thread)
   → Delete button → ephemeral confirm embed → story_tag_delete_confirm_* → removes record + thread post
