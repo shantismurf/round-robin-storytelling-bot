@@ -135,7 +135,24 @@ export async function handleCloseConfirm(connection, interaction) {
     // Story is now marked closed — gather stats directly (export is now a manual, optional step)
     const { turnCount, wordCount, writerCount } = await getStoryStats(connection, storyId);
 
+    // Export buttons are offered publicly on the close announcement so any writer can grab a copy
+    const [btnExportNoBreaks, btnExportWithBreaks] = await Promise.all([
+      getConfigValue(connection, 'btnExportNoBreaks', guildId),
+      getConfigValue(connection, 'btnExportWithBreaks', guildId),
+    ]);
+    const exportRow = new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`story_export_close_noturns_${storyId}`)
+        .setLabel(btnExportNoBreaks)
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`story_export_close_withturns_${storyId}`)
+        .setLabel(btnExportWithBreaks)
+        .setStyle(ButtonStyle.Secondary)
+    );
+
     // Update story thread title and post close message (if thread still exists)
+    let postedPublicly = false;
     if (story.story_thread_id) {
       try {
         const storyThread = await interaction.guild.channels.fetch(story.story_thread_id);
@@ -158,7 +175,8 @@ export async function handleCloseConfirm(connection, interaction) {
             turn_count: turnCount,
             word_count: wordCount.toLocaleString()
           });
-          await storyThread.send({ content: closedMsg });
+          await storyThread.send({ content: closedMsg, components: [exportRow] });
+          postedPublicly = true;
         }
       } catch (err) {
         log(`Story thread not available for close post (story ${storyId})`, { show: false, guildName: interaction?.guild?.name });
@@ -174,23 +192,14 @@ export async function handleCloseConfirm(connection, interaction) {
 
     log(`handleCloseConfirm: story ${storyId} closed successfully`, { show: true, guildName: interaction?.guild?.name });
 
-    // Export is now manual — offer both options on the success message
-    const [txtStoryCloseSuccess, btnExportNoBreaks, btnExportWithBreaks] = await Promise.all([
-      getConfigValue(connection, 'txtStoryCloseSuccess', guildId),
-      getConfigValue(connection, 'btnExportNoBreaks', guildId),
-      getConfigValue(connection, 'btnExportWithBreaks', guildId),
-    ]);
-    const exportRow = new ActionRowBuilder().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`story_export_close_noturns_${storyId}`)
-        .setLabel(btnExportNoBreaks)
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`story_export_close_withturns_${storyId}`)
-        .setLabel(btnExportWithBreaks)
-        .setStyle(ButtonStyle.Secondary)
-    );
-    await interaction.editReply({ content: txtStoryCloseSuccess, components: [exportRow] });
+    if (postedPublicly) {
+      // Public close announcement already carries the confirmation and export buttons — dismiss the ephemeral prompt.
+      await interaction.deleteReply();
+    } else {
+      // No thread to post the announcement in — fall back to offering export on the ephemeral reply.
+      const txtStoryCloseSuccess = await getConfigValue(connection, 'txtStoryCloseSuccess', guildId);
+      await interaction.editReply({ content: txtStoryCloseSuccess, components: [exportRow] });
+    }
 
     // Clean up the active writer's turn thread now that the reply has been
     // sent — this may delete the thread the interaction was issued from.
