@@ -51,7 +51,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_latejoins')
-      .setLabel(`${cfg.lblManageJoinStatus ?? cfg.lblJoinStatus}: ${state.allowJoins ? cfg.txtOpen : cfg.txtClosed}`)
+      .setLabel(`${cfg.lblManageJoinStatus}: ${state.allowJoins ? cfg.txtOpen : cfg.txtClosed}`)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_authors')
