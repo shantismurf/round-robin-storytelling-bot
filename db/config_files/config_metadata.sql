@@ -76,7 +76,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtTagStatus', '-# [emoji_status] by [reviewed_by] on [reviewed_at]', 'en', 1),
 ('txtTagNotCreator', '❌ Only the story creator can review tag suggestions.', 'en', 1),
 ('txtTagReviewSessionExpired', 'This tag review session has expired. Use /story manage to open tag review again.', 'en', 1),
-('btnReviewTags', '🏷️ Review Tags ([count])', 'en', 1),
+('btnReviewTags', 'Review Tags ([count])', 'en', 1),
 ('txtSelectionStaged', 'Selection saved — click **Save Settings** on the panel to apply.', 'en', 1),
 ('btnViewTags', '🏷️ View Tags', 'en', 1),
 ('btnEditTags', '✏️ Edit Tags', 'en', 1),
