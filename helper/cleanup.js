@@ -9,29 +9,29 @@
 import { DB, loadConfig, formattedDate } from '../utilities.js';
 
 const ORPHAN_KEYS = [
-  'lblHelp5Metadata',
-  'txtHelp5Metadata',
-  'txtHelp6Footer',
-  'lblHelp6StoryCommands',
-  'txtHelp6StoryCommands',
-  'lblHelp6Dashboard',
-  'txtHelp6Dashboard',
-  'lblHelp6CreatorCommands',
-  'txtHelp6CreatorCommands',
-  'lblHelp7Setup',
-  'txtHelp7Setup',
-  'lblHelp7SetupChannels',
-  'txtHelp7SetupChannels',
-  'lblHelp7SetupPermissions',
-  'txtHelp7SetupPermissions',
-  'lblHelp7SetupRoundup',
-  'txtHelp7SetupRoundup',
-  'lblHelp7ManageStory',
-  'txtHelp7ManageStory',
-  'lblHelp7ManageUser',
-  'txtHelp7ManageUser',
-  'lblHelp7Delete',
-  'txtHelp7Delete'
+'txtDMTurnStart',
+'txtMentionTurnStart',
+'btnSetTurnLength',
+'btnSetTimeout'
+'btnSetPenName',
+'btnSetDelayHours',
+'btnSetDelayWriters',
+'btnSetMaxWriters'
+'txtDMTurnReminder'
+'txtMentionTurnReminder',
+'cfgWeeklyRoundupThumbnail',
+'btnSetMetadata',
+'btnSetupFeed'
+'btnSetupMedia'
+'btnSetupRestrictedFeed',
+'btnSetupRestrictedMedia',
+'btnSetupRoundupChannel',
+'btnSetupRoundupDay',
+'btnSetupRoundupHour',
+'txtMyListJoined',
+'txtMyListMyStats'
+'txtMyListNoTurns',
+'txtMyListStoryTotal'
 ];
 
 async function main() {
