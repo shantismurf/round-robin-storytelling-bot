@@ -21,9 +21,9 @@ function buildManageMessage(cfg, state, activeTurn = null) {
 
   const embed = buildStoryEmbed(cfg, state, { title: cfg.txtManageEmbedTitle, isManage: true });
 
-  // Row 1 (4): Set Title & Summary | Mode: <> | Order: <> | Pause/Resume or Reopen
+  // Row 1 (3-4): Set Title & Summary | Mode: <> | Order: <> | Pause/Resume (not shown when closed)
   const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
-  const row1 = new ActionRowBuilder().addComponents(
+  const row1Components = [
     new ButtonBuilder()
       .setCustomId('story_manage_open_titlesummary')
       .setLabel(cfg.btnAddTitleAndSummary)
@@ -36,16 +36,16 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setCustomId('story_manage_cycle_order')
       .setLabel(`${cfg.lblWriterOrder}: ${orderLabel}`)
       .setStyle(ButtonStyle.Secondary),
-    isClosed
-      ? new ButtonBuilder()
-          .setCustomId('story_manage_reopen')
-          .setLabel(cfg.txtReopenStory)
-          .setStyle(ButtonStyle.Success)
-      : new ButtonBuilder()
-          .setCustomId('story_manage_toggle_pauseresume')
-          .setLabel(pauseResumeLabel)
-          .setStyle(ButtonStyle.Secondary),
-  );
+  ];
+  if (!isClosed) {
+    row1Components.push(
+      new ButtonBuilder()
+        .setCustomId('story_manage_toggle_pauseresume')
+        .setLabel(pauseResumeLabel)
+        .setStyle(ButtonStyle.Secondary)
+    );
+  }
+  const row1 = new ActionRowBuilder().addComponents(...row1Components);
 
   // Row 2 (3): Joins: <> | Show Names: <> | Hide Threads: <>
   const row2 = new ActionRowBuilder().addComponents(
@@ -68,15 +68,15 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     new ButtonBuilder()
       .setCustomId('story_manage_open_metadata')
       .setLabel(cfg.btnAddMetadata)
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('story_manage_open_tags')
       .setLabel(cfg.btnAddTags)
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('story_manage_open_settings')
       .setLabel(cfg.btnAddSettings)
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
   );
 
   // Row 4 (3-4): Manage Entries | Manage Turns | [Review Tags if pending]
@@ -84,11 +84,11 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     new ButtonBuilder()
       .setCustomId('story_manage_entries_open')
       .setLabel(cfg.btnManageEntries)
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('story_manage_turns_open')
       .setLabel(cfg.btnManageTurns)
-      .setStyle(ButtonStyle.Secondary),
+      .setStyle(ButtonStyle.Primary),
   ];
   if (state.pendingTagCount > 0) {
     row4Components.push(
@@ -100,12 +100,21 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   }
   const row4 = new ActionRowBuilder().addComponents(...row4Components);
 
-  // Row 5: Save Settings
+  // Row 5: Save Settings | Close Story / Reopen Story
   const row5 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_save')
       .setLabel(cfg.btnSaveSettings)
-      .setStyle(ButtonStyle.Success)
+      .setStyle(ButtonStyle.Success),
+    isClosed
+      ? new ButtonBuilder()
+          .setCustomId('story_manage_reopen')
+          .setLabel(cfg.txtReopenStory)
+          .setStyle(ButtonStyle.Success)
+      : new ButtonBuilder()
+          .setCustomId('story_manage_close_open')
+          .setLabel(cfg.btnCloseConfirm)
+          .setStyle(ButtonStyle.Danger)
   );
 
   return { embeds: [embed], components: [row1, row2, row3, row4, row5] };
@@ -147,7 +156,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtOpen', 'txtClosed', 'txtActive', 'txtPaused', 'txtHrs',
       'txtStory', 'txtPause', 'txtResume', 'txtNotSet',
       'btnAdminConfigSave', 'btnCancel',
-      'lblJoinStatus', 'lblOpenToWriters', 'lblTags', 'btnSetTags',
+      'lblOpenToWriters', 'lblTags', 'btnSetTags',
       'lblRating', 'lblWarnings', 'lblDynamic',
       'btnReviewTags',
       'txtSelectionStaged',
@@ -171,7 +180,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtTurnExtendPlaceholder', 'txtTurnDeleteEntryModalTitle', 'lblTurnDeleteEntryTurn',
       'txtTurnDeleteEntryPlaceholder', 'txtTurnRestoreEntryModalTitle', 'lblTurnRestoreEntryId',
       'txtTurnRestoreEntryPlaceholder', 'txtTurnNextSelectWrite',
-      'txtReopenStory',
+      'txtReopenStory', 'txtStoryCloseConfirm', 'btnCloseConfirm',
       'txtAdminConfigSaved', 'errProcessingRequest', 'txtActionCancelled', 'txtActionSessionExpired',
       'txtManageNotAuthorized', 'txtStoryNotFound',
     ], guildId);
@@ -282,6 +291,24 @@ async function handleManageButton(connection, interaction) {
       state.orderType = state.orderType === 3 ? 1 : state.orderType + 1;
       await interaction.deferUpdate();
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+    } else if (customId === 'story_manage_close_open') {
+      // Reuses the standalone /story close confirm/cancel flow — story_close_confirm_<id> and
+      // story_close_cancel_<id> are routed centrally in commands/story.js to handleCloseConfirm/handleCloseCancel.
+      const cfg = state.cfg;
+      const confirmMsg = replaceTemplateVariables(cfg.txtStoryCloseConfirm, { story_title: state.title });
+      const row = new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_close_confirm_${state.storyId}`)
+          .setLabel(cfg.btnCloseConfirm)
+          .setStyle(ButtonStyle.Danger),
+        new ButtonBuilder()
+          .setCustomId(`story_close_cancel_${state.storyId}`)
+          .setLabel(cfg.btnCancel)
+          .setStyle(ButtonStyle.Secondary)
+      );
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply({ content: confirmMsg, embeds: [], components: [row] });
 
     } else if (customId === 'story_manage_reopen') {
       try {
