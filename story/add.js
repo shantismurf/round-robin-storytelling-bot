@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, parseDuration, formatDuration } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
 import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal } from './_metadataModals.js';
@@ -252,12 +252,9 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       }
 
     } else if (customId === 'story_add_metadata_modal') {
-      const dynamic = interaction.fields.getStringSelectValues?.('story_add_metadata_dynamic')?.[0]
-        ?? interaction.fields.getField?.('story_add_metadata_dynamic')?.values?.[0];
-      const rating = interaction.fields.getStringSelectValues?.('story_add_metadata_rating')?.[0]
-        ?? interaction.fields.getField?.('story_add_metadata_rating')?.values?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues?.('story_add_metadata_warnings')
-        ?? interaction.fields.getField?.('story_add_metadata_warnings')?.values ?? [];
+      const dynamic = interaction.fields.getSelectMenuValues('story_add_metadata_dynamic')?.[0];
+      const rating = interaction.fields.getSelectMenuValues('story_add_metadata_rating')?.[0];
+      const warningsRaw = interaction.fields.getSelectMenuValues('story_add_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;
@@ -274,13 +271,11 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       const rawPenName = sanitizeModalInput(interaction.fields.getTextInputValue('pen_name'), 255);
       state.penName = rawPenName || null;
 
-      const privacyVal = interaction.fields.getStringSelectValues?.('story_add_mysettings_privacy')?.[0]
-        ?? interaction.fields.getField?.('story_add_mysettings_privacy')?.values?.[0];
+      const privacyVal = interaction.fields.getSelectMenuValues('story_add_mysettings_privacy')?.[0];
       if (privacyVal === 'private') state.keepPrivate = 1;
       else if (privacyVal === 'public') state.keepPrivate = 0;
 
-      const notifVal = interaction.fields.getStringSelectValues?.('story_add_mysettings_notifications')?.[0]
-        ?? interaction.fields.getField?.('story_add_mysettings_notifications')?.values?.[0];
+      const notifVal = interaction.fields.getSelectMenuValues('story_add_mysettings_notifications')?.[0];
       if (notifVal === 'dm') state.notifications = 1;
       else if (notifVal === 'mention') state.notifications = 0;
     }
@@ -459,28 +454,32 @@ export async function handleAddStoryButton(connection, interaction) {
                 .setValue(state.penName || '')
                 .setPlaceholder(cfg.txtJoinPenNamePlaceholder ?? 'Leave blank to use Discord display name')
             ),
-            new ActionRowBuilder().addComponents(
-              new StringSelectMenuBuilder()
-                .setCustomId('story_add_mysettings_privacy')
-                .setPlaceholder(cfg.lblJoinPrivacySelect)
-                .setMinValues(1)
-                .setMaxValues(1)
-                .addOptions([
-                  { label: cfg.txtPublic, value: 'public', default: !state.keepPrivate },
-                  { label: cfg.txtPrivate, value: 'private', default: !!state.keepPrivate },
-                ])
-            ),
-            new ActionRowBuilder().addComponents(
-              new StringSelectMenuBuilder()
-                .setCustomId('story_add_mysettings_notifications')
-                .setPlaceholder(cfg.lblJoinNotifSelect)
-                .setMinValues(1)
-                .setMaxValues(1)
-                .addOptions([
-                  { label: cfg.txtNotifDM, value: 'dm', default: !!state.notifications },
-                  { label: cfg.txtNotifMention, value: 'mention', default: !state.notifications },
-                ])
-            ),
+          )
+          .addLabelComponents(
+            new LabelBuilder()
+              .setLabel(cfg.lblJoinPrivacySelect)
+              .setStringSelectMenuComponent(
+                new StringSelectMenuBuilder()
+                  .setCustomId('story_add_mysettings_privacy')
+                  .setMinValues(1)
+                  .setMaxValues(1)
+                  .addOptions([
+                    { label: cfg.txtPublic, value: 'public', default: !state.keepPrivate },
+                    { label: cfg.txtPrivate, value: 'private', default: !!state.keepPrivate },
+                  ])
+              ),
+            new LabelBuilder()
+              .setLabel(cfg.lblJoinNotifSelect)
+              .setStringSelectMenuComponent(
+                new StringSelectMenuBuilder()
+                  .setCustomId('story_add_mysettings_notifications')
+                  .setMinValues(1)
+                  .setMaxValues(1)
+                  .addOptions([
+                    { label: cfg.txtNotifDM, value: 'dm', default: !!state.notifications },
+                    { label: cfg.txtNotifMention, value: 'mention', default: !state.notifications },
+                  ])
+              ),
           )
       );
 

@@ -1,4 +1,4 @@
-import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder } from 'discord.js';
+import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder } from 'discord.js';
 import { getConfigValue, formatDuration } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
 
@@ -112,15 +112,15 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
     { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
     { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: '​', value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
     { name: cfg.txtStoryAddSectionBreakMeta, value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
     { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
     { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
     { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
-    { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: false },
-    { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: false },
+    { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
+    { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: true },
+    { name: '​', value: '​', inline: true },
   );
 
   if (showJoinSettings) {
@@ -181,10 +181,10 @@ export function buildMetadataModal(cfg, state, namespace) {
   return new ModalBuilder()
     .setCustomId(`${ns}_metadata_modal`)
     .setTitle(cfg.btnAddMetadata)
-    .addComponents(
-      new ActionRowBuilder().addComponents(dynamicSelect),
-      new ActionRowBuilder().addComponents(ratingSelect),
-      new ActionRowBuilder().addComponents(warningsSelect),
+    .addLabelComponents(
+      new LabelBuilder().setLabel(cfg.lblMetaDynamic).setStringSelectMenuComponent(dynamicSelect),
+      new LabelBuilder().setLabel(cfg.lblMetaRating).setStringSelectMenuComponent(ratingSelect),
+      new LabelBuilder().setLabel(cfg.lblMetaWarnings).setStringSelectMenuComponent(warningsSelect),
     );
 }
 
