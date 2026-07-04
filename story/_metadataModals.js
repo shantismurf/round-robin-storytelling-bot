@@ -41,16 +41,10 @@ export async function getMetaCfg(connection, guildId) {
 
 /**
  * Shared embed builder for /story add and /story manage panels.
- * Returns an EmbedBuilder (not a full message payload).
- * Callers wrap it: { embeds: [buildStoryEmbed(cfg, state, opts)], components: [...] }
- *
- * options.title         — embed title (add: txtCreateStoryTitle, manage: txtManageEmbedTitle)
- * options.isManage      — suppresses My Join Settings section and intro description
- * options.showJoinSettings — explicit false also suppresses join section
+ * isManage: shows metadata section, hides join settings and intro description.
  */
-export function buildStoryEmbed(cfg, state, options = {}) {
-  const showJoinSettings = options.showJoinSettings !== false && !options.isManage;
-  const title = options.title ?? cfg.txtCreateStoryTitle;
+export function buildStoryEmbed(cfg, state, title, isManage = false) {
+  title = title ?? cfg.txtCreateStoryTitle;
 
   const modeEmojis = { 0: '🟢', 1: '🟣', 2: '🔵' };
   const modeLabels = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC };
@@ -95,7 +89,7 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     .setTitle(title)
     .setColor(state.storyMode === 1 ? 0xE040FB : state.storyMode === 2 ? 0x5865F2 : 0x57F287);
 
-  if (cfg.txtStoryAddIntro && !options.isManage) {
+  if (cfg.txtStoryAddIntro && !isManage) {
     embed.setDescription(cfg.txtStoryAddIntro);
   }
 
@@ -112,18 +106,24 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
     { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
     { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: sectionLine, value: '​', inline: true },
-    { name: cfg.txtStoryAddSectionBreakMeta, value: '​', inline: true },
-    { name: sectionLine, value: '​', inline: true },
     { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
-    { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
-    { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
-    { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
-    { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: true },
-    { name: '​', value: '​', inline: true },
   );
 
-  if (showJoinSettings) {
+  if (isManage) {
+    embed.addFields(
+      { name: sectionLine, value: '​', inline: true },
+      { name: cfg.txtStoryAddSectionBreakMeta, value: '​', inline: true },
+      { name: sectionLine, value: '​', inline: true },
+      { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
+      { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
+      { name: '​', value: '​', inline: true },
+      { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
+      { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: true },
+      { name: '​', value: '​', inline: true },
+    );
+  }
+
+  if (!isManage) {
     embed.addFields(
       { name: sectionLine, value: '​', inline: true },
       { name: cfg.txtStoryAddSectionBreakJoin, value: '​', inline: true },

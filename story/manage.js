@@ -19,7 +19,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const isSlowMode = state.storyMode === 2;
   const modeLabelManage = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC }[state.storyMode] ?? cfg.txtNormalUC;
 
-  const embed = buildStoryEmbed(cfg, state, { title: cfg.txtManageEmbedTitle, isManage: true });
+  const embed = buildStoryEmbed(cfg, state, cfg.txtManageEmbedTitle, true);
 
   // Row 1 (3-4): Set Title & Summary | Mode: <> | Order: <> | Pause/Resume (not shown when closed)
   const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);

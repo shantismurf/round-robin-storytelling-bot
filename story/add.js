@@ -87,7 +87,7 @@ export function buildStoryAddMessage(cfg, state) {
   const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
   const orderLabel = orderLabels[state.orderType];
 
-  const embed = buildStoryEmbed(cfg, state);
+  const embed = buildStoryEmbed(cfg, state, cfg.txtCreateStoryTitle);
 
   // Row 1: Set Title & Summary | Mode: <> | Order: <>
   const row1 = new ActionRowBuilder().addComponents(
