@@ -85,6 +85,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtAddValidationTitleEmpty', 'Story title cannot be empty.', 'en', 1),
 ('txtAddValidationTitleRequired', 'Please set a story title before creating the story.', 'en', 1),
 ('txtListFilterPrompt', '🔍 **Filter stories:**', 'en', 1),
+('txtStoryAddSectionBreakInfo', '**ℹ️ Story Info**', 'en', 1),
 ('txtStoryAddSectionBreakSettings', '**⚙️ Story Settings**', 'en', 1),
 ('txtStoryAddSectionBreakMeta', '**🗂️ Story Metadata**', 'en', 1),
 ('txtStoryAddSectionBreakJoin', '**🖊️ My Join Settings**', 'en', 1),

@@ -17,7 +17,7 @@ export async function getMetaCfg(connection, guildId) {
     'txtPrivateOffDesc', 'txtPrivateOnDesc',
     'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
     'txtOrderRandomDesc', 'txtOrderRoundRobinDesc', 'txtOrderFixedDesc',
-    'txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin',
+    'txtStoryAddSectionBreakInfo','txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin',
     'lblStoryTitle', 'lblModeToggle', 'lblWriterOrder', 'lblHideToggle', 'lblShowAuthors',
     'lblTurnLength', 'lblTimeoutReminder', 'lblTimeoutReminderSlow',
     'lblMaxWriters', 'lblDelayStart', 'txtDelayHint',
@@ -84,6 +84,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
     : (state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}%`);
 
   const sectionLine = cfg.txtSectionBreakLine;
+  const turnLengthDisplay = isSlowMode ? cfg.txtNA : formatDuration(state.turnLength)
 
   const embed = new EmbedBuilder()
     .setTitle(title)
@@ -94,28 +95,33 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   }
 
   embed.addFields(
+    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakInfo +' '+ sectionLine, value: '​', inline: false },
+
     { name: cfg.lblStoryTitle, value: `${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}`, inline: false },
-    { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
-    { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
-    { name: '​', value: '​', inline: true },
-    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
+
     { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
     { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-    { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
-    { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
-    { name: cfg.lblHideToggle, value: state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc, inline: true },
+    { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
+
     { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
-    { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
+    { name: cfg.lblHideToggle, value: state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc, inline: true },
+    { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
+
+    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
+
+    { name: cfg.lblTurnLength, value: turnLengthDisplay + '\n\n**' + cfg.lblMaxWriters + '**\n\n' + maxWritersDisplay, inline: true },
     { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: '​', value: '​', inline: true },
+    { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
   );
 
   if (isManage) {
     embed.addFields(
       { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine, value: '​', inline: false },
+
       { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
       { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
       { name: '​', value: '​', inline: true },
+
       { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
       { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: true },
       { name: '​', value: '​', inline: true },
@@ -125,6 +131,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   if (!isManage) {
     embed.addFields(
       { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine, value: '​', inline: false },
+
       { name: cfg.lblYourPenName, value: state.penName, inline: true },
       { name: cfg.lblJoinPrivacy, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
       { name: cfg.lblJoinNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
