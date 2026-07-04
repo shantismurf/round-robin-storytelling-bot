@@ -144,6 +144,7 @@ export function buildMetadataModal(cfg, state, namespace) {
   const dynamicSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_dynamic`)
     .setPlaceholder(cfg.lblMetaDynamic)
+    .setRequired(false)
     .setMinValues(0)
     .setMaxValues(1)
     .addOptions(dynamicOptions.map(k => ({
@@ -155,6 +156,7 @@ export function buildMetadataModal(cfg, state, namespace) {
   const ratingSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_rating`)
     .setPlaceholder(cfg.lblMetaRating)
+    .setRequired(false)
     .setMinValues(0)
     .setMaxValues(1)
     .addOptions(ratingCodes.map(code => ({
@@ -166,6 +168,7 @@ export function buildMetadataModal(cfg, state, namespace) {
   const warningsSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_warnings`)
     .setPlaceholder(cfg.lblMetaWarnings)
+    .setRequired(false)
     .setMinValues(0)
     .setMaxValues(warningOptions.length)
     .addOptions([

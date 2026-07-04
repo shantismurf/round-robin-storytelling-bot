@@ -461,6 +461,7 @@ export async function handleAddStoryButton(connection, interaction) {
               .setStringSelectMenuComponent(
                 new StringSelectMenuBuilder()
                   .setCustomId('story_add_mysettings_privacy')
+                  .setRequired(false)
                   .setMinValues(0)
                   .setMaxValues(1)
                   .addOptions([
@@ -473,6 +474,7 @@ export async function handleAddStoryButton(connection, interaction) {
               .setStringSelectMenuComponent(
                 new StringSelectMenuBuilder()
                   .setCustomId('story_add_mysettings_notifications')
+                  .setRequired(false)
                   .setMinValues(0)
                   .setMaxValues(1)
                   .addOptions([
