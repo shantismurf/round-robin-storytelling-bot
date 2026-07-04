@@ -1,6 +1,6 @@
 -- Context: config_story
 INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
-('lblStoryTitle', 'Story Title:', 'en', 1),
+('lblStoryTitle', '**Story Title:**', 'en', 1),
 ('lblQuickMode', 'Quick Mode?:', 'en', 1),
 ('lblTurnLength', 'Turn Length (hours):', 'en', 1),
 ('lblTimeoutReminder', 'Reminder Timing:', 'en', 1),

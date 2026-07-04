@@ -100,7 +100,7 @@ export function buildStoryEmbed(cfg, state, options = {}) {
   }
 
   embed.addFields(
-    { name: '​', value: `${cfg.lblStoryTitle}\n${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}\n\n${cfg.lblMetaSceneBreakDivider}\n${sceneBreakDisplay}`, inline: false },
+    { name: cfg.lblStoryTitle, value: `${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}\n\n${cfg.lblMetaSceneBreakDivider}\n${sceneBreakDisplay}`, inline: false },
     { name: sectionLine, value: '​', inline: true },
     { name: cfg.txtStoryAddSectionBreakSettings, value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
@@ -120,7 +120,7 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
     { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
     { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
-    { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: true },
+    { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: false },
   );
 
   if (showJoinSettings) {
@@ -128,7 +128,7 @@ export function buildStoryEmbed(cfg, state, options = {}) {
       { name: sectionLine, value: '​', inline: true },
       { name: cfg.txtStoryAddSectionBreakJoin, value: '​', inline: true },
       { name: sectionLine, value: '​', inline: true },
-      { name: '​', value: `${cfg.lblYourPenName}\n${state.penName || cfg.txtNotSet}\n\n${cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle}\n${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n\n${cfg.lblJoinNotifications ?? cfg.lblMyNotifications}\n${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`, inline: false },
+      { name: cfg.lblYourPenName, value: `${state.penName || cfg.txtNotSet}\n\n${cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle}\n${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n\n${cfg.lblJoinNotifications ?? cfg.lblMyNotifications}\n${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`, inline: false },
     );
   }
 
