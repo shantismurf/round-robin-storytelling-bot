@@ -3,7 +3,7 @@ import path from 'path';
 import mysql from 'mysql2/promise';
 
 export function loadConfig() {
-  const cfgPath = path.resolve(process.cwd(), 'config.json');
+  const cfgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'config.json');
   if (!fs.existsSync(cfgPath)) {
     log('Missing config.json. Copy config.example.json and fill values.', { show: true });
     process.exit(1);

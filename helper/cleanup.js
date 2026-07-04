@@ -3,7 +3,7 @@
  * Deletes config keys from the DB that no longer exist in any config_files SQL file.
  * Safe to run multiple times — only deletes keys explicitly listed below.
  *
- * Usage: node cleanup.js
+ * Usage: from project root, run: node helper/cleanup.js
  */
 
 import { DB, loadConfig, formattedDate } from '../utilities.js';
@@ -12,24 +12,24 @@ const ORPHAN_KEYS = [
 'txtDMTurnStart',
 'txtMentionTurnStart',
 'btnSetTurnLength',
-'btnSetTimeout'
+'btnSetTimeout',
 'btnSetPenName',
 'btnSetDelayHours',
 'btnSetDelayWriters',
-'btnSetMaxWriters'
-'txtDMTurnReminder'
+'btnSetMaxWriters',
+'txtDMTurnReminder',
 'txtMentionTurnReminder',
 'cfgWeeklyRoundupThumbnail',
 'btnSetMetadata',
-'btnSetupFeed'
-'btnSetupMedia'
+'btnSetupFeed',
+'btnSetupMedia',
 'btnSetupRestrictedFeed',
 'btnSetupRestrictedMedia',
 'btnSetupRoundupChannel',
 'btnSetupRoundupDay',
 'btnSetupRoundupHour',
 'txtMyListJoined',
-'txtMyListMyStats'
+'txtMyListMyStats',
 'txtMyListNoTurns',
 'txtMyListStoryTotal'
 ];
