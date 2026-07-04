@@ -54,14 +54,14 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   const orderDescs = { 1: cfg.txtOrderRandomDesc, 2: cfg.txtOrderRoundRobinDesc, 3: cfg.txtOrderFixedDesc };
 
   const isSlowMode = state.storyMode === 2;
-  const modeEmoji = modeEmojis[state.storyMode] ?? '🟢';
+  const modeEmoji = modeEmojis[state.storyMode];
   const modeLabel = modeLabels[state.storyMode] ?? cfg.txtNormalUC;
   const modeDesc = modeDescs[state.storyMode] ?? cfg.txtNormalModeDesc;
   const orderEmoji = orderEmojis[state.orderType];
   const orderLabel = orderLabels[state.orderType];
   const orderDesc = orderDescs[state.orderType];
 
-  const ratingLabel = cfg[ratingLabelKey(state.rating ?? 'NR')] ?? state.rating;
+  const ratingLabel = cfg[ratingLabelKey(state.rating)] ?? state.rating;
   const warningsDisplay = state.warnings?.length
     ? (Array.isArray(state.warnings) ? state.warnings : state.warnings.split(',').map(w => w.trim()))
         .map(k => cfg[k] ?? k).join(', ')
@@ -94,10 +94,11 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   }
 
   embed.addFields(
-    { name: '​', value: `${cfg.lblStoryTitle}\n${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}\n\n${cfg.lblMetaSceneBreakDivider}\n${sceneBreakDisplay}`, inline: false },
-    { name: sectionLine, value: '​', inline: true },
-    { name: cfg.txtStoryAddSectionBreakSettings, value: '​', inline: true },
-    { name: sectionLine, value: '​', inline: true },
+    { name: '​', value: `${cfg.lblStoryTitle}\n${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}`, inline: false },
+    { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
+    { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
+    { name: '​', value: '​', inline: true },
+    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
     { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
     { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
     { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
@@ -106,14 +107,12 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
     { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
     { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
     { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
+    { name: '​', value: '​', inline: true },
   );
 
   if (isManage) {
     embed.addFields(
-      { name: sectionLine, value: '​', inline: true },
-      { name: cfg.txtStoryAddSectionBreakMeta, value: '​', inline: true },
-      { name: sectionLine, value: '​', inline: true },
+      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine​, value: '​', inline: false },
       { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
       { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
       { name: '​', value: '​', inline: true },
@@ -125,10 +124,10 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
 
   if (!isManage) {
     embed.addFields(
-      { name: sectionLine, value: '​', inline: true },
-      { name: cfg.txtStoryAddSectionBreakJoin, value: '​', inline: true },
-      { name: sectionLine, value: '​', inline: true },
-      { name: '​', value: `${cfg.lblYourPenName}\n${state.penName || cfg.txtNotSet}\n\n${cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle}\n${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n\n${cfg.lblJoinNotifications ?? cfg.lblMyNotifications}\n${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`, inline: false },
+      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine​, value: '​', inline: false },
+      { name: cfg.lblYourPenName, value: state.penName, inline: true },
+      { name: cfg.lblJoinPrivacy, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
+      { name: cfg.lblJoinNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
     );
   }
 
