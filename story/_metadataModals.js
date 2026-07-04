@@ -1,4 +1,4 @@
-import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder } from 'discord.js';
+import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder } from 'discord.js';
 import { getConfigValue, formatDuration } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
 
@@ -12,25 +12,25 @@ export async function getMetaCfg(connection, guildId) {
     'txtCreateStoryTitle', 'txtStoryAddIntro', 'txtStoryTitlePrompt',
     'txtManageEmbedTitle',
     'txtNormalModeDesc', 'txtQuickModeDesc', 'txtSlowModeDesc',
-    'txtHideThreadsOffDesc', 'txtHideThreadsOnDesc',
+    'txtTurnPrivacyPublicDesc', 'txtTurnPrivacyPrivateDesc',
     'txtShowAuthorsOnDesc', 'txtShowAuthorsOffDesc',
     'txtPrivateOffDesc', 'txtPrivateOnDesc',
     'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
     'txtOrderRandomDesc', 'txtOrderRoundRobinDesc', 'txtOrderFixedDesc',
     'txtStoryAddSectionBreakInfo','txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin',
-    'lblStoryTitle', 'lblModeToggle', 'lblWriterOrder', 'lblHideToggle', 'lblShowAuthors',
+    'lblStoryTitle', 'lblModeToggle', 'lblWriterOrder', 'lblTurnPrivacy', 'lblShowAuthors',
     'lblTurnLength', 'lblTimeoutReminder', 'lblTimeoutReminderSlow',
     'lblMaxWriters', 'lblDelayStart', 'txtDelayHint',
     'lblPrivateToggle', 'lblJoinPrivacySelect', 'lblJoinNotifSelect',
     'lblJoinNotifications', 'lblJoinPrivacy',
     'lblMyNotifications', 'lblYourPenName',
     'txtNotifDM', 'txtNotifMention',
-    'lblMetaRating', 'lblMetaWarnings', 'lblMetaDynamic',
+    'lblMetaRating', 'lblMetadataAddon', 'lblMetaWarnings', 'lblMetaDynamic',
     'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary', 'lblMetaSceneBreakDivider',
     'txtMetaMainRelationshipPlaceholder', 'txtMetaSceneBreakDividerPlaceholder',
     'txtManageWarningSelectInstructions',
-    'btnAddTitleAndSummary', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings', 'btnAddHideToggle',
+    'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
     'btnSaveSettings', 'btnCreateStory',
     'optWarnAllClear',
     ...ratingCodes.map(ratingLabelKey),
@@ -93,43 +93,49 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   if (cfg.txtStoryAddIntro && !isManage) {
     embed.setDescription(cfg.txtStoryAddIntro);
   }
+  //25 fields total, 14 for story info/settings, 7 for metadata, 4 for join settings
+  embed.addFields( //14 fields
+    { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
 
-  embed.addFields(
+    { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
+
     { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakInfo +' '+ sectionLine, value: '​', inline: false },
-
-    { name: cfg.lblStoryTitle, value: `${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}`, inline: false },
 
     { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
     { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-    { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
+    { name: cfg.lblMetaRating + cfg.lblMetadataAddon, value: ratingLabel, inline: true },
 
-    { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
-    { name: cfg.lblHideToggle, value: state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc, inline: true },
+    { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc, inline: true },
+    { name: cfg.lblTurnPrivacy, value: state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc, inline: true },
     { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
 
     { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
 
-    { name: cfg.lblTurnLength, value: turnLengthDisplay + '\n\n**' + cfg.lblMaxWriters + '**\n\n' + maxWritersDisplay, inline: true },
+    { name: cfg.lblTurnLength, value: turnLengthDisplay, inline: true },
     { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+    { name: cfg.lblDelayStart, value: `-+*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+
+    { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: false },
+
   );
 
   if (isManage) {
-    embed.addFields(
+    embed.addFields( //7 fields
       { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine, value: '​', inline: false },
 
       { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
       { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
-      { name: '​', value: '​', inline: true },
 
-      { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
-      { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: true },
-      { name: '​', value: '​', inline: true },
+      { name: cfg.lblMetaMainRelationship, value: mainPairingDisplay, inline: true },
+      { name: cfg.lblMetaOtherRelationships, value: otherRelDisplay, inline: true },
+      { name: cfg.lblMetaCharacters, value: charsDisplay, inline: true },
+
+      { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
     );
   }
 
   if (!isManage) {
-    embed.addFields(
+    embed.addFields( //4 fields
       { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine, value: '​', inline: false },
 
       { name: cfg.lblYourPenName, value: state.penName, inline: true },
@@ -245,5 +251,67 @@ export function buildTagsModal(cfg, state, namespace) {
           .setMaxLength(1000)
           .setValue(state.tags ?? '')
       ),
+    );
+}
+
+/**
+ * Builds the Story Info modal (mode, order, show authors, turn privacy radio groups + scene break text input).
+ * namespace: 'story_add' or 'story_manage'
+ */
+export function buildStoryInfoModal(cfg, state, namespace) {
+  const ns = namespace ?? 'story_add';
+
+  const modeGroup = new RadioGroupBuilder()
+    .setCustomId(`${ns}_storyinfo_mode`)
+    .setRequired(false)
+    .addOptions(
+      new RadioGroupOptionBuilder().setLabel(cfg.txtNormalUC).setValue('0').setDescription(cfg.txtNormalModeDesc).setDefault(state.storyMode === 0),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtQuickUC).setValue('1').setDescription(cfg.txtQuickModeDesc).setDefault(state.storyMode === 1),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtSlowTC).setValue('2').setDescription(cfg.txtSlowModeDesc).setDefault(state.storyMode === 2),
+    );
+
+  const orderGroup = new RadioGroupBuilder()
+    .setCustomId(`${ns}_storyinfo_order`)
+    .setRequired(false)
+    .addOptions(
+      new RadioGroupOptionBuilder().setLabel(cfg.txtOrderRandom).setValue('1').setDescription(cfg.txtOrderRandomDesc).setDefault(state.orderType === 1),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtOrderRoundRobin).setValue('2').setDescription(cfg.txtOrderRoundRobinDesc).setDefault(state.orderType === 2),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtOrderFixed).setValue('3').setDescription(cfg.txtOrderFixedDesc).setDefault(state.orderType === 3),
+    );
+
+  const showAuthorsGroup = new RadioGroupBuilder()
+    .setCustomId(`${ns}_storyinfo_showauthors`)
+    .setRequired(false)
+    .addOptions(
+      new RadioGroupOptionBuilder().setLabel(cfg.txtYes).setValue('1').setDescription(cfg.txtShowAuthorsOnDesc).setDefault(!!state.showAuthors),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtNo).setValue('0').setDescription(cfg.txtShowAuthorsOffDesc).setDefault(!state.showAuthors),
+    );
+
+  const turnPrivacyGroup = new RadioGroupBuilder()
+    .setCustomId(`${ns}_storyinfo_turnprivacy`)
+    .setRequired(false)
+    .addOptions(
+      new RadioGroupOptionBuilder().setLabel(cfg.txtPublic).setValue('0').setDescription(cfg.txtTurnPrivacyPublicDesc).setDefault(!state.storyTurnPrivacy),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtPrivate).setValue('1').setDescription(cfg.txtTurnPrivacyPrivateDesc).setDefault(!!state.storyTurnPrivacy),
+    );
+
+  return new ModalBuilder()
+    .setCustomId(`${ns}_storyinfo_modal`)
+    .setTitle(cfg.btnAddStoryInfo)
+    .addLabelComponents(
+      new LabelBuilder().setLabel(cfg.lblModeToggle).setRadioGroupComponent(modeGroup),
+      new LabelBuilder().setLabel(cfg.lblWriterOrder).setRadioGroupComponent(orderGroup),
+      new LabelBuilder().setLabel(cfg.lblShowAuthors).setRadioGroupComponent(showAuthorsGroup),
+      new LabelBuilder().setLabel(cfg.lblTurnPrivacy).setRadioGroupComponent(turnPrivacyGroup),
+    )
+    .addComponents(
+      new TextInputBuilder()
+        .setCustomId('scene_break_divider')
+        .setLabel(cfg.lblMetaSceneBreakDivider)
+        .setStyle(TextInputStyle.Short)
+        .setRequired(false)
+        .setMaxLength(200)
+        .setValue(state.sceneBreakDivider ?? '')
+        .setPlaceholder(cfg.txtMetaSceneBreakDividerPlaceholder ?? '')
     );
 }

@@ -9,6 +9,16 @@
 import { DB, loadConfig, formattedDate } from '../utilities.js';
 
 const ORPHAN_KEYS = [
+'lblHideTurnThreads',
+'txtHideThreadsOffDesc',
+'txtHideThreadsOnDesc',
+'lblHideToggle',
+'btnAddHideToggle',
+'txtHideTurnThreadsValidation',
+'txtHideTurnThreadsPlaceholder',
+'lblHelp3HideThreads',
+'txtHelp3HideThreads',
+'lblManageJoinStatus',
 'txtDMTurnStart',
 'txtMentionTurnStart',
 'btnSetTurnLength',

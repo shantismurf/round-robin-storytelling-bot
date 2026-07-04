@@ -215,7 +215,7 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
     }
 
     // Insert story_writer record
-    const turnPrivacy = storyInput.turnPrivacy !== undefined ? storyInput.turnPrivacy : storyInput.keepPrivate;
+    const turnPrivacy = storyInput.writerTurnPrivacy !== undefined ? storyInput.writerTurnPrivacy : storyInput.keepPrivate;
     const notificationPrefs = storyInput.notificationPrefs || 'dm';
 
     // Assign writer_order = current active writer count + 1 so fixed order works correctly

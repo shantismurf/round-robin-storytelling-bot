@@ -44,7 +44,7 @@ const PAGE_DEFS = [
       { lbl: 'lblHelp3WriterOrder',     txt: 'txtHelp3WriterOrder' },
       { lbl: 'lblHelp3TurnLength',      txt: 'txtHelp3TurnLength' },
       { lbl: 'lblHelp3TimeoutReminder', txt: 'txtHelp3TimeoutReminder' },
-      { lbl: 'lblHelp3HideThreads',     txt: 'txtHelp3HideThreads' },
+      { lbl: 'lblHelp3TurnPrivacy',     txt: 'txtHelp3TurnPrivacy' },
       { lbl: 'lblHelp3ShowAuthors',     txt: 'txtHelp3ShowAuthors' },
       { lbl: 'lblHelp3MaxWriters',      txt: 'txtHelp3MaxWriters' },
       { lbl: 'lblHelp3DelayStart',      txt: 'txtHelp3DelayStart' },

@@ -23,7 +23,7 @@ function buildManageUserPanel(state) {
 
   const statusLabel    = state.writerStatus === 1 ? cfg.txtMyStoryManageActiveStatus : cfg.txtMyStoryManagePausedStatus;
   const notifLabel     = state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention;
-  const privacyLabel   = state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic;
+  const privacyLabel   = state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic;
 
   const embed = new EmbedBuilder()
     .setTitle(replaceTemplateVariables(cfg.txtManageUserPanelTitle, {
@@ -40,7 +40,7 @@ function buildManageUserPanel(state) {
     .setDescription(cfg.txtManageUserPanelDesc);
 
   const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
-  const privacyToggleLabel = state.turnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
+  const privacyToggleLabel = state.writerTurnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
 
   const row1 = new ActionRowBuilder().addComponents(
     state.writerStatus === 1
@@ -150,10 +150,10 @@ export async function handleManageUser(connection, interaction) {
       writerStatus: writer.sw_status,
       penName: writer.pen_name,
       notificationPrefs: writer.notification_prefs,
-      turnPrivacy: writer.turn_privacy,
+      writerTurnPrivacy: writer.turn_privacy,
       // Stage copies for save
       stagedNotificationPrefs: writer.notification_prefs,
-      stagedTurnPrivacy: writer.turn_privacy,
+      stagedWriterTurnPrivacy: writer.turn_privacy,
       isActiveTurn,
       activeTurnId: isActiveTurn ? activeTurnRows[0].turn_id : null,
       activeTurnThreadId: isActiveTurn ? activeTurnRows[0].thread_id : null,
@@ -199,8 +199,8 @@ export async function handleManageUserButton(connection, interaction) {
 
   } else if (customId === 'storyadmin_mu_toggle_privacy') {
     await interaction.deferUpdate();
-    pending.turnPrivacy = pending.turnPrivacy ? 0 : 1;
-    log(`handleManageUserButton: toggled privacy to ${pending.turnPrivacy}`, { show: false, guildName: interaction?.guild?.name });
+    pending.writerTurnPrivacy = pending.writerTurnPrivacy ? 0 : 1;
+    log(`handleManageUserButton: toggled privacy to ${pending.writerTurnPrivacy}`, { show: false, guildName: interaction?.guild?.name });
     await interaction.editReply(buildManageUserPanel(pending));
 
   } else if (customId === 'storyadmin_mu_save') {
@@ -209,7 +209,7 @@ export async function handleManageUserButton(connection, interaction) {
     try {
       await connection.execute(
         `UPDATE story_writer SET notification_prefs = ?, turn_privacy = ? WHERE story_writer_id = ?`,
-        [pending.notificationPrefs, pending.turnPrivacy, pending.writerId]
+        [pending.notificationPrefs, pending.writerTurnPrivacy, pending.writerId]
       );
       await logAdminAction(connection, adminId, 'update_writer_settings', pending.storyId, pending.targetUserId);
       log(`handleManageUserButton: save complete`, { show: false, guildName: interaction?.guild?.name });

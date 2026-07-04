@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, parseDuration, formatDuration } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
-import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal } from './_metadataModals.js';
+import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
 
 // Temporary storage for story add session state
 export const pendingStoryData = new Map();
@@ -39,7 +39,7 @@ export async function handleAddStory(connection, interaction) {
       cfg,
       storyTitle: null,
       storyMode: 0,
-      hideThreads: 0,
+      storyTurnPrivacy: 0,
       turnLength: 24,
       timeoutReminder: 50,
       penName: (await getPreviousPenName(connection, interaction.user.id)) || interaction.member?.displayName || interaction.user.displayName,
@@ -81,44 +81,26 @@ export async function handleAddStory(connection, interaction) {
 }
 
 export function buildStoryAddMessage(cfg, state) {
-  const isSlowMode = state.storyMode === 2;
-  const modeLabels = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC };
-  const modeLabel = modeLabels[state.storyMode] ?? cfg.txtNormalUC;
-  const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
-  const orderLabel = orderLabels[state.orderType];
-
   const embed = buildStoryEmbed(cfg, state, cfg.txtCreateStoryTitle);
 
-  // Row 1: Set Title & Summary | Mode: <> | Order: <>
+  // Row 1: Set Title and Summary | Story Info | Story Settings
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_open_titlesummary')
       .setLabel(cfg.btnAddTitleAndSummary)
-      .setStyle(ButtonStyle.Primary)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_add_open_storyinfo')
+      .setLabel(cfg.btnAddStoryInfo)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_add_open_settings')
+      .setLabel(cfg.btnAddSettings)
+      .setStyle(ButtonStyle.Primary),
   );
 
-  // Row 2: Show Names: <> | Hide Threads: <>
+  // Row 2: My Settings | Story Metadata | Story Tags
   const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_add_cycle_mode')
-      .setLabel(`${cfg.lblModeToggle}: ${modeLabel}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_add_cycle_order')
-      .setLabel(`${cfg.lblWriterOrder}: ${orderLabel}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_add_toggle_authors')
-      .setLabel(`${cfg.lblShowAuthors}: ${state.showAuthors ? cfg.txtYes : cfg.txtNo}`)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('story_add_toggle_hide')
-      .setLabel(`${cfg.btnAddHideToggle}: ${state.hideThreads ? cfg.txtOn : cfg.txtOff}`)
-      .setStyle(ButtonStyle.Secondary),
-  );
-
-  // Row 3: Story Metadata | Story Tags | Story Settings | My Settings
-  const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_open_mysettings')
       .setLabel(cfg.btnAddMySettings)
@@ -131,21 +113,17 @@ export function buildStoryAddMessage(cfg, state) {
       .setCustomId('story_add_open_tags')
       .setLabel(cfg.btnAddTags)
       .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_add_open_settings')
-      .setLabel(cfg.btnAddSettings)
-      .setStyle(ButtonStyle.Primary)
   );
 
-  // Row 5: Create Story
-  const row5 = new ActionRowBuilder().addComponents(
+  // Row 3: Create Story
+  const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_create')
       .setLabel(cfg.btnCreateStory)
       .setStyle(ButtonStyle.Success)
   );
 
-  return { embeds: [embed], components: [row1, row2, row3, row5] };
+  return { embeds: [embed], components: [row1, row2, row3] };
 }
 
 export async function handleAddStoryModalSubmit(connection, interaction) {
@@ -170,7 +148,6 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       }
       state.storyTitle = value;
       state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('story_summary'), 4000, true) || '';
-      state.sceneBreakDivider = sanitizeModalInput(interaction.fields.getTextInputValue('scene_break_divider'), 200, true) || '';
 
     } else if (customId === 'story_add_settings_modal') {
       const cfg = state.cfg;
@@ -260,12 +237,22 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       if (rating) state.rating = rating;
       state.warnings = (warningsRaw ?? []).filter(v => v !== '__dismiss__');
 
+    } else if (customId === 'story_add_storyinfo_modal') {
+      const modeVal = interaction.fields.getRadioGroup('story_add_storyinfo_mode');
+      if (modeVal !== null) state.storyMode = parseInt(modeVal);
+      const orderVal = interaction.fields.getRadioGroup('story_add_storyinfo_order');
+      if (orderVal !== null) state.orderType = parseInt(orderVal);
+      const showVal = interaction.fields.getRadioGroup('story_add_storyinfo_showauthors');
+      if (showVal !== null) state.showAuthors = parseInt(showVal);
+      const privacyVal = interaction.fields.getRadioGroup('story_add_storyinfo_turnprivacy');
+      if (privacyVal !== null) state.storyTurnPrivacy = parseInt(privacyVal);
+      state.sceneBreakDivider = sanitizeModalInput(interaction.fields.getTextInputValue('scene_break_divider'), 200) || '';
+
     } else if (customId === 'story_add_tags_modal') {
       state.mainPairing = sanitizeModalInput(interaction.fields.getTextInputValue('main_pairing'), 200) || '';
       state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
       state.characters = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
       state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
-      state.sceneBreakDivider = sanitizeModalInput(interaction.fields.getTextInputValue('scene_break_divider'), 200) || '';
 
     } else if (customId === 'story_add_mysettings_modal') {
       const rawPenName = sanitizeModalInput(interaction.fields.getTextInputValue('pen_name'), 255);
@@ -308,25 +295,8 @@ export async function handleAddStoryButton(connection, interaction) {
   log(`handleAddStoryButton: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
-    if (customId === 'story_add_cycle_mode') {
-      state.storyMode = state.storyMode === 2 ? 0 : state.storyMode + 1;
-      await interaction.deferUpdate();
-      await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
-
-    } else if (customId === 'story_add_toggle_hide') {
-      state.hideThreads = state.hideThreads ? 0 : 1;
-      await interaction.deferUpdate();
-      await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
-
-    } else if (customId === 'story_add_toggle_authors') {
-      state.showAuthors = state.showAuthors ? 0 : 1;
-      await interaction.deferUpdate();
-      await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
-
-    } else if (customId === 'story_add_cycle_order') {
-      state.orderType = state.orderType === 3 ? 1 : state.orderType + 1;
-      await interaction.deferUpdate();
-      await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
+    if (customId === 'story_add_open_storyinfo') {
+      await interaction.showModal(buildStoryInfoModal(state.cfg, state, 'story_add'));
 
     } else if (customId === 'story_add_open_titlesummary') {
       const cfg = state.cfg;
@@ -352,16 +322,6 @@ export async function handleAddStoryButton(connection, interaction) {
                 .setRequired(false)
                 .setMaxLength(4000)
                 .setValue(state.summary || '')
-            ),
-            new ActionRowBuilder().addComponents(
-              new TextInputBuilder()
-                .setCustomId('scene_break_divider')
-                .setLabel(cfg.lblMetaSceneBreakDivider)
-                .setStyle(TextInputStyle.Short)
-                .setRequired(false)
-                .setMaxLength(200)
-                .setValue(state.sceneBreakDivider || '')
-                .setPlaceholder(cfg.txtMetaSceneBreakDividerPlaceholder ?? '')
             ),
           )
       );
@@ -511,7 +471,7 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
     const storyInput = {
       storyTitle: state.storyTitle,
       mode: state.storyMode,
-      hideTurnThreads: state.hideThreads,
+      hideTurnThreads: state.storyTurnPrivacy,
       turnLength: state.turnLength,
       timeoutReminder: state.timeoutReminder,
       penName: state.penName,

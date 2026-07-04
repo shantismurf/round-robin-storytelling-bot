@@ -1,5 +1,13 @@
 # To-Do List
 
+- [x] Story Info Modal implementation (see plan: im-trying-to-run-resilient-candy.md)
+  - [x] Config SQL: rename/add/delete keys (config_story, config_storyadmin, config_help, config_turn)
+  - [x] `_metadataModals.js`: add `buildStoryInfoModal()`, update `getMetaCfg()`, fix Show Authors embed field
+  - [x] `add.js`: new row layout, remove toggle handlers, add storyinfo modal handler, rename `state.hideThreads` → `state.storyTurnPrivacy`
+  - [x] `manage.js`: new row layout, remove toggle handlers, add storyinfo modal handler, joins button logic flip
+  - [x] Config roadmap sync
+  - [x] Variable rename: `story.story_turn_privacy` → `storyTurnPrivacy`; `story_writer.turn_privacy` → `writerTurnPrivacy` across all JS files
+
 - Roundup formatting
 - Help text review
 - Code review: Slow mode additions and End Turn Thread Preservation additions (project standard compliance)

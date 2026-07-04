@@ -19,12 +19,12 @@ export function buildMyStoryManagePanel(state, cfg) {
       { name: cfg.lblMyStoryManageStatus,  value: statusLabel,                                                      inline: true },
       { name: cfg.lblMyStoryManagePenName,  value: state.penName || cfg.txtNotSet,                                   inline: true },
       { name: cfg.lblMyStoryManageNotif,   value: state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention, inline: true },
-      { name: cfg.lblMyStoryManagePrivacy, value: state.turnPrivacy ? cfg.txtPrivate : cfg.txtPublic,               inline: true }
+      { name: cfg.lblMyStoryManagePrivacy, value: state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic,               inline: true }
     )
     .setDescription(cfg.txtMyStoryManagePanelDesc);
 
   const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
-  const privacyToggleLabel = state.turnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
+  const privacyToggleLabel = state.writerTurnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('mystory_manage_penname').setLabel(cfg.btnAdminMUPenName).setStyle(ButtonStyle.Secondary),
@@ -116,7 +116,7 @@ export async function handleMyStoryManage(connection, interaction) {
       writerStatus: writer.sw_status,
       penName: writer.pen_name,
       notificationPrefs: writer.notification_prefs,
-      turnPrivacy: writer.turn_privacy,
+      writerTurnPrivacy: writer.turn_privacy,
       hasActiveTurn: activeTurnRows.length > 0,
       originalInteraction: interaction,
       cfg
@@ -149,7 +149,7 @@ export async function handleMyStoryManageButton(connection, interaction) {
 
   } else if (customId === 'mystory_manage_privacy') {
     await interaction.deferUpdate();
-    state.turnPrivacy = state.turnPrivacy ? 0 : 1;
+    state.writerTurnPrivacy = state.writerTurnPrivacy ? 0 : 1;
     await interaction.editReply(buildMyStoryManagePanel(state, state.cfg));
 
   } else if (customId === 'mystory_manage_penname') {
@@ -174,7 +174,7 @@ export async function handleMyStoryManageButton(connection, interaction) {
     try {
       await connection.execute(
         `UPDATE story_writer SET pen_name = ?, notification_prefs = ?, turn_privacy = ? WHERE story_writer_id = ?`,
-        [state.penName, state.notificationPrefs, state.turnPrivacy, state.storyWriterId]
+        [state.penName, state.notificationPrefs, state.writerTurnPrivacy, state.storyWriterId]
       );
       log(`mystory manage saved for writer ${state.storyWriterId} in story ${state.storyId}`, { show: true, guildName: interaction?.guild?.name });
       pendingMyStoryManageData.delete(userId);

@@ -1,7 +1,7 @@
 -- Context: config_storyadmin
 INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtStoryCloseConfirm', 'Are you sure you want to close **[story_title]**?', 'en', 1),
-('btnCloseConfirm', '🔒 Close Story', 'en', 1),
+('btnCloseConfirm', 'Close Story', 'en', 1),
 ('txtStoryClosedPublic', '📕 **[story_title]** is now complete! Thank you to all [writer_count] writer(s) who participated — [turn_count] turns and ~[word_count] words. Use the buttons below to export the full story.', 'en', 1),
 ('txtStoryFeedClosed', '🎉 **Congratulations to the writers of [story_title]!** The story has concluded with [turn_count] turns and ~[word_count] words. Thank you to all [writer_count] writer(s)!', 'en', 1),
 ('txtSetupPanelTitle', 'Round Robin StoryBot Setup', 'en', 1),
@@ -131,7 +131,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageEmbedTitle', 'Story Settings', 'en', 1),
 ('lblManageStoryTitle', '📖 Story Title', 'en', 1),
 ('lblManageStoryStatus', 'Story Status', 'en', 1),
-('lblManageJoinStatus', 'Join Status', 'en', 1),
+('btnManageJoinsOpen', 'Open Joins', 'en', 1),
+('btnManageJoinsClose', 'Close Joins', 'en', 1),
 ('txtManageSectionBreakMeta', '**📋 Story Metadata**', 'en', 1),
 ('txtManageSetTitleModalTitle', 'Edit Story Title', 'en', 1),
 ('txtManageSetTitlePlaceholder', 'Enter the new story title', 'en', 1),

@@ -233,7 +233,7 @@ export async function handleJoinConfirm(connection, interaction) {
 
   const joinInput = {
     penName: state.penName || null,
-    turnPrivacy: state.privacy === 'private' ? 1 : 0,
+    writerTurnPrivacy: state.privacy === 'private' ? 1 : 0,
     notificationPrefs: state.notificationPrefs
   };
 
