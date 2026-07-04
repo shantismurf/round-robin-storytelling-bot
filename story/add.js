@@ -461,7 +461,7 @@ export async function handleAddStoryButton(connection, interaction) {
               .setStringSelectMenuComponent(
                 new StringSelectMenuBuilder()
                   .setCustomId('story_add_mysettings_privacy')
-                  .setMinValues(1)
+                  .setMinValues(0)
                   .setMaxValues(1)
                   .addOptions([
                     { label: cfg.txtPublic, value: 'public', default: !state.keepPrivate },
@@ -473,7 +473,7 @@ export async function handleAddStoryButton(connection, interaction) {
               .setStringSelectMenuComponent(
                 new StringSelectMenuBuilder()
                   .setCustomId('story_add_mysettings_notifications')
-                  .setMinValues(1)
+                  .setMinValues(0)
                   .setMaxValues(1)
                   .addOptions([
                     { label: cfg.txtNotifDM, value: 'dm', default: !!state.notifications },

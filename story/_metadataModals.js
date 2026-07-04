@@ -144,7 +144,7 @@ export function buildMetadataModal(cfg, state, namespace) {
   const dynamicSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_dynamic`)
     .setPlaceholder(cfg.lblMetaDynamic)
-    .setMinValues(1)
+    .setMinValues(0)
     .setMaxValues(1)
     .addOptions(dynamicOptions.map(k => ({
       label: cfg[k] ?? k,
@@ -155,7 +155,7 @@ export function buildMetadataModal(cfg, state, namespace) {
   const ratingSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_rating`)
     .setPlaceholder(cfg.lblMetaRating)
-    .setMinValues(1)
+    .setMinValues(0)
     .setMaxValues(1)
     .addOptions(ratingCodes.map(code => ({
       label: cfg[ratingLabelKey(code)] ?? code,
@@ -166,7 +166,7 @@ export function buildMetadataModal(cfg, state, namespace) {
   const warningsSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_warnings`)
     .setPlaceholder(cfg.lblMetaWarnings)
-    .setMinValues(1)
+    .setMinValues(0)
     .setMaxValues(warningOptions.length)
     .addOptions([
       { label: cfg.txtManageWarningSelectInstructions ?? cfg.txtNone, value: '__dismiss__', default: false },
