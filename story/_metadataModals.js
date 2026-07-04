@@ -112,7 +112,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
 
   if (isManage) {
     embed.addFields(
-      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine​, value: '​', inline: false },
+      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine, value: '​', inline: false },
       { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
       { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
       { name: '​', value: '​', inline: true },
@@ -124,7 +124,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
 
   if (!isManage) {
     embed.addFields(
-      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine​, value: '​', inline: false },
+      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine, value: '​', inline: false },
       { name: cfg.lblYourPenName, value: state.penName, inline: true },
       { name: cfg.lblJoinPrivacy, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
       { name: cfg.lblJoinNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
