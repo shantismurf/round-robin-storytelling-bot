@@ -100,18 +100,18 @@ export function buildStoryEmbed(cfg, state, options = {}) {
   }
 
   embed.addFields(
-    { name: cfg.lblStoryTitle, value: `${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}\n\n${cfg.lblMetaSceneBreakDivider}\n${sceneBreakDisplay}`, inline: false },
+    { name: '​', value: `${cfg.lblStoryTitle}\n${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}\n\n${cfg.lblMetaSceneBreakDivider}\n${sceneBreakDisplay}`, inline: false },
     { name: sectionLine, value: '​', inline: true },
     { name: cfg.txtStoryAddSectionBreakSettings, value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
     { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
     { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-    { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
-    { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: cfg.lblHideToggle, value: state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc, inline: true },
-    { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
     { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: true },
     { name: cfg.lblDelayStart, value: `*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+    { name: cfg.lblHideToggle, value: state.hideThreads ? cfg.txtHideThreadsOnDesc : cfg.txtHideThreadsOffDesc, inline: true },
+    { name: cfg.lblShowAuthors, value: `${state.showAuthors ? cfg.txtYes : cfg.txtNo} — ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`, inline: true },
+    { name: cfg.lblTurnLength, value: isSlowMode ? cfg.txtNA : formatDuration(state.turnLength), inline: true },
+    { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
     { name: '​', value: '​', inline: true },
     { name: sectionLine, value: '​', inline: true },
     { name: cfg.txtStoryAddSectionBreakMeta, value: '​', inline: true },
@@ -119,7 +119,7 @@ export function buildStoryEmbed(cfg, state, options = {}) {
     { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
     { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
     { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
-    { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: true },
+    { name: '​', value: `${cfg.lblMetaMainRelationship}\n${mainPairingDisplay}\n\n${cfg.lblMetaCharacters}\n${charsDisplay}`, inline: false },
     { name: '​', value: `${cfg.lblMetaOtherRelationships}\n${otherRelDisplay}\n\n${cfg.lblMetaTags}\n${tagsDisplay}`, inline: false },
   );
 
@@ -128,7 +128,7 @@ export function buildStoryEmbed(cfg, state, options = {}) {
       { name: sectionLine, value: '​', inline: true },
       { name: cfg.txtStoryAddSectionBreakJoin, value: '​', inline: true },
       { name: sectionLine, value: '​', inline: true },
-      { name: cfg.lblYourPenName, value: `${state.penName || cfg.txtNotSet}\n\n${cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle}\n${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n\n${cfg.lblJoinNotifications ?? cfg.lblMyNotifications}\n${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`, inline: false },
+      { name: '​', value: `${cfg.lblYourPenName}\n${state.penName || cfg.txtNotSet}\n\n${cfg.lblJoinPrivacy ?? cfg.lblPrivateToggle}\n${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n\n${cfg.lblJoinNotifications ?? cfg.lblMyNotifications}\n${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`, inline: false },
     );
   }
 

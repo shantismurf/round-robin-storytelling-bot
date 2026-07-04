@@ -30,7 +30,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtSlowTC', 'Slow', 'en', 1),
 ('txtSlowLC', 'slow', 'en', 1),
 ('txtNA', 'N/A', 'en', 1),
-('txtSlowModeDesc', 'Writers get a turn thread with no time limit. Turns advance when skipped or finalized.', 'en', 1),
+('txtSlowModeDesc', 'Turns have no time limit.', 'en', 1),
 ('txtNormalModeWelcome', '## Welcome to your turn thread for [[story_title]]([story_thread_link])\nWrite your story entry here in as many posts as you''d like. Edit as needed, and use Discord markdown for formatting. Use the buttons below to Finalize your turn, or Skip to pass to the next writer without submitting.\n\nYour turn ends on [turn_end_full], [turn_end_relative]. If you need to catch up with the story since your last turn, use the command `/mystory catchup story_id:[story_id]`.', 'en', 1),
 ('txtNormalModeWelcomeNoMedia', '## Welcome to your turn thread for [[story_title]]([story_thread_link])\nWrite your story entry here in as many posts as you''d like. Edit as needed, using Discord markdown for formatting. Use the buttons below to Finalize your turn, or Skip to pass to the next writer without submitting.\n\nYour turn ends on [turn_end_full], [turn_end_relative]. If you need to catch up with the story since your last turn, use the command `/mystory catchup story_id:[story_id]`.', 'en', 1),
 ('txtQuickModeTurnStart', '🎭 **[story_title]:** [current_writer]''s turn has started! Please use `/story write [story_id]` to submit your entry. Turn ends [turn_end_date].', 'en', 1),
@@ -65,8 +65,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnFilter', '🔍 Filter', 'en', 1),
 ('txtQuickJoinPlaceholder', 'Quick join a story...', 'en', 1),
 ('txtQuickJoinDesc', '[writer_count]/[max_writers] writers • [mode] mode', 'en', 1),
-('txtNormalModeDesc', 'Writers get a private or public thread for each turn.', 'en', 1),
-('txtQuickModeDesc', 'Writers submit entries via the /story write command.', 'en', 1),
+('txtNormalModeDesc', 'Writers get a thread for each turn.', 'en', 1),
+('txtQuickModeDesc', 'Limited entries submitted via `/story write`', 'en', 1),
 ('txtPrivateOffDesc', 'Your turn threads will be visible to other writers.', 'en', 1),
 ('txtPrivateOnDesc', 'Your turn threads will only be visible to you and admins.', 'en', 1),
 ('txtNormalModeImageHelp', '📸 **Attaching images:** Upload each image in its own **separate post** in this thread in the order you would like it to appear in the story. The text of that post will become the image''s display label when the story is read. If a post has no text, the filename will be used as the label.', 'en', 1),
@@ -81,4 +81,4 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('cfgHubLogChannelId', '1505941432370724864', 'en', 1),
 ('cfgHubAnnouncementsChannelId', '1498673028203286681', 'en', 1),
 ('cfgFaqPostIds', '1503509386520166450|1503509384439926844|1503509381939986463|1503509380056748193|1503509377535971329|1503509375493345451|1503509373161439286|1503509370435276950', 'en', 1),
-('txtSectionBreakLine', '═══════════════', 'en', 1);
+('txtSectionBreakLine', '══════════', 'en', 1);
