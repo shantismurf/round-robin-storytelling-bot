@@ -69,7 +69,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnAddHideToggle', 'Hide Turn Threads', 'en', 1),
 ('lblPrivateToggle', 'Turns', 'en', 1),
 ('lblDelayStart', 'Delay Start By', 'en', 1),
-('txtDelayHint', 'leave blank for no start delay', 'en', 1),
+('txtDelayHint', 'leave blank to start immediately', 'en', 1),
 ('lblWriterOrder', 'Writer Order', 'en', 1),
 ('lblShowAuthors', 'Show Names', 'en', 1),
 ('txtShowAuthorsOnDesc', 'Shows writer names with entries.', 'en', 1),

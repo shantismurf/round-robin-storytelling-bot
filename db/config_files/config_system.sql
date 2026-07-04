@@ -66,7 +66,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtQuickJoinPlaceholder', 'Quick join a story...', 'en', 1),
 ('txtQuickJoinDesc', '[writer_count]/[max_writers] writers • [mode] mode', 'en', 1),
 ('txtNormalModeDesc', 'Writers get a thread for each turn.', 'en', 1),
-('txtQuickModeDesc', 'Limited entries submitted via `/story write`', 'en', 1),
+('txtQuickModeDesc', 'Limited entries sent via `/story write`', 'en', 1),
 ('txtPrivateOffDesc', 'Your turn threads will be visible to other writers.', 'en', 1),
 ('txtPrivateOnDesc', 'Your turn threads will only be visible to you and admins.', 'en', 1),
 ('txtNormalModeImageHelp', '📸 **Attaching images:** Upload each image in its own **separate post** in this thread in the order you would like it to appear in the story. The text of that post will become the image''s display label when the story is read. If a post has no text, the filename will be used as the label.', 'en', 1),

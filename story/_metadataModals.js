@@ -94,7 +94,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   }
 
   embed.addFields(
-    { name: '​', value: `${cfg.lblStoryTitle}\n${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}`, inline: false },
+    { name: cfg.lblStoryTitle, value: `${titleDisplay}\n\n${cfg.lblMetaSummary}\n${summaryDisplay}`, inline: false },
     { name: cfg.lblMetaRating, value: ratingLabel, inline: true },
     { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
     { name: '​', value: '​', inline: true },
