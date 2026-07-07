@@ -215,18 +215,29 @@ export async function handleJoinConfirm(connection, interaction) {
   const storyId = parseInt(interaction.customId.split('_').at(-1));
   const guildId = interaction.guild.id;
   const state = pendingJoinData.get(interaction.user.id);
+  log(`handleJoinConfirm entry: storyId=${storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!state) {
-    await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', guildId), flags: MessageFlags.Ephemeral });
+    await interaction.reply({ content: await getConfigValue(connection, 'txtJoinFormFailed', guildId), flags: MessageFlags.Ephemeral }).catch(error =>
+      log(`handleJoinConfirm: no pending state, reply failed for storyId=${storyId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
+    );
     return;
   }
 
-  await interaction.deferUpdate();
+  try {
+    await interaction.deferUpdate();
+  } catch (error) {
+    log(`handleJoinConfirm: deferUpdate failed for storyId=${storyId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    return;
+  }
 
   // Re-validate eligibility in case story changed while user was deciding
   const joinInfo = await validateJoinEligibility(connection, storyId, guildId, interaction.user.id);
+  log(`handleJoinConfirm: eligibility success=${joinInfo.success} storyId=${storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   if (!joinInfo.success) {
-    await interaction.editReply({ content: joinInfo.error, embeds: [], components: [] });
+    await interaction.editReply({ content: joinInfo.error, embeds: [], components: [] }).catch(error =>
+      log(`handleJoinConfirm: ineligible-reply edit failed for storyId=${storyId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
+    );
     pendingJoinData.delete(interaction.user.id);
     return;
   }
@@ -237,51 +248,74 @@ export async function handleJoinConfirm(connection, interaction) {
     notificationPrefs: state.notificationPrefs
   };
 
+  // Transaction scope: only the DB write lives here. A failure past this point
+  // must not be reported as a join failure, since the join already committed.
   const txn = await connection.getConnection();
   await txn.beginTransaction();
+  let result;
   try {
-    const result = await StoryJoin(txn, interaction, joinInput, storyId);
-
+    result = await StoryJoin(txn, interaction, joinInput, storyId);
     if (result.success) {
       await txn.commit();
-      pendingJoinData.delete(interaction.user.id);
-
-      const [[writerCount], [storyInfo]] = await Promise.all([
-        connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`, [storyId]),
-        connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId])
-      ]);
-
-      const txtJoinSuccess = await getConfigValue(connection, 'txtJoinSuccess', guildId);
-      const successMessage = replaceTemplateVariables(txtJoinSuccess, {
-        story_title: storyInfo[0].title,
-        writer_number: writerCount[0].count
-      });
-
-      await interaction.editReply({ content: `${successMessage}${result.confirmationMessage || ''}`, embeds: [], components: [] });
-
-      await postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyInfo[0].title);
-      updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
-
-      if (storyInfo[0].story_thread_id) {
-        interaction.guild.channels.fetch(storyInfo[0].story_thread_id.toString())
-          .then(thread => thread?.members.add(interaction.user.id))
-          .catch(() => {});
-      }
-
-      const writerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-      getConfigValue(connection, 'txtStoryThreadWriterJoin', guildId).then(template =>
-        postStoryThreadActivity(connection, interaction.guild, storyId, template.replace('[writer_name]', writerName))
-      ).catch(() => {});
-
     } else {
       await txn.rollback();
-      await interaction.editReply({ content: result.error, embeds: [], components: [] });
     }
   } catch (error) {
-    await txn.rollback();
-    log(`handleJoinConfirm failed for storyId=${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtJoinProcessFailed', guildId), embeds: [], components: [] });
+    await txn.rollback().catch(() => {});
+    log(`handleJoinConfirm: transaction failed for storyId=${storyId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtJoinProcessFailed', guildId), embeds: [], components: [] }).catch(err =>
+      log(`handleJoinConfirm: process-failed edit failed for storyId=${storyId} user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name })
+    );
+    return;
   } finally {
     txn.release();
   }
+
+  if (!result.success) {
+    await interaction.editReply({ content: result.error, embeds: [], components: [] }).catch(error =>
+      log(`handleJoinConfirm: failure-reply edit failed for storyId=${storyId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
+    );
+    return;
+  }
+
+  // Join is committed. Everything below is best-effort notification/UI work —
+  // each step is independent so one failing must not skip the others.
+  pendingJoinData.delete(interaction.user.id);
+  log(`handleJoinConfirm: join committed for storyId=${storyId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+
+  const [[writerCount], [storyInfo]] = await Promise.all([
+    connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`, [storyId]),
+    connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId])
+  ]);
+
+  const txtJoinSuccess = await getConfigValue(connection, 'txtJoinSuccess', guildId);
+  const successMessage = replaceTemplateVariables(txtJoinSuccess, {
+    story_title: storyInfo[0].title,
+    writer_number: writerCount[0].count
+  });
+
+  await interaction.editReply({ content: `${successMessage}${result.confirmationMessage || ''}`, embeds: [], components: [] }).catch(error =>
+    log(`handleJoinConfirm: success-confirmation edit failed for storyId=${storyId} user=${interaction.user.username} (join already committed): ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
+  );
+
+  await postStoryFeedJoinAnnouncement(connection, storyId, interaction, storyInfo[0].title);
+
+  updateStoryStatusMessage(connection, interaction.guild, storyId).catch(error =>
+    log(`handleJoinConfirm: updateStoryStatusMessage failed for storyId=${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
+  );
+
+  if (storyInfo[0].story_thread_id) {
+    interaction.guild.channels.fetch(storyInfo[0].story_thread_id.toString())
+      .then(thread => thread?.members.add(interaction.user.id))
+      .catch(error =>
+        log(`handleJoinConfirm: failed to add user=${interaction.user.username} to thread for storyId=${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
+      );
+  }
+
+  const writerName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
+  getConfigValue(connection, 'txtStoryThreadWriterJoin', guildId).then(template =>
+    postStoryThreadActivity(connection, interaction.guild, storyId, replaceTemplateVariables(template, { writer_name: writerName }))
+  ).catch(error =>
+    log(`handleJoinConfirm: failed to post thread activity for storyId=${storyId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
+  );
 }
