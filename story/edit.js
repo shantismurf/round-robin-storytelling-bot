@@ -260,6 +260,12 @@ async function handleEditButton(connection, interaction) {
       await renderHistoryPage(connection, interaction, state, state.historyPage, (state.histChunkPage ?? 0) + 1)
     );
 
+  } else if (customId === 'story_edit_restore_cancel') {
+    await interaction.deferUpdate();
+    await state.historyMessage.edit(
+      await renderHistoryPage(connection, interaction, state, state.historyPage, state.histChunkPage ?? 0)
+    );
+
   } else if (customId.startsWith('story_edit_restore_confirm_')) {
     const editId = parseInt(customId.split('_').at(-1));
     await handleRestoreExecute(connection, interaction, editId);
@@ -267,12 +273,6 @@ async function handleEditButton(connection, interaction) {
   } else if (customId.startsWith('story_edit_restore_')) {
     const editId = parseInt(customId.split('_').at(-1));
     await handleRestoreConfirm(connection, interaction, editId);
-
-  } else if (customId === 'story_edit_restore_cancel') {
-    await interaction.deferUpdate();
-    await state.historyMessage.edit(
-      await renderHistoryPage(connection, interaction, state, state.historyPage, state.histChunkPage ?? 0)
-    );
 
   } else if (customId === 'story_edit_back') {
     // Close the history followUp and return focus to the edit embed.
@@ -692,7 +692,7 @@ async function handleRepostEntry(connection, interaction) {
     const userId = interaction.user.id;
     const readSession = pendingReadData.get(userId);
     const successMsg = await getConfigValue(connection, 'txtRepostSuccess', interaction.guild.id);
-    if (readSession?.pendingRepostEntryId === entryId) {
+    if (readSession?.pendingRepostEntryId === String(entryId)) {
       readSession.pendingRepostEntryId = null;
       readSession.btnRepostEntry = null;
       if (deferred) await interaction.editReply(buildReadEmbed(readSession, readSession.currentPage));

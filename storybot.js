@@ -78,8 +78,8 @@ export async function CreateStory(connection, interaction, storyInput) {
     const [storyResult] = await txn.execute(
       `INSERT INTO story (guild_id, guild_story_id, title, story_status, mode, turn_length_hours,
        reminder_timing, story_turn_privacy, show_authors, story_delay_hours, story_delay_users, story_order_type, max_writers,
-       rating, warnings, main_pairing, other_relationships, characters, dynamic, tags, scene_break_divider)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+       rating, warnings, main_pairing, other_relationships, characters, dynamic, tags, scene_break_divider, summary)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
         guild_id,
         nextGuildStoryId,
@@ -101,7 +101,8 @@ export async function CreateStory(connection, interaction, storyInput) {
         storyInput.characters ?? null,
         storyInput.dynamic ?? null,
         storyInput.tags ?? null,
-        storyInput.sceneBreakDivider ?? null
+        storyInput.sceneBreakDivider ?? null,
+        storyInput.summary ?? null
       ]
     );
 

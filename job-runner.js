@@ -102,7 +102,7 @@ async function handleCheckStoryDelay(connection, client, payload) {
     `SELECT story_status, guild_id, title FROM story WHERE story_id = ?`,
     [storyId]
   );
-  if (storyRows.length === 0 || storyRows[0].story_status !== 2) return; // gone or already active
+  if (storyRows.length === 0 || storyRows[0].story_status !== 4) return; // gone or already active
 
   const { guild_id: guildId, title } = storyRows[0];
   log(`handleCheckStoryDelay entry for story ${storyId} "${title}"`, { show: false });
@@ -149,7 +149,7 @@ async function handleTurnTimeout(connection, client, payload) {
   const { turnId, storyId, guildId } = payload;
   // Verify turn is still active
   const [turnRows] = await connection.execute(
-    `SELECT t.turn_id, t.thread_id, sw.discord_display_name
+    `SELECT t.turn_id, t.thread_id, sw.discord_display_name, sw.discord_user_id
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      WHERE t.turn_id = ? AND t.turn_status = 1`,

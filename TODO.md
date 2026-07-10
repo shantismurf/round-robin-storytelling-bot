@@ -1,5 +1,10 @@
 # To-Do List
 
+- Fable Audit fixes — see [docs/Fable_Audit_2026-07.md](docs/Fable_Audit_2026-07.md) "Suggested Fix Order" (now includes the Pass 2 Addendum covering all previously skimmed files; findings 1.30–1.58 plus Bucket 2/4/5 additions)
+  - **Session plan:** one fix-order step per session. Steps 1–3 (and later 5–6): Sonnet. Step 4 (NextTurn restructure + closeStoryInternals) belongs with the Phase 2 web-interface plan: Fable, planned together.
+  - **Working agreement per fix session:** implement the named step only; keep a live working-notes file in docs/ (see docs/feedback_narrate_progress.md); verify each fix against the failure scenario in its audit finding; small commits; SemVer bump on the release commit.
+- **Restricted-guild policy — DECIDED 2026-07-10** (audit 1.39/5.12): if no restricted channel is configured, all stories (including M/E) go in the main feed; ratings are informational-only. Implication for step 3: skip thread migration entirely when no restricted channel exists (never create a second main-feed thread); the read-command NSFW check correctly no-ops when unconfigured; `getActiveThreadId` routing fixes (1.36–1.38) still required for guilds that HAVE a restricted channel.
+
 - [x] Story Info Modal implementation (see plan: im-trying-to-run-resilient-candy.md)
   - [x] Config SQL: rename/add/delete keys (config_story, config_storyadmin, config_help, config_turn)
   - [x] `_metadataModals.js`: add `buildStoryInfoModal()`, update `getMetaCfg()`, fix Show Authors embed field

@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log } from '../utilities.js';
-import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread } from './_turn.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, deleteThreadAndAnnouncement } from './_turn.js';
 import { postThreadEntry } from './_entryRenderer.js';
 
 export async function handleViewLastEntry(connection, interaction) {

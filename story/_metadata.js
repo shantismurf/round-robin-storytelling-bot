@@ -70,7 +70,7 @@ export function buildMetadataFields(story, cfg = {}) {
 
   if (story.warnings) {
     const warningLabels = Object.fromEntries(
-      warningOptions.map(k => [cfg[k], cfg[k]]).filter(([k]) => k)
+      warningOptions.map(k => [k, cfg[k]]).filter(([, v]) => v)
     );
     const formatted = formatWarnings(story.warnings, warningLabels);
     if (formatted) fields.push({ name: cfg.lblWarnings, value: formatted, inline: false });

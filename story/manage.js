@@ -550,12 +550,9 @@ async function handleManageModalSubmit(connection, interaction) {
       }
 
     } else if (customId === 'story_manage_metadata_modal') {
-      const dynamic = interaction.fields.getStringSelectValues?.('story_manage_metadata_dynamic')?.[0]
-        ?? interaction.fields.getField?.('story_manage_metadata_dynamic')?.values?.[0];
-      const rating = interaction.fields.getStringSelectValues?.('story_manage_metadata_rating')?.[0]
-        ?? interaction.fields.getField?.('story_manage_metadata_rating')?.values?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues?.('story_manage_metadata_warnings')
-        ?? interaction.fields.getField?.('story_manage_metadata_warnings')?.values ?? [];
+      const dynamic = interaction.fields.getStringSelectValues('story_manage_metadata_dynamic')?.[0];
+      const rating = interaction.fields.getStringSelectValues('story_manage_metadata_rating')?.[0];
+      const warningsRaw = interaction.fields.getStringSelectValues('story_manage_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;

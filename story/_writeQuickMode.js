@@ -32,7 +32,7 @@ export async function handleWrite(connection, interaction) {
       await interaction.reply({ content: writerInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
-    if (!storyInfo.story.quick_mode) {
+    if (storyInfo.story.mode !== 1) {
       await interaction.reply({ content: txtNormalModeWrite, flags: MessageFlags.Ephemeral });
       return;
     }
