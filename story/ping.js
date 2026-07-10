@@ -1,5 +1,6 @@
 import { MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
+import { getActiveThreadId } from '../storybot.js';
 
 export async function handlePing(connection, interaction) {
   log(`handlePing entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
@@ -22,13 +23,14 @@ export async function handlePing(connection, interaction) {
   }
 
   const [storyRows] = await connection.execute(
-    `SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]
+    `SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]
   );
-  if (!storyRows.length || !storyRows[0].story_thread_id) {
+  const activeThreadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
+  if (!activeThreadId) {
     return interaction.editReply({ content: await getConfigValue(connection, 'txtThreadCreationFailed', guildId) });
   }
 
-  const { title, story_thread_id } = storyRows[0];
+  const { title } = storyRows[0];
 
   const includePaused = interaction.options.getBoolean('include_paused') ?? false;
   const [writerRows] = await connection.execute(
@@ -41,7 +43,7 @@ export async function handlePing(connection, interaction) {
 
   let thread;
   try {
-    thread = await interaction.guild.channels.fetch(story_thread_id.toString());
+    thread = await interaction.guild.channels.fetch(activeThreadId.toString());
   } catch (err) {
     log(`handlePing: could not fetch story thread: ${err}`, { show: true, guildName: interaction.guild.name });
     return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });

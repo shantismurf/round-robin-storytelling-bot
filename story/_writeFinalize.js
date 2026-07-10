@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, checkIsAdmin } from '../utilities.js';
 import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, endTurnGuarded } from './_turn.js';
+import { getActiveThreadId } from '../storybot.js';
 import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './_entryRenderer.js';
 import { pendingPreviewData } from './_state.js';
 
@@ -259,14 +260,15 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     log(`doFinalizeEntry: entry built — ${entryContent.length} chars, ${imagesForwarded} image(s) forwarded`, { show: false, guildName: interaction?.guild?.name });
 
     const [storyInfo] = await connection.execute(
-      `SELECT s.show_authors, s.story_thread_id, s.scene_break_divider, sw.discord_display_name
+      `SELECT s.show_authors, s.story_thread_id, s.restricted_thread_id, s.rating, s.scene_break_divider, sw.discord_display_name
        FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
        WHERE s.story_id = ?`,
       [writerId, storyId]
     );
-    log(`doFinalizeEntry: story info fetched — show_authors=${storyInfo[0]?.show_authors}, story_thread=${storyInfo[0]?.story_thread_id}`, { show: false, guildName: interaction?.guild?.name });
-    const { show_authors, story_thread_id, scene_break_divider, discord_display_name } = storyInfo[0];
+    const activeThreadId = getActiveThreadId(storyInfo[0]);
+    log(`doFinalizeEntry: story info fetched — show_authors=${storyInfo[0]?.show_authors}, active_thread=${activeThreadId}`, { show: false, guildName: interaction?.guild?.name });
+    const { show_authors, scene_break_divider, discord_display_name } = storyInfo[0];
 
     log(`doFinalizeEntry: beginning DB transaction — turn ${turn.turn_id}`, { show: false, guildName: interaction?.guild?.name });
     const txn = await connection.getConnection();
@@ -310,10 +312,10 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     const turn_number = turnNumResult[0].turn_number;
 
     try {
-      const storyThread = await interaction.guild.channels.fetch(story_thread_id);
+      const storyThread = await interaction.guild.channels.fetch(activeThreadId);
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
       await postThreadEntry(storyThread, entryContent, authorLine, scene_break_divider);
-      log(`doFinalizeEntry: entry posted to story thread ${story_thread_id} as turn ${turn_number}`, { show: true, guildName: interaction?.guild?.name });
+      log(`doFinalizeEntry: entry posted to story thread ${activeThreadId} as turn ${turn_number}`, { show: true, guildName: interaction?.guild?.name });
     } catch (embedError) {
       log(`doFinalizeEntry: failed to post entry to story thread: ${embedError}`, { show: true, guildName: interaction?.guild?.name });
     }

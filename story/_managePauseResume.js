@@ -1,7 +1,8 @@
 import { getConfigValue, log, replaceTemplateVariables, getTurnNumber } from '../utilities.js';
 import { PickNextWriter, NextTurn } from './_turn.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
-import { isRestricted } from './_metadata.js';
+import { isRestricted, resolveFeedChannelId } from './_metadata.js';
+import { getActiveThreadId } from '../storybot.js';
 
 export async function applyPauseActions(connection, interaction, state) {
   const [activeTurnRows] = await connection.execute(
@@ -70,7 +71,7 @@ export async function applyPauseActions(connection, interaction, state) {
 export async function applyResumeActions(connection, interaction, state) {
   const [activeTurnRows] = await connection.execute(
     `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.discord_display_name, sw.notification_prefs,
-            s.story_thread_id, s.title
+            s.story_thread_id, s.restricted_thread_id, s.rating, s.title
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      JOIN story s ON s.story_id = sw.story_id
@@ -169,14 +170,14 @@ export async function applyResumeActions(connection, interaction, state) {
   }
 
   try {
-    const linkThreadId = activeTurn.thread_id || activeTurn.story_thread_id;
+    const linkThreadId = activeTurn.thread_id || getActiveThreadId(activeTurn);
     const threadUrl = `https://discord.com/channels/${state.guildId}/${linkThreadId}`;
     const resumeText = (await getConfigValue(connection, 'txtTurnResumed', state.guildId))
       .replace(/\[story_title\]/g, activeTurn.title)
       .replace(/\[turn_end_time\]/g, newEndTimestamp ?? '—')
       .replace(/\[turn_thread_link\]/g, threadUrl);
     if (activeTurn.notification_prefs === 'mention') {
-      const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
+      const feedChannelId = await resolveFeedChannelId(connection, state.guildId, state.rating);
       const channel = await interaction.guild.channels.fetch(feedChannelId);
       await channel.send(`<@${activeTurn.discord_user_id}> ${resumeText}`);
     } else {
@@ -184,7 +185,7 @@ export async function applyResumeActions(connection, interaction, state) {
         const user = await interaction.client.users.fetch(activeTurn.discord_user_id);
         await user.send(resumeText);
       } catch {
-        const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', state.guildId);
+        const feedChannelId = await resolveFeedChannelId(connection, state.guildId, state.rating);
         const channel = await interaction.guild.channels.fetch(feedChannelId);
         await channel.send(`<@${activeTurn.discord_user_id}> ${resumeText}`);
       }
@@ -207,10 +208,11 @@ export async function handleReopenStory(connection, interaction, state) {
 
     try {
       const [storyInfo] = await connection.execute(
-        `SELECT story_thread_id FROM story WHERE story_id = ?`, [state.storyId]
+        `SELECT story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [state.storyId]
       );
-      if (storyInfo[0]?.story_thread_id) {
-        const storyThread = await interaction.guild.channels.fetch(storyInfo[0].story_thread_id).catch(() => null);
+      const activeThreadId = storyInfo.length ? getActiveThreadId(storyInfo[0]) : null;
+      if (activeThreadId) {
+        const storyThread = await interaction.guild.channels.fetch(activeThreadId).catch(() => null);
         if (storyThread) {
           const [txtActive, titleTemplate] = await Promise.all([
             getConfigValue(connection, 'txtActive', guildId),

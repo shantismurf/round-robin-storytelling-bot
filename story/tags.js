@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
+import { getActiveThreadId } from '../storybot.js';
 export { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel } from './_tagSubmit.js';
 
 // ─── Button: "View Proposed Tags" — all server members ──────────────────────
@@ -26,10 +27,10 @@ export async function handleViewProposedTags(connection, interaction) {
   );
 
   const [storyRows] = await connection.execute(
-    `SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]
+    `SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]
   );
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitlePublic', 'txtTagNoPendingPublic',
@@ -132,9 +133,9 @@ export async function handleEditTagsButton(connection, interaction, pageIndex = 
      ORDER BY submitted_at ASC`,
     [storyId]
   );
-  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id ?? null;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount'
@@ -165,9 +166,9 @@ export async function handleTagReviewNav(connection, interaction) {
      ORDER BY submitted_at ASC`,
     [storyId]
   );
-  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id ?? null;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount'
@@ -269,9 +270,9 @@ export async function handleViewTagsNav(connection, interaction) {
     return;
   }
 
-  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitle', 'txtTagVoteCount', 'txtTagVoteNote', 'btnTagApprove', 'btnTagReject'
@@ -396,8 +397,8 @@ export async function handleTagReviewButton(connection, interaction) {
     reviewed_at: `<t:${Math.floor(reviewedAt / 1000)}:d> <t:${Math.floor(reviewedAt / 1000)}:T>`
   });
 
-  const [storyThreadRows] = await connection.execute(`SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]);
-  const storyThreadId = storyThreadRows[0]?.story_thread_id ?? null;
+  const [storyThreadRows] = await connection.execute(`SELECT story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
+  const storyThreadId = storyThreadRows.length ? getActiveThreadId(storyThreadRows[0]) : null;
   if (threadMessageId && storyThreadId) {
     try {
       const thread = await interaction.guild.channels.fetch(storyThreadId).catch(() => null);
@@ -482,10 +483,10 @@ export async function handleTagReviewButton(connection, interaction) {
     return;
   }
 
-  const [storyMeta] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyMeta] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const nextPage = Math.min(pageIndex, remaining.length - 1);
   const { embeds, components } = await buildTagReviewPanel(
-    remaining, nextPage, storyId, storyMeta[0]?.title ?? '', storyMeta[0]?.story_thread_id ?? null, actionCfg, interaction.guild
+    remaining, nextPage, storyId, storyMeta[0]?.title ?? '', storyMeta.length ? getActiveThreadId(storyMeta[0]) : null, actionCfg, interaction.guild
   );
   await interaction.editReply({ content: '', embeds, components });
 }

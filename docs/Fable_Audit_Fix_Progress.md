@@ -132,12 +132,99 @@ the job_log write, which is a bounded/rare edge case, not the unbounded pile-up 
 
 ## Step 3 — Rating-barrier sweep
 
-Target findings: 1.36, 1.37, 1.38, 1.39/5.12 (policy decision already made)
+Target findings: 1.36, 1.37, 1.38, 1.39/5.12 (policy decision already made). This step grew
+substantially beyond its original scope — see "Scope expansion" below. Everything listed here
+is done.
 
-- [ ] 1.36 repost routes through getActiveThreadId (`story/edit.js`)
-- [ ] 1.37 export "Post to Story Thread" routes through getActiveThreadId (`story/export.js`)
-- [ ] 1.38 tag proposals/votes route through getActiveThreadId (`story/_tagSubmit.js`, `story/tags.js`)
-- [ ] 1.39 skip migrateStoryThread entirely when no restricted channel configured (`story/manage.js`)
+### Originally-assigned findings
+
+- [x] 1.36 repost routes through getActiveThreadId (`story/edit.js` handleRepostEntry) — added
+      `rating, restricted_thread_id` to the SELECT.
+- [x] 1.37 export "Post to Story Thread" routes through getActiveThreadId (`story/export.js`
+      handleExportPostPublic).
+- [x] 1.38 tag proposals/votes route through getActiveThreadId — fixed 6 call sites total:
+      `story/_tagSubmit.js` (submit-post, delete-thread-post, delete-success-link) and
+      `story/tags.js` (handleViewProposedTags, handleEditTagsButton, handleTagReviewNav,
+      handleTagReviewButton x2 including the remaining-tags panel rebuild, legacy
+      handleViewTagsButton).
+- [x] 1.39/5.12 policy applied in `story/manage.js` handleManageSave: added
+      `isRestrictedChannelConfigured(connection, guildId)` helper to `story/_metadata.js`
+      (reused, not duplicated, per the sentinel-check pattern already in resolveFeedChannelId).
+      Migration is skipped ONLY when moving INTO restricted with no restricted channel
+      configured — moving back OUT of restricted still migrates normally (that direction
+      can't create a redundant thread; confirmed this distinction with the user after an
+      initial draft of the guard would have wrongly blocked legitimate de-rating migrations
+      when a restricted channel IS configured).
+
+### Scope expansion — same bug class found well beyond the audit's 4 named findings
+
+While fixing 1.36-1.38, checked the actual entry-posting flow (not just repost/export/tags)
+and found the identical bug is far more widespread than the audit reported. Confirmed each
+one with the user before fixing (this thread-routing bug ended up touching ~15 call sites
+total). All confirmed via user discussion and fixed:
+
+- **Primary write flow** (`story/_writeFinalize.js` doFinalizeEntry, `story/_writeQuickMode.js`
+  confirmEntry) — the entry an M/E-rated story's writer submits was posting to the
+  unrestricted thread instead of the restricted one. This is the main path every entry goes
+  through, not an edge case — arguably higher-impact than any of the audit's named findings,
+  and the audit didn't catch it.
+- `story/_managePauseResume.js` handleReopenStory (audit's own **1.19**, previously
+  unassigned) — reopening only retitled the unrestricted thread.
+- `story/close.js` handleCloseConfirm — per user guidance, a story with threads in BOTH
+  restricted and unrestricted space should get story-level lifecycle actions (retitle) on
+  BOTH threads, not just "the active one" — only the close message + export buttons post
+  once, to the active thread. Rewrote the retitle loop accordingly.
+- `story/join.js` handleJoinConfirm — new writer was only added as a Discord thread *member*
+  of the unrestricted thread, so on a restricted story they couldn't see/post in the private
+  thread they'd actually be writing in.
+- `story/ping.js` handlePing (`/story ping`) — posted to the wrong thread.
+- `story/timeleft.js` handleRequestMoreTime — same (handleTimeleft itself is unaffected; it
+  selects story_thread_id but never uses it, replies ephemerally instead).
+- **Feed-channel routing** (separate from thread routing, caught when the user asked "does any
+  feed announcement have this bug"): `announcements.js` postStoryFeedClosedAnnouncement was
+  the only one of 4 announcement functions hardcoding `cfgStoryFeedChannelId` instead of
+  calling `resolveFeedChannelId(connection, guildId, rating)` like its siblings (join/create/
+  activate announcements were already correct) — added a `rating` param (default 'NR') and
+  fixed the call site in close.js to pass `story.rating`.
+- `job-runner.js` sendMentionReminder (turn reminder mention-fallback, used when DM fails or
+  the writer prefers mention notifications — Discord doesn't deliver pings inside threads,
+  which is why this posts to a channel instead) — same hardcoded-main-feed bug, fixed for both
+  the normal/quick and slow-mode reminder paths (4 call sites); also fixed the turn-thread-link
+  fallback in both reminder functions to use getActiveThreadId instead of bare story_thread_id.
+- `story/_managePauseResume.js` applyResumeActions — resume notification's mention-fallback
+  (both branches: primary mention path and DM-failed fallback) had the same hardcoded main-feed
+  bug; also fixed its thread-link fallback.
+
+### Explicitly NOT touched (checked, confirmed out of scope or not a live bug)
+
+- `commands/storyadmin.js` handleDeleteConfirm (`/storyadmin delete`) — same class of bug
+  (only deletes/references story_thread_id), but this is audit finding **1.42**, explicitly
+  assigned to step 4's `closeStoryInternals` extraction (needs job cancellation + status
+  message handling bundled in too, not a simple thread-id swap). Left alone.
+- `utilities.js` sendUserMessage — has the same hardcoded-feed-channel bug internally, but
+  it's dead code with zero callers anywhere in the codebase (confirmed via grep) and already
+  separately broken (references an undefined `connection` var — audit finding **1.29**,
+  assigned to step 5 cleanup). Not fixed; would have zero runtime effect since nothing calls it.
+- `utilities.js` createThread — same story, audit finding 1.29, dead + already broken, step 5.
+- `_managePauseResume.js` applyPauseActions/applyResumeActions's OWN inline
+  `isRestricted(state.rating) && restricted_thread_id` ternaries (used for the story-thread
+  title update, separate from the mention-fallback bug fixed above) — already correct, just
+  written inline instead of calling getActiveThreadId. Left as stylistic duplication, not a bug;
+  not worth the risk of touching working code that uses `state.rating` as its data source
+  (slightly different from the fresh-query pattern used everywhere else) this late in the
+  session.
+- `story/read.js`, `story/timeleft.js` handleTimeleft — select story_thread_id but never
+  actually use it to post anywhere (ephemeral replies only); not a routing bug, just an unused
+  column in the query.
+- `commands/_myStoryManage.js`, `story/_manageUser.js` thread fetches — all use
+  `activeTurn.thread_id`/`activeTurnThreadId` (the writer's own private turn thread), not the
+  story-level feed thread. Correct as-is, different concern entirely.
+
+All files touched in this expanded step 3 pass `node --check`:
+`story/edit.js`, `story/export.js`, `story/_tagSubmit.js`, `story/tags.js`, `story/manage.js`,
+`story/_metadata.js`, `story/_writeFinalize.js`, `story/_writeQuickMode.js`,
+`story/_managePauseResume.js`, `story/close.js`, `story/join.js`, `story/ping.js`,
+`story/timeleft.js`, `announcements.js`, `job-runner.js`.
 
 ---
 

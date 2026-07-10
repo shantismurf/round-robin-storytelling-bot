@@ -96,6 +96,17 @@ export function buildMetadataFields(story, cfg = {}) {
 }
 
 /**
+ * Whether a restricted feed channel is configured for this guild. When it's not,
+ * policy (decided 2026-07-10) is that all stories — including M/E — stay in the
+ * main feed and ratings are informational-only.
+ */
+export async function isRestrictedChannelConfigured(connection, guildId) {
+  const { getConfigValue } = await import('../utilities.js');
+  const restrictedId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
+  return !!(restrictedId && restrictedId !== 'cfgRestrictedFeedChannelId' && restrictedId !== '');
+}
+
+/**
  * Resolve which feed channel ID to use for a story, based on its rating.
  */
 export async function resolveFeedChannelId(connection, guildId, rating) {

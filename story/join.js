@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
-import { StoryJoin } from '../storybot.js';
+import { StoryJoin, getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { postStoryThreadActivity } from './_turn.js';
 import { postStoryFeedJoinAnnouncement } from '../announcements.js';
@@ -285,7 +285,7 @@ export async function handleJoinConfirm(connection, interaction) {
 
   const [[writerCount], [storyInfo]] = await Promise.all([
     connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`, [storyId]),
-    connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId])
+    connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId])
   ]);
 
   const txtJoinSuccess = await getConfigValue(connection, 'txtJoinSuccess', guildId);
@@ -304,8 +304,9 @@ export async function handleJoinConfirm(connection, interaction) {
     log(`handleJoinConfirm: updateStoryStatusMessage failed for storyId=${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })
   );
 
-  if (storyInfo[0].story_thread_id) {
-    interaction.guild.channels.fetch(storyInfo[0].story_thread_id.toString())
+  const activeThreadId = getActiveThreadId(storyInfo[0]);
+  if (activeThreadId) {
+    interaction.guild.channels.fetch(activeThreadId.toString())
       .then(thread => thread?.members.add(interaction.user.id))
       .catch(error =>
         log(`handleJoinConfirm: failed to add user=${interaction.user.username} to thread for storyId=${storyId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name })

@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validateStoryAccess, validateActiveWriter } from '../utilities.js';
 import { PickNextWriter, NextTurn, endTurnGuarded } from './_turn.js';
+import { getActiveThreadId } from '../storybot.js';
 import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './_entryRenderer.js';
 
 export const pendingReminderTimeouts = new Map();
@@ -179,7 +180,7 @@ export async function confirmEntry(connection, entryId, interaction) {
 
     const [entryInfo] = await txn.execute(`
       SELECT se.turn_id, se.content, sw.story_id, sw.discord_user_id, sw.discord_display_name,
-             s.story_thread_id, s.show_authors, s.scene_break_divider,
+             s.story_thread_id, s.restricted_thread_id, s.rating, s.show_authors, s.scene_break_divider,
              (SELECT COUNT(DISTINCT t2.turn_id)
               FROM turn t2
               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -196,7 +197,8 @@ export async function confirmEntry(connection, entryId, interaction) {
       throw new Error(`Entry not found for ID ${entryId}`);
     }
 
-    const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, scene_break_divider, turn_number } = entryInfo[0];
+    const { turn_id, content, story_id, discord_display_name, show_authors, scene_break_divider, turn_number } = entryInfo[0];
+    const activeThreadId = getActiveThreadId(entryInfo[0]);
 
     const ended = await endTurnGuarded(txn, turn_id);
     if (!ended) {
@@ -215,7 +217,7 @@ export async function confirmEntry(connection, entryId, interaction) {
     await txn.commit();
 
     try {
-      const storyThread = await interaction.guild.channels.fetch(story_thread_id);
+      const storyThread = await interaction.guild.channels.fetch(activeThreadId);
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
       await postThreadEntry(storyThread, content, authorLine, scene_break_divider);
     } catch (threadError) {
