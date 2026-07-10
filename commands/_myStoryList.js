@@ -473,7 +473,7 @@ export async function handleCatchUp(connection, interaction) {
       return await interaction.editReply({ content: intro, embeds: [pages[0]] });
     }
 
-    const navRow = buildCatchUpNavRow(0, totalPages, catchupCfg);
+    const navRow = buildCatchUpNavRow(0, totalPages, catchupCfg, storyId);
     const catchUpKey = `catchup_${userId}_${storyId}`;
     pendingCatchUpData.set(catchUpKey, { pages, storyTitle, catchupCfg });
 
@@ -489,19 +489,19 @@ export async function handleCatchUp(connection, interaction) {
 export async function handleCatchUpNavigation(connection, interaction) {
   log(`handleCatchUpNavigation: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
-  const [, action, currentPageStr] = interaction.customId.split('_');
+  const [, action, currentPageStr, storyId] = interaction.customId.split('_');
   const currentPage = parseInt(currentPageStr);
   const newPage = action === 'next' ? currentPage + 1 : currentPage - 1;
 
-  const catchUpKey = [...pendingCatchUpData.keys()].find(k => k.startsWith(`catchup_${interaction.user.id}_`));
-  if (!catchUpKey) {
+  const catchUpKey = `catchup_${interaction.user.id}_${storyId}`;
+  if (!pendingCatchUpData.has(catchUpKey)) {
     const msg = await getConfigValue(connection, 'txtCatchupSessionExpired', interaction.guild.id);
     return await interaction.editReply({ content: msg, embeds: [], components: [] });
   }
 
   const { pages, storyTitle, catchupCfg } = pendingCatchUpData.get(catchUpKey);
   const totalPages = pages.length;
-  const navRow = buildCatchUpNavRow(newPage, totalPages, catchupCfg);
+  const navRow = buildCatchUpNavRow(newPage, totalPages, catchupCfg, storyId);
   const navHeader = replaceTemplateVariables(catchupCfg.txtCatchupNavHeader, { story_title: storyTitle, page: newPage + 1, total: totalPages });
 
   await interaction.editReply({
@@ -511,15 +511,15 @@ export async function handleCatchUpNavigation(connection, interaction) {
   });
 }
 
-function buildCatchUpNavRow(currentPage, totalPages, catchupCfg) {
+function buildCatchUpNavRow(currentPage, totalPages, catchupCfg, storyId) {
   return new ActionRowBuilder().addComponents(
     new ButtonBuilder()
-      .setCustomId(`catchup_prev_${currentPage}`)
+      .setCustomId(`catchup_prev_${currentPage}_${storyId}`)
       .setLabel(catchupCfg.btnPrev)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(currentPage === 0),
     new ButtonBuilder()
-      .setCustomId(`catchup_next_${currentPage}`)
+      .setCustomId(`catchup_next_${currentPage}_${storyId}`)
       .setLabel(catchupCfg.btnNext)
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(currentPage === totalPages - 1)

@@ -1,21 +1,49 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, discordTimestamp, closeOrphanedGuildStories } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
-import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread } from './story/_turn.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded } from './story/_turn.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
-import { handleWeeklyRoundup } from './story/roundup.js';
+import { handleWeeklyRoundup, scheduleNextRoundup } from './story/roundup.js';
 
 const JOB_POLL_INTERVAL_MS = 60 * 1000;
 const JOB_MAX_ATTEMPTS = 3;
 const JOB_RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
+const JOB_PURGE_EVERY_N_TICKS = 24 * 60; // once per day at a 60s poll interval
+const JOB_PURGE_AGE_DAYS = 30;
 
-export function startJobRunner(connection, client) {
+let pollTickCount = 0;
+
+export async function startJobRunner(connection, client) {
+  // Jobs only sit at job_status=1 while processJob's synchronous handler is running —
+  // there's no code path that leaves one there and returns. So any job still at
+  // status 1 when the runner starts must have been orphaned by a crash/restart
+  // between claim and completion (the restricted host restarts on every deploy).
+  // Re-queue them so they aren't silently lost, per Fable Audit 1.13.
+  const [stuck] = await connection.execute(`SELECT job_id, job_type FROM job WHERE job_status = 1`);
+  if (stuck.length > 0) {
+    await connection.execute(`UPDATE job SET job_status = 0 WHERE job_status = 1`);
+    log(`Job runner startup: re-queued ${stuck.length} job(s) orphaned by a previous restart (${stuck.map(j => `${j.job_id}:${j.job_type}`).join(', ')})`, { show: true });
+  }
   log('Job runner started, polling every 60s', { show: true });
   setInterval(() => runDueJobs(connection, client), JOB_POLL_INTERVAL_MS);
 }
 
+async function purgeOldJobs(connection) {
+  const [result] = await connection.execute(
+    `DELETE FROM job WHERE job_status IN (2, 3, 4) AND run_at < DATE_SUB(NOW(), INTERVAL ? DAY)`,
+    [JOB_PURGE_AGE_DAYS]
+  );
+  if (result.affectedRows > 0) {
+    log(`Job runner: purged ${result.affectedRows} completed/cancelled/failed job(s) older than ${JOB_PURGE_AGE_DAYS} days`, { show: false });
+  }
+}
+
 async function runDueJobs(connection, client) {
   try {
+    pollTickCount++;
+    if (pollTickCount % JOB_PURGE_EVERY_N_TICKS === 0) {
+      await purgeOldJobs(connection).catch(err => log(`Job purge error: ${err}`, { show: true }));
+    }
     const [jobs] = await connection.execute(
       `SELECT * FROM job WHERE job_status = 0 AND run_at <= NOW() ORDER BY run_at ASC LIMIT 20`
     );
@@ -62,10 +90,12 @@ async function processJob(connection, client, job) {
       default:
         log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
     }
+    await connection.execute(`UPDATE job SET job_status = 4 WHERE job_id = ?`, [job.job_id]);
   } catch (err) {
     if (err?.code === 10004 && payload.guildId) {
       log(`Job ${job.job_id} (${job.job_type}): guild ${payload.guildId} no longer has the bot installed; closing its stories`, { show: true, hub: true });
       await closeOrphanedGuildStories(connection, payload.guildId);
+      await connection.execute(`UPDATE job SET job_status = 3 WHERE job_id = ?`, [job.job_id]);
       return;
     }
     log(`Job ${job.job_id} (${job.job_type}) failed on attempt ${attemptNumber}: ${err}`, { show: true });
@@ -79,6 +109,14 @@ async function processJob(connection, client, job) {
     } else {
       await connection.execute(`UPDATE job SET job_status = 2 WHERE job_id = ?`, [job.job_id]);
       log(`⚠️ Job ${job.job_id} (${job.job_type}) permanently failed after ${attemptNumber} attempts: ${err}`, { show: true });
+      if (job.job_type === 'weeklyRoundup' && payload.guildId) {
+        // handleWeeklyRoundup deliberately doesn't reschedule on a throw (so retries
+        // aren't cancelled out from under it) — once retries are exhausted here,
+        // schedule the next window so the guild doesn't lose the feature entirely.
+        await scheduleNextRoundup(connection, payload.guildId).catch(schedErr =>
+          log(`Failed to reschedule weeklyRoundup for guild ${payload.guildId} after permanent failure: ${schedErr}`, { show: true })
+        );
+      }
     }
   }
 }
@@ -170,15 +208,13 @@ async function handleTurnTimeout(connection, client, payload) {
 
   const activeTurn = turnRows[0];
 
-  // End the turn and cancel its pending jobs
-  await connection.execute(
-    `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-    [turnId]
-  );
-  await connection.execute(
-    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-    [turnId]
-  );
+  // End the turn and cancel its pending jobs. Guarded so a finalize that races
+  // this timeout (both reading turn_status=1 in the same window) only advances once.
+  const ended = await endTurnGuarded(connection, turnId);
+  if (!ended) {
+    log(`turnTimeout no-op for turn ${turnId} — already ended by a race (finalize/skip)`, { show: true, guildName: guildId });
+    return;
+  }
 
   const ctx = await buildSyntheticContext(client, guildId);
   log(`Turn ${turnId} timed out for story ${storyId}`, { show: true, guildName: ctx.guild?.name });

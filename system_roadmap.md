@@ -106,7 +106,9 @@ Jobs are stored in the `job` table and polled every 60 seconds by `job-runner.js
 | `turnSlowReminder` | `handleSlowTurnReminder()` | Fires every `reminder_timing` hours to remind the writer of an open slow mode turn. Self-rescheduling: inserts a new job on fire. Cancelled on turn end or story pause. |
 | `weeklyRoundup` | `handleWeeklyRoundup()` (story/roundup.js) | Weekly summary post. Dedup via `job_log` table — `INSERT IGNORE` on `(job_type, guild_id, window_key)` ensures only the first execution per window posts. |
 
-Job retry: max 3 attempts, 5-minute delay between retries. Status codes: `0`=pending, `1`=in-progress, `2`=permanently failed, `3`=cancelled.
+Job retry: max 3 attempts, 5-minute delay between retries. Status codes: `0`=pending, `1`=in-progress, `2`=permanently failed, `3`=cancelled, `4`=completed.
+
+On startup, any job still at status `1` is re-queued to `0` — a job only stays claimed while its handler is synchronously running, so if the process restarted mid-job (e.g. a deploy), the row is orphaned rather than genuinely stuck. Completed/cancelled/failed jobs (`2`/`3`/`4`) older than 30 days are purged once per day.
 
 ### job_log table
 

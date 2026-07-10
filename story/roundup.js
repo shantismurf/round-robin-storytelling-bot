@@ -213,18 +213,25 @@ export async function handleWeeklyRoundup(connection, client, payload) {
   const { guildId, runAt } = payload;
   log(`handleWeeklyRoundup: entry — guild ${guildId} runAt=${runAt ?? 'now'}`, { show: true });
 
-  // Use job_log as the authoritative dedup record. INSERT IGNORE means only the first
-  // job to reach this point for a given (type, guild, window) will proceed — any
-  // duplicate jobs (from accumulated backlog or restart races) get 0 affectedRows and bail.
   const scheduledAt = runAt ? new Date(runAt) : new Date();
   const windowKey = runAt ?? scheduledAt.toISOString();
-  const [logResult] = await connection.execute(
-    `INSERT IGNORE INTO job_log (job_type, guild_id, window_key, scheduled_at)
-     VALUES ('weeklyRoundup', ?, ?, ?)`,
-    [String(guildId), windowKey, scheduledAt]
+
+  // Note on rescheduling: this function reschedules the *next* window itself on every
+  // non-throwing path (duplicate/disabled/no-channel/success). On a genuine send failure
+  // it deliberately does NOT reschedule here — it re-throws so job-runner's existing
+  // retry logic (3 attempts, 5-min backoff) gets a chance first; job-runner reschedules
+  // on the caller's behalf only once retries are exhausted (see processJob's permanent-
+  // failure branch), so this job's own retry slot is never cancelled out from under it.
+
+  // Check job_log (not yet written) as a read-only dedup check — the actual
+  // INSERT happens after a successful send so a failed attempt can be retried
+  // for the same window instead of permanently losing it.
+  const [existing] = await connection.execute(
+    `SELECT 1 FROM job_log WHERE job_type = 'weeklyRoundup' AND guild_id = ? AND window_key = ?`,
+    [String(guildId), windowKey]
   );
-  if (logResult.affectedRows === 0) {
-    log(`handleWeeklyRoundup: duplicate window ${windowKey} — skipping and rescheduling for guild ${guildId}`, { show: true });
+  if (existing.length > 0) {
+    log(`handleWeeklyRoundup: duplicate window ${windowKey} already posted — skipping for guild ${guildId}`, { show: true });
     await scheduleNextRoundup(connection, guildId);
     return;
   }
@@ -232,6 +239,7 @@ export async function handleWeeklyRoundup(connection, client, payload) {
   const enabled = await getConfigValue(connection, 'cfgWeeklyRoundupEnabled', guildId);
   if (enabled !== '1') {
     log(`handleWeeklyRoundup: roundup disabled for guild ${guildId} — skipping`, { show: true });
+    await scheduleNextRoundup(connection, guildId);
     return;
   }
 
@@ -260,6 +268,13 @@ export async function handleWeeklyRoundup(connection, client, payload) {
     throw err;
   }
 
+  // Record success only now — INSERT IGNORE still guards against a concurrent
+  // duplicate job reaching this same point for the same window.
+  await connection.execute(
+    `INSERT IGNORE INTO job_log (job_type, guild_id, window_key, scheduled_at)
+     VALUES ('weeklyRoundup', ?, ?, ?)`,
+    [String(guildId), windowKey, scheduledAt]
+  );
   await connection.execute(
     `DELETE FROM job_log WHERE posted_at < DATE_SUB(NOW(), INTERVAL 90 DAY)`
   );

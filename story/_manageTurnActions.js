@@ -209,7 +209,12 @@ export async function handleTurnActionConfirm(connection, interaction) {
     if (action === 'skip') {
       const { activeTurn } = pending;
       log(`handleTurnActionConfirm: skip confirmed by ${interaction.user.username} — turnId=${activeTurn.turn_id} writer="${activeTurn.discord_display_name}" story=${storyId}`, { show: true, guildName: interaction?.guild?.name });
-      await skipActiveTurn(connection, interaction.guild, activeTurn.turn_id, activeTurn.thread_id);
+      const ended = await skipActiveTurn(connection, interaction.guild, activeTurn.turn_id, activeTurn.thread_id);
+      if (!ended) {
+        log(`handleTurnActionConfirm: skip no-op — turn ${activeTurn.turn_id} already ended for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+        await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteTurnEnded', guildId), components: [] });
+        return;
+      }
       const nextWriterId = await PickNextWriter(connection, storyId);
       if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
       await logAdminAction(connection, adminId, 'skip', storyId);
@@ -219,7 +224,12 @@ export async function handleTurnActionConfirm(connection, interaction) {
     } else if (action === 'reassign') {
       const { activeTurn, prevWriter } = pending;
       log(`handleTurnActionConfirm: reassign confirmed by ${interaction.user.username} — story ${storyId} prevWriter="${prevWriter.discord_display_name}" (${prevWriter.story_writer_id}) currentWriter="${activeTurn.current_writer_name}"`, { show: true, guildName: interaction?.guild?.name });
-      await skipActiveTurn(connection, interaction.guild, activeTurn.turn_id, activeTurn.thread_id);
+      const ended = await skipActiveTurn(connection, interaction.guild, activeTurn.turn_id, activeTurn.thread_id);
+      if (!ended) {
+        log(`handleTurnActionConfirm: reassign no-op — turn ${activeTurn.turn_id} already ended for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+        await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteTurnEnded', guildId), components: [] });
+        return;
+      }
       await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [prevWriter.story_writer_id, storyId]);
       const nextWriterId = await PickNextWriter(connection, storyId);
       if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);

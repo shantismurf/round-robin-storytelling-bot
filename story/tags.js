@@ -414,23 +414,52 @@ export async function handleTagReviewButton(connection, interaction) {
     }
   }
 
+  const txn = await connection.getConnection();
+  await txn.beginTransaction();
+  let staleReview = false;
+  try {
+    if (isApprove) {
+      log(`handleTagReviewButton: approving tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      const [claimResult] = await txn.execute(
+        `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ? AND submission_status = 'pending'`,
+        [reviewerName, submissionId]
+      );
+      if (claimResult.affectedRows !== 1) {
+        staleReview = true;
+      } else {
+        // Lock the story row so two concurrent approvals for the same story can't
+        // both read the same pre-update tags value and clobber each other's append.
+        const [storyRows] = await txn.execute(`SELECT tags FROM story WHERE story_id = ? FOR UPDATE`, [storyId]);
+        const existingTags = (storyRows[0]?.tags?.trim() || '').split(',').map(t => t.trim()).filter(Boolean);
+        if (!existingTags.includes(tagText)) {
+          existingTags.push(tagText);
+          await txn.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [existingTags.join(', '), storyId]);
+        }
+      }
+    } else {
+      log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      const [claimResult] = await txn.execute(
+        `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ? AND submission_status = 'pending'`,
+        [reviewerName, submissionId]
+      );
+      if (claimResult.affectedRows !== 1) staleReview = true;
+    }
+    await txn.commit();
+  } catch (err) {
+    await txn.rollback();
+    throw err;
+  } finally {
+    txn.release();
+  }
+
+  if (staleReview) {
+    log(`handleTagReviewButton: submission ${submissionId} already reviewed by another admin — no-op`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtTagReviewSessionExpired', guildId), embeds: [], components: [] });
+    return;
+  }
+
   if (isApprove) {
-    log(`handleTagReviewButton: approving tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
-    await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
-      [reviewerName, submissionId]
-    );
-    const [storyRows] = await connection.execute(`SELECT tags FROM story WHERE story_id = ?`, [storyId]);
-    const existing = storyRows[0]?.tags?.trim() || '';
-    const newTags = existing ? `${existing}, ${tagText}` : tagText;
-    await connection.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [newTags, storyId]);
     updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`updateStoryStatusMessage failed for story ${storyId} after tag approve: ${err}`, { show: true, guildName: interaction?.guild?.name }));
-  } else {
-    log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
-    await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
-      [reviewerName, submissionId]
-    );
   }
 
   const [remaining] = await connection.execute(

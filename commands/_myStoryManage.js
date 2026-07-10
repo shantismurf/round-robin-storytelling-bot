@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
-import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from '../story/_turn.js';
+import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, endTurnGuarded } from '../story/_turn.js';
 
 // Pending /mystory manage sessions keyed by user ID
 export const pendingMyStoryManageData = new Map();
@@ -279,9 +279,14 @@ export async function handlePanelPassConfirm(connection, interaction) {
       return;
     }
     const turn = turnInfo[0];
-    await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [turn.turn_id]);
+    const ended = await endTurnGuarded(connection, turn.turn_id);
+    if (!ended) {
+      log(`handlePanelPassConfirm: turn ${turn.turn_id} already ended (race), no-op`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteTurnEnded', guildId), components: [] });
+      return;
+    }
     const nextWriterId = await PickNextWriter(connection, storyId);
-    await NextTurn(connection, interaction, nextWriterId);
+    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
     if (turn.thread_id) {
       try {
         const thread = await interaction.guild.channels.fetch(turn.thread_id);
@@ -330,20 +335,24 @@ export async function handlePanelPauseConfirm(connection, interaction) {
 
     if (activeTurnRows.length > 0) {
       const activeTurn = activeTurnRows[0];
-      await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurn.turn_id]);
-      if (activeTurn.thread_id) {
-        try {
-          const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
-          if (thread) await thread.delete('Writer paused — turn passed');
-        } catch (err) {
-          log(`handlePanelPauseConfirm: failed to delete thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
+      const ended = await endTurnGuarded(connection, activeTurn.turn_id);
+      if (!ended) {
+        log(`handlePanelPauseConfirm: turn ${activeTurn.turn_id} already ended (race), skipping thread cleanup/advance`, { show: true, guildName: interaction?.guild?.name });
+      } else {
+        if (activeTurn.thread_id) {
+          try {
+            const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
+            if (thread) await thread.delete('Writer paused — turn passed');
+          } catch (err) {
+            log(`handlePanelPauseConfirm: failed to delete thread: ${err}`, { show: true, guildName: interaction?.guild?.name });
+          }
         }
-      }
-      try {
-        const nextWriterId = await PickNextWriter(connection, storyId);
-        if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-      } catch (err) {
-        log(`handlePanelPauseConfirm: failed to advance turn: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        try {
+          const nextWriterId = await PickNextWriter(connection, storyId);
+          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+        } catch (err) {
+          log(`handlePanelPauseConfirm: failed to advance turn: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        }
       }
     }
 
@@ -389,10 +398,13 @@ export async function handlePanelLeaveConfirm(connection, interaction) {
     );
     const isLastWriter = remainingRows[0].count === 0;
 
+    let turnEnded = false;
     if (activeTurnRows.length > 0) {
       const activeTurn = activeTurnRows[0];
-      await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurn.turn_id]);
-      if (activeTurn.thread_id) {
+      turnEnded = await endTurnGuarded(connection, activeTurn.turn_id);
+      if (!turnEnded) {
+        log(`handlePanelLeaveConfirm: turn ${activeTurn.turn_id} already ended (race), skipping thread cleanup/advance`, { show: true, guildName: interaction?.guild?.name });
+      } else if (activeTurn.thread_id) {
         try {
           const thread = await interaction.guild.channels.fetch(activeTurn.thread_id);
           if (thread) await deleteThreadAndAnnouncement(thread);
@@ -407,7 +419,7 @@ export async function handlePanelLeaveConfirm(connection, interaction) {
     if (isLastWriter) {
       await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
       log(`Story ${storyId} auto-closed — last writer left via manage panel`, { show: true, guildName: interaction?.guild?.name });
-    } else if (activeTurnRows.length > 0) {
+    } else if (turnEnded) {
       try {
         const nextWriterId = await PickNextWriter(connection, storyId);
         if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);

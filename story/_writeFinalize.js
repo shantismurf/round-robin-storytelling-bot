@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, checkIsAdmin } from '../utilities.js';
-import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement } from './_turn.js';
+import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, endTurnGuarded } from './_turn.js';
 import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './_entryRenderer.js';
 import { pendingPreviewData } from './_state.js';
 
@@ -272,13 +272,16 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     const txn = await connection.getConnection();
     await txn.beginTransaction();
     try {
+      const ended = await endTurnGuarded(txn, turn.turn_id);
+      if (!ended) {
+        await txn.rollback();
+        log(`doFinalizeEntry: turn ${turn.turn_id} already ended (race with timeout/other finalize) — aborting`, { show: true, guildName: interaction?.guild?.name });
+        await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteTurnEnded', interaction.guild.id), components: [] });
+        return;
+      }
       await txn.execute(
         `INSERT INTO story_entry (turn_id, content, entry_status, created_at) VALUES (?, ?, 'confirmed', NOW())`,
         [turn.turn_id, entryContent]
-      );
-      await txn.execute(
-        `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-        [turn.turn_id]
       );
       const nextWriterId = await PickNextWriter(txn, storyId);
       await NextTurn(txn, interaction, nextWriterId);
