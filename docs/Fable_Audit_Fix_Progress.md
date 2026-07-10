@@ -11,6 +11,23 @@ add a capacity re-check inside the transaction — 1.14's capacity race is still
 Not in scope for steps 1-3 (it's a Tier-2 state-machine item not on the fix-order
 list); flagged here for a future session.
 
+## STATUS AS OF SESSION END: all 3 steps done, committed, NOT yet verified at runtime
+
+3 commits on `fable-audit/steps-1-3` (a3853cc, 87b1f75, cbcad61). package.json bumped
+to 3.1.0. Attempted DB-level verification against the real remote MariaDB
+(bot-hosting.net) — connected successfully, confirmed live schema/data, but the user
+correctly declined to let me run any write-based check against production data with
+no rollback path, and no isolated test guild/token or local DB (Docker daemon down)
+was available. **Nothing in this diff has been runtime-verified** — confidence rests
+entirely on `node --check` (clean on every touched file) and careful manual tracing
+against `db/init.sql` + migrations during implementation. See TODO.md's Fable Audit
+entry for the specific manual-test checklist to run before trusting this in production.
+
+Read this whole file before touching anything in steps 1-3's area again — it records
+several judgment calls (see "Deliberately NOT touched" under each step) about what's
+in scope vs. deferred, and the reasoning for each so a future session doesn't
+re-litigate them from scratch.
+
 ## Step 1 — One-line/one-word fixes with outsized impact
 
 Target findings: 1.1, 1.2, 1.5, 1.6, 1.9, 1.3, 1.4, 1.30, 1.31, 1.32, 1.33, 1.34, 1.35, 1.47
