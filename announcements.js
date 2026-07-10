@@ -140,10 +140,10 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
  * function postStoryFeedClosedAnnouncement
  * Post congratulatory announcement when a story is closed
  */
-export async function postStoryFeedClosedAnnouncement(connection, interaction, storyTitle, turnCount, wordCount, writerCount) {
+export async function postStoryFeedClosedAnnouncement(connection, interaction, storyTitle, turnCount, wordCount, writerCount, rating = 'NR') {
   const guildId = interaction.guild.id;
   try {
-    const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
+    const feedChannelId = await resolveFeedChannelId(connection, guildId, rating);
     if (!feedChannelId) {
       log('Story feed channel not configured - skipping closed announcement', { show: true, guildName: interaction?.guild?.name });
       return;

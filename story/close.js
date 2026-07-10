@@ -4,6 +4,7 @@ import { updateStoryStatusMessage } from './_storyStatus.js';
 import { endTurnThread } from './_turn.js';
 import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
+import { getActiveThreadId } from '../storybot.js';
 
 // Direct stats query — independent of export generation, since export is now a manual, optional step after close.
 async function getStoryStats(connection, storyId) {
@@ -99,7 +100,7 @@ export async function handleCloseConfirm(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, guild_story_id, title, story_status, story_thread_id, mode FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT story_id, guild_story_id, title, story_status, story_thread_id, restricted_thread_id, rating, mode FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0 || storyRows[0].story_status === 3) {
@@ -151,23 +152,28 @@ export async function handleCloseConfirm(connection, interaction) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    // Update story thread title and post close message (if thread still exists)
+    // Update title on every existing thread (unrestricted and/or restricted — a story that
+    // migrated at some point can have both); post the close message + export buttons once,
+    // to whichever is the currently-active thread for the story's rating.
     let postedPublicly = false;
-    if (story.story_thread_id) {
-      try {
-        const storyThread = await interaction.guild.channels.fetch(story.story_thread_id);
-        if (storyThread) {
-          // Update thread title to reflect closed status
-          const [threadTitleTemplate, txtClosed] = await Promise.all([
-            getConfigValue(connection, 'txtStoryThreadTitle', guildId),
-            getConfigValue(connection, 'txtClosed', guildId)
-          ]);
-          const updatedTitle = threadTitleTemplate
-            .replace('[story_id]', story.guild_story_id)
-            .replace('[inputStoryTitle]', story.title)
-            .replace('[story_status]', txtClosed);
-          await storyThread.setName(updatedTitle);
+    const activeThreadId = getActiveThreadId(story);
+    const threadIdsToRetitle = [story.story_thread_id, story.restricted_thread_id].filter(Boolean);
+    const [threadTitleTemplate, txtClosed] = await Promise.all([
+      getConfigValue(connection, 'txtStoryThreadTitle', guildId),
+      getConfigValue(connection, 'txtClosed', guildId)
+    ]);
+    const updatedTitle = threadTitleTemplate
+      .replace('[story_id]', story.guild_story_id)
+      .replace('[inputStoryTitle]', story.title)
+      .replace('[story_status]', txtClosed);
 
+    for (const threadId of threadIdsToRetitle) {
+      try {
+        const thread = await interaction.guild.channels.fetch(threadId);
+        if (!thread) continue;
+        await thread.setName(updatedTitle);
+
+        if (threadId === activeThreadId) {
           const txtStoryClosedPublic = await getConfigValue(connection, 'txtStoryClosedPublic', guildId);
           const closedMsg = replaceTemplateVariables(txtStoryClosedPublic, {
             story_title: story.title,
@@ -175,17 +181,17 @@ export async function handleCloseConfirm(connection, interaction) {
             turn_count: turnCount,
             word_count: wordCount.toLocaleString()
           });
-          await storyThread.send({ content: closedMsg, components: [exportRow] });
+          await thread.send({ content: closedMsg, components: [exportRow] });
           postedPublicly = true;
         }
       } catch (err) {
-        log(`Story thread not available for close post (story ${storyId})`, { show: false, guildName: interaction?.guild?.name });
+        log(`Story thread ${threadId} not available for close (story ${storyId})`, { show: false, guildName: interaction?.guild?.name });
       }
     }
 
     // Feed announcement — only if there are confirmed entries
     if (turnCount > 0) {
-      await postStoryFeedClosedAnnouncement(connection, interaction, story.title, turnCount, wordCount, writerCount);
+      await postStoryFeedClosedAnnouncement(connection, interaction, story.title, turnCount, wordCount, writerCount, story.rating);
     }
 
     updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});

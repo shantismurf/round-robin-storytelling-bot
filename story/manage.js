@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBu
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
-import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
 import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
@@ -442,7 +442,12 @@ async function handleManageSave(connection, interaction, state) {
       }
     }
 
-    if (crossesBarrier(state.originalRating, state.rating)) {
+    // Skip migration only when moving INTO restricted with no restricted channel configured
+    // (policy: story stays in the main feed, rating is informational-only). Moving back OUT
+    // of restricted should always proceed normally — that direction can't create a redundant
+    // thread since it's returning to the story's existing main-feed thread.
+    const skipMigration = isRestricted(state.rating) && !(await isRestrictedChannelConfigured(connection, guildId));
+    if (crossesBarrier(state.originalRating, state.rating) && !skipMigration) {
       log(`handleManageSave: rating barrier crossed ${state.originalRating}→${state.rating} for storyId=${state.storyId}`, { show: true, guildName: state.guildName });
       const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, state.rating, state.originalRating);
       if (!migResult.success) {
@@ -453,6 +458,9 @@ async function handleManageSave(connection, interaction, state) {
         if (migratedThread) await migratedThread.send({ embeds: [migResult.migratedInEmbed] }).catch(() => {});
       }
     } else {
+      if (crossesBarrier(state.originalRating, state.rating)) {
+        log(`handleManageSave: rating barrier crossed ${state.originalRating}→${state.rating} for storyId=${state.storyId} but no restricted channel configured — staying in current thread per policy`, { show: false, guildName: state.guildName });
+      }
       updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
     }
 
@@ -550,12 +558,9 @@ async function handleManageModalSubmit(connection, interaction) {
       }
 
     } else if (customId === 'story_manage_metadata_modal') {
-      const dynamic = interaction.fields.getStringSelectValues?.('story_manage_metadata_dynamic')?.[0]
-        ?? interaction.fields.getField?.('story_manage_metadata_dynamic')?.values?.[0];
-      const rating = interaction.fields.getStringSelectValues?.('story_manage_metadata_rating')?.[0]
-        ?? interaction.fields.getField?.('story_manage_metadata_rating')?.values?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues?.('story_manage_metadata_warnings')
-        ?? interaction.fields.getField?.('story_manage_metadata_warnings')?.values ?? [];
+      const dynamic = interaction.fields.getStringSelectValues('story_manage_metadata_dynamic')?.[0];
+      const rating = interaction.fields.getStringSelectValues('story_manage_metadata_rating')?.[0];
+      const warningsRaw = interaction.fields.getStringSelectValues('story_manage_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;

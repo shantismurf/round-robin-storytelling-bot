@@ -3,6 +3,7 @@ import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { marked } from 'marked';
 import { ratingCodes, ratingLabelKey, formatWarnings, warningOptions, dynamicOptions } from './_metadata.js';
 import { applyEntryMarkup, isSceneBreakLine } from './_entryMarkup.js';
+import { getActiveThreadId } from '../storybot.js';
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
@@ -322,10 +323,11 @@ export async function handleExportPostPublic(connection, interaction) {
   const guildId = interaction.guild.id;
 
   const [storyRows] = await connection.execute(
-    `SELECT story_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
+    `SELECT story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ? AND guild_id = ?`,
     [storyId, guildId]
   );
-  if (!storyRows.length || !storyRows[0].story_thread_id) {
+  const activeThreadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
+  if (!activeThreadId) {
     return interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
 
@@ -337,7 +339,7 @@ export async function handleExportPostPublic(connection, interaction) {
   const ao3Instructions = await getConfigValue(connection, 'txtExportAO3Instructions', guildId);
 
   try {
-    const thread = await interaction.guild.channels.fetch(String(storyRows[0].story_thread_id));
+    const thread = await interaction.guild.channels.fetch(String(activeThreadId));
     await thread.send({ content: ao3Instructions, files: [{ attachment: result.buffer, name: result.filename }] });
   } catch (err) {
     log(`handleExportPostPublic: could not post to story thread: ${err}`, { show: true, guildName: interaction.guild.name });

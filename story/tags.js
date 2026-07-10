@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
+import { getActiveThreadId } from '../storybot.js';
 export { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel } from './_tagSubmit.js';
 
 // ─── Button: "View Proposed Tags" — all server members ──────────────────────
@@ -26,10 +27,10 @@ export async function handleViewProposedTags(connection, interaction) {
   );
 
   const [storyRows] = await connection.execute(
-    `SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]
+    `SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]
   );
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitlePublic', 'txtTagNoPendingPublic',
@@ -132,9 +133,9 @@ export async function handleEditTagsButton(connection, interaction, pageIndex = 
      ORDER BY submitted_at ASC`,
     [storyId]
   );
-  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id ?? null;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount'
@@ -165,9 +166,9 @@ export async function handleTagReviewNav(connection, interaction) {
      ORDER BY submitted_at ASC`,
     [storyId]
   );
-  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id ?? null;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount'
@@ -269,9 +270,9 @@ export async function handleViewTagsNav(connection, interaction) {
     return;
   }
 
-  const [storyRows] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyRows] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const storyTitle = storyRows[0]?.title ?? '';
-  const threadId = storyRows[0]?.story_thread_id;
+  const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
 
   const cfg = await getConfigValue(connection, [
     'txtTagPendingTitle', 'txtTagVoteCount', 'txtTagVoteNote', 'btnTagApprove', 'btnTagReject'
@@ -396,8 +397,8 @@ export async function handleTagReviewButton(connection, interaction) {
     reviewed_at: `<t:${Math.floor(reviewedAt / 1000)}:d> <t:${Math.floor(reviewedAt / 1000)}:T>`
   });
 
-  const [storyThreadRows] = await connection.execute(`SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]);
-  const storyThreadId = storyThreadRows[0]?.story_thread_id ?? null;
+  const [storyThreadRows] = await connection.execute(`SELECT story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
+  const storyThreadId = storyThreadRows.length ? getActiveThreadId(storyThreadRows[0]) : null;
   if (threadMessageId && storyThreadId) {
     try {
       const thread = await interaction.guild.channels.fetch(storyThreadId).catch(() => null);
@@ -414,23 +415,52 @@ export async function handleTagReviewButton(connection, interaction) {
     }
   }
 
+  const txn = await connection.getConnection();
+  await txn.beginTransaction();
+  let staleReview = false;
+  try {
+    if (isApprove) {
+      log(`handleTagReviewButton: approving tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      const [claimResult] = await txn.execute(
+        `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ? AND submission_status = 'pending'`,
+        [reviewerName, submissionId]
+      );
+      if (claimResult.affectedRows !== 1) {
+        staleReview = true;
+      } else {
+        // Lock the story row so two concurrent approvals for the same story can't
+        // both read the same pre-update tags value and clobber each other's append.
+        const [storyRows] = await txn.execute(`SELECT tags FROM story WHERE story_id = ? FOR UPDATE`, [storyId]);
+        const existingTags = (storyRows[0]?.tags?.trim() || '').split(',').map(t => t.trim()).filter(Boolean);
+        if (!existingTags.includes(tagText)) {
+          existingTags.push(tagText);
+          await txn.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [existingTags.join(', '), storyId]);
+        }
+      }
+    } else {
+      log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+      const [claimResult] = await txn.execute(
+        `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ? AND submission_status = 'pending'`,
+        [reviewerName, submissionId]
+      );
+      if (claimResult.affectedRows !== 1) staleReview = true;
+    }
+    await txn.commit();
+  } catch (err) {
+    await txn.rollback();
+    throw err;
+  } finally {
+    txn.release();
+  }
+
+  if (staleReview) {
+    log(`handleTagReviewButton: submission ${submissionId} already reviewed by another admin — no-op`, { show: true, guildName: interaction?.guild?.name });
+    await interaction.editReply({ content: await getConfigValue(connection, 'txtTagReviewSessionExpired', guildId), embeds: [], components: [] });
+    return;
+  }
+
   if (isApprove) {
-    log(`handleTagReviewButton: approving tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
-    await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'approved', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
-      [reviewerName, submissionId]
-    );
-    const [storyRows] = await connection.execute(`SELECT tags FROM story WHERE story_id = ?`, [storyId]);
-    const existing = storyRows[0]?.tags?.trim() || '';
-    const newTags = existing ? `${existing}, ${tagText}` : tagText;
-    await connection.execute(`UPDATE story SET tags = ? WHERE story_id = ?`, [newTags, storyId]);
     updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`updateStoryStatusMessage failed for story ${storyId} after tag approve: ${err}`, { show: true, guildName: interaction?.guild?.name }));
-  } else {
-    log(`handleTagReviewButton: rejecting tag "${tagText}" for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
-    await connection.execute(
-      `UPDATE story_tag_submission SET submission_status = 'rejected', reviewed_at = NOW(), reviewed_by_display_name = ? WHERE submission_id = ?`,
-      [reviewerName, submissionId]
-    );
   }
 
   const [remaining] = await connection.execute(
@@ -453,10 +483,10 @@ export async function handleTagReviewButton(connection, interaction) {
     return;
   }
 
-  const [storyMeta] = await connection.execute(`SELECT title, story_thread_id FROM story WHERE story_id = ?`, [storyId]);
+  const [storyMeta] = await connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
   const nextPage = Math.min(pageIndex, remaining.length - 1);
   const { embeds, components } = await buildTagReviewPanel(
-    remaining, nextPage, storyId, storyMeta[0]?.title ?? '', storyMeta[0]?.story_thread_id ?? null, actionCfg, interaction.guild
+    remaining, nextPage, storyId, storyMeta[0]?.title ?? '', storyMeta.length ? getActiveThreadId(storyMeta[0]) : null, actionCfg, interaction.guild
   );
   await interaction.editReply({ content: '', embeds, components });
 }

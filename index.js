@@ -148,7 +148,7 @@ async function main() {
     log(`✅ Bot online — v${version} on ${client.guilds.cache.size} server(s)`, { show: true, hub: true });
     await bot.start();
     await loadCommands('./commands');
-    startJobRunner(connection, client);
+    startJobRunner(connection, client).catch(err => log(`startJobRunner failed: ${err?.stack ?? err}`, { show: true }));
     refreshAllStatusMessages(connection, client);
   });
   client.on(Events.GuildDelete, async guild => {

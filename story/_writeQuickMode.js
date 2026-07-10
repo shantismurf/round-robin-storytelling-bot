@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validateStoryAccess, validateActiveWriter } from '../utilities.js';
-import { PickNextWriter, NextTurn } from './_turn.js';
+import { PickNextWriter, NextTurn, endTurnGuarded } from './_turn.js';
+import { getActiveThreadId } from '../storybot.js';
 import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './_entryRenderer.js';
 
 export const pendingReminderTimeouts = new Map();
@@ -32,7 +33,7 @@ export async function handleWrite(connection, interaction) {
       await interaction.reply({ content: writerInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
-    if (!storyInfo.story.quick_mode) {
+    if (storyInfo.story.mode !== 1) {
       await interaction.reply({ content: txtNormalModeWrite, flags: MessageFlags.Ephemeral });
       return;
     }
@@ -77,13 +78,21 @@ export async function handleWriteModalSubmit(connection, interaction) {
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   let entryId = null;
   try {
-    const [pendingEntry] = await connection.execute(`
-      SELECT story_entry_id FROM story_entry se
-      JOIN turn t ON se.turn_id = t.turn_id
+    const [turnInfo] = await connection.execute(`
+      SELECT t.turn_id FROM turn t
       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-      WHERE sw.story_id = ? AND sw.discord_user_id = ?
-      AND se.entry_status IN ('pending', 'discarded')
+      WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1
     `, [storyId, interaction.user.id]);
+
+    if (turnInfo.length === 0) {
+      throw new Error('No active turn found');
+    }
+    const currentTurnId = turnInfo[0].turn_id;
+
+    const [pendingEntry] = await connection.execute(`
+      SELECT story_entry_id FROM story_entry
+      WHERE turn_id = ? AND entry_status IN ('pending', 'discarded')
+    `, [currentTurnId]);
 
     if (pendingEntry.length > 0) {
       await connection.execute(`
@@ -92,20 +101,10 @@ export async function handleWriteModalSubmit(connection, interaction) {
       `, [content, pendingEntry[0].story_entry_id]);
       entryId = String(pendingEntry[0].story_entry_id);
     } else {
-      const [turnInfo] = await connection.execute(`
-        SELECT t.turn_id FROM turn t
-        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-        WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1
-      `, [storyId, interaction.user.id]);
-
-      if (turnInfo.length === 0) {
-        throw new Error('No active turn found');
-      }
-
       const [result] = await connection.execute(`
         INSERT INTO story_entry (turn_id, content, entry_status)
         VALUES (?, ?, 'pending')
-      `, [turnInfo[0].turn_id, content]);
+      `, [currentTurnId, content]);
 
       entryId = String(result.insertId);
     }
@@ -181,7 +180,7 @@ export async function confirmEntry(connection, entryId, interaction) {
 
     const [entryInfo] = await txn.execute(`
       SELECT se.turn_id, se.content, sw.story_id, sw.discord_user_id, sw.discord_display_name,
-             s.story_thread_id, s.show_authors, s.scene_break_divider,
+             s.story_thread_id, s.restricted_thread_id, s.rating, s.show_authors, s.scene_break_divider,
              (SELECT COUNT(DISTINCT t2.turn_id)
               FROM turn t2
               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -198,13 +197,11 @@ export async function confirmEntry(connection, entryId, interaction) {
       throw new Error(`Entry not found for ID ${entryId}`);
     }
 
-    const { turn_id, content, story_id, discord_display_name, story_thread_id, show_authors, scene_break_divider, turn_number } = entryInfo[0];
+    const { turn_id, content, story_id, discord_display_name, show_authors, scene_break_divider, turn_number } = entryInfo[0];
+    const activeThreadId = getActiveThreadId(entryInfo[0]);
 
-    const [turnCheck] = await txn.execute(
-      `SELECT turn_status FROM turn WHERE turn_id = ?`,
-      [turn_id]
-    );
-    if (turnCheck.length === 0 || turnCheck[0].turn_status !== 1) {
+    const ended = await endTurnGuarded(txn, turn_id);
+    if (!ended) {
       await txn.rollback();
       await interaction.editReply({
         content: await getConfigValue(connection, 'txtWriteTurnEnded', interaction.guild.id),
@@ -214,16 +211,13 @@ export async function confirmEntry(connection, entryId, interaction) {
       return;
     }
 
-    await txn.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [turn_id]);
-    await txn.execute(`UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`, [turn_id]);
-
     const nextWriterId = await PickNextWriter(txn, story_id);
     await NextTurn(txn, interaction, nextWriterId);
 
     await txn.commit();
 
     try {
-      const storyThread = await interaction.guild.channels.fetch(story_thread_id);
+      const storyThread = await interaction.guild.channels.fetch(activeThreadId);
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
       await postThreadEntry(storyThread, content, authorLine, scene_break_divider);
     } catch (threadError) {

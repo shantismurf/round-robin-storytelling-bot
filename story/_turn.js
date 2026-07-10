@@ -378,19 +378,37 @@ export async function endTurnThread(connection, guild, threadId, writerDiscordUs
 }
 
 /**
+ * endTurnGuarded — atomically ends a turn only if it's still active, and cancels
+ * its pending jobs. The UPDATE's own WHERE clause is the concurrency guard: if two
+ * callers race to end the same turn (e.g. finalize vs. timeout), only the first
+ * UPDATE affects a row — the second sees affectedRows === 0 and must back off
+ * instead of re-running PickNextWriter/NextTurn a second time.
+ * Returns true if this call ended the turn, false if it was already ended.
+ */
+export async function endTurnGuarded(connection, turnId) {
+  const [result] = await connection.execute(
+    `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ? AND turn_status = 1`,
+    [turnId]
+  );
+  if (result.affectedRows !== 1) return false;
+  await connection.execute(
+    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
+    [turnId]
+  );
+  return true;
+}
+
+/**
  * skipActiveTurn — ends a turn as a skip, cancels its pending jobs, and deletes its thread.
  * Shared by handleSkip and handleReassign so the skip logic lives in one place.
  */
 export async function skipActiveTurn(connection, guild, turnId, threadId) {
   log(`skipActiveTurn: entry turnId=${turnId} threadId=${threadId}`, { show: false, guildName: guild?.name });
-  await connection.execute(
-    `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-    [turnId]
-  );
-  await connection.execute(
-    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-    [turnId]
-  );
+  const ended = await endTurnGuarded(connection, turnId);
+  if (!ended) {
+    log(`skipActiveTurn: turn ${turnId} already ended — skipping thread cleanup and turn advance`, { show: true, guildName: guild?.name });
+    return false;
+  }
   if (threadId) {
     try {
       const thread = await guild.channels.fetch(threadId);
@@ -399,6 +417,7 @@ export async function skipActiveTurn(connection, guild, turnId, threadId) {
       log(`Could not delete turn thread on skip: ${err}`, { show: true, guildName: guild?.name });
     }
   }
+  return true;
 }
 
 /**

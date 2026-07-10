@@ -21,7 +21,9 @@ export async function handleListStories(connection, interaction) {
  * Handle list navigation buttons (prev/next page)
  */
 export async function handleListNavigation(connection, interaction) {
-  const [, , filter, pageStr] = interaction.customId.split('_');
+  const parts = interaction.customId.split('_');
+  const pageStr = parts.at(-1);
+  const filter = parts.slice(2, -1).join('_');
   await interaction.deferUpdate();
   await renderStoryListReply(connection, interaction, filter, parseInt(pageStr));
 }

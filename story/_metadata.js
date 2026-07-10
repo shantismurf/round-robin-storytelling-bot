@@ -70,7 +70,7 @@ export function buildMetadataFields(story, cfg = {}) {
 
   if (story.warnings) {
     const warningLabels = Object.fromEntries(
-      warningOptions.map(k => [cfg[k], cfg[k]]).filter(([k]) => k)
+      warningOptions.map(k => [k, cfg[k]]).filter(([, v]) => v)
     );
     const formatted = formatWarnings(story.warnings, warningLabels);
     if (formatted) fields.push({ name: cfg.lblWarnings, value: formatted, inline: false });
@@ -93,6 +93,17 @@ export function buildMetadataFields(story, cfg = {}) {
   }
 
   return fields;
+}
+
+/**
+ * Whether a restricted feed channel is configured for this guild. When it's not,
+ * policy (decided 2026-07-10) is that all stories — including M/E — stay in the
+ * main feed and ratings are informational-only.
+ */
+export async function isRestrictedChannelConfigured(connection, guildId) {
+  const { getConfigValue } = await import('../utilities.js');
+  const restrictedId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
+  return !!(restrictedId && restrictedId !== 'cfgRestrictedFeedChannelId' && restrictedId !== '');
 }
 
 /**

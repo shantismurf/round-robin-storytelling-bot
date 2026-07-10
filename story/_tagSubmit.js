@@ -1,5 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, checkIsAdmin, checkIsCreator, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { getActiveThreadId } from '../storybot.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -134,10 +135,10 @@ export async function handleTagSubmitModalSubmit(connection, interaction) {
   let threadMessageId = null;
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]
+      `SELECT story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]
     );
-    log(`handleTagSubmitModalSubmit: story_thread_id=${storyRows[0]?.story_thread_id}`, { show: false, guildName: interaction?.guild?.name });
-    const threadId = storyRows[0]?.story_thread_id;
+    const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
+    log(`handleTagSubmitModalSubmit: activeThreadId=${threadId}`, { show: false, guildName: interaction?.guild?.name });
     if (threadId) {
       const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
       if (thread) {
@@ -257,8 +258,8 @@ export async function handleTagDeleteConfirm(connection, interaction) {
 
   if (threadMessageId) {
     try {
-      const [storyRows] = await connection.execute(`SELECT story_thread_id FROM story WHERE story_id = ?`, [storyId]);
-      const threadId = storyRows[0]?.story_thread_id;
+      const [storyRows] = await connection.execute(`SELECT story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId]);
+      const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
       if (threadId) {
         const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
         if (thread) {
@@ -274,9 +275,10 @@ export async function handleTagDeleteConfirm(connection, interaction) {
   let successText = '';
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_thread_id, status_message_id, guild_story_id FROM story WHERE story_id = ?`, [storyId]
+      `SELECT story_thread_id, restricted_thread_id, rating, status_message_id, guild_story_id FROM story WHERE story_id = ?`, [storyId]
     );
-    const { story_thread_id: threadId, status_message_id: statusMsgId, guild_story_id: guildStoryId } = storyRows[0] ?? {};
+    const threadId = storyRows.length ? getActiveThreadId(storyRows[0]) : null;
+    const { status_message_id: statusMsgId, guild_story_id: guildStoryId } = storyRows[0] ?? {};
     const txtTemplate = await getConfigValue(connection, 'txtTagDeleteSuccess', guildId);
     const threadLink = (threadId && statusMsgId)
       ? `https://discord.com/channels/${guildId}/${threadId}/${statusMsgId}`

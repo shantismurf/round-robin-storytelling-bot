@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
-import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, postStoryThreadActivity } from './_turn.js';
+import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, postStoryThreadActivity, endTurnGuarded } from './_turn.js';
 
 // Keyed by admin user ID
 const pendingManageUserData = new Map();
@@ -308,20 +308,24 @@ async function handleManageUserConfirm(connection, interaction) {
       log(`handleManageUserConfirm: pausing writer ${writerId}`, { show: false, guildName: interaction?.guild?.name });
       await connection.execute(`UPDATE story_writer SET sw_status = 2 WHERE story_writer_id = ?`, [writerId]);
       if (isActiveTurn) {
-        await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurnId]);
-        if (activeTurnThreadId) {
-          try {
-            const thread = await interaction.guild.channels.fetch(activeTurnThreadId);
-            if (thread) await deleteThreadAndAnnouncement(thread);
-          } catch (err) {
-            log(`handleManageUserConfirm: could not delete thread on pause: ${err}`, { show: true, guildName: interaction?.guild?.name });
+        const ended = await endTurnGuarded(connection, activeTurnId);
+        if (!ended) {
+          log(`handleManageUserConfirm: pause — turn ${activeTurnId} already ended (race), skipping thread cleanup/advance`, { show: true, guildName: interaction?.guild?.name });
+        } else {
+          if (activeTurnThreadId) {
+            try {
+              const thread = await interaction.guild.channels.fetch(activeTurnThreadId);
+              if (thread) await deleteThreadAndAnnouncement(thread);
+            } catch (err) {
+              log(`handleManageUserConfirm: could not delete thread on pause: ${err}`, { show: true, guildName: interaction?.guild?.name });
+            }
           }
-        }
-        try {
-          const nextWriterId = await PickNextWriter(connection, storyId);
-          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
-        } catch (err) {
-          log(`handleManageUserConfirm: could not advance turn after pause for story ${storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
+          try {
+            const nextWriterId = await PickNextWriter(connection, storyId);
+            if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+          } catch (err) {
+            log(`handleManageUserConfirm: could not advance turn after pause for story ${storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
+          }
         }
       }
       await logAdminAction(connection, adminId, 'pause_user', storyId, targetUserId);
@@ -343,9 +347,12 @@ async function handleManageUserConfirm(connection, interaction) {
 
     } else if (action === 'remove') {
       log(`handleManageUserConfirm: removing writer ${writerId} isActiveTurn=${isActiveTurn} isLastWriter=${isLastWriter}`, { show: false, guildName: interaction?.guild?.name });
+      let turnEnded = false;
       if (isActiveTurn) {
-        await connection.execute(`UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`, [activeTurnId]);
-        if (activeTurnThreadId) {
+        turnEnded = await endTurnGuarded(connection, activeTurnId);
+        if (!turnEnded) {
+          log(`handleManageUserConfirm: remove — turn ${activeTurnId} already ended (race), skipping thread cleanup/advance`, { show: true, guildName: interaction?.guild?.name });
+        } else if (activeTurnThreadId) {
           try {
             const thread = await interaction.guild.channels.fetch(activeTurnThreadId);
             if (thread) await deleteThreadAndAnnouncement(thread);
@@ -358,7 +365,7 @@ async function handleManageUserConfirm(connection, interaction) {
       if (isLastWriter) {
         await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
         log(`handleManageUserConfirm: story ${storyId} auto-closed — last writer removed`, { show: true, guildName: interaction?.guild?.name });
-      } else if (isActiveTurn) {
+      } else if (turnEnded) {
         const nextWriterId = await PickNextWriter(connection, storyId);
         if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
       }

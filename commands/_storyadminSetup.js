@@ -25,7 +25,7 @@ export function buildSetupPanel(state, cfg) {
       { name: cfg.lblSetupChangelog,                value: desc('txtSetupEmbedDescChangelog')       + (state.changelogEnabled ? cfg.txtOn : cfg.txtOff), inline: false },
     )
     .setDescription(cfg.txtSetupModalSaveWarning)
-    .setFooter({ text: cfg.txtSetupModalSaveWarning + ` ##` });
+    .setFooter({ text: cfg.txtSetupModalSaveWarning });
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
@@ -76,6 +76,7 @@ export async function handleSetup(connection, interaction) {
     'txtNotSet', 'txtOff', 'txtOn',
     'txtSetupAgeRestrictNote', 'txtSetupNoMediaNote', 'txtSetupNoRoleNote', 'txtSetupRoundupDisabledNote',
     'txtSetupSupportInvite', 'lblSetupChangelog',
+    'lblSetupModalFieldRole', 'txtSetupModalPlaceholderRole',
   ], guildId);
 
   // Load current guild-specific config values without falling back to guild_id=1
@@ -405,10 +406,10 @@ export async function handleSetupSave(connection, interaction) {
   );
 
   await upsert('cfgStoryFeedChannelId', state.feedChannelId);
-  if (state.mediaChannelId)           await upsert('cfgMediaChannelId', state.mediaChannelId);
-  if (state.restrictedFeedChannelId)  await upsert('cfgRestrictedFeedChannelId', state.restrictedFeedChannelId);
-  if (state.restrictedMediaChannelId) await upsert('cfgRestrictedMediaChannelId', state.restrictedMediaChannelId);
-  if (state.adminRoleName)            await upsert('cfgAdminRoleName', state.adminRoleName);
+  await upsert('cfgMediaChannelId', state.mediaChannelId || '');
+  await upsert('cfgRestrictedFeedChannelId', state.restrictedFeedChannelId || '');
+  await upsert('cfgRestrictedMediaChannelId', state.restrictedMediaChannelId || '');
+  await upsert('cfgAdminRoleName', state.adminRoleName || '');
 
   // Roundup config
   if (state.roundupChannelId) {

@@ -1,7 +1,7 @@
 # Round Robin StoryBot — Claude Context
 ## Developer Notes & Persona
 - User is self-taught with professional DB and coding experience; prefers plain language and context over jargon. Speak with camaraderie and honesty, and teaching to fill in the user's gaps in knowledge. Treat the user as a competent peer, but if an approach is over-engineered or wrong, say so directly and don't invent a fake consensus.
-* **Process Transparency:** Always immediately restate what you understand the user's request to be, then proceed keeping the user regularly informed of your thought processes. Check in if a process runs for more than 30 seconds with no output.
+* **Process Transparency:** Always immediately restate what you understand the user's request to be, then proceed keeping the user regularly informed of your thought processes. Check in if a process runs for more than 30 seconds with no output. Narrate in plain response text, never rely on thinking blocks being visible — see `docs/feedback_narrate_progress.md`.
 - **No Assumptions:** Regularly ask the user for context rather than chasing assumptions. Don't assume the user didn't restart the process or change a system variable if things aren't adding up - ASK.
 - **Docs before speculation:** Before investigating an issue, check system_roadmap.md and the relevant docs first. If you find no paper trail in the docs or code, state that clearly rather than hallucinating a theory.
 - **Reuse before you write:** Check for existing logic before implementing. Extract reusable code to shared helpers and modules. Search for existing config values that can be repurposed before creating new keys. Keep files under 500 lines.
@@ -15,7 +15,7 @@
   - deploy_commands: registers slash commands (instant in test_mode).
 - **MariaDB:** Uses explicit transactions (`BEGIN`/`COMMIT`/`ROLLBACK`) for all story state changes.
   - The migration runner splits on ; before stripping comments, so any ; inside a comment text corrupts the next statement. NO SEMI-COLONS IN SQL CODE COMMENTS!
-- Current discord.js version is 14.26.4, which supports select menus and radio buttons in modals. Use web resources if you don't have reference data.
+- discord.js 14.26.4: modals DO support selects/radio groups. Before writing or reviewing ANY discord.js component/modal code, read `docs/discordjs_reference.md` and verify against `node_modules/discord.js/src/`, never training data.
 
 ## High-level Architecture 
 - **index.js (The Gateway):** Primary entry point. Routes all interactions (isCommand, isButton, isModalSubmit) by customId 

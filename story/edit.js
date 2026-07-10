@@ -3,6 +3,7 @@ import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryCont
 import { postThreadEntry } from './_entryRenderer.js';
 import { pendingReadData, pendingEditData } from './_state.js';
 import { buildReadEmbed } from './read.js';
+import { getActiveThreadId } from '../storybot.js';
 
 export { pendingEditData };
 
@@ -260,6 +261,12 @@ async function handleEditButton(connection, interaction) {
       await renderHistoryPage(connection, interaction, state, state.historyPage, (state.histChunkPage ?? 0) + 1)
     );
 
+  } else if (customId === 'story_edit_restore_cancel') {
+    await interaction.deferUpdate();
+    await state.historyMessage.edit(
+      await renderHistoryPage(connection, interaction, state, state.historyPage, state.histChunkPage ?? 0)
+    );
+
   } else if (customId.startsWith('story_edit_restore_confirm_')) {
     const editId = parseInt(customId.split('_').at(-1));
     await handleRestoreExecute(connection, interaction, editId);
@@ -267,12 +274,6 @@ async function handleEditButton(connection, interaction) {
   } else if (customId.startsWith('story_edit_restore_')) {
     const editId = parseInt(customId.split('_').at(-1));
     await handleRestoreConfirm(connection, interaction, editId);
-
-  } else if (customId === 'story_edit_restore_cancel') {
-    await interaction.deferUpdate();
-    await state.historyMessage.edit(
-      await renderHistoryPage(connection, interaction, state, state.historyPage, state.histChunkPage ?? 0)
-    );
 
   } else if (customId === 'story_edit_back') {
     // Close the history followUp and return focus to the edit embed.
@@ -633,7 +634,7 @@ async function handleRepostEntry(connection, interaction) {
   try {
     const [rows] = await connection.execute(
       `SELECT se.content, se.created_at, sw.discord_display_name, sw.discord_user_id AS original_author_id,
-              s.story_thread_id, s.show_authors, s.scene_break_divider,
+              s.story_thread_id, s.restricted_thread_id, s.rating, s.show_authors, s.scene_break_divider,
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
@@ -656,16 +657,17 @@ async function handleRepostEntry(connection, interaction) {
       });
     }
 
-    const { content, created_at, discord_display_name, original_author_id, story_thread_id, show_authors, scene_break_divider, turn_number, last_edited_at, last_editor_id } = rows[0];
+    const { content, created_at, discord_display_name, original_author_id, show_authors, scene_break_divider, turn_number, last_edited_at, last_editor_id } = rows[0];
+    const activeThreadId = getActiveThreadId(rows[0]);
 
-    if (!story_thread_id) {
+    if (!activeThreadId) {
       return await interaction.editReply({
         content: await getConfigValue(connection, 'txtRepostThreadNotFound', interaction.guild.id),
         components: []
       });
     }
 
-    const storyThread = await interaction.guild.channels.fetch(story_thread_id).catch(() => null);
+    const storyThread = await interaction.guild.channels.fetch(activeThreadId).catch(() => null);
     if (!storyThread) {
       return await interaction.editReply({
         content: await getConfigValue(connection, 'txtRepostThreadNotFound', interaction.guild.id),
@@ -686,13 +688,13 @@ async function handleRepostEntry(connection, interaction) {
 
     if (storyThread.locked) await storyThread.setLocked(false);
     if (storyThread.archived) await storyThread.setArchived(false);
-    log(`handleRepostEntry: posting entry to thread ${story_thread_id}, content length=${content.length}`, { show: true, guildName: interaction?.guild?.name });
+    log(`handleRepostEntry: posting entry to thread ${activeThreadId}, content length=${content.length}`, { show: true, guildName: interaction?.guild?.name });
     await postThreadEntry(storyThread, content, authorLine, scene_break_divider);
 
     const userId = interaction.user.id;
     const readSession = pendingReadData.get(userId);
     const successMsg = await getConfigValue(connection, 'txtRepostSuccess', interaction.guild.id);
-    if (readSession?.pendingRepostEntryId === entryId) {
+    if (readSession?.pendingRepostEntryId === String(entryId)) {
       readSession.pendingRepostEntryId = null;
       readSession.btnRepostEntry = null;
       if (deferred) await interaction.editReply(buildReadEmbed(readSession, readSession.currentPage));

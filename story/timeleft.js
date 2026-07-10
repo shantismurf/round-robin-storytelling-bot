@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId } from '../utilities.js';
+import { getActiveThreadId } from '../storybot.js';
 
 export async function handleTimeleft(connection, interaction) {
   log(`handleTimeleft entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
@@ -81,7 +82,7 @@ export async function handleRequestMoreTime(connection, interaction) {
   const guildId = interaction.guild.id;
 
   const [rows] = await connection.execute(
-    `SELECT sw.discord_user_id, t.turn_id, t.more_time_requested, s.title, s.story_thread_id
+    `SELECT sw.discord_user_id, t.turn_id, t.more_time_requested, s.title, s.story_thread_id, s.restricted_thread_id, s.rating
      FROM story s
      JOIN story_writer sw ON sw.story_id = s.story_id
      JOIN turn t ON t.story_writer_id = sw.story_writer_id
@@ -117,7 +118,8 @@ export async function handleRequestMoreTime(connection, interaction) {
     .replace('[admin_role]', adminMention);
 
   try {
-    const thread = await interaction.guild.channels.fetch(String(turn.story_thread_id));
+    const activeThreadId = getActiveThreadId(turn);
+    const thread = await interaction.guild.channels.fetch(String(activeThreadId));
     await thread.send(txtPost);
   } catch (err) {
     log(`handleRequestMoreTime: could not post to story thread: ${err}`, { show: true, guildName: interaction.guild.name });
