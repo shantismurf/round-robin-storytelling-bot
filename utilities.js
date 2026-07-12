@@ -255,6 +255,16 @@ export async function isGuildConfigured(connection, guildId) {
  * or a job that fails because its guild is gone.
  */
 export async function closeOrphanedGuildStories(connection, guildId) {
+  // End active turns before flipping story_status, since the join below only
+  // matches turns belonging to still-open (1/2/4) stories.
+  const [turnResult] = await connection.execute(
+    `UPDATE turn t
+     JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     JOIN story s ON sw.story_id = s.story_id
+     SET t.turn_status = 0, t.ended_at = NOW()
+     WHERE s.guild_id = ? AND s.story_status IN (1, 2, 4) AND t.turn_status = 1`,
+    [guildId]
+  );
   const [storyResult] = await connection.execute(
     `UPDATE story SET story_status = 3, closed_at = NOW() WHERE guild_id = ? AND story_status IN (1, 2, 4)`,
     [guildId]
@@ -263,7 +273,7 @@ export async function closeOrphanedGuildStories(connection, guildId) {
     `UPDATE job SET job_status = 3 WHERE job_status IN (0, 1) AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
     [String(guildId)]
   );
-  log(`closeOrphanedGuildStories: closed ${storyResult.affectedRows} story/stories and cancelled ${jobResult.affectedRows} pending job(s) for guild ${guildId}`, { show: true, hub: true });
+  log(`closeOrphanedGuildStories: ended ${turnResult.affectedRows} active turn(s), closed ${storyResult.affectedRows} story/stories, and cancelled ${jobResult.affectedRows} pending job(s) for guild ${guildId}`, { show: true, hub: true });
 }
 
 export async function getConfigValue(connection, key, guildId = 1) {

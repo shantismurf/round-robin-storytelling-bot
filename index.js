@@ -2,6 +2,7 @@ import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFla
 import { StoryBot } from './storybot.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
 import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories } from './utilities.js';
+import { handleWriterDeparted } from './story/_writerDeparted.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';
 import fs from 'fs';
@@ -65,9 +66,11 @@ async function main() {
   const processingModals = new Set();
 
   const client = new Client({ intents: [
-    GatewayIntentBits.Guilds, 
-    GatewayIntentBits.GuildMessages, 
-    GatewayIntentBits.MessageContent] });
+    GatewayIntentBits.Guilds,
+    GatewayIntentBits.GuildMessages,
+    GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildMembers,
+    GatewayIntentBits.GuildModeration] });
   // instantiate story engine
   const bot = new StoryBot(config);
   // Listen for publish events from RRStoryBot and post using the Discord client
@@ -154,6 +157,18 @@ async function main() {
   client.on(Events.GuildDelete, async guild => {
     log(`Bot removed from guild ${guild.name ?? 'unknown'} (${guild.id})`, { show: true, hub: true });
     await closeOrphanedGuildStories(connection, guild.id);
+  });
+  client.on(Events.GuildMemberRemove, async member => {
+    log(`Member left guild ${member.guild?.name ?? 'unknown'} (${member.guild?.id}): ${member.user?.tag ?? member.id}`, { show: false, guildName: member.guild?.name });
+    await handleWriterDeparted(connection, client, member.guild.id, member.id).catch(err =>
+      log(`handleWriterDeparted (leave) failed for guild ${member.guild?.id} user ${member.id}: ${err?.stack ?? err}`, { show: true })
+    );
+  });
+  client.on(Events.GuildBanAdd, async ban => {
+    log(`Member banned from guild ${ban.guild?.name ?? 'unknown'} (${ban.guild?.id}): ${ban.user?.tag ?? ban.user?.id}`, { show: false, guildName: ban.guild?.name });
+    await handleWriterDeparted(connection, client, ban.guild.id, ban.user.id).catch(err =>
+      log(`handleWriterDeparted (ban) failed for guild ${ban.guild?.id} user ${ban.user?.id}: ${err?.stack ?? err}`, { show: true })
+    );
   });
   client.on(Events.MessageCreate, async message => {
     if (message.author.bot) return;

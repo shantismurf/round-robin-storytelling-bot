@@ -14,7 +14,7 @@
 2. Give it a name and save.
 3. Go to the **Bot** tab:
    - Click **Add Bot** if prompted.
-   - Under **Privileged Gateway Intents**, enable **Message Content Intent**. This is required for the bot to read attachment data when forwarding media to the media channel.
+   - Under **Privileged Gateway Intents**, enable **Message Content Intent** (required for the bot to read attachment data when forwarding media to the media channel) and **Server Members Intent** (required to detect writers leaving or being banned from the server so they can be removed from active stories).
    - Copy your **bot token** — you will need it for `config.json`.
 4. Go to the **OAuth2** tab and copy your **Client ID**.
 

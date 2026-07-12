@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
-import { endTurnThread } from './_turn.js';
+import { endTurnThread, endTurnGuarded } from './_turn.js';
 import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
 import { getActiveThreadId } from '../storybot.js';
@@ -121,10 +121,7 @@ export async function handleCloseConfirm(connection, interaction) {
     let activeTurn = null;
     if (activeTurnRows.length > 0) {
       activeTurn = activeTurnRows[0];
-      await connection.execute(
-        `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-        [activeTurn.turn_id]
-      );
+      await endTurnGuarded(connection, activeTurn.turn_id);
     }
 
     // Close the story
