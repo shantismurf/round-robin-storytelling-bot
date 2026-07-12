@@ -243,6 +243,85 @@ All files touched in this expanded step 3 pass `node --check`:
 `story/_managePauseResume.js`, `story/close.js`, `story/join.js`, `story/ping.js`,
 `story/timeleft.js`, `announcements.js`, `job-runner.js`.
 
+## Step 4 — NextTurn result-checking + departWriter/closeStoryInternals consolidation (2026-07-12)
+
+Branch: `claude/fable-audit-next-steps-fbfult`. Target findings: 1.10(a)/(c), 1.7, 1.17, 1.41, 1.42,
+plus the `_writerDeparted.js` 6th-duplicate-site item flagged earlier this session. Scoped
+deliberately: the full 1.10(b)/1.12 advanceTurn/notifyTurn DB-Discord split was left for the
+Phase 2 web-interface session (see TODO.md) — this pass fixes the "silently stalled and
+invisible" failure mode without touching NextTurn's internals or transaction boundaries.
+3 commits (`ea037af`, `cb30366`, `ea1cc96`), **not yet runtime-verified** — same constraint as
+steps 1-3, no isolated test guild/DB available this session; confidence rests on `node --check`
+(clean on every touched file) and manual tracing against the existing endTurnGuarded/endTurnThread
+patterns already proven in steps 1-3.
+
+**4a — job-cancel status + skip delete/keep** (1.17, 1.7):
+- 1.17: `_managePauseResume.js` (pause, resume) and `_manageTurnActions.js` (extend) cancelled
+  superseded jobs with `job_status=2` via `JSON_EXTRACT` payload matching instead of the
+  `turn_id` column + status 3. Standardized both on `WHERE turn_id = ? AND job_status = 0` /
+  status 3, and added `turn_id` to the replacement job INSERTs so NextTurn's own
+  cancel-by-turn_id can find them later.
+- 1.7: added a `{ forceDelete }` option to `endTurnThread` (`_turn.js`); `_writeSkip.js`'s
+  `handleSkipConfirm` now passes `forceDelete: variant === 'delete'`, so Delete actually
+  deletes immediately instead of silently behaving like Keep.
+
+**4b — departWriter/closeStoryInternals** (1.41, 1.42, the `_writerDeparted.js` consolidation):
+- Added `closeStoryInternals(connection, ctx, storyId)` in `_turn.js`: end any still-active
+  turn, cancel every pending job tied to the story's turns, set `story_status=3`, retitle
+  every existing thread (unrestricted and/or restricted), refresh the status message. Always
+  silent — `close.js` calls it then layers its own public close-message/export-buttons/feed-
+  announcement on top (unchanged from before, just no longer duplicating the shared part).
+- Added `departWriter(connection, ctx, storyId, writerId, discordUserId)` in `_turn.js`: end
+  the writer's active turn if any (24h-preserve via `endTurnThread`, not immediate delete),
+  flip `sw_status=0`, then close-or-advance via `closeStoryInternals` or
+  `PickNextWriter`+`NextTurn`. Replaces duplicated logic in three places: `_manageUser.js`
+  (admin remove), `commands/_myStoryManage.js` (panel leave), and `_writerDeparted.js` (guild
+  leave/ban sweep) — the six near-identical call sites flagged earlier this session collapse
+  into one implementation.
+- The three "yield without leaving" sites — admin pause (`_manageUser.js`), panel pass and
+  panel pause (`commands/_myStoryManage.js`) — get the smaller half of 1.41: swapped their
+  immediate `thread.delete()`/`deleteThreadAndAnnouncement` calls for `endTurnThread` so a
+  paused/passed writer's draft gets the same 24h grace as skip/timeout, without needing the
+  full departWriter treatment (they don't leave the story).
+- `/storyadmin delete` (`commands/storyadmin.js`) now cancels the story's pending jobs before
+  the cascade-delete (previously they fired later against a dangling `turn_id`) and deletes
+  both `story_thread_id` and `restricted_thread_id` (previously only the unrestricted thread
+  was deleted, leaking the restricted one on any story that had migrated).
+
+**4c — NextTurn result-checking** (1.10a/c): NextTurn catches its own errors internally and
+returns `{success:false}` rather than throwing, but nothing checked the result — a Discord
+hiccup during thread creation, or an unguarded null `PickNextWriter`, left a story with an
+ended turn and no successor, invisible until an admin happened to look. Swept all 16 call
+sites (`job-runner.js` x2, `storybot.js` x2, `commands/_myStoryManage.js` x2,
+`story/_managePauseResume.js` x2, `story/_manageTurnActions.js` x3, `story/_manageUser.js`,
+`story/_writeFinalize.js`, `story/_writeQuickMode.js`, `story/_writeSkip.js`, plus
+`departWriter` itself from 4b):
+- `CreateStory` (`storybot.js`) now throws on failure/no-writer to trigger its existing
+  transaction rollback — safe there specifically because nothing has been shown to the user
+  yet, unlike a mid-flow finalize.
+- Every other site now hub-logs (`show:true, hub:true`) a clear "story has no active turn"
+  alert on failure or a missing next writer, without changing the surrounding commit/reply
+  behavior. Turns an invisible stall into something `#logs` actually surfaces, per 1.10(c),
+  without the larger DB/Discord split.
+- Found and fixed one additional site while doing this sweep: `_writeSkip.js`'s
+  `handleSkipConfirm` had its own unguarded `UPDATE turn SET turn_status = 0` — it was missed
+  by step 2's `endTurnGuarded` rollout entirely (not in that step's site list). Now uses
+  `endTurnGuarded` like every other turn-ending path.
+
+Deliberately NOT touched (out of step-4 scope, noted for later):
+- 1.10(b)/1.12 — the actual advanceTurn/notifyTurn split (DB-only turn creation separated from
+  Discord thread-create/notify) and the Discord-calls-inside-transactions problem it would
+  fix. Earmarked for the Phase 2 web-interface session per TODO.md — this pass only adds
+  result-checking around NextTurn as currently structured.
+- 1.14 (join capacity race) — flagged repeatedly as out-of-scope for steps 1-4, still open,
+  still a standalone fix whenever (unrelated code path, `join.js`'s transaction).
+
+All 13 touched files pass `node --check`: `story/_turn.js`, `story/_managePauseResume.js`,
+`story/_manageTurnActions.js`, `story/_writeSkip.js`, `story/_manageUser.js`,
+`commands/_myStoryManage.js`, `story/_writerDeparted.js`, `story/close.js`,
+`commands/storyadmin.js`, `job-runner.js`, `storybot.js`, `story/_writeFinalize.js`,
+`story/_writeQuickMode.js`.
+
 ---
 
 ## Log
