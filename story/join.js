@@ -4,6 +4,7 @@ import { StoryJoin, getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { postStoryThreadActivity } from './_turn.js';
 import { postStoryFeedJoinAnnouncement } from '../announcements.js';
+import { STORY_STATUS, WRITER_STATUS } from '../constants.js';
 
 // Pending join sessions keyed by userId
 export const pendingJoinData = new Map();
@@ -24,10 +25,10 @@ export async function validateJoinEligibility(connection, storyId, guildId, user
     const [storyInfo] = await connection.execute(`
       SELECT s.*, COUNT(sw.story_writer_id) as current_writers
       FROM story s
-      LEFT JOIN story_writer sw ON s.story_id = sw.story_id AND sw.sw_status = 1
+      LEFT JOIN story_writer sw ON s.story_id = sw.story_id AND sw.sw_status = ?
       WHERE s.story_id = ? AND s.guild_id = ?
       GROUP BY s.story_id
-    `, [storyId, guildId]);
+    `, [WRITER_STATUS.ACTIVE, storyId, guildId]);
 
     if (storyInfo.length === 0) {
       return { success: false, error: await getConfigValue(connection,'txtStoryNotFound', guildId) };
@@ -36,7 +37,7 @@ export async function validateJoinEligibility(connection, storyId, guildId, user
     const story = storyInfo[0];
 
     // Check if story is closed
-    if (story.story_status === 3) {
+    if (story.story_status === STORY_STATUS.CLOSED) {
       return { success: false, error: await getConfigValue(connection,'txtJoinStoryClosed', guildId) };
     }
 
@@ -56,8 +57,8 @@ export async function validateJoinEligibility(connection, storyId, guildId, user
     // Check if user already joined
     const [existingWriter] = await connection.execute(`
       SELECT story_writer_id FROM story_writer
-      WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1
-    `, [storyId, userId]);
+      WHERE story_id = ? AND discord_user_id = ? AND sw_status = ?
+    `, [storyId, userId, WRITER_STATUS.ACTIVE]);
 
     if (existingWriter.length > 0) {
       return { success: false, error: await getConfigValue(connection,'txtMemberStatusJoined', guildId) };
@@ -70,9 +71,8 @@ export async function validateJoinEligibility(connection, storyId, guildId, user
   }
 }
 
-export async function buildJoinEmbed(connection, state, threadMode = false) {
-  const { storyId, guildId, storyTitle, privacy, notificationPrefs, penName, displayName, threadMode: stateThreadMode } = state;
-  const isThreadMode = threadMode || stateThreadMode;
+export async function buildJoinEmbed(connection, state) {
+  const { storyId, guildId, storyTitle, privacy, notificationPrefs, penName, displayName } = state;
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacySelect', 'lblJoinNotifSelect',
     'lblJoinPenName', 'txtJoinPenNameNotSet', 'btnJoinSetPenName', 'btnJoinConfirm', 'btnCancel'
@@ -115,7 +115,7 @@ export async function buildJoinEmbed(connection, state, threadMode = false) {
       .setLabel(cfg.btnJoinConfirm)
       .setStyle(ButtonStyle.Success),
     new ButtonBuilder()
-      .setCustomId(isThreadMode ? `story_join_thread_cancel_${storyId}` : `story_join_cancel_${storyId}`)
+      .setCustomId(`story_join_cancel_${storyId}`)
       .setLabel(cfg.btnCancel)
       .setStyle(ButtonStyle.Danger)
   );
@@ -150,16 +150,12 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     log(`handleJoin: building embed`, { show: false, guildName: interaction?.guild?.name });
     const existingPenName = await getPreviousPenName(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', penName: existingPenName, displayName, threadMode: buttonStoryId !== null };
+    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', penName: existingPenName, displayName };
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
     log(`handleJoin: replying`, { show: false, guildName: interaction?.guild?.name });
-    if (buttonStoryId !== null) {
-      await interaction.reply(embedData);
-    } else {
-      await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
-    }
+    await interaction.reply({ ...embedData, flags: MessageFlags.Ephemeral });
     log(`handleJoin: complete`, { show: false, guildName: interaction?.guild?.name });
 
   } catch (error) {
@@ -284,7 +280,7 @@ export async function handleJoinConfirm(connection, interaction) {
   log(`handleJoinConfirm: join committed for storyId=${storyId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
 
   const [[writerCount], [storyInfo]] = await Promise.all([
-    connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`, [storyId]),
+    connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = ?`, [storyId, WRITER_STATUS.ACTIVE]),
     connection.execute(`SELECT title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`, [storyId])
   ]);
 

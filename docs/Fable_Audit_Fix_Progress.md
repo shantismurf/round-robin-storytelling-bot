@@ -355,3 +355,226 @@ reopening those files in a separate session. 1.14 (join capacity race) lives in 
 code (`join.js`'s transaction, re-checking `max_writers` inside the existing transaction) and
 doesn't depend on anything step 4 touches — fine as a standalone fix any time, no need to
 wait.
+
+## Step 5 — Docs/constants/tests/dead-code + opportunistic Step 6 folds (2026-07-12)
+
+Branch: `fable-audit/step-5`. Target: audit's Suggested Fix Order item 5 (4.1/4.2 docs sync,
+constants module closing LOGIC_ERRORS #11, Layer-1 test harness per 4.5, dead-code deletion
+per 4.10/1.29) plus opportunistic Step 6 folds per the 2026-07-12 TODO.md sequencing decision.
+A fresh Explore survey at the start of this session confirmed which Tier-3/Bucket-2 findings
+were still live before starting (some had been incidentally closed by steps 1-4), and found
+one stale TODO.md item (StoryJoin's `dmMessage` is computed from `NextTurn`'s return value,
+not hardcoded — that cleanup item was dropped from scope). **Not yet runtime-verified** — no
+isolated test guild/DB available this session either, same constraint as every prior step;
+confidence rests on `node --check` (clean on all 35 touched files + `constants.js` + 6 new
+test files) and the full Layer-1 suite (56/56 passing).
+
+### 1. Constants module + full sweep (closes LOGIC_ERRORS #11)
+
+Created `constants.js` at the project root: `STORY_STATUS`, `TURN_STATUS`, `JOB_STATUS`,
+`WRITER_STATUS`, `ENTRY_STATUS`, `STORY_MODE` — values verified against `db/init.sql` +
+migration 015 (story.mode rename) + migration 003 (entry_status ENUM), not assumed from the
+audit doc. Confirmed via `commands/_myStoryList.js`'s own `story_status IN (0, 2, 4)` guard
+that a bare `0` status is a defensive catch-all, not a real 5th story status — no code path
+ever sets it, no migration documents it — so no constant was added for it.
+
+Swept **all 33 files / 291 occurrences** the user approved doing in one pass (a pure rename,
+each substitution semantically identical to the original — same value, same comparison
+operator, no logic changes). Two agent passes handled most of the mechanical work
+(18 files), but both needed correction after review:
+- The first agent stalled mid-file after 8 files; all 8 were reviewed line-by-line and found
+  correct before resuming.
+- The second agent completed 10 of 25 assigned files before exhausting its context budget,
+  self-reporting exactly which 15 it didn't reach. Of the 10 it did finish, a **live SQL
+  parameter-count bug** was found and fixed by hand in `story/list.js` (converted a literal
+  `sw_status = 1` to a `?` placeholder but never added the corresponding param — would have
+  thrown or silently misbound at runtime), plus 3 missed literals in `commands/_myStoryList.js`,
+  `story/export.js`, and `story/edit.js`. A read-only audit agent then re-verified all 10
+  files' SQL placeholder-vs-param counts by hand and found zero further issues.
+- The remaining 15 files, plus a final full-codebase grep sweep (which caught several more
+  spots the agents missed — `job-runner.js`, `_storyStatus.js`, `add.js`, `manage.js`,
+  `_metadataModals.js`, `_turn.js`, `utilities.js` each had at least one leftover literal),
+  were done by hand with a `node --check` after every file and a widening series of grep
+  patterns to catch what narrower ones missed (bare `.mode ===`, `state.storyMode`,
+  `entry_status = '...'` string literals, `IN (...)` clauses). **Lesson for future sweeps of
+  this kind:** narrow regex patterns reliably under-count; budget for at least 2-3 progressively
+  broader re-sweeps of the whole codebase after the "first pass" looks done, and never trust an
+  agent's self-reported completion on a mechanical, high-file-count task without spot-checking
+  diffs — both agents produced correct work where they finished, but neither caught everything
+  in scope.
+
+**Also fixed while sweeping** (files opened for the sweep, folded in per the Step 6
+opportunistic-fold decision):
+- **1.18**: `_managePauseResume.js`'s `applyPauseActions` replaced a `[turnEndTime]` token
+  that doesn't exist in `txtTurnThreadTitle` with the hardcoded literal `'PAUSED'` — a
+  double bug (broken token + hardcoded text). User chose the fix: added an optional
+  `{? ([status])?}` token to `txtTurnThreadTitle` in `config_turn.sql`, populated with the
+  existing `txtPaused` config value via `replaceTemplateVariables` (not inline `.replace()`).
+  Active threads render unchanged (`Turn 3 - Story ID: 12 - Alice`); paused ones now show
+  `Turn 3 - Story ID: 12 - Alice (Paused)`.
+- **1.54 (partial)**: inline `.replace('[writer_name]', ...)` → `replaceTemplateVariables`
+  in `story/_manageUser.js` and `story/_writeSkip.js` (a second site of the same bug found
+  while touching that file for the sweep). `story/read.js`'s `log(msg, ['', guildId])`
+  array-as-options-object misuse fixed to `{ show: false, guildName }`.
+- **`closeStoryInternals`'s inline `.replace()`** (`story/_turn.js`, flagged by the step-4
+  code review) — converted to `replaceTemplateVariables`.
+- **1.15**: `story/_writeSkip.js`'s `handleThreadDeleteNow` had no authorization check at
+  all — any user who could see the button could delete another writer's preserved draft
+  thread. Added a lookup from `thread_id` back to the owning turn/writer/story, gating the
+  delete to the draft owner, the story creator, or an admin.
+
+### 2. Dead code deletion (4.10 + 1.29)
+
+Confirmed genuinely dead (zero callers) and removed:
+- `utilities.js`: `createThread` (already broken — undefined `connection` var, the old
+  `permissionOverwrites.create()` mistake) and `sendUserMessage`.
+- `storybot.js` / `index.js`: the `StoryBot extends EventEmitter` class, `emitPublish`, and
+  the `bot.on('publish')` listener — the "engine emits, gateway renders" design had zero
+  real callers; `bot.start()`'s only effect (a startup log line) was preserved inline.
+- `commands/storyadmin.js`: `handleModalTest` + `handleModalTestSubmit` (marked `[TEMP]` in
+  their own comment, no `modaltest` subcommand registered) and the now-unused
+  `TextDisplayBuilder`/`LabelBuilder`/`ChannelSelectMenuBuilder`/`ModalBuilder`/
+  `TextInputBuilder`/`TextInputStyle` imports they were the only users of.
+- `story/_manageUser.js`: unused `stagedNotificationPrefs`/`stagedWriterTurnPrivacy` state
+  fields and the `btnAdminMUToggleNotif`/`btnAdminMUTogglePrivacy` config keys (fetched,
+  never referenced — the panel actually uses `btnManageUserSwitchMention`/
+  `btnManageUserMakePublic`/etc., a different key set).
+
+**Explicitly NOT deleted** (re-verified live, contradicting the original audit note as
+"legacy/unreachable"): `story/tags.js`'s `handleViewTagsNav` — it **is** called, routed via
+the `story_view_tags_` customId prefix check in `commands/story.js`. Only the thin wrapper
+`handleViewTagsButton` (which called `handleViewProposedTags` and was never itself invoked)
+was actually dead; deleted that one function only.
+
+### 3. Docs sync (4.1, 4.2)
+
+- **`system_roadmap.md`**: added the 16 missing `story/_*.js` modules to the File Inventory
+  table with accurate one-line purpose descriptions (read each file's exports rather than
+  guessing from filenames), plus the new `constants.js`.
+- **`CLAUDE.md`**: rewrote the "High-level Architecture" section — proposed to the user per
+  the no-silent-edits-to-user-facing-text convention, user provided final wording (added
+  detail on `index.js`'s `deploy.js` responsibilities, reworded the storybot.js bullet).
+  Corrects "storybot.js (The Engine)" to reflect that the engine now lives in `story/_*.js`.
+
+### 4. Retired LOGIC_ERRORS_REPORT.md
+
+Added a header note marking it superseded by `docs/Fable_Audit_2026-07.md`, per the audit's
+own disposition table — kept the file for history rather than deleting it.
+
+### 5. Layer-1 test harness (4.5)
+
+`test/_fakeConnection.js` — a scripted-queue fake `connection.execute()` matching
+mysql2/promise's `[rows]` return shape. `package.json`'s `test` script changed from the
+placeholder to `node --test "test/**/*.test.js"` (a bare `node --test test/` directory
+argument fails on this Windows/Node 22 setup — treated as a `require()` path, not a glob
+root — so the explicit glob is load-bearing, not stylistic).
+
+6 test files, 56 tests, covering the audit's full suggested list:
+- `test/_turn.test.js` — `PickNextWriter`, all 3 order types + admin override + the cycle-reset
+  fallback (exercises 1.26's documented ambiguity directly).
+- `test/_delay.test.js` — `checkStoryDelay`, writer-count and hour-delay boundaries, plus a
+  regression guard pinning 1.9's fix (delayed-status check, not active-status check).
+- `test/_entryRenderer.test.js` — `buildEntryPages` (pagination, scene-break markup, image
+  extraction, author-name hiding).
+- `test/_metadata.test.js` — `isRestricted`, `crossesBarrier`, `formatWarnings`.
+- `test/join.test.js` — `validateJoinEligibility`, all rejection paths + success.
+- `test/utilities.test.js` — `splitAtParagraphs`, `parseDuration`, `formatDuration`,
+  `replaceTemplateVariables`, `chunkEntryContent`.
+
+### 6. Standalone Step-6 items (1.23, 2.4) — deferred, not done this session
+
+User approved including these in scope, but they were not reached this session — the
+constants sweep and its cleanup took longer than planned once the two sweep agents' gaps
+had to be manually closed. Both remain open:
+- **1.23** — `messages.fetch({ limit: 100/50 })` caps in `_writeFinalize.js`/`_turn.js`
+  silently drop content past the cap for very long turns. Needs pagination via discord.js's
+  `before`/`after` cursor, with care taken since draft-detection and entry-composition call
+  sites may have different correctness requirements.
+- **2.4** — `job-runner.js` rebuilds a synthetic guild/role context per job even when
+  multiple queued jobs target the same guild in one tick. Needs per-tick context caching
+  keyed by guild.
+
+Both are self-contained enough to pick up in a future session without re-deriving context —
+flagged in TODO.md.
+
+### 7. User-flagged bug (not from the audit): join panel posted publicly instead of ephemeral
+
+User recalled a bug from their own notes: the writer-join embed (pen name / privacy /
+notification selects + confirm/cancel) posted publicly and visibly to everyone in the
+channel when triggered via the "Join" **button** (story feed / thread panel), then got
+deleted on cancel — only the `/story join` **slash command** path was ephemeral.
+Confirmed live in `story/join.js:160`: `handleJoin`'s button-triggered branch called
+`interaction.reply(embedData)` with no `MessageFlags.Ephemeral`, while the slash-command
+branch did. This predates the Fable Audit entirely — never caught by any pass, and distinct
+from audit finding **1.58** (`story_join_thread_cancel_` not acknowledging the interaction
+before delete — same button, different bug, same lines).
+
+Fix: both branches now reply ephemeral (collapsed to one `interaction.reply({ ...embedData,
+flags: MessageFlags.Ephemeral })` call). Since both join paths are now ephemeral, the
+`isThreadMode`/`threadMode` distinction in `buildJoinEmbed` and `handleJoin` (which existed
+solely to pick between two cancel-button customIds — `story_join_cancel_` for the
+ephemeral/deferUpdate+editReply cancel, `story_join_thread_cancel_` for a raw
+`message.delete()`) no longer served any purpose. Removed it: `buildJoinEmbed` no longer
+takes a `threadMode` param or reads `state.threadMode`; the join state object no longer sets
+it; the cancel button always uses `story_join_cancel_`; `commands/story.js`'s
+`story_join_thread_cancel_` branch (and its `message.delete()`) is gone. This also fully
+closes **1.58** — the buggy code path it was filed against no longer exists, rather than
+just being less visible now that the message is ephemeral.
+
+All 37 touched `.js` files plus `constants.js` and the 6 new test files pass `node --check`.
+Full test suite: 56/56 passing.
+
+### 8. Independent code review before merge (2026-07-12)
+
+Ran a fresh-agent, high-effort code review (8 finder angles: line-by-line diff scan,
+removed-behavior audit, cross-file tracer, reuse, simplification, efficiency, altitude,
+CLAUDE.md conventions) against the full working-tree diff before pushing to main, per user
+request. 23 raw candidates surfaced across the angles, deduped and verified down to 7. Two
+were real issues, both fixed immediately:
+
+- **`commands/_myStoryList.js`'s paused-view query regressed.** The constants sweep had
+  converted a harmless literal `story_status IN (0, 2, 4)` — where `0` was always dead, no
+  code path or migration ever writes it to `story.story_status` — into binding
+  `STORY_STATUS.ACTIVE` for that slot instead of preserving `0`. This would have leaked
+  every story the user is actively writing into their `/mystory list paused` results.
+  Confirmed via `git log -p` the literal predates this session (present since the query was
+  first written); the *substitution* was the regression, introduced by the mechanical sweep
+  treating a defensive dead-value literal as if it were meant to match a real status. Fixed
+  in two steps: first restored the literal `0` with an explanatory comment, then — after the
+  user asked directly whether a nameless `0` would confuse a future agent into remapping it
+  again — removed it entirely instead, since it matches zero possible rows under the current
+  schema and a bare unexplained `0` is a standing trap for exactly this class of mistake.
+  `whereExtra` for the paused view is now `story_status IN (?, ?)` bound to
+  `[STORY_STATUS.PAUSED, STORY_STATUS.DELAYED]` only — verified placeholder count still
+  matches the params array (5 filter placeholders: 2 for `IN`, 1 for `!=`, 2 for the
+  `ORDER BY CASE`) after the removal.
+- **`story/read.js`'s documented fix was never actually applied.** This doc's own item 1
+  section (written earlier in this same session) claimed the `log(msg, ['', guildId])`
+  array-misuse at three call sites was fixed to `{ show: false, guildName }` as part of the
+  1.54 fold-in. It wasn't — the edit was never made, only written up as done. The review
+  agent caught this by diffing the actual changes against the documented claim. Fixed for
+  real this time (all three call sites in `handleRead`'s restricted-story branch).
+
+**Lesson for future sessions:** a documented fix and an applied fix are not the same thing —
+verify doc claims against `git diff`, including a session's own notes about itself, before
+trusting them as a record of what actually happened.
+
+**Outstanding findings from the review, left as-is (pre-existing debt or minor, none are
+regressions introduced by step 5):**
+- `_managePauseResume.js`'s story-level thread retitle (`applyPauseActions`/
+  `applyResumeActions`/`handleReopenStory`) still uses inline `.replace()` chains on
+  `txtStoryThreadTitle` rather than `replaceTemplateVariables` — confirmed via `git diff`
+  these exact lines are untouched by step 5 (pre-existing, distinct from the turn-level
+  `txtTurnThreadTitle` fix step 5 made for 1.18). Already covered by TODO.md's standing
+  inline-`.replace()` compliance sweep item.
+- `_writeSkip.js`'s new `handleThreadDeleteNow` authorization check (this session's 1.15 fix)
+  is correct but hand-rolls owner/creator/admin logic inline — a fourth near-duplicate of
+  this pattern in the codebase, worth extracting to a shared helper eventually.
+- `story/list.js`'s `getStoriesPaginated` params assembly (fixed prefix + dynamic filter
+  params + fixed suffix across 3 separate queries) is fragile to eyeball, though re-verified
+  correct — the same file/pattern that produced step 5's own earlier param-count bug.
+- `story/ping.js`'s SQL-ternary/params-ternary pairing and `_managePauseResume.js`'s
+  un-batched `getConfigValue` calls (audit 2.3) are minor, pre-existing, non-blocking.
+
+Full detail on all 7 findings and their disposition logged in TODO.md. Re-ran `node --check`
+on the 2 fixed files and the full test suite after applying both fixes: 56/56 passing.

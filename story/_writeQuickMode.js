@@ -3,6 +3,7 @@ import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, validate
 import { PickNextWriter, NextTurn, endTurnGuarded } from './_turn.js';
 import { getActiveThreadId } from '../storybot.js';
 import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './_entryRenderer.js';
+import { TURN_STATUS, ENTRY_STATUS, STORY_MODE } from '../constants.js';
 
 export const pendingReminderTimeouts = new Map();
 
@@ -33,7 +34,7 @@ export async function handleWrite(connection, interaction) {
       await interaction.reply({ content: writerInfo.error, flags: MessageFlags.Ephemeral });
       return;
     }
-    if (storyInfo.story.mode !== 1) {
+    if (storyInfo.story.mode !== STORY_MODE.QUICK) {
       await interaction.reply({ content: txtNormalModeWrite, flags: MessageFlags.Ephemeral });
       return;
     }
@@ -81,8 +82,8 @@ export async function handleWriteModalSubmit(connection, interaction) {
     const [turnInfo] = await connection.execute(`
       SELECT t.turn_id FROM turn t
       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-      WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1
-    `, [storyId, interaction.user.id]);
+      WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?
+    `, [storyId, interaction.user.id, TURN_STATUS.ACTIVE]);
 
     if (turnInfo.length === 0) {
       throw new Error('No active turn found');
@@ -91,20 +92,20 @@ export async function handleWriteModalSubmit(connection, interaction) {
 
     const [pendingEntry] = await connection.execute(`
       SELECT story_entry_id FROM story_entry
-      WHERE turn_id = ? AND entry_status IN ('pending', 'discarded')
-    `, [currentTurnId]);
+      WHERE turn_id = ? AND entry_status IN (?, ?)
+    `, [currentTurnId, ENTRY_STATUS.PENDING, ENTRY_STATUS.DISCARDED]);
 
     if (pendingEntry.length > 0) {
       await connection.execute(`
-        UPDATE story_entry SET content = ?, entry_status = 'pending', created_at = NOW()
+        UPDATE story_entry SET content = ?, entry_status = ?, created_at = NOW()
         WHERE story_entry_id = ?
-      `, [content, pendingEntry[0].story_entry_id]);
+      `, [content, ENTRY_STATUS.PENDING, pendingEntry[0].story_entry_id]);
       entryId = String(pendingEntry[0].story_entry_id);
     } else {
       const [result] = await connection.execute(`
         INSERT INTO story_entry (turn_id, content, entry_status)
-        VALUES (?, ?, 'pending')
-      `, [currentTurnId, content]);
+        VALUES (?, ?, ?)
+      `, [currentTurnId, content, ENTRY_STATUS.PENDING]);
 
       entryId = String(result.insertId);
     }
@@ -175,8 +176,8 @@ export async function confirmEntry(connection, entryId, interaction) {
 
   try {
     await txn.execute(`
-      UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?
-    `, [entryId]);
+      UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?
+    `, [ENTRY_STATUS.CONFIRMED, entryId]);
 
     const [entryInfo] = await txn.execute(`
       SELECT se.turn_id, se.content, sw.story_id, sw.discord_user_id, sw.discord_display_name,
@@ -184,14 +185,14 @@ export async function confirmEntry(connection, entryId, interaction) {
              (SELECT COUNT(DISTINCT t2.turn_id)
               FROM turn t2
               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+              JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
               WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
       FROM story_entry se
       JOIN turn t ON se.turn_id = t.turn_id
       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
       JOIN story s ON sw.story_id = s.story_id
       WHERE se.story_entry_id = ?
-    `, [entryId]);
+    `, [ENTRY_STATUS.CONFIRMED, entryId]);
 
     if (entryInfo.length === 0) {
       throw new Error(`Entry not found for ID ${entryId}`);
@@ -254,8 +255,8 @@ export async function discardEntry(connection, entryId, interaction) {
 
   try {
     await connection.execute(`
-      UPDATE story_entry SET entry_status = 'discarded' WHERE story_entry_id = ?
-    `, [entryId]);
+      UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?
+    `, [ENTRY_STATUS.DISCARDED, entryId]);
 
     await interaction.editReply({
       content: await getConfigValue(connection, 'txtEntryDiscarded', interaction.guild.id),

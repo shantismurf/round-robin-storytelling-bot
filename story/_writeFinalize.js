@@ -4,6 +4,7 @@ import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, endTurnGuarded }
 import { getActiveThreadId } from '../storybot.js';
 import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './_entryRenderer.js';
 import { pendingPreviewData } from './_state.js';
+import { TURN_STATUS, ENTRY_STATUS } from '../constants.js';
 
 export function collectMessageParts(userMessages, resolveAttachment) {
   const parts = [];
@@ -52,8 +53,8 @@ export async function handleFinalizeEntry(connection, interaction) {
          FROM turn t
          JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
          JOIN story s ON sw.story_id = s.story_id
-         WHERE sw.story_id = ? AND t.turn_status = 1 AND t.thread_id = ?`,
-        [storyId, interaction.channel.id]
+         WHERE sw.story_id = ? AND t.turn_status = ? AND t.thread_id = ?`,
+        [storyId, TURN_STATUS.ACTIVE, interaction.channel.id]
       );
       turnInfo = rows;
       writerId = rows[0]?.discord_user_id;
@@ -63,8 +64,8 @@ export async function handleFinalizeEntry(connection, interaction) {
          FROM turn t
          JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
          JOIN story s ON sw.story_id = s.story_id
-         WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-        [storyId, interaction.user.id]
+         WHERE sw.story_id = ? AND t.turn_status = ? AND sw.discord_user_id = ?`,
+        [storyId, TURN_STATUS.ACTIVE, interaction.user.id]
       );
       turnInfo = rows;
       writerId = interaction.user.id;
@@ -196,8 +197,8 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-      [storyId, writerId]
+       WHERE sw.story_id = ? AND t.turn_status = ? AND sw.discord_user_id = ?`,
+      [storyId, TURN_STATUS.ACTIVE, writerId]
     );
     if (turnInfo.length === 0) {
       log(`doFinalizeEntry: no active turn for writer ${writerId} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
@@ -283,8 +284,8 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
         return;
       }
       await txn.execute(
-        `INSERT INTO story_entry (turn_id, content, entry_status, created_at) VALUES (?, ?, 'confirmed', NOW())`,
-        [turn.turn_id, entryContent]
+        `INSERT INTO story_entry (turn_id, content, entry_status, created_at) VALUES (?, ?, ?, NOW())`,
+        [turn.turn_id, entryContent, ENTRY_STATUS.CONFIRMED]
       );
       const nextWriterId = await PickNextWriter(txn, storyId);
       nextTurnResult = nextWriterId
@@ -312,9 +313,9 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
       `SELECT COUNT(DISTINCT t2.turn_id) AS turn_number
        FROM turn t2
        JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-       JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+       JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
        WHERE sw2.story_id = ? AND t2.started_at <= (SELECT started_at FROM turn WHERE turn_id = ?)`,
-      [storyId, turn.turn_id]
+      [ENTRY_STATUS.CONFIRMED, storyId, turn.turn_id]
     );
     const turn_number = turnNumResult[0].turn_number;
 
@@ -353,8 +354,8 @@ export async function handleFinalizeConfirm(connection, interaction) {
     const [turnInfo] = await connection.execute(
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-      [storyId, writerId]
+       WHERE sw.story_id = ? AND t.turn_status = ? AND sw.discord_user_id = ?`,
+      [storyId, TURN_STATUS.ACTIVE, writerId]
     );
     if (turnInfo.length === 0) {
       log(`handleFinalizeConfirm: no active turn for writer ${writerId} story ${storyId}`, { show: false, guildName: interaction?.guild?.name });

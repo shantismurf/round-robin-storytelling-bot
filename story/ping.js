@@ -1,6 +1,7 @@
 import { MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
 import { getActiveThreadId } from '../storybot.js';
+import { WRITER_STATUS } from '../constants.js';
 
 export async function handlePing(connection, interaction) {
   log(`handlePing entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
@@ -34,8 +35,8 @@ export async function handlePing(connection, interaction) {
 
   const includePaused = interaction.options.getBoolean('include_paused') ?? false;
   const [writerRows] = await connection.execute(
-    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status ${includePaused ? 'IN (1, 2)' : '= 1'}`,
-    [storyId]
+    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status ${includePaused ? 'IN (?, ?)' : '= ?'}`,
+    includePaused ? [storyId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED] : [storyId, WRITER_STATUS.ACTIVE]
   );
 
   const mentions = writerRows.map(w => `<@${w.discord_user_id}>`).join(' ');

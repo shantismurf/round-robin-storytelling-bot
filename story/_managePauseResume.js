@@ -3,22 +3,23 @@ import { PickNextWriter, NextTurn } from './_turn.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { isRestricted, resolveFeedChannelId } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
+import { STORY_STATUS, TURN_STATUS, JOB_STATUS, STORY_MODE } from '../constants.js';
 
 export async function applyPauseActions(connection, interaction, state) {
   const [activeTurnRows] = await connection.execute(
     `SELECT t.turn_id, t.thread_id, sw.discord_display_name
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ? AND t.turn_status = 1`,
-    [state.storyId]
+     WHERE sw.story_id = ? AND t.turn_status = ?`,
+    [state.storyId, TURN_STATUS.ACTIVE]
   );
   if (activeTurnRows.length === 0) return;
 
   const { turn_id: turnId, thread_id: threadId, discord_display_name } = activeTurnRows[0];
 
   await connection.execute(
-    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-    [turnId]
+    `UPDATE job SET job_status = ? WHERE turn_id = ? AND job_status = ?`,
+    [JOB_STATUS.CANCELLED, turnId, JOB_STATUS.PENDING]
   );
 
   if (!threadId) return;
@@ -27,13 +28,17 @@ export async function applyPauseActions(connection, interaction, state) {
     const thread = await interaction.guild.channels.fetch(threadId);
     if (!thread) return;
 
-    const turnNumber = await getTurnNumber(connection, state.storyId);
-    const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', state.guildId);
-    const pausedTitle = threadTitleTemplate
-      .replace('[story_id]', state.guildStoryId)
-      .replace('[storyTurnNumber]', turnNumber)
-      .replace('[user display name]', discord_display_name)
-      .replace('[turnEndTime]', 'PAUSED');
+    const [turnNumber, txtPaused, threadTitleTemplate] = await Promise.all([
+      getTurnNumber(connection, state.storyId),
+      getConfigValue(connection, 'txtPaused', state.guildId),
+      getConfigValue(connection, 'txtTurnThreadTitle', state.guildId),
+    ]);
+    const pausedTitle = replaceTemplateVariables(threadTitleTemplate, {
+      story_id: state.guildStoryId,
+      storyTurnNumber: turnNumber,
+      'user display name': discord_display_name,
+      status: txtPaused,
+    });
 
     await thread.setName(pausedTitle);
     await thread.setLocked(true);
@@ -73,8 +78,8 @@ export async function applyResumeActions(connection, interaction, state) {
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      JOIN story s ON s.story_id = sw.story_id
-     WHERE sw.story_id = ? AND t.turn_status = 1`,
-    [state.storyId]
+     WHERE sw.story_id = ? AND t.turn_status = ?`,
+    [state.storyId, TURN_STATUS.ACTIVE]
   );
 
   try {
@@ -115,11 +120,11 @@ export async function applyResumeActions(connection, interaction, state) {
   }
 
   const activeTurn = activeTurnRows[0];
-  const isSlowMode = state.storyMode === 2;
+  const isSlowMode = state.storyMode === STORY_MODE.SLOW;
 
   await connection.execute(
-    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-    [activeTurn.turn_id]
+    `UPDATE job SET job_status = ? WHERE turn_id = ? AND job_status = ?`,
+    [JOB_STATUS.CANCELLED, activeTurn.turn_id, JOB_STATUS.PENDING]
   );
 
   let newTurnEndsAt = null;
@@ -132,23 +137,23 @@ export async function applyResumeActions(connection, interaction, state) {
       [newTurnEndsAt, activeTurn.turn_id]
     );
     await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-      ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt, activeTurn.turn_id]
+      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+      ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt, JOB_STATUS.PENDING, activeTurn.turn_id]
     );
     if (state.timeoutReminder > 0) {
       const reminderMs = state.turnLength * (state.timeoutReminder / 100) * 60 * 60 * 1000;
       const reminderTime = new Date(Date.now() + reminderMs);
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-        ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime, activeTurn.turn_id]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+        ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime, JOB_STATUS.PENDING, activeTurn.turn_id]
       );
     }
     newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
   } else if (state.timeoutReminder > 0) {
     const reminderTime = new Date(Date.now() + (state.timeoutReminder * 60 * 60 * 1000));
     await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-      ['turnSlowReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id, reminderHours: state.timeoutReminder }), reminderTime, activeTurn.turn_id]
+      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+      ['turnSlowReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id, reminderHours: state.timeoutReminder }), reminderTime, JOB_STATUS.PENDING, activeTurn.turn_id]
     );
   }
 
@@ -205,8 +210,8 @@ export async function handleReopenStory(connection, interaction, state) {
 
   try {
     await connection.execute(
-      `UPDATE story SET story_status = 1 WHERE story_id = ?`,
-      [state.storyId]
+      `UPDATE story SET story_status = ? WHERE story_id = ?`,
+      [STORY_STATUS.ACTIVE, state.storyId]
     );
 
     try {
@@ -250,8 +255,8 @@ export async function handleReopenStory(connection, interaction, state) {
       { story_title: state.title, join_status: joinStatus }
     );
 
-    state.originalStatus = 1;
-    state.targetStatus = 1;
+    state.originalStatus = STORY_STATUS.ACTIVE;
+    state.targetStatus = STORY_STATUS.ACTIVE;
 
     log(`handleReopenStory: story ${state.storyId} reopened successfully`, { show: true, guildName: interaction?.guild?.name });
     return { reopenMsg };

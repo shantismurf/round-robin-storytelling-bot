@@ -1,5 +1,6 @@
-import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, LabelBuilder, ChannelSelectMenuBuilder } from 'discord.js';
+import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
+import { STORY_STATUS, JOB_STATUS } from '../constants.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
 import { syncFaqPosts, handleAdminHelp } from '../faq.js';
 import { deleteThreadAndAnnouncement } from '../story/_turn.js';
@@ -71,78 +72,6 @@ async function execute(connection, interaction) {
   if (subcommand === 'user')         await handleManageUser(connection, interaction);
   else if (subcommand === 'delete')  await handleDelete(connection, interaction);
   else if (subcommand === 'faqsync') await handleFaqSync(connection, interaction);
-}
-
-// ---------------------------------------------------------------------------
-// [TEMP] /storyadmin modaltest — verify TextDisplay, LabelBuilder, ChannelSelect in modals
-// ---------------------------------------------------------------------------
-
-async function handleModalTest(interaction) {
-  log(`handleModalTest entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-  const modal = new ModalBuilder()
-    .setCustomId('storyadmin_modaltest_modal')
-    .setTitle('Modal Component Test');
-
-  modal.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent('## Test Heading\nThis text is from a TextDisplayBuilder. If you can read this with heading formatting, TextDisplay works in modals.')
-  );
-
-  modal.addLabelComponents(
-    new LabelBuilder()
-      .setLabel('Channel Select (pick any text channel)')
-      .setChannelSelectMenuComponent(
-        new ChannelSelectMenuBuilder()
-          .setCustomId('testChannel')
-          .addChannelTypes(4)
-//          .setMinValues(0)
-          .setMaxValues(1)
-      )
-  );
-
-  modal.addLabelComponents(
-    new LabelBuilder()
-      .setLabel('Text Input (type anything)')
-      .setTextInputComponent(
-        new TextInputBuilder()
-          .setCustomId('testText')
-          .setStyle(TextInputStyle.Short)
-          .setRequired(false)
-          .setPlaceholder('optional text here')
-      )
-  );
-
-  await interaction.showModal(modal);
-}
-
-async function handleModalTestSubmit(interaction) {
-  log(`handleModalTestSubmit entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  let channelResult = '(none selected)';
-  let textResult = '(empty)';
-
-  try {
-    const channelField = interaction.fields.getField('testChannel');
-    log(`handleModalTestSubmit: channelField raw`, { show: false, guildName: interaction?.guild?.name });
-    log(channelField, { show: false, guildName: interaction?.guild?.name });
-    const channelId = channelField?.channels?.first()?.id ?? channelField?.values?.[0] ?? null;
-    if (channelId) channelResult = `<#${channelId}> (id: ${channelId})`;
-  } catch (err) {
-    channelResult = `ERROR reading channel: ${err.message}`;
-    log(`handleModalTestSubmit: channel read failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-
-  try {
-    const raw = interaction.fields.getTextInputValue('testText');
-    if (raw) textResult = raw;
-  } catch (err) {
-    textResult = `ERROR reading text: ${err.message}`;
-    log(`handleModalTestSubmit: text read failed: ${err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-
-  await interaction.editReply({
-    content: `**Modal Test Results**\nChannel: ${channelResult}\nText: ${textResult}`
-  });
 }
 
 // ---------------------------------------------------------------------------
@@ -240,8 +169,8 @@ async function handleDeleteConfirm(connection, interaction) {
     // the turn rows out from under them — otherwise they later fire against a dangling turn_id.
     await connection.execute(
       `UPDATE job j JOIN turn t ON j.turn_id = t.turn_id JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       SET j.job_status = 3 WHERE sw.story_id = ? AND j.job_status = 0`,
-      [storyId]
+       SET j.job_status = ? WHERE sw.story_id = ? AND j.job_status = ?`,
+      [JOB_STATUS.CANCELLED, storyId, JOB_STATUS.PENDING]
     );
 
     // Hard delete — cascades to story_writer, turn, story_entry
@@ -301,8 +230,6 @@ async function handleModalSubmit(connection, interaction) {
     await handleSetupRoundupModal(connection, interaction);
   } else if (interaction.customId === 'storyadmin_setup_role_modal') {
     await handleSetupRoleModal(connection, interaction);
-  } else if (interaction.customId === 'storyadmin_modaltest_modal') {
-    await handleModalTestSubmit(interaction);
   } else if (interaction.customId.startsWith('storyadmin_mu_')) {
     await handleManageUserModalSubmit(connection, interaction);
   }
@@ -322,10 +249,10 @@ async function handleAutocomplete(connection, interaction) {
            AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
        ) AS is_creator
      FROM story s
-     WHERE s.guild_id = ? AND s.story_status != 3
+     WHERE s.guild_id = ? AND s.story_status != ?
        AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
      ORDER BY is_creator DESC, ${storyLastActivitySQL()} DESC LIMIT 25`,
-    [interaction.user.id, guildId, typed, typedPrefix]
+    [interaction.user.id, guildId, STORY_STATUS.CLOSED, typed, typedPrefix]
   );
   return interaction.respond(
     rows.map(r => ({

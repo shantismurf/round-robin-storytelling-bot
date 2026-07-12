@@ -1,6 +1,7 @@
 import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder } from 'discord.js';
 import { getConfigValue, formatDuration } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
+import { STORY_MODE } from '../constants.js';
 
 export async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [
@@ -53,7 +54,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   const orderLabels = { 1: cfg.txtOrderRandom, 2: cfg.txtOrderRoundRobin, 3: cfg.txtOrderFixed };
   const orderDescs = { 1: cfg.txtOrderRandomDesc, 2: cfg.txtOrderRoundRobinDesc, 3: cfg.txtOrderFixedDesc };
 
-  const isSlowMode = state.storyMode === 2;
+  const isSlowMode = state.storyMode === STORY_MODE.SLOW;
   const modeEmoji = modeEmojis[state.storyMode];
   const modeLabel = modeLabels[state.storyMode] ?? cfg.txtNormalUC;
   const modeDesc = modeDescs[state.storyMode] ?? cfg.txtNormalModeDesc;
@@ -88,7 +89,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
 
   const embed = new EmbedBuilder()
     .setTitle(title)
-    .setColor(state.storyMode === 1 ? 0xE040FB : state.storyMode === 2 ? 0x5865F2 : 0x57F287);
+    .setColor(state.storyMode === STORY_MODE.QUICK ? 0xE040FB : state.storyMode === STORY_MODE.SLOW ? 0x5865F2 : 0x57F287);
 
   if (cfg.txtStoryAddIntro && !isManage) {
     embed.setDescription(cfg.txtStoryAddIntro);
@@ -265,9 +266,9 @@ export function buildStoryInfoModal(cfg, state, namespace) {
     .setCustomId(`${ns}_storyinfo_mode`)
     .setRequired(false)
     .addOptions(
-      new RadioGroupOptionBuilder().setLabel(cfg.txtNormalUC).setValue('0').setDescription(cfg.txtNormalModeDesc).setDefault(state.storyMode === 0),
-      new RadioGroupOptionBuilder().setLabel(cfg.txtQuickUC).setValue('1').setDescription(cfg.txtQuickModeDesc).setDefault(state.storyMode === 1),
-      new RadioGroupOptionBuilder().setLabel(cfg.txtSlowTC).setValue('2').setDescription(cfg.txtSlowModeDesc).setDefault(state.storyMode === 2),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtNormalUC).setValue('0').setDescription(cfg.txtNormalModeDesc).setDefault(state.storyMode === STORY_MODE.NORMAL),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtQuickUC).setValue('1').setDescription(cfg.txtQuickModeDesc).setDefault(state.storyMode === STORY_MODE.QUICK),
+      new RadioGroupOptionBuilder().setLabel(cfg.txtSlowTC).setValue('2').setDescription(cfg.txtSlowModeDesc).setDefault(state.storyMode === STORY_MODE.SLOW),
     );
 
   const orderGroup = new RadioGroupBuilder()

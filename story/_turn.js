@@ -3,6 +3,7 @@ import { getConfigValue, getTurnNumber, log, replaceTemplateVariables, discordTi
 import { resolveFeedChannelId } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
+import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, STORY_MODE, ENTRY_STATUS } from '../constants.js';
 
 /**
  * Selects the next writer based on story order type.
@@ -43,8 +44,8 @@ export async function PickNextWriter(connection, storyId) {
 
   if (story_order_type === 2) {
     const [allWriters] = await connection.execute(
-      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = 1`,
-      [storyId]
+      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = ?`,
+      [storyId, WRITER_STATUS.ACTIVE]
     );
     if (allWriters.length === 0) return null;
     if (!currentWriterId) {
@@ -92,9 +93,9 @@ export async function PickNextWriter(connection, storyId) {
       `SELECT sw.story_writer_id, MAX(t.turn_id) AS last_turn_id
        FROM story_writer sw
        LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.sw_status = 1
+       WHERE sw.story_id = ? AND sw.sw_status = ?
        GROUP BY sw.story_writer_id`,
-      [storyId]
+      [storyId, WRITER_STATUS.ACTIVE]
     );
 
     // Sort most-recent first; treat NULL (never gone) as 0 so new joiners always land in the pool
@@ -116,8 +117,8 @@ export async function PickNextWriter(connection, storyId) {
 
   // For Random and Fixed: fetch active writers
   const [writers] = await connection.execute(
-    `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY writer_order ASC`,
-    [storyId]
+    `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND sw_status = ? ORDER BY writer_order ASC`,
+    [storyId, WRITER_STATUS.ACTIVE]
   );
   if (writers.length === 0) return null;
   if (!currentWriterId) {
@@ -168,17 +169,17 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     const [activeTurnRows] = await connection.execute(
       `SELECT turn_id FROM turn WHERE story_writer_id IN (
          SELECT story_writer_id FROM story_writer WHERE story_id = ?
-       ) AND turn_status = 1 LIMIT 1`,
-      [writer.story_id]
+       ) AND turn_status = ? LIMIT 1`,
+      [writer.story_id, TURN_STATUS.ACTIVE]
     );
     if (activeTurnRows.length > 0) {
       await connection.execute(
-        `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-        [activeTurnRows[0].turn_id]
+        `UPDATE job SET job_status = ? WHERE turn_id = ? AND job_status = ?`,
+        [JOB_STATUS.CANCELLED, activeTurnRows[0].turn_id, JOB_STATUS.PENDING]
       );
     }
 
-    const isSlowMode = writer.mode === 2;
+    const isSlowMode = writer.mode === STORY_MODE.SLOW;
 
     // Insert turn record — slow mode has no deadline (turn_ends_at stays NULL)
     let turnEndsAt = null;
@@ -186,8 +187,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       turnEndsAt = new Date(Date.now() + (writer.turn_length_hours * 60 * 60 * 1000));
     }
     const [turnResult] = await connection.execute(
-      `INSERT INTO turn (story_writer_id, started_at, turn_ends_at, turn_status) VALUES (?, NOW(), ?, 1)`,
-      [storyWriterId, turnEndsAt]
+      `INSERT INTO turn (story_writer_id, started_at, turn_ends_at, turn_status) VALUES (?, NOW(), ?, ?)`,
+      [storyWriterId, turnEndsAt, TURN_STATUS.ACTIVE]
     );
 
     const turnId = turnResult.insertId;
@@ -196,8 +197,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     if (!isSlowMode) {
       // Schedule turnTimeout job
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-        ['turnTimeout', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id }), turnEndsAt, turnId]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+        ['turnTimeout', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id }), turnEndsAt, JOB_STATUS.PENDING, turnId]
       );
 
       // Schedule turnReminder job if configured (percent-based, fires once)
@@ -205,16 +206,16 @@ export async function NextTurn(connection, interaction, storyWriterId) {
         const reminderMs = writer.turn_length_hours * (writer.reminder_timing / 100) * 60 * 60 * 1000;
         const reminderTime = new Date(Date.now() + reminderMs);
         await connection.execute(
-          `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-          ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime, turnId]
+          `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+          ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime, JOB_STATUS.PENDING, turnId]
         );
       }
     } else if (writer.reminder_timing > 0) {
       // Slow mode: schedule repeating reminder (hours-based; re-schedules itself on each fire)
       const reminderTime = new Date(Date.now() + (writer.reminder_timing * 60 * 60 * 1000));
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-        ['turnSlowReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id, reminderHours: writer.reminder_timing }), reminderTime, turnId]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+        ['turnSlowReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id, reminderHours: writer.reminder_timing }), reminderTime, JOB_STATUS.PENDING, turnId]
       );
     }
 
@@ -225,7 +226,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     // turnEndTime is only meaningful for normal/quick mode
     const turnEndTime = isSlowMode ? null : turnEndTimeFunction(writer.turn_length_hours);
 
-    if (writer.mode === 1) {
+    if (writer.mode === STORY_MODE.QUICK) {
       // Quick mode — feed announcement, no turn thread
       await handleQuickModeNotification(connection, interaction, writer, guild_id);
       dmMessage = 'Quick mode notification sent';
@@ -369,8 +370,8 @@ export async function endTurnThread(connection, guild, threadId, writerDiscordUs
       );
       await thread.send({ content: scheduleMsg.replace('[relative_timestamp]', relativeTs), components: [row] });
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-        ['threadDelete', JSON.stringify({ threadId, guildId }), deleteAt]
+        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
+        ['threadDelete', JSON.stringify({ threadId, guildId }), deleteAt, JOB_STATUS.PENDING]
       );
       log(`endTurnThread: thread ${threadId} has draft content — scheduled delete at ${deleteAt.toISOString()}`, { show: true, guildName: guild?.name });
     } else {
@@ -392,13 +393,13 @@ export async function endTurnThread(connection, guild, threadId, writerDiscordUs
  */
 export async function endTurnGuarded(connection, turnId) {
   const [result] = await connection.execute(
-    `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ? AND turn_status = 1`,
-    [turnId]
+    `UPDATE turn SET turn_status = ?, ended_at = NOW() WHERE turn_id = ? AND turn_status = ?`,
+    [TURN_STATUS.ENDED, turnId, TURN_STATUS.ACTIVE]
   );
   if (result.affectedRows !== 1) return false;
   await connection.execute(
-    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-    [turnId]
+    `UPDATE job SET job_status = ? WHERE turn_id = ? AND job_status = ?`,
+    [JOB_STATUS.CANCELLED, turnId, JOB_STATUS.PENDING]
   );
   return true;
 }
@@ -416,8 +417,8 @@ export async function closeStoryInternals(connection, ctx, storyId) {
 
   const [activeTurnRows] = await connection.execute(
     `SELECT t.turn_id FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ? AND t.turn_status = 1`,
-    [storyId]
+     WHERE sw.story_id = ? AND t.turn_status = ?`,
+    [storyId, TURN_STATUS.ACTIVE]
   );
   if (activeTurnRows.length > 0) {
     await endTurnGuarded(connection, activeTurnRows[0].turn_id);
@@ -428,11 +429,11 @@ export async function closeStoryInternals(connection, ctx, storyId) {
   // whose turn was already ended by another path moments earlier).
   await connection.execute(
     `UPDATE job j JOIN turn t ON j.turn_id = t.turn_id JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     SET j.job_status = 3 WHERE sw.story_id = ? AND j.job_status = 0`,
-    [storyId]
+     SET j.job_status = ? WHERE sw.story_id = ? AND j.job_status = ?`,
+    [JOB_STATUS.CANCELLED, storyId, JOB_STATUS.PENDING]
   );
 
-  await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
+  await connection.execute(`UPDATE story SET story_status = ?, closed_at = NOW() WHERE story_id = ?`, [STORY_STATUS.CLOSED, storyId]);
 
   const [storyRows] = await connection.execute(
     `SELECT guild_story_id, title, story_thread_id, restricted_thread_id FROM story WHERE story_id = ?`,
@@ -474,12 +475,12 @@ export async function closeStoryInternals(connection, ctx, storyId) {
  */
 export async function departWriter(connection, ctx, storyId, writerId, discordUserId) {
   const [activeTurnRows] = await connection.execute(
-    `SELECT turn_id, thread_id FROM turn WHERE story_writer_id = ? AND turn_status = 1`,
-    [writerId]
+    `SELECT turn_id, thread_id FROM turn WHERE story_writer_id = ? AND turn_status = ?`,
+    [writerId, TURN_STATUS.ACTIVE]
   );
   const [remainingRows] = await connection.execute(
-    `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND story_writer_id != ?`,
-    [storyId, writerId]
+    `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = ? AND story_writer_id != ?`,
+    [storyId, WRITER_STATUS.ACTIVE, writerId]
   );
   const isLastWriter = remainingRows[0].count === 0;
 
@@ -492,7 +493,7 @@ export async function departWriter(connection, ctx, storyId, writerId, discordUs
     }
   }
 
-  await connection.execute(`UPDATE story_writer SET sw_status = 0, left_at = NOW() WHERE story_writer_id = ?`, [writerId]);
+  await connection.execute(`UPDATE story_writer SET sw_status = ?, left_at = NOW() WHERE story_writer_id = ?`, [WRITER_STATUS.LEFT, writerId]);
 
   let nextWriterId = null;
   if (isLastWriter) {
@@ -581,8 +582,8 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
   log(`handleWriterNotification: entry writerId=${writer.discord_user_id} (${writer.discord_display_name}) prefs=${writer.notification_prefs} mode=${writer.mode}`, { show: false, guildName: interaction?.guild?.name });
   const linkToUse = linkToThreadId || writer.story_thread_id;
   const threadUrl = `https://discord.com/channels/${guild_id}/${linkToUse}`;
-  const modeKey = writer.mode === 1 ? 'Quick' : writer.mode === 2 ? 'Slow' : 'Normal';
-  const isSlowMode = writer.mode === 2;
+  const modeKey = writer.mode === STORY_MODE.QUICK ? 'Quick' : writer.mode === STORY_MODE.SLOW ? 'Slow' : 'Normal';
+  const isSlowMode = writer.mode === STORY_MODE.SLOW;
 
   const tokenMap = {
     turn_thread_link: threadUrl,
@@ -630,7 +631,7 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
 
 async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime) {
   log(`postWelcomeMessage: entry storyId=${writer.story_id} (${writer.title}) writerId=${writer.discord_user_id} (${writer.discord_display_name}) mode=${writer.mode}`, { show: false });
-  const isSlowMode = writer.mode === 2;
+  const isSlowMode = writer.mode === STORY_MODE.SLOW;
   const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guild_id);
   const mediaConfigured = mediaChannelId && mediaChannelId !== 'cfgMediaChannelId';
 
@@ -664,9 +665,9 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
      FROM story_entry se
      JOIN turn t ON se.turn_id = t.turn_id
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+     WHERE sw.story_id = ? AND se.entry_status = ?
      ORDER BY t.started_at DESC LIMIT 1`,
-    [writer.story_id]
+    [writer.story_id, ENTRY_STATUS.CONFIRMED]
   );
   const hasPreviousEntry = lastEntryRows.length > 0;
 

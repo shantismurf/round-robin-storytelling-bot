@@ -1,6 +1,6 @@
 {
   "name": "round-robin-storybot",
-  "version": "3.1.1",
+  "version": "3.1.2",
   "description": "A Discord bot to run round-robin collaborative stories",
   "type": "module",
   "main": "index.js",
@@ -12,7 +12,7 @@
     "sync-config:set": "node sync-config.js --set",
     "dev": "nodemon index.js",
     "lint": "eslint . || true",
-    "test": "echo \"no tests yet\" && exit 0"
+    "test": "node --test \"test/**/*.test.js\""
   },
   "author": "",
   "license": "MIT",

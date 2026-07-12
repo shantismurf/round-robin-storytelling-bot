@@ -8,12 +8,13 @@ import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm,
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
 import { applyPauseActions, applyResumeActions, handleReopenStory } from './_managePauseResume.js';
+import { STORY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
 
 const pendingManageData = new Map();
 
 function buildManageMessage(cfg, state, activeTurn = null) {
-  const isPaused = state.targetStatus === 2;
-  const isClosed = state.targetStatus === 3;
+  const isPaused = state.targetStatus === STORY_STATUS.PAUSED;
+  const isClosed = state.targetStatus === STORY_STATUS.CLOSED;
 
   const embed = buildStoryEmbed(cfg, state, cfg.txtManageEmbedTitle, true);
 
@@ -174,8 +175,8 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       `SELECT t.turn_id, t.thread_id, sw.discord_display_name, sw.discord_user_id,
               sw.story_writer_id, UNIX_TIMESTAMP(t.turn_ends_at) as turn_ends_unix
        FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1`,
-      [storyId]
+       WHERE sw.story_id = ? AND t.turn_status = ?`,
+      [storyId, TURN_STATUS.ACTIVE]
     );
     const activeTurn = activeTurnRows.length > 0 ? activeTurnRows[0] : null;
     log(`handleManage: activeTurn=${activeTurn ? activeTurn.turn_id : 'none'} isCreator=${isCreator} isAdmin=${isAdmin}`, { show: false, guildName: interaction?.guild?.name });
@@ -187,7 +188,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       guildId,
       title: story.title,
       storyTitle: story.title,
-      storyMode: story.mode ?? 0,
+      storyMode: story.mode ?? STORY_MODE.NORMAL,
       turnLength: story.turn_length_hours,
       timeoutReminder: story.reminder_timing ?? 50,
       maxWriters: story.max_writers,
@@ -279,7 +280,7 @@ async function handleManageButton(connection, interaction) {
       }
 
     } else if (customId === 'story_manage_toggle_pauseresume') {
-      state.targetStatus = state.targetStatus === 1 ? 2 : 1;
+      state.targetStatus = state.targetStatus === STORY_STATUS.ACTIVE ? STORY_STATUS.PAUSED : STORY_STATUS.ACTIVE;
       await interaction.deferUpdate();
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
@@ -314,7 +315,7 @@ async function handleManageButton(connection, interaction) {
 
     } else if (customId === 'story_manage_open_settings') {
       const cfg = state.cfg;
-      const isSlowMode = state.storyMode === 2;
+      const isSlowMode = state.storyMode === STORY_MODE.SLOW;
       const turnLengthLabel = isSlowMode ? cfg.txtNA : cfg.lblTurnLength;
       const reminderLabel = isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder;
       const reminderPlaceholder = isSlowMode ? cfg.txtTimeoutReminderSlowPlaceholder : (cfg.txtTimeoutReminderPlaceholder ?? 'Enter 0–100 (0 = no reminder)');
@@ -435,9 +436,9 @@ async function handleManageSave(connection, interaction, state) {
     if (state.targetStatus !== state.originalStatus) {
       await connection.execute(`UPDATE story SET story_status = ? WHERE story_id = ?`, [state.targetStatus, state.storyId]);
 
-      if (state.targetStatus === 2) {
+      if (state.targetStatus === STORY_STATUS.PAUSED) {
         await applyPauseActions(connection, interaction, state);
-      } else if (state.targetStatus === 1) {
+      } else if (state.targetStatus === STORY_STATUS.ACTIVE) {
         await applyResumeActions(connection, interaction, state);
       }
     }
@@ -520,7 +521,7 @@ async function handleManageModalSubmit(connection, interaction) {
 
     } else if (customId === 'story_manage_settings_modal') {
       const cfg = state.cfg;
-      const isSlowMode = state.storyMode === 2;
+      const isSlowMode = state.storyMode === STORY_MODE.SLOW;
 
       const rawTurnLength = sanitizeModalInput(interaction.fields.getTextInputValue('turn_length'), 20);
       if (!isSlowMode && rawTurnLength) {

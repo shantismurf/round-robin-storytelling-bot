@@ -5,6 +5,7 @@ import { isRestricted, ratingBadgeKey } from './_metadata.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './_state.js';
 import { buildEditMessage } from './edit.js';
 import { buildEntryEmbed, buildEntryPages } from './_entryRenderer.js';
+import { WRITER_STATUS, ENTRY_STATUS } from '../constants.js';
 
 export { pendingReadData, lastReadPage };
 
@@ -181,20 +182,20 @@ export async function handleRead(connection, interaction) {
     // Restricted story check — M/E rated stories can only be read in channels that are age-restricted, if the restricted feed if has been configured for this guild
 
     if (isRestricted(story.rating)) {
-log(`handleRead: story isRestricted, Rating: ${story.rating}`,['',guildId]);
+      log(`handleRead: story isRestricted, Rating: ${story.rating}`, { show: false, guildName: interaction?.guild?.name });
       const restrictedChannelId = await getConfigValue(connection, 'cfgRestrictedFeedChannelId', guildId);
-log(`handleRead: restrictedChannelId: ${restrictedChannelId}`,['',guildId]);
-      const isConfigured = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';  
+      log(`handleRead: restrictedChannelId: ${restrictedChannelId}`, { show: false, guildName: interaction?.guild?.name });
+      const isConfigured = restrictedChannelId && restrictedChannelId !== 'cfgRestrictedFeedChannelId' && restrictedChannelId !== '';
 
 if (isConfigured) {
     // 1. Fetch the channel
     const fullChannel = await interaction.client.channels.fetch(interaction.channelId);
 
-    // 2. Logic: If it's a thread, look at the parent's NSFW status. 
+    // 2. Logic: If it's a thread, look at the parent's NSFW status.
     // If it's a regular channel, look at its own NSFW status.
     const isNsfw = fullChannel.nsfw || (fullChannel.parent && fullChannel.parent.nsfw);
 
-    log(`handleRead: Configured: ${isConfigured}, Channel: ${fullChannel.name}, NSFW: ${isNsfw}`, ['', guildId]);
+    log(`handleRead: Configured: ${isConfigured}, Channel: ${fullChannel.name}, NSFW: ${isNsfw}`, { show: false, guildName: interaction?.guild?.name });
 
     // 3. Perform the check against the resolved status
     if (!isNsfw) {
@@ -211,15 +212,15 @@ if (isConfigured) {
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
                WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) AS turn_number,
               sw.discord_display_name
        FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+       WHERE sw.story_id = ? AND se.entry_status = ?
        ORDER BY t.started_at`,
-      [storyId]
+      [ENTRY_STATUS.CONFIRMED, storyId, ENTRY_STATUS.CONFIRMED]
     );
 
     if (entries.length === 0) {
@@ -272,8 +273,8 @@ if (isConfigured) {
       checkIsCreator(connection, storyId, interaction.user.id)
     ]);
     const [writerRows] = await connection.execute(
-      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
-      [storyId, interaction.user.id]
+      `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = ?`,
+      [storyId, interaction.user.id, WRITER_STATUS.ACTIVE]
     );
     const isActiveWriter = writerRows.length > 0;
 

@@ -1,5 +1,6 @@
 import { log } from '../utilities.js';
 import { departWriter, buildSyntheticContext } from './_turn.js';
+import { STORY_STATUS, WRITER_STATUS } from '../constants.js';
 
 /**
  * Sweeps a user who left or was banned from a guild out of every story they're
@@ -18,8 +19,8 @@ export async function handleWriterDeparted(connection, client, guildId, userId) 
     `SELECT sw.story_writer_id, sw.story_id
      FROM story_writer sw
      JOIN story s ON sw.story_id = s.story_id
-     WHERE sw.discord_user_id = ? AND s.guild_id = ? AND sw.sw_status IN (1, 2) AND s.story_status IN (1, 2, 4)`,
-    [userId, guildId]
+     WHERE sw.discord_user_id = ? AND s.guild_id = ? AND sw.sw_status IN (?, ?) AND s.story_status IN (?, ?, ?)`,
+    [userId, guildId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED]
   );
   if (writerRows.length === 0) return;
 

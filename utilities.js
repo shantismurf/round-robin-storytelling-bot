@@ -1,6 +1,7 @@
 import fs from 'fs';
 import path from 'path';
 import mysql from 'mysql2/promise';
+import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, ENTRY_STATUS } from './constants.js';
 
 export function loadConfig() {
   const cfgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'config.json');
@@ -261,17 +262,17 @@ export async function closeOrphanedGuildStories(connection, guildId) {
     `UPDATE turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      JOIN story s ON sw.story_id = s.story_id
-     SET t.turn_status = 0, t.ended_at = NOW()
-     WHERE s.guild_id = ? AND s.story_status IN (1, 2, 4) AND t.turn_status = 1`,
-    [guildId]
+     SET t.turn_status = ?, t.ended_at = NOW()
+     WHERE s.guild_id = ? AND s.story_status IN (?, ?, ?) AND t.turn_status = ?`,
+    [TURN_STATUS.ENDED, guildId, STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED, TURN_STATUS.ACTIVE]
   );
   const [storyResult] = await connection.execute(
-    `UPDATE story SET story_status = 3, closed_at = NOW() WHERE guild_id = ? AND story_status IN (1, 2, 4)`,
-    [guildId]
+    `UPDATE story SET story_status = ?, closed_at = NOW() WHERE guild_id = ? AND story_status IN (?, ?, ?)`,
+    [STORY_STATUS.CLOSED, guildId, STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED]
   );
   const [jobResult] = await connection.execute(
-    `UPDATE job SET job_status = 3 WHERE job_status IN (0, 1) AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-    [String(guildId)]
+    `UPDATE job SET job_status = ? WHERE job_status IN (?, ?) AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, String(guildId)]
   );
   log(`closeOrphanedGuildStories: ended ${turnResult.affectedRows} active turn(s), closed ${storyResult.affectedRows} story/stories, and cancelled ${jobResult.affectedRows} pending job(s) for guild ${guildId}`, { show: true, hub: true });
 }
@@ -314,34 +315,6 @@ export async function getConfigValue(connection, key, guildId = 1) {
       return Object.fromEntries(key.map(k => [k, k]));
     }
     return key;
-  }
-}
-
-export async function sendUserMessage(connection, interaction, storyWriterId, cfgMessageKey) {
-  // Get writer and story info
-  const [writerInfo] = await connection.execute(
-    `SELECT sw.discord_user_id, s.guild_id 
-     FROM story_writer sw 
-     JOIN story s ON sw.story_id = s.story_id 
-     WHERE sw.story_writer_id = ?`,
-    [storyWriterId]
-  );
-  const { discord_user_id, guild_id } = writerInfo[0];
-  
-  // Get messages from config, use dm key name to get mention key name
-  const dmMessage = await getConfigValue(connection,cfgMessageKey, guild_id);
-  const mentionKey = cfgMessageKey.replace('txtDM', 'txtMention'); // txtDMTurnStart -> txtMentionTurnStart
-  const mentionMessage = await getConfigValue(connection,mentionKey, guild_id);
-  
-  try {
-    const user = await interaction.client.users.fetch(discord_user_id);
-    await user.send(dmMessage);
-    return `${formattedDate()}:  ` + cfgMessageKey + ' DM sent successfully';
-  } catch (dmError) {
-    const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guild_id);
-    const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
-    await channel.send(`<@${discord_user_id}> ${mentionMessage}`);
-    return `${formattedDate()}:  ` + cfgMessageKey + ' Mention sent in channel';
   }
 }
 
@@ -430,9 +403,9 @@ export async function getTurnNumber(connection, storyId) {
     `SELECT COUNT(DISTINCT t.turn_id) + 1 AS turn_number
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+     JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
      WHERE sw.story_id = ?`,
-    [storyId]
+    [ENTRY_STATUS.CONFIRMED, storyId]
   );
   log(`getTurnNumber result: ${result[0].turn_number} for story ${storyId}`, { show: false });
   return result[0].turn_number;
@@ -463,89 +436,6 @@ export async function checkIsAdmin(connection, interaction, guildId) {
 }
 
 /**
- * Creates a Discord thread with appropriate permissions
- * @param {Object} interaction - Discord interaction object
- * @param {string} guildID - Guild ID
- * @param {Object} keyValueMap - Configuration object containing:
- *   - titleTemplateKey: Config key for thread title template
- *   - threadType: ChannelType.PublicThread or ChannelType.PrivateThread
- *   - reason: Reason for audit log
- *   - targetUserId: (optional) User ID for thread permissions
- *   - Any template variables for title replacement (story_id, etc.)
- * @returns {Object} Created Discord thread
- */
-export async function createThread(interaction, guildID, keyValueMap) {
-  log(`createThread entry for guild ${guildID} type ${keyValueMap.threadType} target ${keyValueMap.targetUserId ?? 'none'}`, { show: false });
-  // Set up thread configuration
-  const { titleTemplateKey, threadType, reason, targetUserId } = keyValueMap;
-  const storyFeedChannelId = await getConfigValue(connection,'cfgStoryFeedChannelId', guildID);
-  const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
-  
-  if (!channel) {
-    throw new Error(`${formattedDate()}: Story feed channel not found`);
-  }
-  
-  // Get admin role (used for both public and private thread permissions)
-  const adminRoleName = await getConfigValue(connection,'cfgAdminRoleName', guildID);
-  const adminRole = interaction.guild.roles.cache.find(r => r.name === adminRoleName);
-  
-  if (!adminRole) {
-    log(`Admin role '${adminRoleName}' not found - skipping admin permissions`, { show: true });
-  }
-  
-  // Get and build thread title
-  const titleTemplate = await getConfigValue(connection,titleTemplateKey, guildID);
-  const threadTitle = replaceTemplateVariables(titleTemplate, keyValueMap);
-  
-  // Create thread
-  log(`createThread creating "${threadTitle}" in channel ${storyFeedChannelId}`, { show: false });
-  const thread = await channel.threads.create({
-    name: threadTitle,
-    type: threadType,
-    reason: reason
-  });
-  log(`createThread created thread ${thread.id}`, { show: false });
-  
-  // Set permissions if needed
-  if (threadType === ChannelType.PublicThread && targetUserId) {
-    // Public thread with restricted permissions
-    await thread.permissionOverwrites.create(interaction.guild.roles.everyone, {
-      SendMessages: false,
-      AddReactions: true,
-      ViewChannel: true
-    });
-    
-    await thread.permissionOverwrites.create(targetUserId, {
-      SendMessages: true,
-      ViewChannel: true
-    });
-    
-    if (adminRole) {
-      await thread.permissionOverwrites.create(adminRole.id, {
-        SendMessages: true,
-        ManageMessages: true,
-        ViewChannel: true
-      });
-    }
-  } else if (threadType === ChannelType.PrivateThread && targetUserId) {
-    // Private thread - add target user and admin
-    await thread.members.add(targetUserId);
-    if (adminRole) {
-      // Add each admin user individually (Discord limitation for private threads)
-      for (const member of adminRole.members.values()) {
-        try {
-          await thread.members.add(member.id);
-        } catch (error) {
-          log(`Failed to add admin ${member.displayName} to private thread: ${error}`, { show: true });
-        }
-      }
-    }
-  }
-  
-  return thread;
-}
-
-/**
  * Validate if story exists, belongs to guild, and is active (status = 1).
  * Used by write, manage, close, timeleft handlers.
  */
@@ -568,7 +458,7 @@ export async function validateStoryAccess(connection, storyId, guildId) {
       return { success: false, error: await getConfigValue(connection,'txtStoryWrongGuild', guildId) };
     }
 
-    if (story.story_status !== 1) {
+    if (story.story_status !== STORY_STATUS.ACTIVE) {
       log(`validateStoryAccess: story ${storyId} not active (status=${story.story_status})`, { show: false });
       return { success: false, error: await getConfigValue(connection,'txtStoryNotActive', guildId) };
     }
@@ -592,9 +482,9 @@ export async function validateActiveWriter(connection, userId, storyId) {
       SELECT sw.discord_user_id as current_writer
       FROM turn t
       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-      WHERE sw.story_id = ? AND t.turn_status = 1
+      WHERE sw.story_id = ? AND t.turn_status = ?
       ORDER BY t.turn_id DESC LIMIT 1
-    `, [storyId]);
+    `, [storyId, TURN_STATUS.ACTIVE]);
 
     if (writerInfo.length === 0 || writerInfo[0].current_writer !== userId) {
       log(`validateActiveWriter: user ${userId} is not the active writer for story ${storyId}`, { show: false });
@@ -620,8 +510,8 @@ export async function validateActiveWriter(connection, userId, storyId) {
  */
 export async function checkIsCreator(connection, storyId, userId) {
   const [rows] = await connection.execute(
-    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC LIMIT 1`,
-    [storyId]
+    `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status = ? ORDER BY joined_at ASC LIMIT 1`,
+    [storyId, WRITER_STATUS.ACTIVE]
   );
   return rows.length > 0 && String(rows[0].discord_user_id) === userId;
 }

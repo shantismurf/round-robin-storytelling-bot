@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'disc
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
+import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, STORY_MODE, ENTRY_STATUS } from '../constants.js';
 
 /**
  * Build thread title string from config templates.
@@ -15,7 +16,7 @@ export async function buildThreadTitle(connection, story) {
     getConfigValue(connection, 'txtDelayed', story.guild_id),
     getConfigValue(connection, 'txtStoryThreadTitle', story.guild_id),
   ]);
-  const statusLabel = { 1: txtActive, 2: txtPaused, 3: txtClosed, 4: txtDelayed }[story.story_status] ?? txtActive;
+  const statusLabel = { [STORY_STATUS.ACTIVE]: txtActive, [STORY_STATUS.PAUSED]: txtPaused, [STORY_STATUS.CLOSED]: txtClosed, [STORY_STATUS.DELAYED]: txtDelayed }[story.story_status] ?? txtActive;
   return titleTemplate
     .replace('[story_id]', story.guild_story_id)
     .replace('[inputStoryTitle]', story.title)
@@ -52,8 +53,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       `SELECT t.turn_ends_at, t.story_writer_id, sw.discord_display_name
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1`,
-      [storyId]
+       WHERE sw.story_id = ? AND t.turn_status = ?`,
+      [storyId, TURN_STATUS.ACTIVE]
     );
     const activeTurn = activeTurnRows[0] ?? null;
 
@@ -62,8 +63,8 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       `SELECT se.content FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'`,
-      [storyId]
+       WHERE sw.story_id = ? AND se.entry_status = ?`,
+      [storyId, ENTRY_STATUS.CONFIRMED]
     );
     const entryCount = confirmedEntries.length;
     const cdnImageRegex = /https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+/g;
@@ -106,13 +107,13 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const txtOrderFixed = cfg.txtOrderFixed;
     const ratingBadgeDisplay = cfg[ratingBadgeCfgKey];
 
-    const statusMap = { 1: `▶️ ${txtActive}`, 2: `⏸️ ${txtPaused}`, 3: `🔒 ${txtClosed}`, 4: `⏳ ${txtDelayed}` };
+    const statusMap = { [STORY_STATUS.ACTIVE]: `▶️ ${txtActive}`, [STORY_STATUS.PAUSED]: `⏸️ ${txtPaused}`, [STORY_STATUS.CLOSED]: `🔒 ${txtClosed}`, [STORY_STATUS.DELAYED]: `⏳ ${txtDelayed}` };
     const orderMap = { 1: `🎲 ${txtOrderRandom}`, 2: `🔄 ${txtOrderRoundRobin}`, 3: `📋 ${txtOrderFixed}` };
     const colorMap = { 1: 0x57f287, 2: 0xfee75c, 3: 0xed4245 };
 
-    const activeWriters = writers.filter(w => w.sw_status === 1);
-    const pausedWriters = writers.filter(w => w.sw_status === 2);
-    const leftWriters   = writers.filter(w => w.sw_status === 0);
+    const activeWriters = writers.filter(w => w.sw_status === WRITER_STATUS.ACTIVE);
+    const pausedWriters = writers.filter(w => w.sw_status === WRITER_STATUS.PAUSED);
+    const leftWriters   = writers.filter(w => w.sw_status === WRITER_STATUS.LEFT);
 
     // Creator = first writer to join (first in joined_at ASC order among active writers)
     const creatorId = activeWriters[0]?.story_writer_id ?? null;
@@ -148,12 +149,12 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         turnValue = `**${activeTurn.discord_display_name}** — ${cfg.txtStatusSlowModeNoTimer}`;
       }
     } else {
-      turnValue = story.story_status === 1 ? cfg.txtStatusNoActiveTurn : '—';
+      turnValue = story.story_status === STORY_STATUS.ACTIVE ? cfg.txtStatusNoActiveTurn : '—';
     }
 
     // Next writer — only deterministic for Fixed order; Random and Round Robin are selected at turn change
     let nextWriterValue = '—';
-    if (story.story_status === 1) {
+    if (story.story_status === STORY_STATUS.ACTIVE) {
       if (story.next_writer_id) {
         const nw = writers.find(w => w.story_writer_id === story.next_writer_id);
         nextWriterValue = nw ? `📌 **${nw.discord_display_name}** ${cfg.txtStatusNextManual}` : `📌 ${cfg.txtStatusNextManual}`;
@@ -173,7 +174,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     let reminderText = '';
     if (story.reminder_timing > 0) {
-      reminderText = story.mode === 2
+      reminderText = story.mode === STORY_MODE.SLOW
         ? replaceTemplateVariables(cfg.txtStatusReminderSuffixSlow, { hours: story.reminder_timing })
         : replaceTemplateVariables(cfg.txtStatusReminderSuffix, { percent: story.reminder_timing });
     }
@@ -205,9 +206,9 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       .addFields(
         ...(story.tags ? [{ name: cfg.lblStatusTags, value: story.tags, inline: false }] : []),
         { name: cfg.lblStatusStatus,      value: statusMap[story.story_status] ?? '—',                                         inline: true },
-        { name: cfg.lblStatusMode,        value: story.mode === 1 ? cfg.txtModeQuick : story.mode === 2 ? cfg.txtModeSlow : cfg.txtModeNormal, inline: true },
+        { name: cfg.lblStatusMode,        value: story.mode === STORY_MODE.QUICK ? cfg.txtModeQuick : story.mode === STORY_MODE.SLOW ? cfg.txtModeSlow : cfg.txtModeNormal, inline: true },
         { name: cfg.lblStatusWriterOrder, value: orderMap[story.story_order_type] ?? '—',                                                        inline: true },
-        { name: cfg.lblStatusTurnLength,  value: story.mode === 2 ? cfg.txtNA : `${story.turn_length_hours}h${reminderText}`,                    inline: true },
+        { name: cfg.lblStatusTurnLength,  value: story.mode === STORY_MODE.SLOW ? cfg.txtNA : `${story.turn_length_hours}h${reminderText}`,                    inline: true },
         { name: cfg.lblStatusWriters,     value: `${activeWriters.length}/${story.max_writers || '∞'} · ${joinStatus}`,        inline: true },
         { name: cfg.lblStatusShowAuthors, value: story.show_authors ? cfg.txtYes : cfg.txtNo,                                  inline: true },
         { name: cfg.lblStatusCurrentTurn, value: turnValue,                                                                    inline: true },
@@ -219,7 +220,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       .setTimestamp();
 
     if (story.summary) embed.setDescription(story.summary);
-    if (story.story_status === 3 && story.closed_at) {
+    if (story.story_status === STORY_STATUS.CLOSED && story.closed_at) {
       const closedTimestamp = `<t:${Math.floor(new Date(story.closed_at).getTime() / 1000)}:D>`;
       embed.addFields({ name: cfg.lblStatusClosed, value: closedTimestamp, inline: true });
     }
@@ -237,7 +238,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     } catch {}
 
     // Add Join button if story is open for new writers
-    const isJoinable = story.story_status !== 3
+    const isJoinable = story.story_status !== STORY_STATUS.CLOSED
       && story.allow_joins
       && (!story.max_writers || activeWriters.length < story.max_writers);
 
@@ -257,7 +258,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     }
 
     // Add "Suggest a Tag" button for active stories
-    if (story.story_status === 1) {
+    if (story.story_status === STORY_STATUS.ACTIVE) {
       const btnSubmitTag = await getConfigValue(connection, 'btnSubmitTag', story.guild_id);
       actionRow.addComponents(
         new ButtonBuilder()

@@ -4,6 +4,7 @@ import { postThreadEntry } from './_entryRenderer.js';
 import { pendingReadData, pendingEditData } from './_state.js';
 import { buildReadEmbed } from './read.js';
 import { getActiveThreadId } from '../storybot.js';
+import { ENTRY_STATUS } from '../constants.js';
 
 export { pendingEditData };
 
@@ -35,7 +36,7 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
                JOIN story_entry se2 ON se2.turn_id = t2.turn_id
-                 AND se2.entry_status = 'confirmed'
+                 AND se2.entry_status = ?
                WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
               ) AS turn_number
        FROM story_entry se
@@ -43,8 +44,8 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story s ON sw.story_id = s.story_id
        WHERE se.story_entry_id = ?
-         AND se.entry_status = 'confirmed'`,
-      [entryId]
+         AND se.entry_status = ?`,
+      [ENTRY_STATUS.CONFIRMED, entryId, ENTRY_STATUS.CONFIRMED]
     );
   } else {
     // Path A: resolve by turn number — uses confirmed-only count to match /story read numbering
@@ -57,16 +58,16 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_id = ?
-         AND se.entry_status = 'confirmed'
+         AND se.entry_status = ?
          AND (
            SELECT COUNT(DISTINCT t2.turn_id)
            FROM turn t2
            JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
            JOIN story_entry se2 ON se2.turn_id = t2.turn_id
-             AND se2.entry_status = 'confirmed'
+             AND se2.entry_status = ?
            WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
          ) = ?`,
-      [storyId, turnNumber]
+      [storyId, ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, turnNumber]
     );
   }
 
@@ -367,7 +368,7 @@ async function handleRestoreConfirm(connection, interaction, editId) {
   if (!state) return;
 
   const editCfg = state.editCfg ?? {};
-  const confirmText = state.entryStatus === 'deleted'
+  const confirmText = state.entryStatus === ENTRY_STATUS.DELETED
     ? (editCfg.txtEditRestoreConfirmSingle ?? 'Restore this entry to the story? It will reappear in `/story read` and exports, and will alter the story\'s turn count.')
     : (editCfg.txtEditRestoreConfirmMulti ?? 'Restore this version? This will replace your entire current entry, including content not shown on this page, and will alter the story\'s turn count.');
 
@@ -407,10 +408,10 @@ async function handleRestoreExecute(connection, interaction, editId) {
   const txn = await connection.getConnection();
   await txn.beginTransaction();
   try {
-    if (state.entryStatus === 'deleted') {
+    if (state.entryStatus === ENTRY_STATUS.DELETED) {
       await txn.execute(
-        `UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?`,
-        [state.entryId]
+        `UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?`,
+        [ENTRY_STATUS.CONFIRMED, state.entryId]
       );
     } else {
       const [current] = await txn.execute(
@@ -598,15 +599,15 @@ async function handleEditModalSubmit(connection, interaction) {
       `SELECT se.story_entry_id FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+       WHERE sw.story_id = ? AND se.entry_status = ?
          AND (
            SELECT COUNT(DISTINCT t2.turn_id)
            FROM turn t2
            JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-           JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+           JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
            WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at
          ) = ?`,
-      [state.storyId, state.turnNumber + 1]
+      [state.storyId, ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, state.turnNumber + 1]
     );
     if (nextRows.length > 0) {
       extraButtons.push(
@@ -638,7 +639,7 @@ async function handleRepostEntry(connection, interaction) {
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
                WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) AS turn_number,
               (SELECT see.edited_at FROM story_entry_edit see WHERE see.entry_id = se.story_entry_id ORDER BY see.edited_at DESC LIMIT 1) AS last_edited_at,
               (SELECT see.edited_by FROM story_entry_edit see WHERE see.entry_id = se.story_entry_id ORDER BY see.edited_at DESC LIMIT 1) AS last_editor_id
@@ -646,8 +647,8 @@ async function handleRepostEntry(connection, interaction) {
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story s ON sw.story_id = s.story_id
-       WHERE se.story_entry_id = ? AND se.entry_status = 'confirmed'`,
-      [entryId]
+       WHERE se.story_entry_id = ? AND se.entry_status = ?`,
+      [ENTRY_STATUS.CONFIRMED, entryId, ENTRY_STATUS.CONFIRMED]
     );
 
     if (rows.length === 0) {

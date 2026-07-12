@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables } from '../utilities.js';
+import { ENTRY_STATUS } from '../constants.js';
 
 // Keyed by userId — holds state for the in-progress entry browse session
 const pendingEntryData = new Map();
@@ -29,9 +30,9 @@ async function fetchContributingWriters(connection, storyId, nameFragment = null
     FROM story_writer sw
     JOIN turn t ON t.story_writer_id = sw.story_writer_id
     JOIN story_entry se ON se.turn_id = t.turn_id
-    WHERE sw.story_id = ? AND se.entry_status IN ('confirmed', 'deleted')
+    WHERE sw.story_id = ? AND se.entry_status IN (?, ?)
   `;
-  const params = [storyId];
+  const params = [storyId, ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.DELETED];
   if (nameFragment) {
     sql += ` AND sw.discord_display_name LIKE ?`;
     params.push(`%${nameFragment}%`);
@@ -53,15 +54,15 @@ async function fetchWriterEntries(connection, storyId, storyWriterId, offset = 0
         SELECT COUNT(DISTINCT t2.turn_id)
         FROM turn t2
         JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-        JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status IN ('confirmed', 'deleted')
+        JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status IN (?, ?)
         WHERE sw2.story_id = ? AND t2.started_at <= t.started_at
       ) AS turn_number
     FROM story_entry se
     JOIN turn t ON se.turn_id = t.turn_id
-    WHERE t.story_writer_id = ? AND se.entry_status IN ('confirmed', 'deleted')
+    WHERE t.story_writer_id = ? AND se.entry_status IN (?, ?)
     ORDER BY t.started_at ASC
     LIMIT ? OFFSET ?
-  `, [storyId, storyWriterId, ENTRY_PAGE_SIZE + 1, offset]);
+  `, [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.DELETED, storyId, storyWriterId, ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.DELETED, ENTRY_PAGE_SIZE + 1, offset]);
   return rows;
 }
 
@@ -98,7 +99,7 @@ function buildEntrySelectMessage(cfg, entries, writerName, hasMore, entryOffset 
   const options = pageEntries.map(e => {
     const preview = e.preview ? e.preview.replace(/\n/g, ' ') : '';
     const label = `Turn ${e.turn_number} — ${e.word_count} words — ${preview}`.slice(0, 100);
-    const statusFlag = e.entry_status === 'deleted' ? ` ${cfg.txtManageEntriesDeletedFlag}` : '';
+    const statusFlag = e.entry_status === ENTRY_STATUS.DELETED ? ` ${cfg.txtManageEntriesDeletedFlag}` : '';
     return {
       label: (label + statusFlag).slice(0, 100),
       value: String(e.story_entry_id)
@@ -285,13 +286,13 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
                 SELECT COUNT(DISTINCT t2.turn_id)
                 FROM turn t2
                 JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-                JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status IN ('confirmed','deleted')
+                JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status IN (?, ?)
                 WHERE sw2.story_id = ? AND t2.started_at <= t.started_at
               ) AS turn_number
        FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        WHERE se.story_entry_id = ?`,
-      [pending.storyId, entryId]
+      [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.DELETED, pending.storyId, entryId]
     );
 
     if (!entry) {
@@ -319,19 +320,19 @@ export async function handleManageEntriesSelectMenu(connection, interaction) {
       ))
       .setDescription(contentPreview)
       .setFooter({ text: footerText })
-      .setColor(entry.entry_status === 'deleted' ? 0xff6b6b : 0x57F287);
+      .setColor(entry.entry_status === ENTRY_STATUS.DELETED ? 0xff6b6b : 0x57F287);
 
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder()
         .setCustomId('story_manage_entries_delete')
         .setLabel(cfg.btnManageEntriesDelete)
         .setStyle(ButtonStyle.Danger)
-        .setDisabled(entry.entry_status === 'deleted'),
+        .setDisabled(entry.entry_status === ENTRY_STATUS.DELETED),
       new ButtonBuilder()
         .setCustomId('story_manage_entries_restore')
         .setLabel(cfg.btnManageEntriesRestore)
         .setStyle(ButtonStyle.Secondary)
-        .setDisabled(entry.entry_status === 'confirmed'),
+        .setDisabled(entry.entry_status === ENTRY_STATUS.CONFIRMED),
       new ButtonBuilder()
         .setCustomId('story_manage_entries_back')
         .setLabel(cfg.btnManageEntriesBack)
@@ -361,11 +362,11 @@ export async function handleManageEntriesActionButton(connection, interaction) {
       const [[current]] = await connection.execute(
         `SELECT entry_status FROM story_entry WHERE story_entry_id = ?`, [entryId]
       );
-      if (!current || current.entry_status === 'deleted') {
+      if (!current || current.entry_status === ENTRY_STATUS.DELETED) {
         await interaction.update({ content: cfg.txtManageEntryAlreadyDeleted, embeds: [], components: [] });
         return;
       }
-      await connection.execute(`UPDATE story_entry SET entry_status = 'deleted' WHERE story_entry_id = ?`, [entryId]);
+      await connection.execute(`UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?`, [ENTRY_STATUS.DELETED, entryId]);
       log(`Entry deleted: ${entryId}`, { show: true, guildName: interaction?.guild?.name });
       pendingEntryData.delete(userId);
       await interaction.update({
@@ -378,11 +379,11 @@ export async function handleManageEntriesActionButton(connection, interaction) {
       const [[current]] = await connection.execute(
         `SELECT entry_status FROM story_entry WHERE story_entry_id = ?`, [entryId]
       );
-      if (!current || current.entry_status === 'confirmed') {
+      if (!current || current.entry_status === ENTRY_STATUS.CONFIRMED) {
         await interaction.update({ content: cfg.txtManageEntryAlreadyConfirmed, embeds: [], components: [] });
         return;
       }
-      await connection.execute(`UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?`, [entryId]);
+      await connection.execute(`UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?`, [ENTRY_STATUS.CONFIRMED, entryId]);
       log(`Entry restored: ${entryId} for writer ${pending.selectedWriterName}`, { show: true, guildName: interaction?.guild?.name });
       pendingEntryData.delete(userId);
       await interaction.update({

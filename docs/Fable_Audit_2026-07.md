@@ -201,7 +201,7 @@ Grounded in friction visible in the code; building toward the existing roadmap (
 
 **5.5 Multi-panel sessions (1.28) have a UX face:** an admin managing two stories, or creating while managing, gets crossed wires with no warning. Cheapest fix consistent with current architecture: when opening a second panel, edit the first panel's message to "superseded by your newer panel" before overwriting the session.
 
-**5.6 Can't clear metadata once set** (1.24): add an explicit "— none —" option to rating/dynamic selects rather than treating empty selection as "no change", and say which semantics apply in the placeholder.
+**5.6 Can't clear metadata once set** (1.24): add an explicit "— none —" option to dynamic selects rather than treating empty selection as "no change", and say which semantics apply in the placeholder.
 
 **5.7 Toward Reactions/Kudos and Hub Sharing:** the status-message pattern (persistent, edited-in-place, id stored on story) is the right chassis for the reaction-repost feature — but note 2.1 first, since Reactions will multiply status-update frequency. For Hub Sharing's consent points, the join flow already has the confirm-panel pattern to hang a consent notice on (`buildJoinEmbed` + `handleJoinConfirm` revalidation is the natural insertion point).
 

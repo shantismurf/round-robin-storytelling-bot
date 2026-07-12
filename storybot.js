@@ -1,6 +1,6 @@
-import { EventEmitter } from 'events';
 import { getConfigValue, log } from './utilities.js';
 import { ChannelType } from 'discord.js';
+import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, STORY_MODE } from './constants.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement } from './announcements.js';
 import { resolveFeedChannelId, isRestricted } from './story/_metadata.js';
 import { checkStoryDelay } from './story/_delay.js';
@@ -11,37 +11,6 @@ export { checkStoryDelay } from './story/_delay.js';
 export { PickNextWriter, NextTurn, postStoryThreadActivity, deleteThreadAndAnnouncement, skipActiveTurn } from './story/_turn.js';
 export { updateStoryStatusMessage } from './story/_storyStatus.js';
 export { migrateStoryThread } from './story/_migration.js';
-
-/**
- * StoryBot.js contains story engine logic and emits 'publish' events when it
- * wants something posted to Discord. index.js owns the Discord client and
- * listens for those events to perform posting. Announcements are handled
- * in announcements.js which is called from storybot.js and commands/story.js.
- */
-export class StoryBot extends EventEmitter {
-  constructor(config) {
-    super();
-    this.config = config || {};
-  }
-
-  async start() {
-    // initialize schedulers, etc. (no Discord login here)
-    log('Round Robin StoryBot engine initialized', { show: true });
-  }
-
-  async stop() {
-    // stop internal timers/workers
-  }
-
-  /**
-   * Compose a simple publish payload and emit it. Payload is a plain object
-   * so the caller (index.js) can convert to discord.js EmbedBuilder.
-   */
-  emitPublish(channelID, { title, author, description, footer, content, files } = {}) {
-    const embedData = { title, author, description, footer };
-    this.emit('publish', { channelId: channelID, content: content || null, embeds: [embedData], files: files || [] });
-  }
-}
 
 /**
  * Returns the currently active story thread ID.
@@ -67,7 +36,7 @@ export async function CreateStory(connection, interaction, storyInput) {
   try {
 
     // Step 1: Insert story record
-    const storyStatus = (storyInput.delayHours > 0 || storyInput.delayWriters > 0) ? 4 : 1; // 4 = waiting (delayed), 1 = active
+    const storyStatus = (storyInput.delayHours > 0 || storyInput.delayWriters > 0) ? STORY_STATUS.DELAYED : STORY_STATUS.ACTIVE;
 
     // Calculate next guild-local story number
     const [[{ nextGuildStoryId }]] = await txn.execute(
@@ -85,7 +54,7 @@ export async function CreateStory(connection, interaction, storyInput) {
         nextGuildStoryId,
         storyInput.storyTitle,
         storyStatus,
-        storyInput.mode ?? 0,
+        storyInput.mode ?? STORY_MODE.NORMAL,
         storyInput.turnLength,
         storyInput.timeoutReminder,
         storyInput.hideTurnThreads,
@@ -114,7 +83,7 @@ export async function CreateStory(connection, interaction, storyInput) {
       const delayTime = new Date(Date.now() + (storyInput.delayHours * 60 * 60 * 1000));
       await txn.execute(
         `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
-        ['checkStoryDelay', JSON.stringify({ storyId }), delayTime, 0]
+        ['checkStoryDelay', JSON.stringify({ storyId }), delayTime, JOB_STATUS.PENDING]
       );
     }
 
@@ -153,7 +122,7 @@ export async function CreateStory(connection, interaction, storyInput) {
     }
 
     // Step 6: Start first turn if story is active (no delay)
-    if (storyStatus === 1) {
+    if (storyStatus === STORY_STATUS.ACTIVE) {
       const firstWriterId = await PickNextWriter(txn, storyId);
       if (!firstWriterId) {
         throw new Error('No writer available to start the first turn');
@@ -172,7 +141,7 @@ export async function CreateStory(connection, interaction, storyInput) {
 
     // Post initial status message (NextTurn already posted one if story is active;
     // this covers delayed stories where no turn has started yet)
-    if (storyStatus !== 1) {
+    if (storyStatus !== STORY_STATUS.ACTIVE) {
       updateStoryStatusMessage(connection, interaction.guild, storyId)
         .catch(err => log(`CreateStory: updateStoryStatusMessage failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
     }
@@ -227,8 +196,8 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
 
     // Assign writer_order = current active writer count + 1 so fixed order works correctly
     const [countResult] = await connection.execute(
-      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1`,
-      [storyId]
+      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = ?`,
+      [storyId, WRITER_STATUS.ACTIVE]
     );
     const writerOrder = countResult[0].count + 1;
 

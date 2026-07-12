@@ -4,25 +4,26 @@ import { endTurnThread, closeStoryInternals } from './_turn.js';
 import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
 import { getActiveThreadId } from '../storybot.js';
+import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
 
 // Direct stats query — independent of export generation, since export is now a manual, optional step after close.
 async function getStoryStats(connection, storyId) {
   const [writerRows] = await connection.execute(
-    `SELECT COUNT(*) AS writerCount FROM story_writer WHERE story_id = ? AND sw_status = 1`,
-    [storyId]
+    `SELECT COUNT(*) AS writerCount FROM story_writer WHERE story_id = ? AND sw_status = ?`,
+    [storyId, WRITER_STATUS.ACTIVE]
   );
   const [entryRows] = await connection.execute(
     `SELECT se.content,
             (SELECT COUNT(DISTINCT t2.turn_id) FROM turn t2
              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-             JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+             JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
              WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
      FROM story_entry se
      JOIN turn t ON se.turn_id = t.turn_id
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+     WHERE sw.story_id = ? AND se.entry_status = ?
      ORDER BY t.started_at`,
-    [storyId]
+    [ENTRY_STATUS.CONFIRMED, storyId, ENTRY_STATUS.CONFIRMED]
   );
   const turnCount = entryRows.length ? entryRows[entryRows.length - 1].turn_number : 0;
   const wordCount = entryRows.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
@@ -48,14 +49,14 @@ export async function handleClose(connection, interaction) {
     }
     const story = storyRows[0];
 
-    if (story.story_status === 3) {
+    if (story.story_status === STORY_STATUS.CLOSED) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryAlreadyClosed', guildId) });
     }
 
     // Auth: oldest active writer (creator) OR admin role
     const [creatorRows] = await connection.execute(
-      `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC LIMIT 1`,
-      [storyId]
+      `SELECT discord_user_id FROM story_writer WHERE story_id = ? AND sw_status = ? ORDER BY joined_at ASC LIMIT 1`,
+      [storyId, WRITER_STATUS.ACTIVE]
     );
     const isCreator = creatorRows.length > 0 && String(creatorRows[0].discord_user_id) === interaction.user.id;
     const isAdmin = await checkIsAdmin(connection, interaction, guildId);
@@ -102,7 +103,7 @@ export async function handleCloseConfirm(connection, interaction) {
       `SELECT story_id, guild_story_id, title, story_status, story_thread_id, restricted_thread_id, rating, mode FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
-    if (storyRows.length === 0 || storyRows[0].story_status === 3) {
+    if (storyRows.length === 0 || storyRows[0].story_status === STORY_STATUS.CLOSED) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFoundOrClosed', guildId), components: [] });
     }
     const story = storyRows[0];
@@ -113,9 +114,9 @@ export async function handleCloseConfirm(connection, interaction) {
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1
+       WHERE sw.story_id = ? AND t.turn_status = ?
        ORDER BY t.started_at DESC LIMIT 1`,
-      [storyId]
+      [storyId, TURN_STATUS.ACTIVE]
     );
     const activeTurn = activeTurnRows.length > 0 ? activeTurnRows[0] : null;
 
@@ -184,7 +185,7 @@ export async function handleCloseConfirm(connection, interaction) {
 
     // Clean up the active writer's turn thread now that the reply has been
     // sent — this may delete the thread the interaction was issued from.
-    if (activeTurn && story.mode !== 1) {
+    if (activeTurn && story.mode !== STORY_MODE.QUICK) {
       await endTurnThread(connection, interaction.guild, activeTurn.thread_id, activeTurn.discord_user_id, guildId);
     }
 

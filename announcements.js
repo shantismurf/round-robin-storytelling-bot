@@ -1,5 +1,6 @@
 import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
 import { resolveFeedChannelId, ratingBadgeKey } from './story/_metadata.js';
+import { STORY_MODE, WRITER_STATUS, TURN_STATUS } from './constants.js';
 /**
  * All announcements sent to story feed channel are handled here
  * Join is called from commands/story.js
@@ -18,22 +19,22 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
         log('Story feed channel not configured - skipping join announcement', { show: true, guildName: interaction?.guild?.name });
         return;
       }
-      
+
       const [turnInfo] = await connection.execute(`
         SELECT sw.discord_display_name, t.started_at, s.turn_length_hours, s.mode
         FROM turn t
         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
         JOIN story s ON sw.story_id = s.story_id
-        WHERE sw.story_id = ? AND t.turn_status = 1
+        WHERE sw.story_id = ? AND t.turn_status = ?
         ORDER BY t.started_at DESC LIMIT 1
-      `, [storyId]);
+      `, [storyId, TURN_STATUS.ACTIVE]);
 
       const joinerName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
       let announcement;
 
       if (turnInfo.length > 0) {
         const turn = turnInfo[0];
-        const isSlowMode = turn.mode === 2;
+        const isSlowMode = turn.mode === STORY_MODE.SLOW;
         if (isSlowMode) {
           const txtStoryFeedJoinAnnouncementSlow = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncementSlow', guildId);
           announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncementSlow, {
@@ -87,22 +88,22 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
               s.max_writers, s.allow_joins, s.story_delay_hours, s.story_delay_users,
               s.created_at, s.rating, COUNT(sw.story_writer_id) as writer_count
        FROM story s
-       LEFT JOIN story_writer sw ON sw.story_id = s.story_id AND sw.sw_status = 1
+       LEFT JOIN story_writer sw ON sw.story_id = s.story_id AND sw.sw_status = ?
        WHERE s.story_id = ?
        GROUP BY s.story_id`,
-      [storyId]
+      [WRITER_STATUS.ACTIVE, storyId]
     );
     if (storyRows.length === 0) return;
     const story = storyRows[0];
 
     const creatorName = interaction.member.displayName || interaction.user.displayName || interaction.user.username;
 
-    const modeText = story.mode === 1 ? 'Quick' : story.mode === 2 ? 'Slow' : 'Normal';
+    const modeText = story.mode === STORY_MODE.QUICK ? 'Quick' : story.mode === STORY_MODE.SLOW ? 'Slow' : 'Normal';
     const orderMap = { 1: 'Random', 2: 'Round-Robin', 3: 'Fixed' };
     const orderText = orderMap[story.story_order_type] ?? 'Random';
     const writersText = `${story.writer_count}/${story.max_writers || '∞'} Writers`;
     const openText = story.allow_joins ? 'Open' : 'Closed';
-    const turnLengthText = story.mode === 2 ? 'No Timer' : `${story.turn_length_hours}h Turns`;
+    const turnLengthText = story.mode === STORY_MODE.SLOW ? 'No Timer' : `${story.turn_length_hours}h Turns`;
 
     const delayParts = [];
     if (story.story_delay_hours > 0) {
@@ -186,13 +187,13 @@ export async function postStoryFeedActivationAnnouncement(connection, storyId, i
         FROM turn t
         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
         JOIN story s ON sw.story_id = s.story_id
-        WHERE sw.story_id = ? AND t.turn_status = 1
+        WHERE sw.story_id = ? AND t.turn_status = ?
         ORDER BY t.started_at DESC LIMIT 1
-      `, [storyId]);
+      `, [storyId, TURN_STATUS.ACTIVE]);
 
       if (turnInfo.length > 0) {
         const turn = turnInfo[0];
-        const isSlowMode = turn.mode === 2;
+        const isSlowMode = turn.mode === STORY_MODE.SLOW;
         let announcement;
         if (isSlowMode) {
           const txtStoryFeedNowActiveSlow = await getConfigValue(connection, 'txtStoryFeedNowActiveSlow', guildId);

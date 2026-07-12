@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, endTurnGuarded, endTurnThread, departWriter } from '../story/_turn.js';
+import { WRITER_STATUS, TURN_STATUS } from '../constants.js';
 
 // Pending /mystory manage sessions keyed by user ID
 export const pendingMyStoryManageData = new Map();
@@ -8,7 +9,7 @@ export const pendingMyStoryManageData = new Map();
 // ─── Panel builder ───────────────────────────────────────────────────────────
 
 export function buildMyStoryManagePanel(state, cfg) {
-  const statusLabel = state.writerStatus === 1
+  const statusLabel = state.writerStatus === WRITER_STATUS.ACTIVE
     ? cfg.txtMyStoryManageActiveStatus
     : cfg.txtMyStoryManagePausedStatus;
 
@@ -36,7 +37,7 @@ export function buildMyStoryManagePanel(state, cfg) {
     new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
   );
 
-  const pauseResumeLabel = state.writerStatus === 1 ? cfg.btnMyStoryManagePause : cfg.btnMyStoryManageResume;
+  const pauseResumeLabel = state.writerStatus === WRITER_STATUS.ACTIVE ? cfg.btnMyStoryManagePause : cfg.btnMyStoryManageResume;
   const row3 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('mystory_manage_pass')
@@ -44,7 +45,7 @@ export function buildMyStoryManagePanel(state, cfg) {
       .setStyle(ButtonStyle.Secondary)
       .setDisabled(!state.hasActiveTurn),
     new ButtonBuilder()
-      .setCustomId(state.writerStatus === 1 ? 'mystory_manage_pause' : 'mystory_manage_resume')
+      .setCustomId(state.writerStatus === WRITER_STATUS.ACTIVE ? 'mystory_manage_pause' : 'mystory_manage_resume')
       .setLabel(pauseResumeLabel)
       .setStyle(ButtonStyle.Secondary),
     new ButtonBuilder()
@@ -79,8 +80,8 @@ export async function handleMyStoryManage(connection, interaction) {
 
     const [writerRows] = await connection.execute(
       `SELECT story_writer_id, pen_name, notification_prefs, turn_privacy, sw_status
-       FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (1, 2)`,
-      [storyId, interaction.user.id]
+       FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (?, ?)`,
+      [storyId, interaction.user.id, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
     );
     if (writerRows.length === 0) {
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId) });
@@ -90,8 +91,8 @@ export async function handleMyStoryManage(connection, interaction) {
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [storyId, interaction.user.id]
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?`,
+      [storyId, interaction.user.id, TURN_STATUS.ACTIVE]
     );
     log(`handleMyStoryManage: writerStatus=${writer.sw_status} hasActiveTurn=${activeTurnRows.length > 0}`, { show: false, guildName: interaction?.guild?.name });
 
@@ -149,7 +150,7 @@ export async function handleMyStoryManageButton(connection, interaction) {
 
   } else if (customId === 'mystory_manage_privacy') {
     await interaction.deferUpdate();
-    state.writerTurnPrivacy = state.writerTurnPrivacy ? 0 : 1;
+    state.writerTurnPrivacy = !state.writerTurnPrivacy;
     await interaction.editReply(buildMyStoryManagePanel(state, state.cfg));
 
   } else if (customId === 'mystory_manage_penname') {
@@ -213,11 +214,11 @@ export async function handleMyStoryManageButton(connection, interaction) {
     await interaction.deferUpdate();
     try {
       await connection.execute(
-        `UPDATE story_writer SET sw_status = 1 WHERE story_writer_id = ?`,
-        [state.storyWriterId]
+        `UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`,
+        [WRITER_STATUS.ACTIVE, state.storyWriterId]
       );
       log(`${interaction.user.username} resumed in story ${state.storyId}`, { show: true, guildName: interaction?.guild?.name });
-      state.writerStatus = 1;
+      state.writerStatus = WRITER_STATUS.ACTIVE;
       pendingMyStoryManageData.delete(userId);
       const successMsg = replaceTemplateVariables(state.cfg.txtMyResumeSuccess, { story_title: state.storyTitle });
       await interaction.editReply({ content: successMsg, embeds: [], components: [] });
@@ -231,12 +232,12 @@ export async function handleMyStoryManageButton(connection, interaction) {
     const cfg = state.cfg;
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [state.storyId, userId]
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?`,
+      [state.storyId, userId, TURN_STATUS.ACTIVE]
     );
     const [writerCountRows] = await connection.execute(
-      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
-      [state.storyId, userId]
+      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = ? AND discord_user_id != ?`,
+      [state.storyId, WRITER_STATUS.ACTIVE, userId]
     );
     const isMyTurn = activeTurnRows.length > 0;
     const isLastWriter = writerCountRows[0].count === 0;
@@ -271,8 +272,8 @@ export async function handlePanelPassConfirm(connection, interaction) {
     const [turnInfo] = await connection.execute(
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [storyId, userId]
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?`,
+      [storyId, userId, TURN_STATUS.ACTIVE]
     );
     if (turnInfo.length === 0) {
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId), components: [] });
@@ -317,8 +318,8 @@ export async function handlePanelPauseConfirm(connection, interaction) {
     const [writerRows] = await connection.execute(
       `SELECT sw.story_writer_id, s.title, s.guild_story_id FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
-       WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
-      [storyId, guildId, userId]
+       WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = ?`,
+      [storyId, guildId, userId, WRITER_STATUS.ACTIVE]
     );
     if (writerRows.length === 0) {
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId), components: [] });
@@ -329,11 +330,11 @@ export async function handlePanelPauseConfirm(connection, interaction) {
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [storyId, userId]
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?`,
+      [storyId, userId, TURN_STATUS.ACTIVE]
     );
 
-    await connection.execute(`UPDATE story_writer SET sw_status = 2 WHERE story_writer_id = ?`, [story.story_writer_id]);
+    await connection.execute(`UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`, [WRITER_STATUS.PAUSED, story.story_writer_id]);
 
     if (activeTurnRows.length > 0) {
       const activeTurn = activeTurnRows[0];
@@ -382,8 +383,8 @@ export async function handlePanelLeaveConfirm(connection, interaction) {
     const [writerRows] = await connection.execute(
       `SELECT sw.story_writer_id FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
-       WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status IN (1, 2)`,
-      [storyId, guildId, userId]
+       WHERE sw.story_id = ? AND s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status IN (?, ?)`,
+      [storyId, guildId, userId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
     );
     if (writerRows.length === 0) {
       await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId), components: [] });
