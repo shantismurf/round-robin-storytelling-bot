@@ -246,3 +246,33 @@ All files touched in this expanded step 3 pass `node --check`:
 ---
 
 ## Log
+
+**2026-07-12** — PR #17 (outside steps 1-3, separate session) added `story/_writerDeparted.js`
+for the leave/ban auto-remove feature, explicitly mirroring `handlePanelLeaveConfirm`'s
+protocol. It correctly picked up the step-2 `endTurnGuarded` fix, but also copied that
+handler's two known-open bugs as a new (6th) call site of the same end-turn/delete-thread/
+close-or-advance routine:
+- **1.41**: `deleteThreadAndAnnouncement` called immediately on turn-end, no 24h draft
+  preservation.
+- **1.42**: last-writer departure does `UPDATE story SET story_status=3` only — no job
+  cancellation, no status-message update, no thread cleanup. Third site with this exact
+  half-close bug (alongside `_manageUser.js:359`, `_myStoryManage.js:408`).
+
+Decision: don't patch 1.41/1.42 in each of the now-6 duplicate sites (`_manageUser.js`
+pause/remove, `_myStoryManage.js` pass/pause/leave, `_writerDeparted.js`). Fold into step 4:
+extract the interaction-agnostic core (end turn → 24h-preserve-or-delete thread → flip
+`sw_status` → close-or-advance) into `departWriter(connection, ctx, storyId, writerId)` in
+`_turn.js`, alongside the planned `closeStoryInternals`. `handlePanelLeaveConfirm` and the
+admin pause/remove handlers keep their interaction-specific reply logic but call
+`departWriter` for the shared part; `_writerDeparted.js` calls it directly. This turns a
+6-site bug into a 1-site fix and gives step 4's Phase-2 seam one more reusable function for
+free.
+
+**Sequencing decision:** 1.7 (skip's delete/keep choice ignored) and 1.17 (job-cancel status
+inconsistency — pause/resume use status 2 instead of 3, some INSERTs omit `turn_id`) both
+touch the same turn-end/thread-disposal/job-cancellation surface that step 4 is already
+opening up for `departWriter`/`closeStoryInternals`. Fold both into step 4 rather than
+reopening those files in a separate session. 1.14 (join capacity race) lives in unrelated
+code (`join.js`'s transaction, re-checking `max_writers` inside the existing transaction) and
+doesn't depend on anything step 4 touches — fine as a standalone fix any time, no need to
+wait.
