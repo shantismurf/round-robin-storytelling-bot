@@ -22,6 +22,7 @@ For config string keys, see `db/config_roadmap.md`.
 | `commands/mystory.js` | `/mystory` command handler | — |
 | `story/` | Per-subcommand modules: add, close, edit, help, join, list, manage, ping, read, timeleft, write, roundup | — |
 | `story/_metadataModals.js` | Shared embed/modal builders for /story add and /story manage: getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal | ~255 |
+| `story/_writerDeparted.js` | `handleWriterDeparted()` — sweeps a user out of every story they're writing in a guild on `GuildMemberRemove`/`GuildBanAdd`; mirrors the voluntary-leave protocol | ~75 |
 
 ---
 
