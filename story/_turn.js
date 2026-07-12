@@ -342,11 +342,16 @@ export async function deleteThreadAndAnnouncement(thread) {
  * schedules a 24h deletion with a Delete Now button, or deletes immediately.
  * Safe to call with a null/undefined threadId — returns early if no thread.
  */
-export async function endTurnThread(connection, guild, threadId, writerDiscordUserId, guildId) {
+export async function endTurnThread(connection, guild, threadId, writerDiscordUserId, guildId, { forceDelete = false } = {}) {
   if (!threadId) return;
   try {
     const thread = await guild.channels.fetch(threadId).catch(() => null);
     if (!thread) return;
+    if (forceDelete) {
+      await deleteThreadAndAnnouncement(thread);
+      log(`endTurnThread: thread ${threadId} force-deleted (writer chose Delete over the 24h preserve)`, { show: true, guildName: guild?.name });
+      return;
+    }
     const messages = await thread.messages.fetch({ limit: 50 });
     const hasContent = messages.some(m => !m.author.bot && m.author.id === String(writerDiscordUserId));
     if (hasContent) {

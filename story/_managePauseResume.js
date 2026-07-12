@@ -17,9 +17,7 @@ export async function applyPauseActions(connection, interaction, state) {
   const { turn_id: turnId, thread_id: threadId, discord_display_name } = activeTurnRows[0];
 
   await connection.execute(
-    `UPDATE job SET job_status = 2 WHERE job_status = 0
-     AND job_type IN ('turnTimeout', 'turnReminder', 'turnSlowReminder')
-     AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
+    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
     [turnId]
   );
 
@@ -113,9 +111,7 @@ export async function applyResumeActions(connection, interaction, state) {
   const isSlowMode = state.storyMode === 2;
 
   await connection.execute(
-    `UPDATE job SET job_status = 2 WHERE job_status = 0
-     AND job_type IN ('turnTimeout', 'turnReminder', 'turnSlowReminder')
-     AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
+    `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
     [activeTurn.turn_id]
   );
 
@@ -129,23 +125,23 @@ export async function applyResumeActions(connection, interaction, state) {
       [newTurnEndsAt, activeTurn.turn_id]
     );
     await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-      ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt]
+      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+      ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt, activeTurn.turn_id]
     );
     if (state.timeoutReminder > 0) {
       const reminderMs = state.turnLength * (state.timeoutReminder / 100) * 60 * 60 * 1000;
       const reminderTime = new Date(Date.now() + reminderMs);
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-        ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+        ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime, activeTurn.turn_id]
       );
     }
     newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
   } else if (state.timeoutReminder > 0) {
     const reminderTime = new Date(Date.now() + (state.timeoutReminder * 60 * 60 * 1000));
     await connection.execute(
-      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-      ['turnSlowReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id, reminderHours: state.timeoutReminder }), reminderTime]
+      `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+      ['turnSlowReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id, reminderHours: state.timeoutReminder }), reminderTime, activeTurn.turn_id]
     );
   }
 

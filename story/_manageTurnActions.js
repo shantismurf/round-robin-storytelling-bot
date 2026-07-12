@@ -370,13 +370,12 @@ export async function handleTurnActionModal(connection, interaction, manageState
 
       // Cancel old timeout job and schedule new one
       await connection.execute(
-        `UPDATE job SET job_status = 2 WHERE job_type = 'turnTimeout' AND job_status = 0
-         AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
+        `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_type = 'turnTimeout' AND job_status = 0`,
         [turnId]
       );
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-        ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+        ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt, turnId]
       );
 
       await logAdminAction(connection, adminId, 'extend', storyId, null, `+${hours}h`);

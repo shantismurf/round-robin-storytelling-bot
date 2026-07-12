@@ -174,7 +174,7 @@ export async function handleSkipConfirm(connection, interaction) {
 
     await interaction.editReply({ content: await getConfigValue(connection, 'txtSkipSuccess', guildId), components: [] });
 
-    await endTurnThread(connection, interaction.guild, turn.thread_id, turn.discord_user_id, guildId);
+    await endTurnThread(connection, interaction.guild, turn.thread_id, turn.discord_user_id, guildId, { forceDelete: variant === 'delete' });
 
   } catch (error) {
     log(`Skip turn failed: ${error}`, { show: true, guildName: interaction?.guild?.name });
