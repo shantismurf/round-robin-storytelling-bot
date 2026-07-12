@@ -51,6 +51,22 @@
 
 ---
 
+## Update Story Add/Manage Modal Labels
+
+Add emojis to start and end of all modal labels and remove any double stars for bolding
+Need emojis: 
+🪪 Show Names 🪪
+🔏 Turn Thread Privacy 🔏
+⏱️ Turn Length (hours) ⏱️
+🔔 Reminder Timing (%) 🔔
+🫷 Delay Start (optional) 🫸
+♾️ Max Writers (optional) ♾️
+✨ Scene Break Divider ✨
+
+Also, check Radio groups .setRequired(false) to see if we can remove any of the annoying "X Clear Selection" bars that take up a ton of space on mobile. On desktop they are unassuming little buttons, but the mobile interface for this is terrible.
+
+---
+
 ## Create style_roadmap.md
 
 Establish a project style standard document and reference it from CLAUDE.md. Should define at minimum:
