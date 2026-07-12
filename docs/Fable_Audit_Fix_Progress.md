@@ -267,3 +267,12 @@ admin pause/remove handlers keep their interaction-specific reply logic but call
 `departWriter` for the shared part; `_writerDeparted.js` calls it directly. This turns a
 6-site bug into a 1-site fix and gives step 4's Phase-2 seam one more reusable function for
 free.
+
+**Sequencing decision:** 1.7 (skip's delete/keep choice ignored) and 1.17 (job-cancel status
+inconsistency — pause/resume use status 2 instead of 3, some INSERTs omit `turn_id`) both
+touch the same turn-end/thread-disposal/job-cancellation surface that step 4 is already
+opening up for `departWriter`/`closeStoryInternals`. Fold both into step 4 rather than
+reopening those files in a separate session. 1.14 (join capacity race) lives in unrelated
+code (`join.js`'s transaction, re-checking `max_writers` inside the existing transaction) and
+doesn't depend on anything step 4 touches — fine as a standalone fix any time, no need to
+wait.
