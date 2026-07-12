@@ -103,7 +103,14 @@ export async function applyResumeActions(connection, interaction, state) {
 
   if (activeTurnRows.length === 0) {
     const nextWriterId = await PickNextWriter(connection, state.storyId);
-    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+    if (nextWriterId) {
+      const turnResult = await NextTurn(connection, interaction, nextWriterId);
+      if (!turnResult.success) {
+        log(`applyResumeActions: NextTurn failed for story ${state.storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+      }
+    } else {
+      log(`applyResumeActions: no eligible next writer for story ${state.storyId} on resume — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+    }
     return;
   }
 
@@ -224,7 +231,14 @@ export async function handleReopenStory(connection, interaction, state) {
     }
 
     const nextWriterId = await PickNextWriter(connection, state.storyId);
-    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+    if (nextWriterId) {
+      const turnResult = await NextTurn(connection, interaction, nextWriterId);
+      if (!turnResult.success) {
+        log(`handleReopenStory: NextTurn failed for story ${state.storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+      }
+    } else {
+      log(`handleReopenStory: no eligible next writer for story ${state.storyId} on reopen — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+    }
 
     updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
 

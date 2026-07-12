@@ -286,7 +286,14 @@ export async function handlePanelPassConfirm(connection, interaction) {
       return;
     }
     const nextWriterId = await PickNextWriter(connection, storyId);
-    if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+    if (nextWriterId) {
+      const turnResult = await NextTurn(connection, interaction, nextWriterId);
+      if (!turnResult.success) {
+        log(`handlePanelPassConfirm: NextTurn failed for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+      }
+    } else {
+      log(`handlePanelPassConfirm: no eligible next writer for story ${storyId} — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+    }
     if (turn.thread_id) {
       await endTurnThread(connection, interaction.guild, turn.thread_id, userId, guildId);
     }
@@ -339,7 +346,14 @@ export async function handlePanelPauseConfirm(connection, interaction) {
         }
         try {
           const nextWriterId = await PickNextWriter(connection, storyId);
-          if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+          if (nextWriterId) {
+            const turnResult = await NextTurn(connection, interaction, nextWriterId);
+            if (!turnResult.success) {
+              log(`handlePanelPauseConfirm: NextTurn failed for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+            }
+          } else {
+            log(`handlePanelPauseConfirm: no eligible next writer for story ${storyId} — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+          }
         } catch (err) {
           log(`handlePanelPauseConfirm: failed to advance turn: ${err}`, { show: true, guildName: interaction?.guild?.name });
         }

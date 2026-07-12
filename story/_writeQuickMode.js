@@ -212,9 +212,15 @@ export async function confirmEntry(connection, entryId, interaction) {
     }
 
     const nextWriterId = await PickNextWriter(txn, story_id);
-    await NextTurn(txn, interaction, nextWriterId);
+    const nextTurnResult = nextWriterId
+      ? await NextTurn(txn, interaction, nextWriterId)
+      : { success: false, error: 'No eligible next writer' };
 
     await txn.commit();
+
+    if (!nextTurnResult.success) {
+      log(`confirmEntry: NextTurn failed for story ${story_id} after turn ${turn_id} was confirmed — story has no active turn: ${nextTurnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+    }
 
     try {
       const storyThread = await interaction.guild.channels.fetch(activeThreadId);

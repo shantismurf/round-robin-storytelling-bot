@@ -155,7 +155,13 @@ export async function CreateStory(connection, interaction, storyInput) {
     // Step 6: Start first turn if story is active (no delay)
     if (storyStatus === 1) {
       const firstWriterId = await PickNextWriter(txn, storyId);
-      await NextTurn(txn, interaction, firstWriterId);
+      if (!firstWriterId) {
+        throw new Error('No writer available to start the first turn');
+      }
+      const turnResult = await NextTurn(txn, interaction, firstWriterId);
+      if (!turnResult.success) {
+        throw new Error(turnResult.error);
+      }
     }
 
     // Commit transaction
@@ -258,9 +264,13 @@ export async function StoryJoin(connection, interaction, storyInput, storyId) {
     }
 
     if (shouldStartTurn) {
-      const turnResult = await NextTurn(connection, interaction, storyWriterId, true);
-      if (turnResult.dmMessage) {
-        confirmationMessage += `\n${turnResult.dmMessage}`;
+      const turnResult = await NextTurn(connection, interaction, storyWriterId);
+      if (turnResult.success) {
+        if (turnResult.dmMessage) {
+          confirmationMessage += `\n${turnResult.dmMessage}`;
+        }
+      } else {
+        log(`StoryJoin: NextTurn failed activating story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
       }
     }
 

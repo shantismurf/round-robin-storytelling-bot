@@ -144,7 +144,14 @@ async function handleCheckStoryDelay(connection, client, payload) {
     const ctx = await buildSyntheticContext(client, guildId);
     await postStoryFeedActivationAnnouncement(connection, storyId, ctx, title);
     const nextWriterId = await PickNextWriter(connection, storyId);
-    if (nextWriterId) await NextTurn(connection, ctx, nextWriterId);
+    if (nextWriterId) {
+      const turnResult = await NextTurn(connection, ctx, nextWriterId);
+      if (!turnResult.success) {
+        log(`checkStoryDelay: NextTurn failed activating story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: ctx.guild?.name, hub: true });
+      }
+    } else {
+      log(`checkStoryDelay: no eligible writer to start the first turn for story ${storyId} — story has no active turn`, { show: true, guildName: ctx.guild?.name, hub: true });
+    }
     log(`checkStoryDelay job activated story ${storyId}`, { show: true, guildName: ctx.guild?.name });
   } else {
     // Writer count condition not yet met — story stays paused until enough writers join
@@ -214,7 +221,14 @@ async function handleTurnTimeout(connection, client, payload) {
   await endTurnThread(connection, ctx.guild, activeTurn.thread_id, activeTurn.discord_user_id, guildId);
 
   const nextWriterId = await PickNextWriter(connection, storyId);
-  if (nextWriterId) await NextTurn(connection, ctx, nextWriterId);
+  if (nextWriterId) {
+    const turnResult = await NextTurn(connection, ctx, nextWriterId);
+    if (!turnResult.success) {
+      log(`handleTurnTimeout: NextTurn failed for story ${storyId} after turn ${turnId} timed out — story has no active turn: ${turnResult.error}`, { show: true, guildName: ctx.guild?.name, hub: true });
+    }
+  } else {
+    log(`handleTurnTimeout: no eligible next writer for story ${storyId} after turn ${turnId} timed out — story has no active turn`, { show: true, guildName: ctx.guild?.name, hub: true });
+  }
 
   // Activity log (fire-and-forget)
   getConfigValue(connection, 'txtStoryThreadTurnTimeout', guildId).then(template =>

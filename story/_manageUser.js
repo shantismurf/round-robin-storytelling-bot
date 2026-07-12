@@ -317,7 +317,14 @@ async function handleManageUserConfirm(connection, interaction) {
           }
           try {
             const nextWriterId = await PickNextWriter(connection, storyId);
-            if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+            if (nextWriterId) {
+              const turnResult = await NextTurn(connection, interaction, nextWriterId);
+              if (!turnResult.success) {
+                log(`handleManageUserConfirm: NextTurn failed after pause for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+              }
+            } else {
+              log(`handleManageUserConfirm: no eligible next writer after pause for story ${storyId} — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+            }
           } catch (err) {
             log(`handleManageUserConfirm: could not advance turn after pause for story ${storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
           }
