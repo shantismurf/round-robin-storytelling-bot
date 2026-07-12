@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnGuarded, endTurnThread, departWriter } from './_turn.js';
+import { TURN_STATUS, WRITER_STATUS } from '../constants.js';
 
 // Keyed by admin user ID
 const pendingManageUserData = new Map();
@@ -21,7 +22,7 @@ function buildManageUserPanel(state) {
   log(`buildManageUserPanel: storyId=${state.storyId} targetUser=${state.targetUserId} writerStatus=${state.writerStatus}`, { show: false, guildName: state.guildName });
   const cfg = state.cfg;
 
-  const statusLabel    = state.writerStatus === 1 ? cfg.txtMyStoryManageActiveStatus : cfg.txtMyStoryManagePausedStatus;
+  const statusLabel    = state.writerStatus === WRITER_STATUS.ACTIVE ? cfg.txtMyStoryManageActiveStatus : cfg.txtMyStoryManagePausedStatus;
   const notifLabel     = state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention;
   const privacyLabel   = state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic;
 
@@ -43,7 +44,7 @@ function buildManageUserPanel(state) {
   const privacyToggleLabel = state.writerTurnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
 
   const row1 = new ActionRowBuilder().addComponents(
-    state.writerStatus === 1
+    state.writerStatus === WRITER_STATUS.ACTIVE
       ? new ButtonBuilder().setCustomId('storyadmin_mu_pause').setLabel(cfg.btnAdminMUPause).setStyle(ButtonStyle.Danger)
       : new ButtonBuilder().setCustomId('storyadmin_mu_unpause').setLabel(cfg.btnAdminMUUnpause).setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('storyadmin_mu_remove').setLabel(cfg.btnAdminMURemove).setStyle(ButtonStyle.Danger),
@@ -87,8 +88,8 @@ export async function handleManageUser(connection, interaction) {
 
     const [writerRows] = await connection.execute(
       `SELECT story_writer_id, sw_status, pen_name, notification_prefs, turn_privacy
-       FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (1, 2)`,
-      [storyId, targetUser.id]
+       FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (?, ?)`,
+      [storyId, targetUser.id, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
     );
     if (writerRows.length === 0) {
       log(`handleManageUser: target user ${targetUser.id} is not an active writer in story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
@@ -105,12 +106,12 @@ export async function handleManageUser(connection, interaction) {
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 1`,
-      [storyId, targetUser.id]
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?`,
+      [storyId, targetUser.id, TURN_STATUS.ACTIVE]
     );
     const [remainingRows] = await connection.execute(
-      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND discord_user_id != ?`,
-      [storyId, targetUser.id]
+      `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = ? AND discord_user_id != ?`,
+      [storyId, WRITER_STATUS.ACTIVE, targetUser.id]
     );
     log(`handleManageUser: activeTurn=${activeTurnRows.length > 0} remainingWriters=${remainingRows[0].count}`, { show: false, guildName: interaction?.guild?.name });
 
@@ -119,7 +120,6 @@ export async function handleManageUser(connection, interaction) {
       'lblManageUserStatus', 'lblManageUserPenName',
       'lblAdminMUNotif', 'lblAdminMUPrivacy', 'btnManageUserClose',
       'btnAdminMUPause', 'btnAdminMUUnpause', 'btnAdminMURemove', 'btnAdminMUPenName',
-      'btnAdminMUToggleNotif', 'btnAdminMUTogglePrivacy',
       'btnAdminMUSave', 'txtAdminMUSaved',
       'txtAdminMUPauseConfirmDesc', 'txtAdminMUActiveTurnWarning',
       'txtAdminMUUnpauseConfirmDesc', 'txtAdminMURemoveConfirmDesc',
@@ -151,9 +151,6 @@ export async function handleManageUser(connection, interaction) {
       penName: writer.pen_name,
       notificationPrefs: writer.notification_prefs,
       writerTurnPrivacy: writer.turn_privacy,
-      // Stage copies for save
-      stagedNotificationPrefs: writer.notification_prefs,
-      stagedWriterTurnPrivacy: writer.turn_privacy,
       isActiveTurn,
       activeTurnId: isActiveTurn ? activeTurnRows[0].turn_id : null,
       activeTurnThreadId: isActiveTurn ? activeTurnRows[0].thread_id : null,
@@ -306,7 +303,7 @@ async function handleManageUserConfirm(connection, interaction) {
   try {
     if (action === 'pause') {
       log(`handleManageUserConfirm: pausing writer ${writerId}`, { show: false, guildName: interaction?.guild?.name });
-      await connection.execute(`UPDATE story_writer SET sw_status = 2 WHERE story_writer_id = ?`, [writerId]);
+      await connection.execute(`UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`, [WRITER_STATUS.PAUSED, writerId]);
       if (isActiveTurn) {
         const ended = await endTurnGuarded(connection, activeTurnId);
         if (!ended) {
@@ -339,7 +336,7 @@ async function handleManageUserConfirm(connection, interaction) {
 
     } else if (action === 'unpause') {
       log(`handleManageUserConfirm: unpausing writer ${writerId}`, { show: false, guildName: interaction?.guild?.name });
-      await connection.execute(`UPDATE story_writer SET sw_status = 1 WHERE story_writer_id = ?`, [writerId]);
+      await connection.execute(`UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`, [WRITER_STATUS.ACTIVE, writerId]);
       await logAdminAction(connection, adminId, 'unpause_user', storyId, targetUserId);
       const successMsg = replaceTemplateVariables(
         await getConfigValue(connection, 'txtAdminUnpauseUserSuccess', guildId),
@@ -362,7 +359,7 @@ async function handleManageUserConfirm(connection, interaction) {
       await interaction.editReply({ content: successMsg + closeNote, embeds: [], components: [] });
 
       getConfigValue(connection, 'txtStoryThreadWriterRemove', guildId).then(template =>
-        postStoryThreadActivity(connection, interaction.guild, storyId, template.replace('[writer_name]', writerName))
+        postStoryThreadActivity(connection, interaction.guild, storyId, replaceTemplateVariables(template, { writer_name: writerName }))
       ).catch(err => log(`postStoryThreadActivity failed after remove for story ${storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name }));
     }
 

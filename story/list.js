@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, storyLastActivitySQL } from '../utilities.js';
 import { ratingCodes, ratingBadgeKey } from './_metadata.js';
+import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, STORY_MODE } from '../constants.js';
 
 export async function handleListStories(connection, interaction) {
   const guildId = interaction.guild.id;
@@ -94,8 +95,8 @@ export async function renderStoryListReply(connection, interaction, filter, page
       `SELECT sw.story_id, sw.discord_display_name, t.turn_ends_at
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id IN (${placeholders}) AND t.turn_status = 1`,
-      storyIds
+       WHERE sw.story_id IN (${placeholders}) AND t.turn_status = ?`,
+      [...storyIds, TURN_STATUS.ACTIVE]
     );
     for (const t of turns) activeTurnMap.set(t.story_id, t);
   }
@@ -115,15 +116,15 @@ export async function renderStoryListReply(connection, interaction, filter, page
     const joinStatus = story.join_status === 2 ? cfg.txtMemberStatusJoined
       : story.join_status === 1 ? cfg.txtMemberStatusCanJoin
       : cfg.txtMemberStatusCanNotJoin;
-    const modeText = story.mode === 1 ? cfg.txtModeQuick : story.mode === 2 ? cfg.txtModeSlow : cfg.txtModeNormal;
+    const modeText = story.mode === STORY_MODE.QUICK ? cfg.txtModeQuick : story.mode === STORY_MODE.SLOW ? cfg.txtModeSlow : cfg.txtModeNormal;
     const statusText = statusTextMap[story.story_status] ?? '—';
 
     let currentTurn;
-    if (story.story_status === 2) {
+    if (story.story_status === STORY_STATUS.PAUSED) {
       currentTurn = cfg.txtPaused;
-    } else if (story.story_status === 3) {
+    } else if (story.story_status === STORY_STATUS.CLOSED) {
       currentTurn = cfg.txtClosed;
-    } else if (story.story_status === 4) {
+    } else if (story.story_status === STORY_STATUS.DELAYED) {
       currentTurn = cfg.txtDelayed;
     } else {
       const turn = activeTurnMap.get(story.story_id);
@@ -187,7 +188,7 @@ export async function renderStoryListReply(connection, interaction, filter, page
           description: replaceTemplateVariables(cfg.txtQuickJoinDesc, {
             writer_count: s.writer_count,
             max_writers: s.max_writers || '∞',
-            mode: s.mode === 1 ? cfg.txtModeQuick : s.mode === 2 ? cfg.txtModeSlow : cfg.txtModeNormal,
+            mode: s.mode === STORY_MODE.QUICK ? cfg.txtModeQuick : s.mode === STORY_MODE.SLOW ? cfg.txtModeSlow : cfg.txtModeNormal,
           })
         })))
     );
@@ -210,20 +211,22 @@ export async function getStoriesPaginated(connection, guildId, filter, page, ite
     // Apply filters
     switch (filter) {
       case 'joinable':
-        whereClause += ` AND s.story_status IN (1, 2, 4) AND s.allow_joins = 1
-          AND (s.max_writers IS NULL OR (SELECT COUNT(*) FROM story_writer WHERE story_id = s.story_id AND sw_status = 1) < s.max_writers)
-          AND s.story_id NOT IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)`;
-        params.push(userId);
+        whereClause += ` AND s.story_status IN (?, ?, ?) AND s.allow_joins = 1
+          AND (s.max_writers IS NULL OR (SELECT COUNT(*) FROM story_writer WHERE story_id = s.story_id AND sw_status = ?) < s.max_writers)
+          AND s.story_id NOT IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = ?)`;
+        params.push(STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED, WRITER_STATUS.ACTIVE, userId, WRITER_STATUS.ACTIVE);
         break;
       case 'mine':
-        whereClause += ' AND s.story_id IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)';
-        params.push(userId);
+        whereClause += ' AND s.story_id IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = ?)';
+        params.push(userId, WRITER_STATUS.ACTIVE);
         break;
       case 'active':
-        whereClause += ' AND s.story_status = 1';
+        whereClause += ' AND s.story_status = ?';
+        params.push(STORY_STATUS.ACTIVE);
         break;
       case 'paused':
-        whereClause += ' AND s.story_status = 2';
+        whereClause += ' AND s.story_status = ?';
+        params.push(STORY_STATUS.PAUSED);
         break;
       default:
         // Rating filters: rating_G, rating_T, rating_M, rating_E, rating_NR
@@ -240,11 +243,11 @@ export async function getStoriesPaginated(connection, guildId, filter, page, ite
       SELECT COUNT(*) as total FROM (
         SELECT s.story_id
         FROM story s
-        LEFT JOIN story_writer sw ON s.story_id = sw.story_id AND sw.sw_status = 1
+        LEFT JOIN story_writer sw ON s.story_id = sw.story_id AND sw.sw_status = ?
         ${whereClause}
         GROUP BY s.story_id
       ) as filtered_stories
-    `, params);
+    `, [WRITER_STATUS.ACTIVE, ...params]);
 
     const totalCount = countResult[0].total;
     log(`getStoriesPaginated - totalCount: ${totalCount}`, { show: false });
@@ -258,20 +261,20 @@ export async function getStoriesPaginated(connection, guildId, filter, page, ite
         COUNT(sw.story_writer_id) as writer_count,
         (SELECT discord_display_name FROM story_writer WHERE story_id = s.story_id ORDER BY joined_at ASC LIMIT 1) as creator_name,
         CASE
-          WHEN s.story_id IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = 1)
+          WHEN s.story_id IN (SELECT DISTINCT story_id FROM story_writer WHERE discord_user_id = ? AND sw_status = ?)
           THEN 2
-          WHEN s.story_status != 3 AND s.allow_joins = 1
+          WHEN s.story_status != ? AND s.allow_joins = 1
            AND (s.max_writers IS NULL OR COUNT(sw.story_writer_id) < s.max_writers)
           THEN 1
           ELSE 0
         END as join_status
       FROM story s
-      LEFT JOIN story_writer sw ON s.story_id = sw.story_id AND sw.sw_status = 1
+      LEFT JOIN story_writer sw ON s.story_id = sw.story_id AND sw.sw_status = ?
       ${whereClause}
       GROUP BY s.story_id
       ORDER BY ${storyLastActivitySQL()} DESC
       LIMIT ? OFFSET ?
-    `, [userId, ...params, itemsPerPage, offset]);
+    `, [userId, WRITER_STATUS.ACTIVE, STORY_STATUS.CLOSED, WRITER_STATUS.ACTIVE, ...params, itemsPerPage, offset]);
     log(`getStoriesPaginated - stories rows returned: ${stories.length}`, { show: false });
 
     return {

@@ -3,6 +3,7 @@ import { log, storyLastActivitySQL } from '../utilities.js';
 import { handleWriterHelp } from '../faq.js';
 import { handleList, handleListNavigation, handleViewToggle, handleCatchUp, handleCatchUpNavigation } from './_myStoryList.js';
 import { handleMyStoryManage, handleMyStoryManageButton, handlePanelPassConfirm, handlePanelPauseConfirm, handlePanelLeaveConfirm, handlePanelActionCancel, handleMyStoryManageModal } from './_myStoryManage.js';
+import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS } from '../constants.js';
 
 const data = new SlashCommandBuilder()
   .setName('mystory')
@@ -97,27 +98,27 @@ async function handleAutocomplete(connection, interaction) {
     [rows] = await connection.execute(
       `SELECT s.guild_story_id, s.title FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
-       WHERE s.guild_id = ? AND s.story_status != 3 AND sw.sw_status IN (1, 2)
+       WHERE s.guild_id = ? AND s.story_status != ? AND sw.sw_status IN (?, ?)
          AND EXISTS (
            SELECT 1 FROM story_entry se
            JOIN turn t ON se.turn_id = t.turn_id
            JOIN story_writer sw2 ON t.story_writer_id = sw2.story_writer_id
-           WHERE sw2.story_id = s.story_id AND se.entry_status = 'confirmed'
+           WHERE sw2.story_id = s.story_id AND se.entry_status = ?
          )
          AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
        ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-      [interaction.user.id, guildId, typed, typedPrefix]
+      [interaction.user.id, guildId, STORY_STATUS.CLOSED, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, ENTRY_STATUS.CONFIRMED, typed, typedPrefix]
     );
 
   } else {
     [rows] = await connection.execute(
       `SELECT s.guild_story_id, s.title FROM story s
        JOIN story_writer sw ON sw.story_id = s.story_id
-       WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status IN (1, 2)
-         AND s.story_status != 3
+       WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status IN (?, ?)
+         AND s.story_status != ?
          AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
        ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-      [guildId, interaction.user.id, typed, typedPrefix]
+      [guildId, interaction.user.id, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, STORY_STATUS.CLOSED, typed, typedPrefix]
     );
   }
 

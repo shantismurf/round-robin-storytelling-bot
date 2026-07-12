@@ -238,10 +238,6 @@ export async function buildTagReviewPanel(rows, pageIndex, storyId, storyTitle, 
 
 // ─── Paginated "View Tags" — legacy read-view ────────────────────────────────
 
-export async function handleViewTagsButton(connection, interaction) {
-  await handleViewProposedTags(connection, interaction);
-}
-
 export async function handleViewTagsNav(connection, interaction) {
   log(`handleViewTagsNav: customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const parts = interaction.customId.split('_');

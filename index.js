@@ -1,7 +1,7 @@
 import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
-import { StoryBot } from './storybot.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
 import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories } from './utilities.js';
+import { STORY_STATUS } from './constants.js';
 import { handleWriterDeparted } from './story/_writerDeparted.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner } from './job-runner.js';
@@ -18,7 +18,8 @@ let _hubAnnouncementsChannelId = null;
 async function refreshAllStatusMessages(connection, client) {
   try {
     const [stories] = await connection.execute(
-      `SELECT story_id, guild_id FROM story WHERE story_status IN (1, 2) AND story_thread_id IS NOT NULL`
+      `SELECT story_id, guild_id FROM story WHERE story_status IN (?, ?) AND story_thread_id IS NOT NULL`,
+      [STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED]
     );
     log(`Refreshing status messages for ${stories.length} active/paused story/stories...`, { show: false });
     const orphanedGuildIds = new Set();
@@ -71,23 +72,6 @@ async function main() {
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration] });
-  // instantiate story engine
-  const bot = new StoryBot(config);
-  // Listen for publish events from RRStoryBot and post using the Discord client
-  bot.on('publish', async (botContent) => {
-    try {
-      const channel = await client.channels.fetch(botContent.channelId);
-      const embeds = (botContent.embeds || []).map(data => new EmbedBuilder()
-        .setTitle(data.title || '')
-        .setAuthor({ name: data.author || '' })
-        .setDescription(data.description || '')
-        .setFooter({ text: data.footer || '' })
-      );
-      await channel.send({ content: botContent.content || null, embeds, files: botContent.files });
-    } catch (err) {
-      log(`Failed to publish botContent: ${err}`, { show: true });
-    }
-  });
   // Create initiate slash commands
   client.commands = new Collection();
   async function loadCommands(dir) {
@@ -149,7 +133,7 @@ async function main() {
     _hubAnnouncementsChannelId = hubAnnouncementsChannelId;
     const { version } = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
     log(`✅ Bot online — v${version} on ${client.guilds.cache.size} server(s)`, { show: true, hub: true });
-    await bot.start();
+    log('Round Robin StoryBot engine initialized', { show: true });
     await loadCommands('./commands');
     startJobRunner(connection, client).catch(err => log(`startJobRunner failed: ${err?.stack ?? err}`, { show: true }));
     refreshAllStatusMessages(connection, client);

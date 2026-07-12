@@ -1,5 +1,6 @@
 import { EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, storyLastActivitySQL } from '../utilities.js';
+import { STORY_STATUS, TURN_STATUS, JOB_STATUS, ENTRY_STATUS } from '../constants.js';
 
 function writerBadge(entryCount) {
   if (entryCount <= 1) return '✨';
@@ -12,8 +13,8 @@ export async function generateRoundupStats(connection, guildId) {
   const weekAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000);
 
   const [activeStories] = await connection.execute(
-    `SELECT guild_story_id, title FROM story s WHERE s.guild_id = ? AND s.story_status = 1 ORDER BY ${storyLastActivitySQL()} DESC`,
-    [guildId]
+    `SELECT guild_story_id, title FROM story s WHERE s.guild_id = ? AND s.story_status = ? ORDER BY ${storyLastActivitySQL()} DESC`,
+    [guildId, STORY_STATUS.ACTIVE]
   );
 
   const [[{ created }]] = await connection.execute(
@@ -30,18 +31,18 @@ export async function generateRoundupStats(connection, guildId) {
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      JOIN story s ON sw.story_id = s.story_id
-     JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+     JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
      WHERE s.guild_id = ? AND t.ended_at >= ?`,
-    [guildId, weekAgo]
+    [ENTRY_STATUS.CONFIRMED, guildId, weekAgo]
   );
   const [[{ missed }]] = await connection.execute(
     `SELECT COUNT(DISTINCT t.turn_id) AS missed
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      JOIN story s ON sw.story_id = s.story_id
-     LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
-     WHERE s.guild_id = ? AND t.ended_at >= ? AND t.turn_status = 0 AND se.story_entry_id IS NULL`,
-    [guildId, weekAgo]
+     LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
+     WHERE s.guild_id = ? AND t.ended_at >= ? AND t.turn_status = ? AND se.story_entry_id IS NULL`,
+    [ENTRY_STATUS.CONFIRMED, guildId, weekAgo, TURN_STATUS.ENDED]
   );
 
   const [[{ wordSum }]] = await connection.execute(
@@ -52,8 +53,8 @@ export async function generateRoundupStats(connection, guildId) {
      JOIN turn t ON se.turn_id = t.turn_id
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      JOIN story s ON sw.story_id = s.story_id
-     WHERE s.guild_id = ? AND se.entry_status = 'confirmed' AND se.created_at >= ?`,
-    [guildId, weekAgo]
+     WHERE s.guild_id = ? AND se.entry_status = ? AND se.created_at >= ?`,
+    [guildId, ENTRY_STATUS.CONFIRMED, weekAgo]
   );
 
   // Writers who submitted at least one confirmed entry this week
@@ -62,10 +63,10 @@ export async function generateRoundupStats(connection, guildId) {
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
      JOIN story s ON sw.story_id = s.story_id
-     JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+     JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
      WHERE s.guild_id = ? AND t.ended_at >= ?
      ORDER BY t.ended_at DESC`,
-    [guildId, weekAgo]
+    [ENTRY_STATUS.CONFIRMED, guildId, weekAgo]
   );
 
   // Deduplicate by user_id, keeping most recent display name
@@ -89,10 +90,10 @@ export async function generateRoundupStats(connection, guildId) {
        FROM story_writer sw
        JOIN story s ON sw.story_id = s.story_id
        LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id
-       LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+       LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
        WHERE s.guild_id = ? AND sw.discord_user_id IN (${placeholders})
        GROUP BY sw.discord_user_id`,
-      [guildId, ...userIds]
+      [ENTRY_STATUS.CONFIRMED, guildId, ...userIds]
     );
     for (const row of countRows) {
       entryCountMap.set(String(row.discord_user_id), Number(row.entry_count));
@@ -187,14 +188,14 @@ export async function scheduleNextRoundup(connection, guildId) {
 
   // Cancel all pending/in-progress roundup jobs for this guild, then insert one clean job
   await connection.execute(
-    `UPDATE job SET job_status = 3
-     WHERE job_type = 'weeklyRoundup' AND job_status IN (0, 1)
+    `UPDATE job SET job_status = ?
+     WHERE job_type = 'weeklyRoundup' AND job_status IN (?, ?)
      AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-    [String(guildId)]
+    [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, String(guildId)]
   );
   await connection.execute(
-    `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-    ['weeklyRoundup', JSON.stringify({ guildId: String(guildId), runAt: runAt.toISOString() }), runAt]
+    `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
+    ['weeklyRoundup', JSON.stringify({ guildId: String(guildId), runAt: runAt.toISOString() }), runAt, JOB_STATUS.PENDING]
   );
   log(`Scheduled next weeklyRoundup for guild ${guildId} at ${runAt.toISOString()}`, { show: true });
   return runAt;
@@ -202,10 +203,10 @@ export async function scheduleNextRoundup(connection, guildId) {
 
 export async function cancelPendingRoundupJobs(connection, guildId) {
   await connection.execute(
-    `UPDATE job SET job_status = 3
-     WHERE job_type = 'weeklyRoundup' AND job_status IN (0, 1, 2)
+    `UPDATE job SET job_status = ?
+     WHERE job_type = 'weeklyRoundup' AND job_status IN (?, ?, ?)
      AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
-    [String(guildId)]
+    [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, JOB_STATUS.FAILED, String(guildId)]
   );
 }
 

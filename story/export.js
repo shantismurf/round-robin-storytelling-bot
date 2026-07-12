@@ -4,6 +4,7 @@ import { marked } from 'marked';
 import { ratingCodes, ratingLabelKey, formatWarnings, warningOptions, dynamicOptions } from './_metadata.js';
 import { applyEntryMarkup, isSceneBreakLine } from './_entryMarkup.js';
 import { getActiveThreadId } from '../storybot.js';
+import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS, STORY_MODE } from '../constants.js';
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
@@ -137,22 +138,22 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   const story = storyRows[0];
 
   const [writers] = await connection.execute(
-    `SELECT discord_display_name, pen_name FROM story_writer WHERE story_id = ? AND sw_status = 1 ORDER BY joined_at ASC`,
-    [storyId]
+    `SELECT discord_display_name, pen_name FROM story_writer WHERE story_id = ? AND sw_status = ? ORDER BY joined_at ASC`,
+    [storyId, WRITER_STATUS.ACTIVE]
   );
 
   const [entries] = await connection.execute(
     `SELECT se.content, se.created_at, sw.discord_display_name, sw.pen_name,
             (SELECT COUNT(DISTINCT t2.turn_id) FROM turn t2
              JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-             JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+             JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
              WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
      FROM story_entry se
      JOIN turn t ON se.turn_id = t.turn_id
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+     WHERE sw.story_id = ? AND se.entry_status = ?
      ORDER BY t.started_at`,
-    [storyId]
+    [ENTRY_STATUS.CONFIRMED, storyId, ENTRY_STATUS.CONFIRMED]
   );
 
   const writerCount = writers.length;
@@ -178,13 +179,13 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
 
   const fmt = d => new Date(d).toISOString().slice(0, 10);
   const publishedDate = fmt(story.created_at);
-  const isClosed = story.story_status === 3;
+  const isClosed = story.story_status === STORY_STATUS.CLOSED;
   const secondDateLabel = isClosed ? cfg.txtExportCompletedLabel : cfg.txtExportUpdatedLabel;
   const secondDate = isClosed && story.closed_at ? fmt(story.closed_at) : fmt(entries[entries.length - 1].created_at);
   const exportDate = fmt(new Date());
 
   const writersList = writers.map(w => `${w.pen_name || w.discord_display_name} (${w.discord_display_name})`).join(', ');
-  const modeLabel = story.mode === 1 ? cfg.txtExportModeQuick : story.mode === 2 ? cfg.txtExportModeSlow : cfg.txtExportModeNormal;
+  const modeLabel = story.mode === STORY_MODE.QUICK ? cfg.txtExportModeQuick : story.mode === STORY_MODE.SLOW ? cfg.txtExportModeSlow : cfg.txtExportModeNormal;
 
   let entriesHtml = '';
   let currentTurn = null;

@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, resolveStoryId } from '../utilities.js';
 import { getActiveThreadId } from '../storybot.js';
+import { TURN_STATUS, STORY_MODE } from '../constants.js';
 
 export async function handleTimeleft(connection, interaction) {
   log(`handleTimeleft entry user=${interaction.user.username} story=${interaction.options.getString('story_id')}`, { show: false, guildName: interaction?.guild?.name });
@@ -17,9 +18,9 @@ export async function handleTimeleft(connection, interaction) {
      FROM story s
      JOIN story_writer sw ON sw.story_id = s.story_id
      JOIN turn t ON t.story_writer_id = sw.story_writer_id
-     WHERE s.story_id = ? AND s.guild_id = ? AND t.turn_status = 1
+     WHERE s.story_id = ? AND s.guild_id = ? AND t.turn_status = ?
      LIMIT 1`,
-    [storyId, guildId]
+    [storyId, guildId, TURN_STATUS.ACTIVE]
   );
 
   if (!rows.length) {
@@ -36,7 +37,7 @@ export async function handleTimeleft(connection, interaction) {
   );
   const nextWriter = nextRows[0]?.discord_display_name ?? null;
 
-  const isSlowMode = turn.mode === 2;
+  const isSlowMode = turn.mode === STORY_MODE.SLOW;
   const timeleftCfg = await getConfigValue(connection, [
     'lblTimeleftStory', 'lblTimeleftCurrentWriter', 'lblTimeleftTurnEnds', 'lblTimeleftUpNext',
     'txtTimeleftAuthorsHidden', 'txtTimeleftSlowMode',
@@ -86,9 +87,9 @@ export async function handleRequestMoreTime(connection, interaction) {
      FROM story s
      JOIN story_writer sw ON sw.story_id = s.story_id
      JOIN turn t ON t.story_writer_id = sw.story_writer_id
-     WHERE s.story_id = ? AND s.guild_id = ? AND t.turn_status = 1
+     WHERE s.story_id = ? AND s.guild_id = ? AND t.turn_status = ?
      LIMIT 1`,
-    [storyId, guildId]
+    [storyId, guildId, TURN_STATUS.ACTIVE]
   );
 
   if (!rows.length) {

@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBu
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, parseDuration, formatDuration } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
 import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
+import { STORY_MODE } from '../constants.js';
 
 // Temporary storage for story add session state
 export const pendingStoryData = new Map();
@@ -151,7 +152,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
 
     } else if (customId === 'story_add_settings_modal') {
       const cfg = state.cfg;
-      const isSlowMode = state.storyMode === 2;
+      const isSlowMode = state.storyMode === STORY_MODE.SLOW;
 
       const rawTurnLength = sanitizeModalInput(interaction.fields.getTextInputValue('turn_length'), 20);
       const parsedTurnLength = parseDuration(rawTurnLength);
@@ -328,7 +329,7 @@ export async function handleAddStoryButton(connection, interaction) {
 
     } else if (customId === 'story_add_open_settings') {
       const cfg = state.cfg;
-      const isSlowMode = state.storyMode === 2;
+      const isSlowMode = state.storyMode === STORY_MODE.SLOW;
       const turnLengthLabel = isSlowMode ? cfg.txtNA : cfg.lblTurnLength;
       const reminderLabel = isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder;
       const reminderPlaceholder = isSlowMode ? cfg.txtTimeoutReminderSlowPlaceholder : 'Enter 0–100 (0 = no reminder)';

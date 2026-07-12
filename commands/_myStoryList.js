@@ -2,6 +2,7 @@ import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelec
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, splitAtParagraphs, storyLastActivitySQL } from '../utilities.js';
 import { getStoriesPaginated } from '../story/list.js';
 import { ratingCodes, ratingBadgeKey } from '../story/_metadata.js';
+import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
 
 const LIST_PAGE_SIZE = 5;
 const WIDE_SPACE = '　'; // unicode full-width space for field value indent
@@ -86,35 +87,39 @@ async function fetchStoriesForView(connection, userId, guildId, view) {
            COALESCE(SUM(LENGTH(se.content) - LENGTH(REPLACE(se.content, ' ', '')) + 1), 0) as my_word_count,
            (SELECT COUNT(DISTINCT t3.turn_id) FROM turn t3
             JOIN story_writer sw3 ON t3.story_writer_id = sw3.story_writer_id
-            JOIN story_entry se3 ON se3.turn_id = t3.turn_id AND se3.entry_status = 'confirmed'
+            JOIN story_entry se3 ON se3.turn_id = t3.turn_id AND se3.entry_status = ?
             WHERE sw3.story_id = s.story_id) as total_turn_count,
            COALESCE((SELECT SUM(LENGTH(se2.content) - LENGTH(REPLACE(se2.content, ' ', '')) + 1)
             FROM story_entry se2
             JOIN turn t2 ON se2.turn_id = t2.turn_id
             JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-            WHERE sw2.story_id = s.story_id AND se2.entry_status = 'confirmed'), 0) as total_word_count
+            WHERE sw2.story_id = s.story_id AND se2.entry_status = ?), 0) as total_word_count
     FROM story_writer sw
     JOIN story s ON sw.story_id = s.story_id
-    LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id AND t.turn_status = 0
-    LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+    LEFT JOIN turn t ON t.story_writer_id = sw.story_writer_id AND t.turn_status = ?
+    LEFT JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
     WHERE sw.discord_user_id = ? AND s.guild_id = ?`;
 
   let whereExtra, orderBy;
+  let params = [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, TURN_STATUS.ENDED, ENTRY_STATUS.CONFIRMED, userId, guildId];
 
   if (view === 'active') {
-    whereExtra = `AND s.story_status = 1 AND sw.sw_status = 1`;
+    whereExtra = `AND s.story_status = ? AND sw.sw_status = ?`;
+    params = [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, TURN_STATUS.ENDED, ENTRY_STATUS.CONFIRMED, userId, guildId, STORY_STATUS.ACTIVE, WRITER_STATUS.ACTIVE];
     orderBy = `ORDER BY ${storyLastActivitySQL()} DESC`;
   } else if (view === 'paused') {
-    whereExtra = `AND s.story_status IN (0, 2, 4) AND sw.sw_status != 0`;
-    orderBy = `ORDER BY CASE s.story_status WHEN 2 THEN 0 WHEN 4 THEN 1 ELSE 2 END ASC, ${storyLastActivitySQL()} DESC`;
+    whereExtra = `AND s.story_status IN (?, ?) AND sw.sw_status != ?`;
+    params = [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, TURN_STATUS.ENDED, ENTRY_STATUS.CONFIRMED, userId, guildId, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED, WRITER_STATUS.LEFT];
+    orderBy = `ORDER BY CASE s.story_status WHEN ? THEN 0 WHEN ? THEN 1 ELSE 2 END ASC, ${storyLastActivitySQL()} DESC`;
   } else {
-    whereExtra = `AND (s.story_status = 3 OR sw.sw_status = 0)`;
+    whereExtra = `AND (s.story_status = ? OR sw.sw_status = ?)`;
+    params = [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, TURN_STATUS.ENDED, ENTRY_STATUS.CONFIRMED, userId, guildId, STORY_STATUS.CLOSED, WRITER_STATUS.LEFT];
     orderBy = `ORDER BY ${storyLastActivitySQL()} DESC`;
   }
 
   const [rows] = await connection.execute(
     `${baseSelect} ${whereExtra} GROUP BY s.story_id, sw.sw_status ${orderBy}`,
-    [userId, guildId]
+    view === 'paused' ? [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, TURN_STATUS.ENDED, ENTRY_STATUS.CONFIRMED, userId, guildId, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED, WRITER_STATUS.LEFT, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED] : params
   );
   return rows;
 }
@@ -127,8 +132,8 @@ async function fetchActiveTurnsForStories(connection, storyIds, userId) {
     `SELECT sw.story_id, sw.discord_display_name, sw.discord_user_id, t.turn_ends_at
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id IN (${placeholders}) AND t.turn_status = 1`,
-    storyIds
+     WHERE sw.story_id IN (${placeholders}) AND t.turn_status = ?`,
+    [...storyIds, TURN_STATUS.ACTIVE]
   );
   for (const t of turns) {
     map.set(t.story_id, {
@@ -146,16 +151,16 @@ function buildListEmbed(pageStories, page, totalPages, view, listCfg, activeTurn
   const embed = new EmbedBuilder().setTitle(title).setColor(0x5865f2).setTimestamp();
 
   const modeIcon = m => MODE_ICON[m] ?? MODE_ICON_DEFAULT;
-  const modeLabel = m => m === 1 ? listCfg.txtModeQuick : m === 2 ? listCfg.txtModeSlow : listCfg.txtModeNormal;
+  const modeLabel = m => m === STORY_MODE.QUICK ? listCfg.txtModeQuick : m === STORY_MODE.SLOW ? listCfg.txtModeSlow : listCfg.txtModeNormal;
   const statusText = s => {
-    if (s === 1) return listCfg.txtActive;
-    if (s === 2) return listCfg.txtPaused;
-    if (s === 0 || s === 4) return listCfg.txtDelayed;
+    if (s === STORY_STATUS.ACTIVE) return listCfg.txtActive;
+    if (s === STORY_STATUS.PAUSED) return listCfg.txtPaused;
+    if (s === STORY_STATUS.DELAYED) return listCfg.txtDelayed;
     return listCfg.txtClosed;
   };
 
   for (const story of pageStories) {
-    const writerPaused = story.writer_status === 2 ? ` · ${listCfg.txtMyListPausedSuffix}` : '';
+    const writerPaused = story.writer_status === WRITER_STATUS.PAUSED ? ` · ${listCfg.txtMyListPausedSuffix}` : '';
     const fieldName = `${modeIcon(story.mode)} ${story.title} (#${story.guild_story_id}) · ${modeLabel(story.mode)} · ${statusText(story.story_status)}${writerPaused}`;
 
     const activeTurn = activeTurnMap.get(story.story_id);
@@ -319,15 +324,15 @@ async function renderJoinableView(connection, interaction, page, guildId, userId
       `SELECT sw.story_id, sw.discord_display_name, t.turn_ends_at
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id IN (${placeholders}) AND t.turn_status = 1`,
-      storyIds
+       WHERE sw.story_id IN (${placeholders}) AND t.turn_status = ?`,
+      [...storyIds, TURN_STATUS.ACTIVE]
     );
     for (const t of turns) activeTurnMap.set(t.story_id, t);
   }
 
-  const statusTextMap = { 1: listCfg.txtActive, 2: listCfg.txtPaused, 3: listCfg.txtClosed, 4: listCfg.txtDelayed };
+  const statusTextMap = { [STORY_STATUS.ACTIVE]: listCfg.txtActive, [STORY_STATUS.PAUSED]: listCfg.txtPaused, [STORY_STATUS.CLOSED]: listCfg.txtClosed, [STORY_STATUS.DELAYED]: listCfg.txtDelayed };
   for (const story of stories.data) {
-    const modeText = story.mode === 1 ? listCfg.txtModeQuick : story.mode === 2 ? listCfg.txtModeSlow : listCfg.txtModeNormal;
+    const modeText = story.mode === STORY_MODE.QUICK ? listCfg.txtModeQuick : story.mode === STORY_MODE.SLOW ? listCfg.txtModeSlow : listCfg.txtModeNormal;
     const ratingBadgeCfgKey = ratingBadgeKey(story.rating ?? 'NR');
     const turn = activeTurnMap.get(story.story_id);
     let turnLine;
@@ -372,7 +377,7 @@ async function renderJoinableView(connection, interaction, page, guildId, userId
         .addOptions(joinableStories.map(s => ({
           label: `${s.title} (#${s.guild_story_id})`,
           value: s.story_id.toString(),
-          description: `${s.writer_count}/${s.max_writers || '∞'} writers · ${s.mode === 1 ? listCfg.txtModeQuick : s.mode === 2 ? listCfg.txtModeSlow : listCfg.txtModeNormal}`,
+          description: `${s.writer_count}/${s.max_writers || '∞'} writers · ${s.mode === STORY_MODE.QUICK ? listCfg.txtModeQuick : s.mode === STORY_MODE.SLOW ? listCfg.txtModeSlow : listCfg.txtModeNormal}`,
         })))
     );
     components.push(joinRow);
@@ -405,10 +410,10 @@ export async function handleCatchUp(connection, interaction) {
     const [lastTurnRows] = await connection.execute(
       `SELECT t.started_at FROM turn t
       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
-       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = 0
+       JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
+       WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?
        ORDER BY t.started_at DESC LIMIT 1`,
-      [storyId, userId]
+      [ENTRY_STATUS.CONFIRMED, storyId, userId, TURN_STATUS.ENDED]
     );
 
     const afterTime = lastTurnRows.length > 0 ? lastTurnRows[0].started_at : new Date(0);
@@ -416,14 +421,14 @@ export async function handleCatchUp(connection, interaction) {
       `SELECT se.content, sw.discord_display_name,
               (SELECT COUNT(DISTINCT t2.turn_id) FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
                WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
        FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND se.entry_status = 'confirmed' AND t.started_at >= ?
+       WHERE sw.story_id = ? AND se.entry_status = ? AND t.started_at >= ?
        ORDER BY t.started_at`,
-      [storyId, afterTime]
+      [ENTRY_STATUS.CONFIRMED, storyId, ENTRY_STATUS.CONFIRMED, afterTime]
     );
 
     if (entries.length === 0) {

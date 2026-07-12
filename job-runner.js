@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, discordTimestamp, closeOrphanedGuildStories } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
+import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, STORY_MODE } from './constants.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded, buildSyntheticContext } from './story/_turn.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 import { handleWeeklyRoundup, scheduleNextRoundup } from './story/roundup.js';
@@ -21,9 +22,9 @@ export async function startJobRunner(connection, client) {
   // status 1 when the runner starts must have been orphaned by a crash/restart
   // between claim and completion (the restricted host restarts on every deploy).
   // Re-queue them so they aren't silently lost, per Fable Audit 1.13.
-  const [stuck] = await connection.execute(`SELECT job_id, job_type FROM job WHERE job_status = 1`);
+  const [stuck] = await connection.execute(`SELECT job_id, job_type FROM job WHERE job_status = ?`, [JOB_STATUS.IN_PROGRESS]);
   if (stuck.length > 0) {
-    await connection.execute(`UPDATE job SET job_status = 0 WHERE job_status = 1`);
+    await connection.execute(`UPDATE job SET job_status = ? WHERE job_status = ?`, [JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS]);
     log(`Job runner startup: re-queued ${stuck.length} job(s) orphaned by a previous restart (${stuck.map(j => `${j.job_id}:${j.job_type}`).join(', ')})`, { show: true });
   }
   log('Job runner started, polling every 60s', { show: true });
@@ -32,8 +33,8 @@ export async function startJobRunner(connection, client) {
 
 async function purgeOldJobs(connection) {
   const [result] = await connection.execute(
-    `DELETE FROM job WHERE job_status IN (2, 3, 4) AND run_at < DATE_SUB(NOW(), INTERVAL ? DAY)`,
-    [JOB_PURGE_AGE_DAYS]
+    `DELETE FROM job WHERE job_status IN (?, ?, ?) AND run_at < DATE_SUB(NOW(), INTERVAL ? DAY)`,
+    [JOB_STATUS.FAILED, JOB_STATUS.CANCELLED, JOB_STATUS.COMPLETED, JOB_PURGE_AGE_DAYS]
   );
   if (result.affectedRows > 0) {
     log(`Job runner: purged ${result.affectedRows} completed/cancelled/failed job(s) older than ${JOB_PURGE_AGE_DAYS} days`, { show: false });
@@ -47,7 +48,8 @@ async function runDueJobs(connection, client) {
       await purgeOldJobs(connection).catch(err => log(`Job purge error: ${err}`, { show: true }));
     }
     const [jobs] = await connection.execute(
-      `SELECT * FROM job WHERE job_status = 0 AND run_at <= NOW() ORDER BY run_at ASC LIMIT 20`
+      `SELECT * FROM job WHERE job_status = ? AND run_at <= NOW() ORDER BY run_at ASC LIMIT 20`,
+      [JOB_STATUS.PENDING]
     );
     for (const job of jobs) {
       await processJob(connection, client, job);
@@ -61,8 +63,8 @@ async function processJob(connection, client, job) {
   log(`processJob claiming job ${job.job_id} (type=${job.job_type})`, { show: false });
   // Claim the job atomically and increment attempt counter
   const [claimed] = await connection.execute(
-    `UPDATE job SET job_status = 1, attempts = attempts + 1 WHERE job_id = ? AND job_status = 0`,
-    [job.job_id]
+    `UPDATE job SET job_status = ?, attempts = attempts + 1 WHERE job_id = ? AND job_status = ?`,
+    [JOB_STATUS.IN_PROGRESS, job.job_id, JOB_STATUS.PENDING]
   );
   if (claimed.affectedRows === 0) return;
 
@@ -92,24 +94,24 @@ async function processJob(connection, client, job) {
       default:
         log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
     }
-    await connection.execute(`UPDATE job SET job_status = 4 WHERE job_id = ?`, [job.job_id]);
+    await connection.execute(`UPDATE job SET job_status = ? WHERE job_id = ?`, [JOB_STATUS.COMPLETED, job.job_id]);
   } catch (err) {
     if (err?.code === 10004 && payload.guildId) {
       log(`Job ${job.job_id} (${job.job_type}): guild ${payload.guildId} no longer has the bot installed; closing its stories`, { show: true, hub: true });
       await closeOrphanedGuildStories(connection, payload.guildId);
-      await connection.execute(`UPDATE job SET job_status = 3 WHERE job_id = ?`, [job.job_id]);
+      await connection.execute(`UPDATE job SET job_status = ? WHERE job_id = ?`, [JOB_STATUS.CANCELLED, job.job_id]);
       return;
     }
     log(`Job ${job.job_id} (${job.job_type}) failed on attempt ${attemptNumber}: ${err}`, { show: true });
     if (attemptNumber < JOB_MAX_ATTEMPTS) {
       const retryAt = new Date(Date.now() + JOB_RETRY_DELAY_MS);
       await connection.execute(
-        `UPDATE job SET job_status = 0, run_at = ? WHERE job_id = ?`,
-        [retryAt, job.job_id]
+        `UPDATE job SET job_status = ?, run_at = ? WHERE job_id = ?`,
+        [JOB_STATUS.PENDING, retryAt, job.job_id]
       );
       log(`Job ${job.job_id} scheduled for retry at ${retryAt.toISOString()} (attempt ${attemptNumber}/${JOB_MAX_ATTEMPTS})`, { show: true });
     } else {
-      await connection.execute(`UPDATE job SET job_status = 2 WHERE job_id = ?`, [job.job_id]);
+      await connection.execute(`UPDATE job SET job_status = ? WHERE job_id = ?`, [JOB_STATUS.FAILED, job.job_id]);
       log(`⚠️ Job ${job.job_id} (${job.job_type}) permanently failed after ${attemptNumber} attempts: ${err}`, { show: true });
       if (job.job_type === 'weeklyRoundup' && payload.guildId) {
         // handleWeeklyRoundup deliberately doesn't reschedule on a throw (so retries
@@ -132,7 +134,7 @@ async function handleCheckStoryDelay(connection, client, payload) {
     `SELECT story_status, guild_id, title FROM story WHERE story_id = ?`,
     [storyId]
   );
-  if (storyRows.length === 0 || storyRows[0].story_status !== 4) return; // gone or already active
+  if (storyRows.length === 0 || storyRows[0].story_status !== STORY_STATUS.DELAYED) return; // gone or already active
 
   const { guild_id: guildId, title } = storyRows[0];
   log(`handleCheckStoryDelay entry for story ${storyId} "${title}"`, { show: false });
@@ -189,8 +191,8 @@ async function handleTurnTimeout(connection, client, payload) {
     `SELECT t.turn_id, t.thread_id, sw.discord_display_name, sw.discord_user_id
      FROM turn t
      JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-     WHERE t.turn_id = ? AND t.turn_status = 1`,
-    [turnId]
+     WHERE t.turn_id = ? AND t.turn_status = ?`,
+    [turnId, TURN_STATUS.ACTIVE]
   );
   if (turnRows.length === 0) return; // already ended or advanced by someone else
   log(`handleTurnTimeout entry for turn ${turnId} story ${storyId} writer ${turnRows[0].discord_display_name}`, { show: false });
@@ -200,7 +202,7 @@ async function handleTurnTimeout(connection, client, payload) {
     `SELECT story_status FROM story WHERE story_id = ?`,
     [storyId]
   );
-  if (storyRows.length === 0 || storyRows[0].story_status !== 1) {
+  if (storyRows.length === 0 || storyRows[0].story_status !== STORY_STATUS.ACTIVE) {
     log(`turnTimeout no-op for turn ${turnId} — story ${storyId} is not active`, { show: false });
     return;
   }
@@ -245,8 +247,8 @@ async function handleTurnReminder(connection, client, payload) {
 
   // Verify turn is still active
   const [turnRows] = await connection.execute(
-    `SELECT turn_id, turn_ends_at FROM turn WHERE turn_id = ? AND turn_status = 1`,
-    [turnId]
+    `SELECT turn_id, turn_ends_at FROM turn WHERE turn_id = ? AND turn_status = ?`,
+    [turnId, TURN_STATUS.ACTIVE]
   );
   if (turnRows.length === 0) return;
 
@@ -255,7 +257,7 @@ async function handleTurnReminder(connection, client, payload) {
     `SELECT story_status, title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`,
     [storyId]
   );
-  if (storyRows.length === 0 || storyRows[0].story_status !== 1) return;
+  if (storyRows.length === 0 || storyRows[0].story_status !== STORY_STATUS.ACTIVE) return;
 
   const story = storyRows[0];
 
@@ -265,8 +267,8 @@ async function handleTurnReminder(connection, client, payload) {
      FROM story_writer sw
      JOIN story s ON sw.story_id = s.story_id
      LEFT JOIN turn t ON t.turn_id = ? AND t.story_writer_id = sw.story_writer_id
-     WHERE sw.story_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1`,
-    [turnId, storyId, writerUserId]
+     WHERE sw.story_id = ? AND sw.discord_user_id = ? AND sw.sw_status = ?`,
+    [turnId, storyId, writerUserId, WRITER_STATUS.ACTIVE]
   );
   if (writerRows.length === 0) return; // writer left
 
@@ -274,9 +276,9 @@ async function handleTurnReminder(connection, client, payload) {
   const ctx = await buildSyntheticContext(client, guildId);
 
   // Build thread link — quick mode links to the story thread; normal/slow link to the turn thread
-  const linkThreadId = (mode !== 1 && turnThreadId) ? turnThreadId : getActiveThreadId(story);
+  const linkThreadId = (mode !== STORY_MODE.QUICK && turnThreadId) ? turnThreadId : getActiveThreadId(story);
   const threadUrl = `https://discord.com/channels/${guildId}/${linkThreadId}`;
-  const modeKey = mode === 1 ? 'Quick' : mode === 2 ? 'Slow' : 'Normal';
+  const modeKey = mode === STORY_MODE.QUICK ? 'Quick' : mode === STORY_MODE.SLOW ? 'Slow' : 'Normal';
 
   const reminderTokenMap = {
     story_title: story.title,
@@ -315,8 +317,8 @@ async function handleSlowTurnReminder(connection, client, payload) {
 
   // Verify turn is still active
   const [turnRows] = await connection.execute(
-    `SELECT turn_id, thread_id FROM turn WHERE turn_id = ? AND turn_status = 1`,
-    [turnId]
+    `SELECT turn_id, thread_id FROM turn WHERE turn_id = ? AND turn_status = ?`,
+    [turnId, TURN_STATUS.ACTIVE]
   );
   if (turnRows.length === 0) return; // turn ended
 
@@ -325,7 +327,7 @@ async function handleSlowTurnReminder(connection, client, payload) {
     `SELECT story_status, title, story_thread_id, restricted_thread_id, rating FROM story WHERE story_id = ?`,
     [storyId]
   );
-  if (storyRows.length === 0 || storyRows[0].story_status !== 1) return;
+  if (storyRows.length === 0 || storyRows[0].story_status !== STORY_STATUS.ACTIVE) return;
 
   const story = storyRows[0];
   const turnThreadId = turnRows[0].thread_id;
@@ -333,8 +335,8 @@ async function handleSlowTurnReminder(connection, client, payload) {
   // Get writer notification preference
   const [writerRows] = await connection.execute(
     `SELECT notification_prefs FROM story_writer
-     WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
-    [storyId, writerUserId]
+     WHERE story_id = ? AND discord_user_id = ? AND sw_status = ?`,
+    [storyId, writerUserId, WRITER_STATUS.ACTIVE]
   );
   if (writerRows.length === 0) return; // writer left
 
@@ -369,8 +371,8 @@ async function handleSlowTurnReminder(connection, client, payload) {
   // Re-schedule for the next interval
   const nextRun = new Date(Date.now() + (reminderHours * 60 * 60 * 1000));
   await connection.execute(
-    `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-    ['turnSlowReminder', JSON.stringify({ turnId, storyId, guildId, writerUserId, reminderHours }), nextRun, turnId]
+    `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+    ['turnSlowReminder', JSON.stringify({ turnId, storyId, guildId, writerUserId, reminderHours }), nextRun, JOB_STATUS.PENDING, turnId]
   );
 
   log(`Slow reminder sent for turn ${turnId} story ${storyId} (${story.title}) writer ${writerUserId}; next at ${nextRun.toISOString()}`, { show: true, guildName: ctx.guild?.name });

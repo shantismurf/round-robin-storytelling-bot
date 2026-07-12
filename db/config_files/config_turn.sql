@@ -5,7 +5,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtStoryCreatorAdd', 'You''ll be added as the first writer in the story. Please provide:', 'en', 1),
 ('txtMustBeNo', '[Field label text] must be a number.', 'en', 1),
 ('txtStoryThreadTitle', 'Story ID: [story_id] - [inputStoryTitle] - [story_status]', 'en', 1),
-('txtTurnThreadTitle', 'Turn [storyTurnNumber] - Story ID: [story_id] - [user display name]', 'en', 1),
+('txtTurnThreadTitle', 'Turn [storyTurnNumber] - Story ID: [story_id] - [user display name]{? ([status])?}', 'en', 1),
 ('btnFinalizeEntry', '✅ Finalize Entry', 'en', 1),
 ('btnSkipTurn', '⏭️ Skip Turn', 'en', 1),
 ('btnViewLastEntry', '📖 View Last Entry', 'en', 1),

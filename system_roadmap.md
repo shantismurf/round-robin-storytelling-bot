@@ -23,6 +23,23 @@ For config string keys, see `db/config_roadmap.md`.
 | `story/` | Per-subcommand modules: add, close, edit, help, join, list, manage, ping, read, timeleft, write, roundup | — |
 | `story/_metadataModals.js` | Shared embed/modal builders for /story add and /story manage: getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal | ~255 |
 | `story/_writerDeparted.js` | `handleWriterDeparted()` — sweeps a user out of every story they're writing in a guild on `GuildMemberRemove`/`GuildBanAdd`; mirrors the voluntary-leave protocol | ~75 |
+| `story/_turn.js` | The turn engine core: `PickNextWriter`, `NextTurn`, `endTurnGuarded` (atomic guarded turn-end), `endTurnThread`/`deleteThreadAndAnnouncement` (draft preservation), `closeStoryInternals`, `departWriter` (shared writer-exit logic) | ~700 |
+| `story/_delay.js` | `checkStoryDelay()` — evaluates a delayed story's writer-count/hour-based activation conditions | — |
+| `story/_storyStatus.js` | `buildThreadTitle()`, `updateStoryStatusMessage()` — persistent status-embed maintenance | — |
+| `story/_metadata.js` | Rating/warnings/dynamic constants and helpers: `isRestricted`, `crossesBarrier`, `ratingCodes`, `warningOptions`, `dynamicOptions`, feed/media channel + restricted-channel-configured resolution | — |
+| `story/_migration.js` | `migrateStoryThread()` — moves a story's active thread between unrestricted/restricted channels on a rating change | — |
+| `story/_managePauseResume.js` | `applyPauseActions`, `applyResumeActions`, `handleReopenStory` — pause/resume/reopen state transitions and thread retitling | — |
+| `story/_manageTurnActions.js` | Admin turn actions panel: skip/reassign/extend the active turn | ~500 |
+| `story/_manageUser.js` | Admin per-writer management panel: pause/unpause/remove a writer, pen-name edits | — |
+| `story/_manageEntries.js` | Admin entry-management panel: browse/edit/delete confirmed entries by writer | — |
+| `story/_tagSubmit.js` | Writer-facing tag proposal flow: submit, delete own pending proposal | — |
+| `story/_writeFinalize.js` | Normal/slow-mode entry finalize flow: preview, confirm, image handling, `doFinalizeEntry` | — |
+| `story/_writeQuickMode.js` | Quick-mode write/confirm/discard flow, including the pending-entry recovery path | — |
+| `story/_writeSkip.js` | Skip-turn flow: `handleSkipTurn`/`handleSkipConfirm` (delete-now vs 24h-preserve), `handleThreadDeleteNow`, `handleViewLastEntry` | — |
+| `story/_entryRenderer.js` | Pure text/embed pagination for entries: `buildEntryPages`, `buildEntryEmbed`, `postThreadEntry` | — |
+| `story/_entryMarkup.js` | Scene-break/markup helpers: `isSceneBreakLine`, `applyEntryMarkup` | — |
+| `story/_state.js` | Shared in-memory session `Map`s (read/edit/preview/view sessions) used across the `story/` modules | — |
+| `constants.js` | Named status constants for the state-machine fields: `STORY_STATUS`, `TURN_STATUS`, `JOB_STATUS`, `WRITER_STATUS`, `ENTRY_STATUS`, `STORY_MODE` — see db/init.sql + migration 015 for source of truth | ~40 |
 
 ---
 

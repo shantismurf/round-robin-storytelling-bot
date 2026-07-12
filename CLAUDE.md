@@ -18,9 +18,10 @@
 - discord.js 14.26.4: modals DO support selects/radio groups. Before writing or reviewing ANY discord.js component/modal code, read `docs/discordjs_reference.md` and verify against `node_modules/discord.js/src/`, never training data.
 
 ## High-level Architecture 
-- **index.js (The Gateway):** Primary entry point. Routes all interactions (isCommand, isButton, isModalSubmit) by customId 
-- **prefix.commands (UI Handlers):** story.js, mystory.js, and storyadmin.js handle Discord-specific logic (Builders, Modals, Buttons).
-- **storybot.js (The Engine):** Core business logic and DB operations. UI handlers must call functions here to execute state changes.
+- **index.js (The Gateway):** Primary bot entry point. Routes all interactions (isCommand, isButton, isModalSubmit) by customId. Executes `deploy.js` on bot start for database migrations, config table sync, slash command registration, and faq post sync.
+- **prefix.commands (UI Handlers):** story.js, mystory.js, and storyadmin.js handle Discord-specific logic (Builders, Modals, Buttons), delegating to `story/_*.js` for state changes.
+- **story/_*.js (The Engine):** Core business logic and DB operations — turn advancement, state machine, metadata, moderation. UI handlers call functions here to execute state changes.
+- **storybot.js:** Story entry points (creation (`CreateStory`) and join (`StoryJoin`)), plus shared re-exports (`getActiveThreadId`, `PickNextWriter`, `NextTurn`).
 - **job-runner.js (Automation):** Manages background tasks like turn timeouts and reminders.
 
 ## Critical Program Standards
@@ -53,6 +54,11 @@ Implement two-tier high-resolution coverage using `log(content, { show, guildNam
   - **Bundles:** Pass `[label, data]` for a timestamped header followed by rendered data.
 - **Data in context:** Log entities active in the operation. If a readable name is already in scope, use `name (id)` format — otherwise ID alone is fine. Always include the triggering user and any story being acted on. Turns and threads need ID only. Guild is redundant if already passed as the log option.
 - **Hub Log Channel** some logs are duplicated to the hub server's `#logs` channel for instant admin notification (`cfgHubLogChannelId`): Any `show: true` message that either contains a clear problem pattern (e.g. 'error', 'failed'. 'not found', etc), OR is explicitly flagged with `hub: true` (e.g. new guild registration)
+
+## Testing
+- **Layer-1 unit tests** live in `test/*.test.js`, run via `npm test` (`node --test`).
+  Cover pure/DB-only logic using `test/_fakeConnection.js` (a scripted-queue fake
+  `connection.execute()`) — no live DB or Discord connection required.
 
 ## System Documentation
 Review and maintain roadmaps with every implementation.

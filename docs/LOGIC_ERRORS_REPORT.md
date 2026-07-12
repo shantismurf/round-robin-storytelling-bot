@@ -1,5 +1,13 @@
 # Discord Storytelling Bot - Logic Errors and Issues Report
 
+> **SUPERSEDED — 2026-07-12.** This report predates the Fable Audit
+> (`docs/Fable_Audit_2026-07.md`), which re-verified every item below against current
+> code + schema + installed discord.js and recorded its disposition in that doc's
+> "LOGIC_ERRORS_REPORT.md disposition" table. Most items here are resolved, superseded
+> by more specific numbered findings, or no longer applicable. Agents should treat
+> `Fable_Audit_2026-07.md` as authoritative and use this file only as historical
+> context, not as a live checklist.
+
 ### 4. Transaction Management Across Multiple Connections
 **TODO**: check where connection needs to be closed...?
 ---

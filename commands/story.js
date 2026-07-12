@@ -1,5 +1,6 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
+import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, ENTRY_STATUS } from '../constants.js';
 
 // Sub-command handlers
 import { handleAddStory, handleAddStoryModalSubmit, handleAddStoryButton } from '../story/add.js';
@@ -11,7 +12,7 @@ import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry 
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
 import { handleManage, handleManageButton, handleManageSelectMenu, handleTurnActionSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu, handleManageEntriesActionButton, handleManageEntriesModal } from '../story/_manageEntries.js';
-import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsButton, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton, handleTagReviewNav } from '../story/tags.js';
+import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton, handleTagReviewNav } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel, handleCloseExportButton } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
@@ -260,9 +261,6 @@ async function handleButtonInteraction(connection, interaction) {
     await handleJoinConfirm(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_set_penname_')) {
     await handleJoinSetAO3Button(connection, interaction);
-  } else if (interaction.customId.startsWith('story_join_thread_cancel_')) {
-    await interaction.message.delete().catch(() => {});
-    pendingJoinData.delete(interaction.user.id);
   } else if (interaction.customId.startsWith('story_join_cancel_')) {
     await interaction.deferUpdate();
     await interaction.editReply({ content: await getConfigValue(connection, 'btnCancel', interaction.guild.id), embeds: [], components: [] });
@@ -362,21 +360,21 @@ async function handleAutocomplete(connection, interaction) {
         `SELECT s.guild_story_id, s.title FROM story s
          JOIN story_writer sw ON sw.story_id = s.story_id
          JOIN turn t ON t.story_writer_id = sw.story_writer_id
-         WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = 1 AND t.turn_status = 1
+         WHERE s.guild_id = ? AND sw.discord_user_id = ? AND sw.sw_status = ? AND t.turn_status = ?
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-        [guildId, interaction.user.id, typed, typedPrefix]
+        [guildId, interaction.user.id, WRITER_STATUS.ACTIVE, TURN_STATUS.ACTIVE, typed, typedPrefix]
       );
 
     } else if (subcommand === 'join') {
       [rows] = await connection.execute(
         `SELECT s.guild_story_id, s.title FROM story s
-         WHERE s.guild_id = ? AND s.story_status = 1 AND s.allow_joins = 1
+         WHERE s.guild_id = ? AND s.story_status = ? AND s.allow_joins = 1
            AND NOT EXISTS (SELECT 1 FROM story_writer sw
-             WHERE sw.story_id = s.story_id AND sw.discord_user_id = ? AND sw.sw_status IN (1,2))
+             WHERE sw.story_id = s.story_id AND sw.discord_user_id = ? AND sw.sw_status IN (?,?))
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-        [guildId, interaction.user.id, typed, typedPrefix]
+        [guildId, STORY_STATUS.ACTIVE, interaction.user.id, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, typed, typedPrefix]
       );
 
     } else if (subcommand === 'read') {
@@ -385,24 +383,24 @@ async function handleAutocomplete(connection, interaction) {
          FROM story s
          JOIN story_writer sw ON sw.story_id = s.story_id
          JOIN turn t ON t.story_writer_id = sw.story_writer_id
-         JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+         JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
          WHERE s.guild_id = ? AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          GROUP BY s.guild_story_id, s.title
          ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-        [guildId, typed, typedPrefix]
+        [ENTRY_STATUS.CONFIRMED, guildId, typed, typedPrefix]
       );
 
     } else if (subcommand === 'timeleft') {
       [rows] = await connection.execute(
         `SELECT s.guild_story_id, s.title,
            EXISTS (SELECT 1 FROM story_writer sw
-             WHERE sw.story_id = s.story_id AND sw.discord_user_id = ? AND sw.sw_status IN (1,2)
+             WHERE sw.story_id = s.story_id AND sw.discord_user_id = ? AND sw.sw_status IN (?,?)
            ) AS is_member
          FROM story s
-         WHERE s.guild_id = ? AND s.story_status = 1
+         WHERE s.guild_id = ? AND s.story_status = ?
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          ORDER BY is_member DESC, ${storyLastActivitySQL()} DESC LIMIT 25`,
-        [interaction.user.id, guildId, typed, typedPrefix]
+        [interaction.user.id, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, guildId, STORY_STATUS.ACTIVE, typed, typedPrefix]
       );
 
     } else if (subcommand === 'close') {
@@ -414,20 +412,20 @@ async function handleAutocomplete(connection, interaction) {
                  AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
              ) AS is_creator
            FROM story s
-           WHERE s.guild_id = ? AND s.story_status != 3
+           WHERE s.guild_id = ? AND s.story_status != ?
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
            ORDER BY is_creator DESC, ${storyLastActivitySQL()} DESC LIMIT 25`,
-          [interaction.user.id, guildId, typed, typedPrefix]
+          [interaction.user.id, guildId, STORY_STATUS.CLOSED, typed, typedPrefix]
         );
       } else {
         [rows] = await connection.execute(
           `SELECT s.guild_story_id, s.title FROM story s
            JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
-           WHERE s.guild_id = ? AND s.story_status != 3
+           WHERE s.guild_id = ? AND s.story_status != ?
              AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
            ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-          [interaction.user.id, guildId, typed, typedPrefix]
+          [interaction.user.id, guildId, STORY_STATUS.CLOSED, typed, typedPrefix]
         );
       }
 
@@ -443,8 +441,8 @@ async function handleAutocomplete(connection, interaction) {
            FROM story s
            WHERE s.guild_id = ?
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-           ORDER BY is_creator DESC, (s.story_status = 3) ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
-          [interaction.user.id, guildId, typed, typedPrefix]
+           ORDER BY is_creator DESC, (s.story_status = ?) ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
+          [interaction.user.id, guildId, typed, typedPrefix, STORY_STATUS.CLOSED]
         );
       } else {
         [manageRows] = await connection.execute(
@@ -453,13 +451,13 @@ async function handleAutocomplete(connection, interaction) {
            WHERE s.guild_id = ?
              AND sw.story_writer_id = (SELECT MIN(story_writer_id) FROM story_writer WHERE story_id = s.story_id)
              AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
-           ORDER BY (s.story_status = 3) ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
-          [interaction.user.id, guildId, typed, typedPrefix]
+           ORDER BY (s.story_status = ?) ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
+          [interaction.user.id, guildId, typed, typedPrefix, STORY_STATUS.CLOSED]
         );
       }
       return interaction.respond(
         manageRows.map(r => ({
-          name: (`${r.title} (#${r.guild_story_id})${r.story_status === 3 ? ' (closed)' : ''}`).slice(0, 100),
+          name: (`${r.title} (#${r.guild_story_id})${r.story_status === STORY_STATUS.CLOSED ? ' (closed)' : ''}`).slice(0, 100),
           value: String(r.guild_story_id)
         }))
       );
@@ -468,14 +466,14 @@ async function handleAutocomplete(connection, interaction) {
       const [pingRows] = await connection.execute(
         `SELECT s.guild_story_id, s.title, s.story_status FROM story s
          JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
-         WHERE s.guild_id = ? AND sw.sw_status IN (1,2)
+         WHERE s.guild_id = ? AND sw.sw_status IN (?,?)
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          ORDER BY s.story_status ASC, ${storyLastActivitySQL()} DESC LIMIT 25`,
-        [interaction.user.id, guildId, typed, typedPrefix]
+        [interaction.user.id, guildId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, typed, typedPrefix]
       );
       return interaction.respond(
         pingRows.map(r => ({
-          name: (`${r.title} (#${r.guild_story_id})${r.story_status === 3 ? ' (closed)' : ''}`).slice(0, 100),
+          name: (`${r.title} (#${r.guild_story_id})${r.story_status === STORY_STATUS.CLOSED ? ' (closed)' : ''}`).slice(0, 100),
           value: String(r.guild_story_id)
         }))
       );
@@ -485,20 +483,20 @@ async function handleAutocomplete(connection, interaction) {
         `SELECT DISTINCT s.guild_story_id, s.title FROM story s
          JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
          JOIN turn t ON t.story_writer_id = sw.story_writer_id
-         JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = 'confirmed'
+         JOIN story_entry se ON se.turn_id = t.turn_id AND se.entry_status = ?
          WHERE s.guild_id = ? AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-        [interaction.user.id, guildId, typed, typedPrefix]
+        [interaction.user.id, ENTRY_STATUS.CONFIRMED, guildId, typed, typedPrefix]
       );
 
     } else if (subcommand === 'tag') {
       [rows] = await connection.execute(
         `SELECT s.guild_story_id, s.title FROM story s
          JOIN story_writer sw ON sw.story_id = s.story_id AND sw.discord_user_id = ?
-         WHERE s.guild_id = ? AND sw.sw_status = 1 AND s.story_status = 1
+         WHERE s.guild_id = ? AND sw.sw_status = ? AND s.story_status = ?
            AND (s.title LIKE ? OR CAST(s.guild_story_id AS CHAR) LIKE ?)
          ORDER BY ${storyLastActivitySQL()} DESC LIMIT 25`,
-        [interaction.user.id, guildId, typed, typedPrefix]
+        [interaction.user.id, guildId, WRITER_STATUS.ACTIVE, STORY_STATUS.ACTIVE, typed, typedPrefix]
       );
 
     } else {
@@ -529,11 +527,11 @@ async function handleAutocomplete(connection, interaction) {
            FROM story_entry se
            JOIN turn t ON se.turn_id = t.turn_id
            JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-           WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+           WHERE sw.story_id = ? AND se.entry_status = ?
          ) sub
          WHERE CAST(turn_number AS CHAR) LIKE ? OR discord_display_name LIKE ?
          ORDER BY turn_number LIMIT 25`,
-        [storyId, `${typed}%`, `%${typed}%`]
+        [storyId, ENTRY_STATUS.CONFIRMED, `${typed}%`, `%${typed}%`]
       );
     } else {
       [rows] = await connection.execute(
@@ -544,12 +542,12 @@ async function handleAutocomplete(connection, interaction) {
            FROM story_entry se
            JOIN turn t ON se.turn_id = t.turn_id
            JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-           WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+           WHERE sw.story_id = ? AND se.entry_status = ?
          ) sub
          WHERE discord_user_id = ?
            AND (CAST(turn_number AS CHAR) LIKE ? OR discord_display_name LIKE ?)
          ORDER BY turn_number LIMIT 25`,
-        [storyId, interaction.user.id, `${typed}%`, `%${typed}%`]
+        [storyId, ENTRY_STATUS.CONFIRMED, interaction.user.id, `${typed}%`, `%${typed}%`]
       );
     }
 

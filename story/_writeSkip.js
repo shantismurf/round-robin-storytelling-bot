@@ -1,7 +1,8 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, checkIsAdmin, checkIsCreator } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded, deleteThreadAndAnnouncement } from './_turn.js';
 import { postThreadEntry } from './_entryRenderer.js';
+import { TURN_STATUS, JOB_STATUS, ENTRY_STATUS } from '../constants.js';
 
 export async function handleViewLastEntry(connection, interaction) {
   log(`handleViewLastEntry entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
@@ -13,8 +14,8 @@ export async function handleViewLastEntry(connection, interaction) {
     const [writerCheck] = await connection.execute(
       `SELECT sw.discord_user_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1`,
-      [storyId]
+       WHERE sw.story_id = ? AND t.turn_status = ?`,
+      [storyId, TURN_STATUS.ACTIVE]
     );
     if (!writerCheck.length || String(writerCheck[0].discord_user_id) !== interaction.user.id) {
       return await interaction.followUp({
@@ -28,15 +29,15 @@ export async function handleViewLastEntry(connection, interaction) {
               (SELECT COUNT(DISTINCT t2.turn_id)
                FROM turn t2
                JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
                WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) as turn_number
        FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story s ON sw.story_id = s.story_id
-       WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+       WHERE sw.story_id = ? AND se.entry_status = ?
        ORDER BY t.started_at DESC LIMIT 1`,
-      [storyId]
+      [ENTRY_STATUS.CONFIRMED, storyId, ENTRY_STATUS.CONFIRMED]
     );
 
     if (rows.length === 0) return;
@@ -62,8 +63,8 @@ export async function handleSkipTurn(connection, interaction) {
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id, sw.discord_display_name
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-      [storyId, interaction.user.id]
+       WHERE sw.story_id = ? AND t.turn_status = ? AND sw.discord_user_id = ?`,
+      [storyId, TURN_STATUS.ACTIVE, interaction.user.id]
     );
 
     if (turnInfo.length === 0) {
@@ -145,8 +146,8 @@ export async function handleSkipConfirm(connection, interaction) {
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id, sw.discord_display_name
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1 AND sw.discord_user_id = ?`,
-      [storyId, interaction.user.id]
+       WHERE sw.story_id = ? AND t.turn_status = ? AND sw.discord_user_id = ?`,
+      [storyId, TURN_STATUS.ACTIVE, interaction.user.id]
     );
 
     if (turnInfo.length === 0) {
@@ -174,7 +175,7 @@ export async function handleSkipConfirm(connection, interaction) {
     }
 
     getConfigValue(connection, 'txtStoryThreadTurnSkip', guildId).then(template =>
-      postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), template.replace('[writer_name]', turn.discord_display_name))
+      postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), replaceTemplateVariables(template, { writer_name: turn.discord_display_name }))
     ).catch(() => {});
 
     await interaction.editReply({ content: await getConfigValue(connection, 'txtSkipSuccess', guildId), components: [] });
@@ -189,13 +190,37 @@ export async function handleSkipConfirm(connection, interaction) {
 
 export async function handleThreadDeleteNow(connection, interaction) {
   const threadId = interaction.customId.replace('story_thread_delete_now_', '');
+  const guildId = interaction.guild.id;
   log(`handleThreadDeleteNow entry threadId=${threadId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferUpdate();
   try {
+    const [ownerRows] = await connection.execute(
+      `SELECT sw.story_id, sw.discord_user_id
+       FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       WHERE t.thread_id = ?
+       ORDER BY t.turn_id DESC LIMIT 1`,
+      [threadId]
+    );
+    if (ownerRows.length === 0) {
+      log(`handleThreadDeleteNow: no turn found for thread ${threadId} — ignoring`, { show: true, guildName: interaction?.guild?.name });
+      return;
+    }
+    const { story_id: storyId, discord_user_id: draftOwnerId } = ownerRows[0];
+    const isOwner = String(draftOwnerId) === interaction.user.id;
+    const [isCreator, isAdmin] = await Promise.all([
+      isOwner ? false : checkIsCreator(connection, storyId, interaction.user.id),
+      isOwner ? false : checkIsAdmin(connection, interaction, guildId),
+    ]);
+    if (!isOwner && !isCreator && !isAdmin) {
+      log(`handleThreadDeleteNow: user ${interaction.user.username} is not the draft owner/creator/admin for thread ${threadId} — denied`, { show: true, guildName: interaction?.guild?.name });
+      return;
+    }
+
     await connection.execute(
-      `UPDATE job SET job_status = 3 WHERE job_type = 'threadDelete' AND job_status = 0
+      `UPDATE job SET job_status = ? WHERE job_type = 'threadDelete' AND job_status = ?
        AND CAST(JSON_EXTRACT(payload, '$.threadId') AS CHAR) = ?`,
-      [String(threadId)]
+      [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, String(threadId)]
     );
     const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);
     if (thread) {

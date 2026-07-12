@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { PickNextWriter, NextTurn, skipActiveTurn } from './_turn.js';
+import { TURN_STATUS, WRITER_STATUS, JOB_STATUS, ENTRY_STATUS } from '../constants.js';
 
 // Keyed by admin user ID — holds context for the pending turn action
 const pendingTurnActionData = new Map();
@@ -56,8 +57,8 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_display_name
        FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1`,
-      [storyId]
+       WHERE sw.story_id = ? AND t.turn_status = ?`,
+      [storyId, TURN_STATUS.ACTIVE]
     );
     if (activeTurnRows.length === 0) {
       log(`handleTurnActionButton: skip — no active turn`, { show: false, guildName: interaction?.guild?.name });
@@ -94,9 +95,9 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     log(`handleTurnActionButton: next — fetching active writers for story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
     const [writers] = await connection.execute(
       `SELECT sw.story_writer_id, sw.discord_user_id, sw.discord_display_name
-       FROM story_writer sw WHERE sw.story_id = ? AND sw.sw_status = 1
+       FROM story_writer sw WHERE sw.story_id = ? AND sw.sw_status = ?
        ORDER BY sw.discord_display_name ASC LIMIT 25`,
-      [storyId]
+      [storyId, WRITER_STATUS.ACTIVE]
     );
     if (writers.length === 0) {
       return await interaction.reply({ content: await getConfigValue(connection, 'txtAdminKickNotWriter', guildId), flags: MessageFlags.Ephemeral });
@@ -119,15 +120,15 @@ export async function handleTurnActionButton(connection, interaction, manageStat
     const [prevRows] = await connection.execute(
       `SELECT sw.story_writer_id, sw.discord_display_name
        FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 0
+       WHERE sw.story_id = ? AND t.turn_status = ?
        ORDER BY t.ended_at DESC LIMIT 1`,
-      [storyId]
+      [storyId, TURN_STATUS.ENDED]
     );
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.story_writer_id, sw.discord_display_name as current_writer_name
        FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-       WHERE sw.story_id = ? AND t.turn_status = 1`,
-      [storyId]
+       WHERE sw.story_id = ? AND t.turn_status = ?`,
+      [storyId, TURN_STATUS.ACTIVE]
     );
     if (activeTurnRows.length === 0) {
       return await interaction.reply({ content: await getConfigValue(connection, 'txtAdminNoActiveTurn', guildId), flags: MessageFlags.Ephemeral });
@@ -298,8 +299,8 @@ export async function handleTurnActionSelectMenu(connection, interaction) {
       const [activeTurnRows] = await connection.execute(
         `SELECT t.turn_id, sw.discord_user_id as current_writer_id FROM turn t
          JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-         WHERE sw.story_id = ? AND t.turn_status = 1`,
-        [storyId]
+         WHERE sw.story_id = ? AND t.turn_status = ?`,
+        [storyId, TURN_STATUS.ACTIVE]
       );
 
       if (activeTurnRows.length === 0) {
@@ -365,8 +366,8 @@ export async function handleTurnActionModal(connection, interaction, manageState
     try {
       const [activeTurnRows] = await connection.execute(
         `SELECT t.turn_id FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-         WHERE sw.story_id = ? AND t.turn_status = 1`,
-        [storyId]
+         WHERE sw.story_id = ? AND t.turn_status = ?`,
+        [storyId, TURN_STATUS.ACTIVE]
       );
       if (activeTurnRows.length === 0) {
         pendingTurnActionData.delete(adminId);
@@ -387,12 +388,12 @@ export async function handleTurnActionModal(connection, interaction, manageState
 
       // Cancel old timeout job and schedule new one
       await connection.execute(
-        `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_type = 'turnTimeout' AND job_status = 0`,
-        [turnId]
+        `UPDATE job SET job_status = ? WHERE turn_id = ? AND job_type = 'turnTimeout' AND job_status = ?`,
+        [JOB_STATUS.CANCELLED, turnId, JOB_STATUS.PENDING]
       );
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
-        ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt, turnId]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
+        ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt, JOB_STATUS.PENDING, turnId]
       );
 
       await logAdminAction(connection, adminId, 'extend', storyId, null, `+${hours}h`);
@@ -431,12 +432,12 @@ export async function handleTurnActionModal(connection, interaction, manageState
          FROM story_entry se
          JOIN turn t ON se.turn_id = t.turn_id
          JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
-         WHERE sw.story_id = ? AND se.entry_status = 'confirmed'
+         WHERE sw.story_id = ? AND se.entry_status = ?
            AND (SELECT COUNT(DISTINCT t2.turn_id) FROM turn t2
                 JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
-                JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = 'confirmed'
+                JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
                 WHERE sw2.story_id = sw.story_id AND t2.started_at <= t.started_at) = ?`,
-        [storyId, turnNumber]
+        [storyId, ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.CONFIRMED, turnNumber]
       );
       log(`handleTurnActionModal: deleteentry — found ${entryRows.length} entries for turn ${turnNumber}`, { show: false, guildName: interaction?.guild?.name });
 
@@ -503,12 +504,12 @@ export async function handleTurnActionModal(connection, interaction, manageState
         pendingTurnActionData.delete(adminId);
         return await interaction.reply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', guildId), flags: MessageFlags.Ephemeral });
       }
-      if (rows[0].entry_status !== 'deleted') {
+      if (rows[0].entry_status !== ENTRY_STATUS.DELETED) {
         pendingTurnActionData.delete(adminId);
         return await interaction.reply({ content: await getConfigValue(connection, 'txtAdminRestoreEntryNotDeleted', guildId), flags: MessageFlags.Ephemeral });
       }
 
-      await connection.execute(`UPDATE story_entry SET entry_status = 'confirmed' WHERE story_entry_id = ?`, [entryId]);
+      await connection.execute(`UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?`, [ENTRY_STATUS.CONFIRMED, entryId]);
       await logAdminAction(connection, adminId, 'restoreentry', rows[0].story_id);
       pendingTurnActionData.delete(adminId);
       const msg = replaceTemplateVariables(

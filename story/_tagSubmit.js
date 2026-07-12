@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, checkIsAdmin, checkIsCreator, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { getActiveThreadId } from '../storybot.js';
+import { WRITER_STATUS } from '../constants.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
@@ -36,8 +37,8 @@ export async function handleTagCommand(connection, interaction) {
   log(`handleTagCommand entry: user=${interaction.user.username}, guildStoryId=${guildStoryId}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   const [writerRows] = await connection.execute(
-    `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
-    [storyId, userId]
+    `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = ?`,
+    [storyId, userId, WRITER_STATUS.ACTIVE]
   );
   if (writerRows.length === 0) {
     await interaction.reply({ content: await getConfigValue(connection, 'txtTagSubmitNotWriter', guildId), flags: MessageFlags.Ephemeral });
@@ -61,8 +62,8 @@ export async function handleTagSubmit(connection, interaction) {
   log(`handleTagSubmit entry: user=${interaction.user.username}, storyId=${storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   const [writerRows] = await connection.execute(
-    `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = 1`,
-    [storyId, userId]
+    `SELECT story_writer_id FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status = ?`,
+    [storyId, userId, WRITER_STATUS.ACTIVE]
   );
   if (writerRows.length === 0) {
     await interaction.reply({ content: await getConfigValue(connection, 'txtTagSubmitNotWriter', guildId), flags: MessageFlags.Ephemeral });
