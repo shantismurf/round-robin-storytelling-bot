@@ -399,6 +399,17 @@ export async function endTurnGuarded(connection, turnId) {
 }
 
 /**
+ * Build a synthetic context object that satisfies the guild/client usage
+ * in NextTurn and announcements without a real Discord interaction.
+ * Shared by job-runner.js and any other non-interaction-driven caller.
+ */
+export async function buildSyntheticContext(client, guildId) {
+  const guild = await client.guilds.fetch(guildId);
+  await guild.roles.fetch(); // populate roles cache for thread membership checks
+  return { guild, client };
+}
+
+/**
  * skipActiveTurn — ends a turn as a skip, cancels its pending jobs, and deletes its thread.
  * Shared by handleSkip and handleReassign so the skip logic lives in one place.
  */

@@ -110,6 +110,8 @@ Job retry: max 3 attempts, 5-minute delay between retries. Status codes: `0`=pen
 
 On startup, any job still at status `1` is re-queued to `0` — a job only stays claimed while its handler is synchronously running, so if the process restarted mid-job (e.g. a deploy), the row is orphaned rather than genuinely stuck. Completed/cancelled/failed jobs (`2`/`3`/`4`) older than 30 days are purged once per day.
 
+Note: status `2` is dual-purpose — set both by the retry exhaustion path in `job-runner.js` (genuine permanent failure, `attempts` = 3) and by pause/extend actions that cancel a job before rescheduling it (`attempts` = 0). Check `attempts` to tell the two apart when auditing. Status `3` is used when a turn ends outright (skip, timeout, close, remove) via `endTurnGuarded()` — no replacement job follows.
+
 ### job_log table
 
 Permanent record of completed scheduled job windows. Used for idempotency — a job checks `job_log` before acting, not the transient `job` table state.
@@ -145,6 +147,7 @@ Unique constraint on `(job_type, guild_id, window_key)` — duplicate insert fai
 | `sanitize(input, maxLength)` | Escapes HTML entities and Discord markdown for embed fields |
 | `sanitizeModalInput(input, maxLength, multiline)` | Normalizes whitespace from modal text inputs |
 | `splitAtParagraphs(text, maxLen)` | Splits embed text at paragraph boundaries |
+| `closeOrphanedGuildStories(conn, guildId)` | Bulk-closes a guild's stories on lost bot access (Discord `10004`): ends any active turns, closes stories, cancels pending jobs |
 
 ---
 

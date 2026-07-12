@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, discordTimestamp, closeOrphanedGuildStories } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
-import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded } from './story/_turn.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded, buildSyntheticContext } from './story/_turn.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 import { handleWeeklyRoundup, scheduleNextRoundup } from './story/roundup.js';
 import { getActiveThreadId } from './storybot.js';
@@ -121,16 +121,6 @@ async function processJob(connection, client, job) {
       }
     }
   }
-}
-
-/**
- * Build a synthetic context object that satisfies the guild/client usage
- * in NextTurn and announcements without a real Discord interaction.
- */
-async function buildSyntheticContext(client, guildId) {
-  const guild = await client.guilds.fetch(guildId);
-  await guild.roles.fetch(); // populate roles cache for thread membership checks
-  return { guild, client };
 }
 
 // ---------------------------------------------------------------------------
