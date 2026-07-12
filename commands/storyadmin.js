@@ -225,7 +225,7 @@ async function handleDeleteConfirm(connection, interaction) {
 
   try {
     const [storyRows] = await connection.execute(
-      `SELECT story_id, title, story_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
+      `SELECT story_id, title, story_thread_id, restricted_thread_id FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
@@ -236,10 +236,18 @@ async function handleDeleteConfirm(connection, interaction) {
     // Log before deleting so the story_id still exists in the log
     await logAdminAction(connection, interaction.user.id, 'delete', storyId);
 
+    // Cancel any pending jobs for this story's turns before the cascade-delete removes
+    // the turn rows out from under them — otherwise they later fire against a dangling turn_id.
+    await connection.execute(
+      `UPDATE job j JOIN turn t ON j.turn_id = t.turn_id JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       SET j.job_status = 3 WHERE sw.story_id = ? AND j.job_status = 0`,
+      [storyId]
+    );
+
     // Hard delete — cascades to story_writer, turn, story_entry
     await connection.execute(`DELETE FROM story WHERE story_id = ?`, [storyId]);
 
-    // Edit the reply before deleting the thread — if the command was run from inside
+    // Edit the reply before deleting the threads — if the command was run from inside
     // the story thread, deleting it first would destroy the ephemeral interaction context.
     await interaction.editReply({
       content: replaceTemplateVariables(
@@ -249,13 +257,14 @@ async function handleDeleteConfirm(connection, interaction) {
       components: []
     });
 
-    // Delete the Discord story thread after replying
-    if (story.story_thread_id) {
+    // Delete both Discord story threads (unrestricted and, if the story ever migrated,
+    // restricted) after replying.
+    for (const threadId of [story.story_thread_id, story.restricted_thread_id].filter(Boolean)) {
       try {
-        const thread = await interaction.guild.channels.fetch(story.story_thread_id);
+        const thread = await interaction.guild.channels.fetch(threadId);
         if (thread) await deleteThreadAndAnnouncement(thread);
       } catch (err) {
-        log(`Story thread already gone for story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
+        log(`Story thread ${threadId} already gone for story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
       }
     }
 

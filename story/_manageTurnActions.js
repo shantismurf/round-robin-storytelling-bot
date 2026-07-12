@@ -216,7 +216,14 @@ export async function handleTurnActionConfirm(connection, interaction) {
         return;
       }
       const nextWriterId = await PickNextWriter(connection, storyId);
-      if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+      if (nextWriterId) {
+        const turnResult = await NextTurn(connection, interaction, nextWriterId);
+        if (!turnResult.success) {
+          log(`handleTurnActionConfirm: NextTurn failed after admin skip for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+        }
+      } else {
+        log(`handleTurnActionConfirm: no eligible next writer after admin skip for story ${storyId} — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+      }
       await logAdminAction(connection, adminId, 'skip', storyId);
       log(`handleTurnActionConfirm: skip complete — story ${storyId} nextWriterId=${nextWriterId ?? 'none'}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply({ content: await getConfigValue(connection, 'txtAdminSkipSuccess', guildId), components: [] });
@@ -232,7 +239,14 @@ export async function handleTurnActionConfirm(connection, interaction) {
       }
       await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [prevWriter.story_writer_id, storyId]);
       const nextWriterId = await PickNextWriter(connection, storyId);
-      if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
+      if (nextWriterId) {
+        const turnResult = await NextTurn(connection, interaction, nextWriterId);
+        if (!turnResult.success) {
+          log(`handleTurnActionConfirm: NextTurn failed after admin reassign for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+        }
+      } else {
+        log(`handleTurnActionConfirm: no eligible next writer after admin reassign for story ${storyId} — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+      }
       // Queue the original current writer to go after the reassigned turn
       await connection.execute(`UPDATE story SET next_writer_id = ? WHERE story_id = ?`, [activeTurn.story_writer_id ?? null, storyId]);
       await logAdminAction(connection, adminId, 'reassign', storyId);
@@ -291,7 +305,10 @@ export async function handleTurnActionSelectMenu(connection, interaction) {
       if (activeTurnRows.length === 0) {
         log(`handleTurnActionSelectMenu: next — no active turn, starting immediately for "${selectedWriter.discord_display_name}" story=${storyId}`, { show: true, guildName: interaction?.guild?.name });
         await connection.execute(`UPDATE story SET next_writer_id = NULL WHERE story_id = ?`, [storyId]);
-        await NextTurn(connection, interaction, parseInt(selectedWriterId));
+        const turnResult = await NextTurn(connection, interaction, parseInt(selectedWriterId));
+        if (!turnResult.success) {
+          log(`handleTurnActionSelectMenu: NextTurn failed starting "${selectedWriter.discord_display_name}" for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+        }
         await logAdminAction(connection, adminId, 'next', storyId, selectedWriter.discord_user_id);
         pendingTurnActionData.delete(adminId);
         await interaction.update({
@@ -370,13 +387,12 @@ export async function handleTurnActionModal(connection, interaction, manageState
 
       // Cancel old timeout job and schedule new one
       await connection.execute(
-        `UPDATE job SET job_status = 2 WHERE job_type = 'turnTimeout' AND job_status = 0
-         AND CAST(JSON_EXTRACT(payload, '$.turnId') AS UNSIGNED) = ?`,
+        `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_type = 'turnTimeout' AND job_status = 0`,
         [turnId]
       );
       await connection.execute(
-        `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, 0)`,
-        ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt]
+        `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, 0, ?)`,
+        ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt, turnId]
       );
 
       await logAdminAction(connection, adminId, 'extend', storyId, null, `+${hours}h`);

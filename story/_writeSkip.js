@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log } from '../utilities.js';
-import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, deleteThreadAndAnnouncement } from './_turn.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded, deleteThreadAndAnnouncement } from './_turn.js';
 import { postThreadEntry } from './_entryRenderer.js';
 
 export async function handleViewLastEntry(connection, interaction) {
@@ -156,17 +156,22 @@ export async function handleSkipConfirm(connection, interaction) {
 
     const turn = turnInfo[0];
 
-    await connection.execute(
-      `UPDATE turn SET turn_status = 0, ended_at = NOW() WHERE turn_id = ?`,
-      [turn.turn_id]
-    );
-    await connection.execute(
-      `UPDATE job SET job_status = 3 WHERE turn_id = ? AND job_status = 0`,
-      [turn.turn_id]
-    );
+    const ended = await endTurnGuarded(connection, turn.turn_id);
+    if (!ended) {
+      log(`handleSkipConfirm: turn ${turn.turn_id} already ended (race), no-op`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteTurnEnded', guildId), components: [] });
+      return;
+    }
 
     const nextWriterId = await PickNextWriter(connection, storyId);
-    await NextTurn(connection, interaction, nextWriterId);
+    if (nextWriterId) {
+      const turnResult = await NextTurn(connection, interaction, nextWriterId);
+      if (!turnResult.success) {
+        log(`handleSkipConfirm: NextTurn failed for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
+      }
+    } else {
+      log(`handleSkipConfirm: no eligible next writer for story ${storyId} — story has no active turn`, { show: true, guildName: interaction?.guild?.name, hub: true });
+    }
 
     getConfigValue(connection, 'txtStoryThreadTurnSkip', guildId).then(template =>
       postStoryThreadActivity(connection, interaction.guild, parseInt(storyId), template.replace('[writer_name]', turn.discord_display_name))
@@ -174,7 +179,7 @@ export async function handleSkipConfirm(connection, interaction) {
 
     await interaction.editReply({ content: await getConfigValue(connection, 'txtSkipSuccess', guildId), components: [] });
 
-    await endTurnThread(connection, interaction.guild, turn.thread_id, turn.discord_user_id, guildId);
+    await endTurnThread(connection, interaction.guild, turn.thread_id, turn.discord_user_id, guildId, { forceDelete: variant === 'delete' });
 
   } catch (error) {
     log(`Skip turn failed: ${error}`, { show: true, guildName: interaction?.guild?.name });

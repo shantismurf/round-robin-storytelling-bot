@@ -273,6 +273,7 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     log(`doFinalizeEntry: beginning DB transaction — turn ${turn.turn_id}`, { show: false, guildName: interaction?.guild?.name });
     const txn = await connection.getConnection();
     await txn.beginTransaction();
+    let nextTurnResult = null;
     try {
       const ended = await endTurnGuarded(txn, turn.turn_id);
       if (!ended) {
@@ -286,7 +287,9 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
         [turn.turn_id, entryContent]
       );
       const nextWriterId = await PickNextWriter(txn, storyId);
-      await NextTurn(txn, interaction, nextWriterId);
+      nextTurnResult = nextWriterId
+        ? await NextTurn(txn, interaction, nextWriterId)
+        : { success: false, error: 'No eligible next writer' };
       await txn.commit();
       log(`doFinalizeEntry: DB transaction committed — entry inserted, turn ${turn.turn_id} ended, next writer ${nextWriterId}`, { show: true, guildName: interaction?.guild?.name });
     } catch (txnError) {
@@ -299,6 +302,10 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
       throw txnError;
     } finally {
       txn.release();
+    }
+
+    if (!nextTurnResult?.success) {
+      log(`doFinalizeEntry: NextTurn failed for story ${storyId} after turn ${turn.turn_id} was finalized — story has no active turn: ${nextTurnResult?.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
     }
 
     const [turnNumResult] = await connection.execute(

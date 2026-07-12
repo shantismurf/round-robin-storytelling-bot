@@ -1,7 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator } from '../utilities.js';
-import { updateStoryStatusMessage } from './_storyStatus.js';
-import { endTurnThread, endTurnGuarded } from './_turn.js';
+import { endTurnThread, closeStoryInternals } from './_turn.js';
 import { postStoryFeedClosedAnnouncement } from '../announcements.js';
 import { generateStoryExport } from './export.js';
 import { getActiveThreadId } from '../storybot.js';
@@ -108,9 +107,9 @@ export async function handleCloseConfirm(connection, interaction) {
     }
     const story = storyRows[0];
 
-    // End active turn if exists. Thread cleanup is deferred until after the
-    // final reply below, since endTurnThread may delete the thread the
-    // interaction itself was issued from.
+    // Capture the active turn before closeStoryInternals ends it, so we can dispose
+    // of its thread (24h-preserving any draft) after the reply below — endTurnThread
+    // may delete the thread the interaction itself was issued from.
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id, sw.discord_user_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
@@ -118,17 +117,11 @@ export async function handleCloseConfirm(connection, interaction) {
        ORDER BY t.started_at DESC LIMIT 1`,
       [storyId]
     );
-    let activeTurn = null;
-    if (activeTurnRows.length > 0) {
-      activeTurn = activeTurnRows[0];
-      await endTurnGuarded(connection, activeTurn.turn_id);
-    }
+    const activeTurn = activeTurnRows.length > 0 ? activeTurnRows[0] : null;
 
-    // Close the story
-    await connection.execute(
-      `UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`,
-      [storyId]
-    );
+    // Shared close core: ends the active turn, cancels pending jobs, sets story_status=3,
+    // retitles any existing thread(s), and refreshes the status message.
+    await closeStoryInternals(connection, interaction, storyId);
 
     // Story is now marked closed — gather stats directly (export is now a manual, optional step)
     const { turnCount, wordCount, writerCount } = await getStoryStats(connection, storyId);
@@ -149,28 +142,15 @@ export async function handleCloseConfirm(connection, interaction) {
         .setStyle(ButtonStyle.Secondary)
     );
 
-    // Update title on every existing thread (unrestricted and/or restricted — a story that
-    // migrated at some point can have both); post the close message + export buttons once,
-    // to whichever is the currently-active thread for the story's rating.
+    // closeStoryInternals already retitled every existing thread (unrestricted and/or
+    // restricted — a story that migrated at some point can have both). Post the close
+    // message + export buttons once, to whichever is the currently-active thread.
     let postedPublicly = false;
     const activeThreadId = getActiveThreadId(story);
-    const threadIdsToRetitle = [story.story_thread_id, story.restricted_thread_id].filter(Boolean);
-    const [threadTitleTemplate, txtClosed] = await Promise.all([
-      getConfigValue(connection, 'txtStoryThreadTitle', guildId),
-      getConfigValue(connection, 'txtClosed', guildId)
-    ]);
-    const updatedTitle = threadTitleTemplate
-      .replace('[story_id]', story.guild_story_id)
-      .replace('[inputStoryTitle]', story.title)
-      .replace('[story_status]', txtClosed);
-
-    for (const threadId of threadIdsToRetitle) {
+    if (activeThreadId) {
       try {
-        const thread = await interaction.guild.channels.fetch(threadId);
-        if (!thread) continue;
-        await thread.setName(updatedTitle);
-
-        if (threadId === activeThreadId) {
+        const thread = await interaction.guild.channels.fetch(activeThreadId);
+        if (thread) {
           const txtStoryClosedPublic = await getConfigValue(connection, 'txtStoryClosedPublic', guildId);
           const closedMsg = replaceTemplateVariables(txtStoryClosedPublic, {
             story_title: story.title,
@@ -182,7 +162,7 @@ export async function handleCloseConfirm(connection, interaction) {
           postedPublicly = true;
         }
       } catch (err) {
-        log(`Story thread ${threadId} not available for close (story ${storyId})`, { show: false, guildName: interaction?.guild?.name });
+        log(`Story thread ${activeThreadId} not available for close (story ${storyId})`, { show: false, guildName: interaction?.guild?.name });
       }
     }
 
@@ -190,8 +170,6 @@ export async function handleCloseConfirm(connection, interaction) {
     if (turnCount > 0) {
       await postStoryFeedClosedAnnouncement(connection, interaction, story.title, turnCount, wordCount, writerCount, story.rating);
     }
-
-    updateStoryStatusMessage(connection, interaction.guild, storyId).catch(() => {});
 
     log(`handleCloseConfirm: story ${storyId} closed successfully`, { show: true, guildName: interaction?.guild?.name });
 
