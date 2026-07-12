@@ -404,6 +404,115 @@ export async function endTurnGuarded(connection, turnId) {
 }
 
 /**
+ * closeStoryInternals — the state changes true of every story close regardless of
+ * why it happened (manual /story close, an auto-close on last-writer-departure, or
+ * an admin delete): end any still-active turn, cancel every pending job tied to the
+ * story's turns, flip story_status, retitle any existing thread(s) to the closed
+ * title, and refresh the status message. Always silent — callers that want a public
+ * "story closed" announcement (close.js) post it themselves afterward.
+ */
+export async function closeStoryInternals(connection, ctx, storyId) {
+  const guildId = ctx.guild.id;
+
+  const [activeTurnRows] = await connection.execute(
+    `SELECT t.turn_id FROM turn t JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     WHERE sw.story_id = ? AND t.turn_status = 1`,
+    [storyId]
+  );
+  if (activeTurnRows.length > 0) {
+    await endTurnGuarded(connection, activeTurnRows[0].turn_id);
+  }
+
+  // Belt-and-suspenders: endTurnGuarded above only cancels the active turn's own jobs.
+  // Catch anything else still pending against any of this story's turns (e.g. a job
+  // whose turn was already ended by another path moments earlier).
+  await connection.execute(
+    `UPDATE job j JOIN turn t ON j.turn_id = t.turn_id JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+     SET j.job_status = 3 WHERE sw.story_id = ? AND j.job_status = 0`,
+    [storyId]
+  );
+
+  await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
+
+  const [storyRows] = await connection.execute(
+    `SELECT guild_story_id, title, story_thread_id, restricted_thread_id FROM story WHERE story_id = ?`,
+    [storyId]
+  );
+  const story = storyRows[0];
+  const threadIds = story ? [story.story_thread_id, story.restricted_thread_id].filter(Boolean) : [];
+  if (threadIds.length > 0) {
+    const [threadTitleTemplate, txtClosed] = await Promise.all([
+      getConfigValue(connection, 'txtStoryThreadTitle', guildId),
+      getConfigValue(connection, 'txtClosed', guildId)
+    ]);
+    const updatedTitle = threadTitleTemplate
+      .replace('[story_id]', story.guild_story_id)
+      .replace('[inputStoryTitle]', story.title)
+      .replace('[story_status]', txtClosed);
+    for (const threadId of threadIds) {
+      try {
+        const thread = await ctx.guild.channels.fetch(threadId);
+        if (thread) await thread.setName(updatedTitle);
+      } catch (err) {
+        log(`closeStoryInternals: could not retitle thread ${threadId} for story ${storyId}: ${err}`, { show: false, guildName: ctx.guild?.name });
+      }
+    }
+  }
+
+  await updateStoryStatusMessage(connection, ctx.guild, storyId).catch(err =>
+    log(`closeStoryInternals: status message update failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: ctx.guild?.name })
+  );
+}
+
+/**
+ * departWriter — the shared core of a writer permanently leaving a story (admin
+ * remove, self leave via the manage panel, or a Discord guild-leave/ban sweep):
+ * end their active turn if any (24h-preserving the draft like skip/timeout do),
+ * flip sw_status, and either close the story (if they were the last active
+ * writer) or advance to the next one. Callers keep their own confirmation UI and
+ * reply text — this only performs the state change and its Discord side-effects.
+ */
+export async function departWriter(connection, ctx, storyId, writerId, discordUserId) {
+  const [activeTurnRows] = await connection.execute(
+    `SELECT turn_id, thread_id FROM turn WHERE story_writer_id = ? AND turn_status = 1`,
+    [writerId]
+  );
+  const [remainingRows] = await connection.execute(
+    `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = 1 AND story_writer_id != ?`,
+    [storyId, writerId]
+  );
+  const isLastWriter = remainingRows[0].count === 0;
+
+  let turnEnded = false;
+  if (activeTurnRows.length > 0) {
+    const { turn_id: turnId, thread_id: threadId } = activeTurnRows[0];
+    turnEnded = await endTurnGuarded(connection, turnId);
+    if (turnEnded && threadId) {
+      await endTurnThread(connection, ctx.guild, threadId, discordUserId, ctx.guild.id);
+    }
+  }
+
+  await connection.execute(`UPDATE story_writer SET sw_status = 0, left_at = NOW() WHERE story_writer_id = ?`, [writerId]);
+
+  let nextWriterId = null;
+  if (isLastWriter) {
+    await closeStoryInternals(connection, ctx, storyId);
+  } else if (turnEnded) {
+    nextWriterId = await PickNextWriter(connection, storyId);
+    if (nextWriterId) {
+      const result = await NextTurn(connection, ctx, nextWriterId);
+      if (!result.success) {
+        log(`departWriter: NextTurn failed after writer ${writerId} departed story ${storyId} — story has no active turn: ${result.error}`, { show: true, guildName: ctx.guild?.name, hub: true });
+      }
+    } else {
+      log(`departWriter: no eligible next writer after writer ${writerId} departed story ${storyId} — story has no active turn`, { show: true, guildName: ctx.guild?.name, hub: true });
+    }
+  }
+
+  return { turnEnded, isLastWriter, nextWriterId };
+}
+
+/**
  * Build a synthetic context object that satisfies the guild/client usage
  * in NextTurn and announcements without a real Discord interaction.
  * Shared by job-runner.js and any other non-interaction-driven caller.

@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
-import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, postStoryThreadActivity, endTurnGuarded } from './_turn.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnGuarded, endTurnThread, departWriter } from './_turn.js';
 
 // Keyed by admin user ID
 const pendingManageUserData = new Map();
@@ -313,12 +313,7 @@ async function handleManageUserConfirm(connection, interaction) {
           log(`handleManageUserConfirm: pause — turn ${activeTurnId} already ended (race), skipping thread cleanup/advance`, { show: true, guildName: interaction?.guild?.name });
         } else {
           if (activeTurnThreadId) {
-            try {
-              const thread = await interaction.guild.channels.fetch(activeTurnThreadId);
-              if (thread) await deleteThreadAndAnnouncement(thread);
-            } catch (err) {
-              log(`handleManageUserConfirm: could not delete thread on pause: ${err}`, { show: true, guildName: interaction?.guild?.name });
-            }
+            await endTurnThread(connection, interaction.guild, activeTurnThreadId, targetUserId, guildId);
           }
           try {
             const nextWriterId = await PickNextWriter(connection, storyId);
@@ -347,34 +342,16 @@ async function handleManageUserConfirm(connection, interaction) {
 
     } else if (action === 'remove') {
       log(`handleManageUserConfirm: removing writer ${writerId} isActiveTurn=${isActiveTurn} isLastWriter=${isLastWriter}`, { show: false, guildName: interaction?.guild?.name });
-      let turnEnded = false;
-      if (isActiveTurn) {
-        turnEnded = await endTurnGuarded(connection, activeTurnId);
-        if (!turnEnded) {
-          log(`handleManageUserConfirm: remove — turn ${activeTurnId} already ended (race), skipping thread cleanup/advance`, { show: true, guildName: interaction?.guild?.name });
-        } else if (activeTurnThreadId) {
-          try {
-            const thread = await interaction.guild.channels.fetch(activeTurnThreadId);
-            if (thread) await deleteThreadAndAnnouncement(thread);
-          } catch (err) {
-            log(`handleManageUserConfirm: could not delete thread on remove: ${err}`, { show: true, guildName: interaction?.guild?.name });
-          }
-        }
-      }
-      await connection.execute(`UPDATE story_writer SET sw_status = 0, left_at = NOW() WHERE story_writer_id = ?`, [writerId]);
-      if (isLastWriter) {
-        await connection.execute(`UPDATE story SET story_status = 3, closed_at = NOW() WHERE story_id = ?`, [storyId]);
+      const { isLastWriter: closedStory } = await departWriter(connection, interaction, storyId, writerId, targetUserId);
+      if (closedStory) {
         log(`handleManageUserConfirm: story ${storyId} auto-closed — last writer removed`, { show: true, guildName: interaction?.guild?.name });
-      } else if (turnEnded) {
-        const nextWriterId = await PickNextWriter(connection, storyId);
-        if (nextWriterId) await NextTurn(connection, interaction, nextWriterId);
       }
       await logAdminAction(connection, adminId, 'remove', storyId, targetUserId);
       const successMsg = replaceTemplateVariables(
         await getConfigValue(connection, 'txtAdminKickSuccess', guildId),
         { user_name: writerName, story_title: storyTitle }
       );
-      const closeNote = isLastWriter ? '\n' + await getConfigValue(connection, 'txtAdminRemoveAutoClose', guildId) : '';
+      const closeNote = closedStory ? '\n' + await getConfigValue(connection, 'txtAdminRemoveAutoClose', guildId) : '';
       await interaction.editReply({ content: successMsg + closeNote, embeds: [], components: [] });
 
       getConfigValue(connection, 'txtStoryThreadWriterRemove', guildId).then(template =>
