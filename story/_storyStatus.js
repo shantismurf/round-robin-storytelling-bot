@@ -92,7 +92,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'txtStatusReminderSuffix', 'txtStatusNoEntries', 'txtStatusEntryStats',
       'lblStatusTags', 'lblStatusStatus', 'lblStatusMode', 'lblStatusWriterOrder',
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
-      'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusClosed',
+      'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusInactiveHeading', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
       'lblMetaDynamic',
       ratingBadgeCfgKey,
@@ -124,6 +124,14 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const legendParts = [cfg.txtStatusLegendCreator, cfg.txtStatusLegendCurrentTurn, cfg.txtStatusLegendNextUp];
     if (pausedWriters.length > 0) legendParts.push(cfg.txtStatusLegendPaused);
 
+    const inactiveLines = [
+      ...pausedWriters.map(w => {
+        const penName = w.pen_name && w.pen_name !== w.discord_display_name ? ` (${w.pen_name})` : '';
+        return `⏸️ ${w.discord_display_name}${penName}`;
+      }),
+      ...leftWriters.map(w => `*${w.discord_display_name}*`),
+    ];
+
     const writerLines = [
       ...activeWriters.map(w => {
         const isCurrent = activeTurn?.story_writer_id === w.story_writer_id;
@@ -134,11 +142,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         const prefix = emojis ? `${emojis} ` : '';
         return `${prefix}**${w.discord_display_name}**${penName}`;
       }),
-      ...pausedWriters.map(w => {
-        const penName = w.pen_name && w.pen_name !== w.discord_display_name ? ` (${w.pen_name})` : '';
-        return `⏸️ ${w.discord_display_name}${penName}`;
-      }),
-      ...leftWriters.map(w => `*${w.discord_display_name}*`),
+      ...(inactiveLines.length > 0 ? ['', '', `**${cfg.lblStatusInactiveHeading}**`, ...inactiveLines] : []),
       '',
       `*${legendParts.join('  ·  ')}*`
     ];

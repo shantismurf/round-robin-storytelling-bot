@@ -59,6 +59,10 @@ Implement two-tier high-resolution coverage using `log(content, { show, guildNam
 - **Layer-1 unit tests** live in `test/*.test.js`, run via `npm test` (`node --test`).
   Cover pure/DB-only logic using `test/_fakeConnection.js` (a scripted-queue fake
   `connection.execute()`) — no live DB or Discord connection required.
+- **Run `npm install` first if `node_modules` isn't present.** The test files import
+  `utilities.js`, which requires `mysql2` even though no test opens a live DB connection —
+  `npm test` fails with `ERR_MODULE_NOT_FOUND` on a fresh clone/container until dependencies
+  are installed.
 
 ## System Documentation
 Review and maintain roadmaps with every implementation.
