@@ -56,7 +56,7 @@ Implement two-tier high-resolution coverage using `log(content, { show, guildNam
 - **Hub Log Channel** some logs are duplicated to the hub server's `#logs` channel for instant admin notification (`cfgHubLogChannelId`): Any `show: true` message that either contains a clear problem pattern (e.g. 'error', 'failed'. 'not found', etc), OR is explicitly flagged with `hub: true` (e.g. new guild registration)
 
 ## Testing
-- **Layer-1 unit tests** live in `test/*.test.js`, run via `npm test` (`node --test`).
+- **Layer-1 unit tests** live in `test/*.test.js`. Run `npm install` first, then execute via `npm test` (`node --test`).
   Cover pure/DB-only logic using `test/_fakeConnection.js` (a scripted-queue fake
   `connection.execute()`) — no live DB or Discord connection required.
 

@@ -128,6 +128,7 @@ Words: ~[word_count]', 'en', 1),
 ('lblStatusNextWriter', 'Next Writer', 'en', 1),
 ('lblStatusEntries', 'Entries', 'en', 1),
 ('lblStatusWriterList', 'Writer List', 'en', 1),
+('lblStatusInactiveHeading', 'Inactive', 'en', 1),
 ('lblStatusClosed', 'Closed', 'en', 1),
 -- Thread preservation / skip flow
 ('txtThreadScheduledDelete', 'This turn has now ended and this thread is scheduled for deletion [relative_timestamp].', 'en', 1),
