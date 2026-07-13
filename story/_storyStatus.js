@@ -142,7 +142,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         const prefix = emojis ? `${emojis} ` : '';
         return `${prefix}**${w.discord_display_name}**${penName}`;
       }),
-      ...(inactiveLines.length > 0 ? ['', '', `**${cfg.lblStatusInactiveHeading}**`, ...inactiveLines] : []),
+      ...(inactiveLines.length > 0 ? ['', `**${cfg.lblStatusInactiveHeading}**`, ...inactiveLines] : []),
       '',
       `*${legendParts.join('  ·  ')}*`
     ];
