@@ -53,6 +53,12 @@
 
 ---
 
+## other adjacent issues 
+- updateStoryStatusMessage never actually throws (it catches internally), so the .catch(err => log(...)) wrappers are technically dead code — but that's a pre-existing pattern from departWriter, not something this PR introduces.
+- commands/_myStoryManage.js's resume log line uses "mystory manage resume" instead of the actual function name, deviating from CLAUDE.md's functionName failed for [context] convention — but it matches a sibling line already in that same function, so it's pre-existing house-style drift, not new
+
+---
+
 ## Create style_roadmap.md
 
 Establish a project style standard document and reference it from CLAUDE.md. Should define at minimum:
