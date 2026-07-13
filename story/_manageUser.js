@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnGuarded, endTurnThread, departWriter } from './_turn.js';
+import { updateStoryStatusMessage } from './_storyStatus.js';
 import { TURN_STATUS, WRITER_STATUS } from '../constants.js';
 
 // Keyed by admin user ID
@@ -304,6 +305,7 @@ async function handleManageUserConfirm(connection, interaction) {
     if (action === 'pause') {
       log(`handleManageUserConfirm: pausing writer ${writerId}`, { show: false, guildName: interaction?.guild?.name });
       await connection.execute(`UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`, [WRITER_STATUS.PAUSED, writerId]);
+      let pauseStatusRefreshed = false;
       if (isActiveTurn) {
         const ended = await endTurnGuarded(connection, activeTurnId);
         if (!ended) {
@@ -316,7 +318,9 @@ async function handleManageUserConfirm(connection, interaction) {
             const nextWriterId = await PickNextWriter(connection, storyId);
             if (nextWriterId) {
               const turnResult = await NextTurn(connection, interaction, nextWriterId);
-              if (!turnResult.success) {
+              if (turnResult.success) {
+                pauseStatusRefreshed = true;
+              } else {
                 log(`handleManageUserConfirm: NextTurn failed after pause for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
               }
             } else {
@@ -326,6 +330,11 @@ async function handleManageUserConfirm(connection, interaction) {
             log(`handleManageUserConfirm: could not advance turn after pause for story ${storyId}: ${err}`, { show: true, guildName: interaction?.guild?.name });
           }
         }
+      }
+      if (!pauseStatusRefreshed) {
+        await updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err =>
+          log(`handleManageUserConfirm: status message update failed after pause for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name })
+        );
       }
       await logAdminAction(connection, adminId, 'pause_user', storyId, targetUserId);
       const successMsg = replaceTemplateVariables(
@@ -337,6 +346,9 @@ async function handleManageUserConfirm(connection, interaction) {
     } else if (action === 'unpause') {
       log(`handleManageUserConfirm: unpausing writer ${writerId}`, { show: false, guildName: interaction?.guild?.name });
       await connection.execute(`UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`, [WRITER_STATUS.ACTIVE, writerId]);
+      await updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err =>
+        log(`handleManageUserConfirm: status message update failed after unpause for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name })
+      );
       await logAdminAction(connection, adminId, 'unpause_user', storyId, targetUserId);
       const successMsg = replaceTemplateVariables(
         await getConfigValue(connection, 'txtAdminUnpauseUserSuccess', guildId),
