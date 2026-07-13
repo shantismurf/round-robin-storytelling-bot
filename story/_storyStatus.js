@@ -60,13 +60,14 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     // Entry stats — count confirmed entries, words, and inline images
     const [confirmedEntries] = await connection.execute(
-      `SELECT se.content FROM story_entry se
+      `SELECT se.content, t.story_writer_id FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND se.entry_status = ?`,
       [storyId, ENTRY_STATUS.CONFIRMED]
     );
     const entryCount = confirmedEntries.length;
+    const contributingWriterIds = new Set(confirmedEntries.map(e => e.story_writer_id));
     const cdnImageRegex = /https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+/g;
     let wordCount = 0;
     let imageCount = 0;
@@ -113,7 +114,9 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     const activeWriters = writers.filter(w => w.sw_status === WRITER_STATUS.ACTIVE);
     const pausedWriters = writers.filter(w => w.sw_status === WRITER_STATUS.PAUSED);
-    const leftWriters   = writers.filter(w => w.sw_status === WRITER_STATUS.LEFT);
+    // Departed writers who never contributed a confirmed entry are dropped from the roster
+    // entirely rather than archived — nothing to preserve a record of.
+    const leftWriters   = writers.filter(w => w.sw_status === WRITER_STATUS.LEFT && contributingWriterIds.has(w.story_writer_id));
 
     // Creator = first writer to join (first in joined_at ASC order among active writers)
     const creatorId = activeWriters[0]?.story_writer_id ?? null;

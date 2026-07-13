@@ -496,18 +496,31 @@ export async function departWriter(connection, ctx, storyId, writerId, discordUs
   await connection.execute(`UPDATE story_writer SET sw_status = ?, left_at = NOW() WHERE story_writer_id = ?`, [WRITER_STATUS.LEFT, writerId]);
 
   let nextWriterId = null;
+  let statusRefreshed = false;
   if (isLastWriter) {
     await closeStoryInternals(connection, ctx, storyId);
+    statusRefreshed = true;
   } else if (turnEnded) {
     nextWriterId = await PickNextWriter(connection, storyId);
     if (nextWriterId) {
       const result = await NextTurn(connection, ctx, nextWriterId);
-      if (!result.success) {
+      if (result.success) {
+        statusRefreshed = true;
+      } else {
         log(`departWriter: NextTurn failed after writer ${writerId} departed story ${storyId} — story has no active turn: ${result.error}`, { show: true, guildName: ctx.guild?.name, hub: true });
       }
     } else {
       log(`departWriter: no eligible next writer after writer ${writerId} departed story ${storyId} — story has no active turn`, { show: true, guildName: ctx.guild?.name, hub: true });
     }
+  }
+
+  // closeStoryInternals and a successful NextTurn already refresh the status post as part of
+  // their own flow — every other path (writer wasn't on the active turn, or advancing it failed)
+  // needs an explicit refresh so a removal is always reflected immediately.
+  if (!statusRefreshed) {
+    await updateStoryStatusMessage(connection, ctx.guild, storyId).catch(err =>
+      log(`departWriter: status message update failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: ctx.guild?.name })
+    );
   }
 
   return { turnEnded, isLastWriter, nextWriterId };
