@@ -236,6 +236,11 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const storyThread = await guild.channels.fetch(activeThreadId).catch(() => null);
     if (!storyThread) return;
 
+    // Story is still active/paused per the DB, so an archived/locked thread here means
+    // Discord (or a user) archived it out from under the engine — reopen it to post.
+    if (storyThread.locked) await storyThread.setLocked(false).catch(() => {});
+    if (storyThread.archived) await storyThread.setArchived(false).catch(() => {});
+
     // Keep story thread title in sync with current status
     try {
       const expectedTitle = await buildThreadTitle(connection, story);

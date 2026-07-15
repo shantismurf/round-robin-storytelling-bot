@@ -44,6 +44,8 @@ export async function handleViewLastEntry(connection, interaction) {
 
     const { content, discord_display_name, show_authors, scene_break_divider, turn_number } = rows[0];
     const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
+    if (interaction.channel.locked) await interaction.channel.setLocked(false).catch(() => {});
+    if (interaction.channel.archived) await interaction.channel.setArchived(false).catch(() => {});
     await postThreadEntry(interaction.channel, content, authorLine, scene_break_divider);
 
   } catch (error) {

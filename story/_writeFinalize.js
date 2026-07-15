@@ -321,6 +321,8 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
 
     try {
       const storyThread = await interaction.guild.channels.fetch(activeThreadId);
+      if (storyThread.locked) await storyThread.setLocked(false).catch(() => {});
+      if (storyThread.archived) await storyThread.setArchived(false).catch(() => {});
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
       await postThreadEntry(storyThread, entryContent, authorLine, scene_break_divider);
       log(`doFinalizeEntry: entry posted to story thread ${activeThreadId} as turn ${turn_number}`, { show: true, guildName: interaction?.guild?.name });
