@@ -225,6 +225,8 @@ export async function confirmEntry(connection, entryId, interaction) {
 
     try {
       const storyThread = await interaction.guild.channels.fetch(activeThreadId);
+      if (storyThread.locked) await storyThread.setLocked(false).catch(() => {});
+      if (storyThread.archived) await storyThread.setArchived(false).catch(() => {});
       const authorLine = show_authors ? `Turn ${turn_number} — ${discord_display_name}` : null;
       await postThreadEntry(storyThread, content, authorLine, scene_break_divider);
     } catch (threadError) {
