@@ -412,6 +412,17 @@ export async function getTurnNumber(connection, storyId) {
   return result[0].turn_number;
 }
 
+/**
+ * Strip the trailing emoji (and the space before it) from a label that's
+ * stored with matching emoji on both ends for modal display. Uses grapheme
+ * segmentation so multi-codepoint emoji (variation selectors, ZWJ sequences)
+ * are removed as a single unit rather than leaving a mangled remainder.
+ */
+export function trimTrailingEmoji(label) {
+  const segments = [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(label)];
+  return segments.slice(0, -1).map(s => s.segment).join('').trimEnd();
+}
+
 export function replaceTemplateVariables(template, keyValueMap) {
   let result = template;
   for (const [key, value] of Object.entries(keyValueMap)) {

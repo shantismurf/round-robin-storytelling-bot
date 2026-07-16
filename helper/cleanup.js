@@ -41,7 +41,13 @@ const ORPHAN_KEYS = [
 'txtMyListJoined',
 'txtMyListMyStats',
 'txtMyListNoTurns',
-'txtMyListStoryTotal'
+'txtMyListStoryTotal',
+'lblRating',
+'lblWarnings',
+'lblMainPairing',
+'lblOtherRelationships',
+'lblCharacters',
+'lblDynamic'
 ];
 
 async function main() {

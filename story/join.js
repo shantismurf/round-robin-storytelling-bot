@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, trimTrailingEmoji } from '../utilities.js';
 import { StoryJoin, getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { postStoryThreadActivity } from './_turn.js';
@@ -82,9 +82,9 @@ export async function buildJoinEmbed(connection, state) {
     .setTitle(`🎭 Join "${storyTitle}"`)
     .setDescription(cfg.txtJoinEmbedDesc)
     .addFields(
-      { name: cfg.lblJoinPrivacySelect, value: privacy === 'private' ? '🔒 Private' : '🌐 Public', inline: true },
-      { name: cfg.lblJoinNotifSelect, value: notificationPrefs === 'dm' ? '💬 DM' : '📢 Mention in channel', inline: true },
-      { name: cfg.lblJoinPenName, value: penName || (displayName ? `${displayName} (Discord display name)` : cfg.txtJoinPenNameNotSet), inline: false }
+      { name: trimTrailingEmoji(cfg.lblJoinPrivacySelect), value: privacy === 'private' ? '🔒 Private' : '🌐 Public', inline: true },
+      { name: trimTrailingEmoji(cfg.lblJoinNotifSelect), value: notificationPrefs === 'dm' ? '💬 DM' : '📢 Mention in channel', inline: true },
+      { name: trimTrailingEmoji(cfg.lblJoinPenName), value: penName || (displayName ? `${displayName} (Discord display name)` : cfg.txtJoinPenNameNotSet), inline: false }
     );
 
   const privacyRow = new ActionRowBuilder().addComponents(

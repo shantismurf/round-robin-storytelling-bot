@@ -134,7 +134,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtStory', 'txtPause', 'txtResume', 'txtNotSet',
       'btnAdminConfigSave', 'btnCancel',
       'lblOpenToWriters', 'lblTags', 'btnSetTags',
-      'lblRating', 'lblWarnings', 'lblDynamic',
       'btnReviewTags',
       'txtSelectionStaged',
       'txtSectionBreakLine', 'txtManageSectionBreakMeta',
