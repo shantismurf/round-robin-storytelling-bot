@@ -1,10 +1,11 @@
 import fs from 'fs';
 import path from 'path';
+import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
 import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, ENTRY_STATUS } from './constants.js';
 
 export function loadConfig() {
-  const cfgPath = path.resolve(path.dirname(new URL(import.meta.url).pathname), 'config.json');
+  const cfgPath = path.resolve(path.dirname(fileURLToPath(import.meta.url)), 'config.json');
   if (!fs.existsSync(cfgPath)) {
     log('Missing config.json. Copy config.example.json and fill values.', { show: true });
     process.exit(1);

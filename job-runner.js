@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, discordTimestamp, closeOrphanedGuildStories } from './utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, discordTimestamp, closeOrphanedGuildStories, isGuildConfigured } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
 import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, STORY_MODE } from './constants.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded, buildSyntheticContext } from './story/_turn.js';
@@ -13,6 +13,7 @@ const JOB_MAX_ATTEMPTS = 3;
 const JOB_RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 const JOB_PURGE_EVERY_N_TICKS = 24 * 60; // once per day at a 60s poll interval
 const JOB_PURGE_AGE_DAYS = 30;
+const ONBOARDING_REMINDER_DAYS = { onboardingDay1: 1, onboardingDay7: 7, onboardingDay14: 14, onboardingDay30: 30 };
 
 let pollTickCount = 0;
 
@@ -90,6 +91,14 @@ async function processJob(connection, client, job) {
         break;
       case 'threadDelete':
         await handleThreadDelete(connection, client, payload);
+        break;
+      case 'onboardingDay1':
+      case 'onboardingDay7':
+      case 'onboardingDay14':
+        await handleOnboardingReminder(connection, client, payload, job.job_type);
+        break;
+      case 'onboardingDay30':
+        await handleOnboardingRemoval(connection, client, payload);
         break;
       default:
         log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
@@ -384,4 +393,68 @@ async function sendMentionReminder(connection, ctx, guildId, writerUserId, modeK
   const storyFeedChannelId = await resolveFeedChannelId(connection, guildId, rating);
   const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
   await channel.send(`<@${writerUserId}> ${applyTokens(txt)}`);
+}
+
+// ---------------------------------------------------------------------------
+// Onboarding reminder sequence — nudges guild owners to complete /storyadmin
+// setup, then leaves the guild if it's still unconfigured after 30 days.
+// ---------------------------------------------------------------------------
+
+/**
+ * Schedules the full day-1/7/14/30 onboarding reminder sequence for a guild,
+ * relative to fromDate. Cancels any existing pending onboarding jobs for the
+ * guild first, so this is safe to call more than once (e.g. a backfill re-run).
+ */
+export async function scheduleOnboardingReminders(connection, guildId, fromDate) {
+  await connection.execute(
+    `UPDATE job SET job_status = ?
+     WHERE job_type IN ('onboardingDay1', 'onboardingDay7', 'onboardingDay14', 'onboardingDay30')
+     AND job_status IN (?, ?)
+     AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, String(guildId)]
+  );
+  for (const [jobType, days] of Object.entries(ONBOARDING_REMINDER_DAYS)) {
+    const runAt = new Date(fromDate.getTime() + days * 24 * 60 * 60 * 1000);
+    await connection.execute(
+      `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
+      [jobType, JSON.stringify({ guildId: String(guildId) }), runAt, JOB_STATUS.PENDING]
+    );
+  }
+  log(`Scheduled onboarding reminder sequence for guild ${guildId} starting from ${fromDate.toISOString()}`, { show: true });
+}
+
+async function handleOnboardingReminder(connection, client, payload, jobType) {
+  const { guildId } = payload;
+  if (await isGuildConfigured(connection, guildId)) {
+    log(`${jobType}: guild ${guildId} has since completed setup — skipping reminder`, { show: false });
+    return;
+  }
+  const guild = await client.guilds.fetch(guildId);
+  const owner = await guild.fetchOwner();
+  const configKey = { onboardingDay1: 'txtOnboardingDay1', onboardingDay7: 'txtOnboardingDay7', onboardingDay14: 'txtOnboardingDay14' }[jobType];
+  const [message, hubInviteUrl] = await Promise.all([
+    getConfigValue(connection, configKey),
+    getConfigValue(connection, 'cfgHubInviteUrl'),
+  ]);
+  await owner.send(replaceTemplateVariables(message, { hubInviteUrl }));
+  log(`Onboarding reminder (${jobType}) sent to owner ${owner.user.tag} for guild ${guild.name} (${guildId})`, { show: true });
+}
+
+async function handleOnboardingRemoval(connection, client, payload) {
+  const { guildId } = payload;
+  if (await isGuildConfigured(connection, guildId)) {
+    log(`onboardingDay30: guild ${guildId} has since completed setup — skipping removal`, { show: false });
+    return;
+  }
+  const guild = await client.guilds.fetch(guildId);
+  const owner = await guild.fetchOwner();
+  const [message, hubInviteUrl] = await Promise.all([
+    getConfigValue(connection, 'txtOnboardingDay30Removal'),
+    getConfigValue(connection, 'cfgHubInviteUrl'),
+  ]);
+  await owner.send(replaceTemplateVariables(message, { hubInviteUrl }));
+  log(`Onboarding reminder (onboardingDay30) sent to owner ${owner.user.tag} for guild ${guild.name} (${guildId})`, { show: true });
+  const joinedAt = guild.joinedAt?.toISOString();
+  await guild.leave();
+  log(`Left guild ${guild.name} (${guildId}) — never configured within 30 days of joining (joined ${joinedAt})`, { show: true, hub: true });
 }

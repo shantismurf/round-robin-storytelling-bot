@@ -9,7 +9,7 @@
     - `_writeSkip.js`'s `handleThreadDeleteNow` auth check (owner/creator/admin) is hand-rolled — a 4th near-duplicate of this pattern in the codebase; extract to a shared helper next time one of the ~3 other copies is touched.
     - `story/list.js`'s `getStoriesPaginated` param assembly (fixed prefix + dynamic filter params + fixed suffix across 3 separate queries) is fragile to eyeball — worth restructuring into one incrementally-built params array if the `/story list` overhaul below is picked up.
     - `_managePauseResume.js`'s story-level thread retitle (`applyPauseActions`/`applyResumeActions`/`handleReopenStory`) still uses inline `.replace()` instead of `replaceTemplateVariables` — covered by the standing inline-`.replace()` compliance sweep below, no separate item needed.
-    - Windows-only, not fixed, doesn't affect the Linux-hosted bot: `loadConfig()` in `utilities.js` can't resolve `config.json` via `import.meta.url` when run directly with `node` on Windows — blocks local dev/testing only.
+    - **[x] FIXED 2026-07-15** — Windows `loadConfig()` path bug: switched to `fileURLToPath(import.meta.url)` instead of manually reading `.pathname`, which was leaving a leading slash before the drive letter (`/C:/...`) that `path.resolve()` didn't strip on Windows. Unblocks local dev/testing and helper scripts run via plain `node`.
 
 - Roundup formatting
 - Help text review
@@ -19,9 +19,9 @@
 - `/story list` overhaul — see [docs/PLAN-story-list-overhaul.md](docs/PLAN-story-list-overhaul.md)
 - formatDuration sweep: apply to `story/_storyStatus.js` line 210 (`${turn_length_hours}h`) and `announcements.js` line 105 (`${turn_length_hours}h Turns`) — these are different UX contexts and need separate review before changing displayed format
 - UX v3 Phases 3–5: `/storyadmin user` collapse, `/mystory manage` collapse + resume confirm, pending-indicator sweep (see plan file)
+- **[x] Export turn-header decoupling — FIXED 2026-07-15.** `story/export.js`'s turn header now shows the turn number whenever breaks are enabled, regardless of `show_authors`; the writer name is appended only when `show_authors` is true. Previously the header was all-or-nothing on `show_authors && !suppressBreaks`, so choosing "with breaks" + names hidden produced no header at all.
 - Move Manage Users (currently the `/storyadmin manage-user` slash command, `story/_manageUser.js`) onto the story manage panel as a "Manage Users" button, loading a two-step modal instead of a standalone command.
 - Status post can go stale on turn-advance failure, not just on writer-status changes (found during independent review of the pause/resume status-refresh fix): `handlePanelPassConfirm` (pass-your-turn, `commands/_myStoryManage.js`) and the admin turn actions in `story/_manageTurnActions.js` (skip/reassign/next) call `NextTurn` and only log a warning if it fails — no fallback `updateStoryStatusMessage` call like the removal/pause/resume fixes now have. Same bug shape, different trigger (turn-advance failure rather than a writer-status change).
-- Export: "Show Names" controls the entire turn-break header (turn number + name), so exporting with breaks but `show_authors = false` produces no header at all — not even a turn number. Decouple: turn numbers should always show when breaks are enabled; "Show Names" should only toggle whether the writer name is included.
 - **[LOW PRIORITY] File-size split pass** — line count audit taken 2026-07-12 after the Fable Audit step 5 session (which touched nearly every file in the codebase). Not urgent; do as a dedicated session whenever it becomes worth it, not opportunistically mid-other-work like the Step 6 folds were. Six files over the 500-line CLAUDE.md standard, in priority order (`edit.js` and `utilities.js` are repeat offenders — both were already flagged in the original May Fable Audit and crept back over 500 despite partial shrinkage since):
   - **`story/edit.js` (642 lines)** — three fairly separable concerns: (1) edit-session open/modal-submit (`handleEdit`, `openEditSession`, `handleEditModalSubmit`), (2) history/restore (`renderHistoryPage`, `handleRestoreConfirm`, `handleRestoreExecute`), (3) repost (`handleRepostEntry`) + the shared `buildEditMessage`/`handleEditButton` UI. Likely split: keep open/modal-submit in `edit.js`, move history/restore to `story/_editHistory.js`, move repost to `story/_editRepost.js` (matches the existing `_*.js` submodule convention already used for write/manage/pause-resume).
   - **`story/_turn.js` (622 lines)** — the turn engine core; audit's Bucket 3 already identified this as "the single most valuable test/reuse seam in the codebase," so any split needs care not to fragment that. Natural seam: `PickNextWriter`/`NextTurn`/`turnEndTimeFunction` (pure selection + turn creation) vs. the thread-lifecycle helpers (`postStoryThreadActivity`, `deleteThreadAndAnnouncement`, `endTurnThread`, `endTurnGuarded`, `skipActiveTurn`, `closeStoryInternals`, `departWriter`) vs. the private notification helpers (`handleQuickModeNotification`, `handleWriterNotification`, `postWelcomeMessage`). Do this one last and most carefully of the six — re-read the Bucket 3 analysis in `docs/Fable_Audit_2026-07.md` first.
@@ -30,6 +30,22 @@
   - **`utilities.js` (534 lines)** — a genuine grab-bag by design (per CLAUDE.md, "imported everywhere"), so splitting has less obvious payoff than the others, but the validators (`validateStoryAccess`, `validateActiveWriter`, `checkIsAdmin`, `checkIsCreator`) and the text/duration helpers (`sanitize`, `sanitizeModalInput`, `chunkEntryContent`, `splitAtParagraphs`, `parseDuration`, `formatDuration`, `replaceTemplateVariables`) are two clean, already-cohesive groups that could become `validators.js` and `textHelpers.js` if this file keeps growing.
   - **`commands/_storyadminSetup.js` (509 lines)** — barely over; lowest priority of the six. `handleSetupSave` (line 333 to end, ~230 lines) is most of the overage on its own.
   - Also worth a light look when doing this pass (currently just under 500, likely to cross it next time they're touched): `story/_manageTurnActions.js` (474), `story/add.js` (471), `commands/_myStoryList.js` (465).
+
+---
+
+## Update Story Add/Manage Modal Labels
+
+Add emojis to start and end of all modal labels and remove any double stars for bolding
+Need emojis: 
+🪪 Show Names 🪪
+🔏 Turn Thread Privacy 🔏
+⏱️ Turn Length (hours) ⏱️
+🔔 Reminder Timing (%) 🔔
+🫷 Delay Start (optional) 🫸
+♾️ Max Writers (optional) ♾️
+✨ Scene Break Divider ✨
+
+Also, check Radio groups .setRequired(false) to see if we can remove any of the annoying "X Clear Selection" bars that take up a ton of space on mobile. On desktop they are unassuming little buttons, but the mobile interface for this is terrible.
 
 ---
 
