@@ -194,9 +194,9 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
       if (currentTurn !== null) entriesHtml += `</div>`;
       currentTurn = entry.turn_number;
       const writerName = entry.pen_name || entry.discord_display_name;
-      const turnHeader = story.show_authors && !suppressBreaks
-        ? `<div class="turn-label">Turn ${entry.turn_number} — ${writerName}</div>`
-        : '';
+      const turnHeader = suppressBreaks
+        ? ''
+        : `<div class="turn-label">Turn ${entry.turn_number}${story.show_authors ? ` — ${writerName}` : ''}</div>`;
       entriesHtml += `<div class="turn">${turnHeader}`;
     }
     entriesHtml += await discordMarkdownToHtml(entry.content, guild, story.scene_break_divider);

@@ -75,7 +75,7 @@ export async function handleSetup(connection, interaction) {
     'txtRoundupDay4', 'txtRoundupDay5', 'txtRoundupDay6',
     'txtNotSet', 'txtOff', 'txtOn',
     'txtSetupAgeRestrictNote', 'txtSetupNoMediaNote', 'txtSetupNoRoleNote', 'txtSetupRoundupDisabledNote',
-    'txtSetupSupportInvite', 'lblSetupChangelog',
+    'txtSetupSupportInvite', 'cfgHubInviteUrl', 'lblSetupChangelog',
     'lblSetupModalFieldRole', 'txtSetupModalPlaceholderRole',
   ], guildId);
 
@@ -544,7 +544,7 @@ export async function handleSetupSave(connection, interaction) {
     saved.push('', ...permWarnings, '', fixMsg);
   }
 
-  saved.push('', state.cfg.txtSetupSupportInvite);
+  saved.push('', replaceTemplateVariables(state.cfg.txtSetupSupportInvite, { hubInviteUrl: state.cfg.cfgHubInviteUrl }));
 
   pendingSetupData.delete(interaction.user.id);
   log(`handleSetupSave: complete for guild ${guildId} by ${interaction.user.tag}`, { show: true, guildName: interaction.guild.name });

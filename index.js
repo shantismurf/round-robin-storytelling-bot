@@ -4,7 +4,7 @@ import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, se
 import { STORY_STATUS } from './constants.js';
 import { handleWriterDeparted } from './story/_writerDeparted.js';
 import { main as deploy } from './deploy.js';
-import { startJobRunner } from './job-runner.js';
+import { startJobRunner, scheduleOnboardingReminders } from './job-runner.js';
 import fs from 'fs';
 
 // Hub broadcast state — populated at ClientReady from config
@@ -138,6 +138,12 @@ async function main() {
     startJobRunner(connection, client).catch(err => log(`startJobRunner failed: ${err?.stack ?? err}`, { show: true }));
     refreshAllStatusMessages(connection, client);
   });
+  client.on(Events.GuildCreate, async guild => {
+    log(`Bot added to guild ${guild.name} (${guild.id})`, { show: true, hub: true });
+    await scheduleOnboardingReminders(connection, guild.id, guild.joinedAt).catch(err =>
+      log(`scheduleOnboardingReminders failed for guild ${guild.id}: ${err?.stack ?? err}`, { show: true })
+    );
+  });
   client.on(Events.GuildDelete, async guild => {
     log(`Bot removed from guild ${guild.name ?? 'unknown'} (${guild.id})`, { show: true, hub: true });
     await closeOrphanedGuildStories(connection, guild.id);
@@ -178,20 +184,25 @@ async function main() {
     let skipped = 0;
     for (const guild of client.guilds.cache.values()) {
       try {
+        if (guild.id === _hubServerId) { skipped++; continue; }
+        if (!await isGuildConfigured(connection, guild.id)) { skipped++; continue; }
         const changelogEnabled = await getConfigValue(connection, 'cfgChangelogEnabled', guild.id);
         if (changelogEnabled === '0') { skipped++; continue; }
         const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guild.id);
-        if (!feedChannelId || feedChannelId === 'cfgStoryFeedChannelId') { skipped++; continue; }
         const channel = await guild.channels.fetch(feedChannelId);
         if (!channel) { skipped++; continue; }
         await channel.send({ embeds: [embed] });
         sent++;
       } catch (err) {
-        log(`Hub broadcast failed for guild ${guild.name} (${guild.id}): ${err?.stack ?? err}`, { show: true });
+        if (err?.code === 'GuildChannelUnowned') {
+          log(`Hub broadcast skipped for guild ${guild.name} (${guild.id}): configured feed channel does not belong to this guild — config may be stale`, { show: true });
+        } else {
+          log(`Hub broadcast failed for guild ${guild.name} (${guild.id}): ${err?.stack ?? err}`, { show: true });
+        }
         skipped++;
       }
     }
-    log(`Hub broadcast complete — sent to ${sent} guild(s), skipped ${skipped}`, { show: true });
+    log(`Hub broadcast complete — sent to ${sent} guild(s), skipped ${skipped}`, { show: true, hub: true });
   });
   function formatCommandLog(interaction) {
     const subcommand = interaction.options.getSubcommand(false);

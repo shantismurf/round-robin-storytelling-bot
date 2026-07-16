@@ -77,6 +77,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnSaveSettings', '✅ Save Settings', 'en', 1),
 ('btnSubmitTagRead', '🏷️ Submit Tag', 'en', 1),
 ('cfgHubServerId', '1498673027720679635', 'en', 1),
+('cfgHubInviteUrl', 'https://discord.gg/hKH9G5XFpJ', 'en', 1),
 ('cfgHubFaqChannelId', '1499454495044927739', 'en', 1),
 ('cfgHubLogChannelId', '1505941432370724864', 'en', 1),
 ('cfgHubAnnouncementsChannelId', '1498673028203286681', 'en', 1),
