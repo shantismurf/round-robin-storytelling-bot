@@ -60,13 +60,14 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     // Entry stats — count confirmed entries, words, and inline images
     const [confirmedEntries] = await connection.execute(
-      `SELECT se.content FROM story_entry se
+      `SELECT se.content, t.story_writer_id FROM story_entry se
        JOIN turn t ON se.turn_id = t.turn_id
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND se.entry_status = ?`,
       [storyId, ENTRY_STATUS.CONFIRMED]
     );
     const entryCount = confirmedEntries.length;
+    const contributingWriterIds = new Set(confirmedEntries.map(e => e.story_writer_id));
     const cdnImageRegex = /https:\/\/cdn\.discordapp\.com\/attachments\/[^\s<"]+/g;
     let wordCount = 0;
     let imageCount = 0;
@@ -91,7 +92,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'txtStatusReminderSuffix', 'txtStatusNoEntries', 'txtStatusEntryStats',
       'lblStatusTags', 'lblStatusStatus', 'lblStatusMode', 'lblStatusWriterOrder',
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
-      'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusClosed',
+      'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusInactiveHeading', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
       'lblMetaDynamic',
       ratingBadgeCfgKey,
@@ -113,13 +114,23 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     const activeWriters = writers.filter(w => w.sw_status === WRITER_STATUS.ACTIVE);
     const pausedWriters = writers.filter(w => w.sw_status === WRITER_STATUS.PAUSED);
-    const leftWriters   = writers.filter(w => w.sw_status === WRITER_STATUS.LEFT);
+    // Departed writers who never contributed a confirmed entry are dropped from the roster
+    // entirely rather than archived — nothing to preserve a record of.
+    const leftWriters   = writers.filter(w => w.sw_status === WRITER_STATUS.LEFT && contributingWriterIds.has(w.story_writer_id));
 
     // Creator = first writer to join (first in joined_at ASC order among active writers)
     const creatorId = activeWriters[0]?.story_writer_id ?? null;
 
     const legendParts = [cfg.txtStatusLegendCreator, cfg.txtStatusLegendCurrentTurn, cfg.txtStatusLegendNextUp];
     if (pausedWriters.length > 0) legendParts.push(cfg.txtStatusLegendPaused);
+
+    const inactiveLines = [
+      ...pausedWriters.map(w => {
+        const penName = w.pen_name && w.pen_name !== w.discord_display_name ? ` (${w.pen_name})` : '';
+        return `⏸️ ${w.discord_display_name}${penName}`;
+      }),
+      ...leftWriters.map(w => `*${w.discord_display_name}*`),
+    ];
 
     const writerLines = [
       ...activeWriters.map(w => {
@@ -131,11 +142,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         const prefix = emojis ? `${emojis} ` : '';
         return `${prefix}**${w.discord_display_name}**${penName}`;
       }),
-      ...pausedWriters.map(w => {
-        const penName = w.pen_name && w.pen_name !== w.discord_display_name ? ` (${w.pen_name})` : '';
-        return `⏸️ ${w.discord_display_name}${penName}`;
-      }),
-      ...leftWriters.map(w => `*${w.discord_display_name}*`),
+      ...(inactiveLines.length > 0 ? ['', `**${cfg.lblStatusInactiveHeading}**`, ...inactiveLines] : []),
       '',
       `*${legendParts.join('  ·  ')}*`
     ];
@@ -228,6 +235,11 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     const activeThreadId = getActiveThreadId(story);
     const storyThread = await guild.channels.fetch(activeThreadId).catch(() => null);
     if (!storyThread) return;
+
+    // Story is still active/paused per the DB, so an archived/locked thread here means
+    // Discord (or a user) archived it out from under the engine — reopen it to post.
+    if (storyThread.locked) await storyThread.setLocked(false).catch(() => {});
+    if (storyThread.archived) await storyThread.setArchived(false).catch(() => {});
 
     // Keep story thread title in sync with current status
     try {

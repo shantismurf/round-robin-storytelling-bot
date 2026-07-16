@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, endTurnGuarded, endTurnThread, departWriter } from '../story/_turn.js';
+import { updateStoryStatusMessage } from '../story/_storyStatus.js';
 import { WRITER_STATUS, TURN_STATUS } from '../constants.js';
 
 // Pending /mystory manage sessions keyed by user ID
@@ -217,6 +218,9 @@ export async function handleMyStoryManageButton(connection, interaction) {
         `UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`,
         [WRITER_STATUS.ACTIVE, state.storyWriterId]
       );
+      await updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(err =>
+        log(`mystory manage resume: status message update failed for story ${state.storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name })
+      );
       log(`${interaction.user.username} resumed in story ${state.storyId}`, { show: true, guildName: interaction?.guild?.name });
       state.writerStatus = WRITER_STATUS.ACTIVE;
       pendingMyStoryManageData.delete(userId);
@@ -336,6 +340,7 @@ export async function handlePanelPauseConfirm(connection, interaction) {
 
     await connection.execute(`UPDATE story_writer SET sw_status = ? WHERE story_writer_id = ?`, [WRITER_STATUS.PAUSED, story.story_writer_id]);
 
+    let pauseStatusRefreshed = false;
     if (activeTurnRows.length > 0) {
       const activeTurn = activeTurnRows[0];
       const ended = await endTurnGuarded(connection, activeTurn.turn_id);
@@ -349,7 +354,9 @@ export async function handlePanelPauseConfirm(connection, interaction) {
           const nextWriterId = await PickNextWriter(connection, storyId);
           if (nextWriterId) {
             const turnResult = await NextTurn(connection, interaction, nextWriterId);
-            if (!turnResult.success) {
+            if (turnResult.success) {
+              pauseStatusRefreshed = true;
+            } else {
               log(`handlePanelPauseConfirm: NextTurn failed for story ${storyId} — story has no active turn: ${turnResult.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });
             }
           } else {
@@ -359,6 +366,11 @@ export async function handlePanelPauseConfirm(connection, interaction) {
           log(`handlePanelPauseConfirm: failed to advance turn: ${err}`, { show: true, guildName: interaction?.guild?.name });
         }
       }
+    }
+    if (!pauseStatusRefreshed) {
+      await updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err =>
+        log(`handlePanelPauseConfirm: status message update failed for story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name })
+      );
     }
 
     pendingMyStoryManageData.delete(userId);

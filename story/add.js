@@ -43,6 +43,7 @@ export async function handleAddStory(connection, interaction) {
       storyTurnPrivacy: 0,
       turnLength: 24,
       timeoutReminder: 50,
+      displayName: interaction.member?.displayName || interaction.user.displayName,
       penName: (await getPreviousPenName(connection, interaction.user.id)) || interaction.member?.displayName || interaction.user.displayName,
       keepPrivate: 0,
       notifications: 1,
@@ -148,7 +149,8 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
         return;
       }
       state.storyTitle = value;
-      state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('story_summary'), 4000, true) || '';
+      // Capped at 1024, not the modal's usual generous limits: the embed renders this in a field, and Discord field values max out at 1024 chars.
+      state.summary = sanitizeModalInput(interaction.fields.getTextInputValue('story_summary'), 1024, true) || '';
 
     } else if (customId === 'story_add_settings_modal') {
       const cfg = state.cfg;
@@ -321,7 +323,7 @@ export async function handleAddStoryButton(connection, interaction) {
                 .setLabel(cfg.lblMetaSummary)
                 .setStyle(TextInputStyle.Paragraph)
                 .setRequired(false)
-                .setMaxLength(4000)
+                .setMaxLength(1024) // matches the embed field value limit this gets rendered into
                 .setValue(state.summary || '')
             ),
           )

@@ -70,7 +70,9 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
 
   const titleDisplay = state.storyTitle || cfg.txtStoryTitlePrompt;
-  const summaryDisplay = state.summary || cfg.txtNotSet;
+  // Defensive cap for stories saved before the modal itself enforced this limit — Discord embed field values max out at 1024 chars.
+  const summaryRaw = state.summary || cfg.txtNotSet;
+  const summaryDisplay = summaryRaw.length > 1024 ? summaryRaw.slice(0, 1023) + '…' : summaryRaw;
   const mainPairingDisplay = state.mainPairing || cfg.txtNotSet;
   const otherRelDisplay = state.otherRelationships || cfg.txtNotSet;
   const charsDisplay = state.characters || cfg.txtNotSet;
@@ -139,7 +141,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
     embed.addFields( //4 fields
       { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine, value: '​', inline: false },
 
-      { name: cfg.lblYourPenName, value: state.penName, inline: true },
+      { name: cfg.lblYourPenName, value: state.penName || state.displayName || cfg.txtNotSet, inline: true },
       { name: cfg.lblJoinPrivacy, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
       { name: cfg.lblJoinNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
     );
