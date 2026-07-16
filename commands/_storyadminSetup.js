@@ -261,8 +261,6 @@ export async function handleSetupChannelsModal(connection, interaction) {
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
 
-  console.log('RAW RESOLVED:', JSON.stringify(interaction.fields.resolved, null, 2));
-
   const readChannelId = (customId) => {
     try {
       const field = interaction.fields.getField(customId);
