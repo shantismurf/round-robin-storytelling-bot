@@ -190,7 +190,7 @@ export async function scheduleNextRoundup(connection, guildId) {
   await connection.execute(
     `UPDATE job SET job_status = ?
      WHERE job_type = 'weeklyRoundup' AND job_status IN (?, ?)
-     AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+     AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.guildId')) = ?`,
     [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, String(guildId)]
   );
   await connection.execute(
@@ -205,7 +205,7 @@ export async function cancelPendingRoundupJobs(connection, guildId) {
   await connection.execute(
     `UPDATE job SET job_status = ?
      WHERE job_type = 'weeklyRoundup' AND job_status IN (?, ?, ?)
-     AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+     AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.guildId')) = ?`,
     [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, JOB_STATUS.FAILED, String(guildId)]
   );
 }

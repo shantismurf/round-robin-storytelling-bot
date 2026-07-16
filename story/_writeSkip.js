@@ -221,7 +221,7 @@ export async function handleThreadDeleteNow(connection, interaction) {
 
     await connection.execute(
       `UPDATE job SET job_status = ? WHERE job_type = 'threadDelete' AND job_status = ?
-       AND CAST(JSON_EXTRACT(payload, '$.threadId') AS CHAR) = ?`,
+       AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.threadId')) = ?`,
       [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, String(threadId)]
     );
     const thread = await interaction.guild.channels.fetch(threadId).catch(() => null);

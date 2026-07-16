@@ -410,7 +410,7 @@ export async function scheduleOnboardingReminders(connection, guildId, fromDate)
     `UPDATE job SET job_status = ?
      WHERE job_type IN ('onboardingDay1', 'onboardingDay7', 'onboardingDay14', 'onboardingDay30')
      AND job_status IN (?, ?)
-     AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+     AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.guildId')) = ?`,
     [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, String(guildId)]
   );
   for (const [jobType, days] of Object.entries(ONBOARDING_REMINDER_DAYS)) {

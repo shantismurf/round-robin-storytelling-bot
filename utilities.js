@@ -272,7 +272,7 @@ export async function closeOrphanedGuildStories(connection, guildId) {
     [STORY_STATUS.CLOSED, guildId, STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED]
   );
   const [jobResult] = await connection.execute(
-    `UPDATE job SET job_status = ? WHERE job_status IN (?, ?) AND CAST(JSON_EXTRACT(payload, '$.guildId') AS CHAR) = ?`,
+    `UPDATE job SET job_status = ? WHERE job_status IN (?, ?) AND JSON_UNQUOTE(JSON_EXTRACT(payload, '$.guildId')) = ?`,
     [JOB_STATUS.CANCELLED, JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS, String(guildId)]
   );
   log(`closeOrphanedGuildStories: ended ${turnResult.affectedRows} active turn(s), closed ${storyResult.affectedRows} story/stories, and cancelled ${jobResult.affectedRows} pending job(s) for guild ${guildId}`, { show: true, hub: true });
