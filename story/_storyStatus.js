@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, trimTrailingEmoji } from '../utilities.js';
 import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
 import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, STORY_MODE, ENTRY_STATUS } from '../constants.js';
@@ -90,7 +90,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'txtStatusNoActiveTurn',
       'txtStatusNextManual', 'txtStatusNextFixed', 'txtStatusNextRoundRobin', 'txtStatusNextRandom',
       'txtStatusReminderSuffix', 'txtStatusNoEntries', 'txtStatusEntryStats',
-      'lblStatusTags', 'lblStatusStatus', 'lblStatusMode', 'lblStatusWriterOrder',
+      'lblStatusStatus', 'lblStatusMode', 'lblStatusWriterOrder',
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusInactiveHeading', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
@@ -196,14 +196,14 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
 
     const metadataFields = [];
     if (story.rating && story.rating !== 'NR') {
-      metadataFields.push({ name: cfg.lblMetaRating, value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
+      metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaRating), value: `${ratingBadgeDisplay} ${story.rating}`, inline: true });
     }
-    if (story.dynamic)            metadataFields.push({ name: cfg.lblMetaDynamic, value: cfg[story.dynamic] ?? story.dynamic, inline: true });
-    if (story.main_pairing)       metadataFields.push({ name: cfg.lblMetaMainRelationship, value: story.main_pairing, inline: true });
-    if (story.other_relationships) metadataFields.push({ name: cfg.lblMetaOtherRelationships, value: story.other_relationships, inline: true });
-    if (warningsDisplay)          metadataFields.push({ name: cfg.lblMetaWarnings, value: warningsDisplay, inline: false });
-    if (story.characters)    metadataFields.push({ name: cfg.lblMetaCharacters, value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
-    if (story.tags) metadataFields.push({ name: cfg.lblMetaTags, value: story.tags.length > 500 ? story.tags.slice(0, 497) + '...' : story.tags, inline: false });
+    if (story.dynamic)            metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaDynamic), value: cfg[story.dynamic] ?? story.dynamic, inline: true });
+    if (story.main_pairing)       metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaMainRelationship), value: story.main_pairing, inline: true });
+    if (story.other_relationships) metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaOtherRelationships), value: story.other_relationships, inline: true });
+    if (warningsDisplay)          metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaWarnings), value: warningsDisplay, inline: false });
+    if (story.characters)    metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaCharacters), value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
+    if (story.tags) metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaTags), value: story.tags.length > 500 ? story.tags.slice(0, 497) + '...' : story.tags, inline: false });
 
     const joinStatus = story.allow_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? cfg.txtOpen : cfg.txtClosed;
 
@@ -211,7 +211,6 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       .setTitle(`📚 ${story.title} (#${story.guild_story_id}) ${ratingBadgeDisplay}`)
       .setColor(colorMap[story.story_status] ?? 0x5865f2)
       .addFields(
-        ...(story.tags ? [{ name: cfg.lblStatusTags, value: story.tags, inline: false }] : []),
         { name: cfg.lblStatusStatus,      value: statusMap[story.story_status] ?? '—',                                         inline: true },
         { name: cfg.lblStatusMode,        value: story.mode === STORY_MODE.QUICK ? cfg.txtModeQuick : story.mode === STORY_MODE.SLOW ? cfg.txtModeSlow : cfg.txtModeNormal, inline: true },
         { name: cfg.lblStatusWriterOrder, value: orderMap[story.story_order_type] ?? '—',                                                        inline: true },

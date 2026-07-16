@@ -1,5 +1,5 @@
 import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder } from 'discord.js';
-import { getConfigValue, formatDuration } from '../utilities.js';
+import { getConfigValue, formatDuration, trimTrailingEmoji } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
 import { STORY_MODE } from '../constants.js';
 
@@ -98,27 +98,27 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   }
   //25 fields total, 14 for story info/settings, 7 for metadata, 4 for join settings
   embed.addFields( //14 fields
-    { name: cfg.lblStoryTitle, value: titleDisplay, inline: false },
+    { name: trimTrailingEmoji(cfg.lblStoryTitle), value: titleDisplay, inline: false },
 
-    { name: cfg.lblMetaSummary, value: summaryDisplay, inline: false },
+    { name: trimTrailingEmoji(cfg.lblMetaSummary), value: summaryDisplay, inline: false },
 
     { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakInfo +' '+ sectionLine, value: '​', inline: false },
 
     { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
     { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-    { name: cfg.lblMetaRating + cfg.lblMetadataAddon, value: ratingLabel, inline: true },
+    { name: trimTrailingEmoji(cfg.lblMetaRating) + cfg.lblMetadataAddon, value: ratingLabel, inline: true },
 
-    { name: cfg.lblShowAuthors, value: state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc, inline: true },
-    { name: cfg.lblTurnPrivacy, value: state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc, inline: true },
-    { name: cfg.lblMetaSceneBreakDivider, value: sceneBreakDisplay, inline: true },
+    { name: trimTrailingEmoji(cfg.lblShowAuthors), value: state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc, inline: true },
+    { name: trimTrailingEmoji(cfg.lblTurnPrivacy), value: state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc, inline: true },
+    { name: trimTrailingEmoji(cfg.lblMetaSceneBreakDivider), value: sceneBreakDisplay, inline: true },
 
     { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
 
-    { name: cfg.lblTurnLength, value: turnLengthDisplay, inline: true },
-    { name: isSlowMode ? cfg.lblTimeoutReminderSlow : cfg.lblTimeoutReminder, value: timeoutDisplay, inline: true },
-    { name: cfg.lblDelayStart, value: `-+*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+    { name: trimTrailingEmoji(cfg.lblTurnLength), value: turnLengthDisplay, inline: true },
+    { name: isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder), value: timeoutDisplay, inline: true },
+    { name: trimTrailingEmoji(cfg.lblDelayStart), value: `-+*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
 
-    { name: cfg.lblMaxWriters, value: maxWritersDisplay, inline: false },
+    { name: trimTrailingEmoji(cfg.lblMaxWriters), value: maxWritersDisplay, inline: false },
 
   );
 
@@ -126,14 +126,14 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
     embed.addFields( //7 fields
       { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine, value: '​', inline: false },
 
-      { name: cfg.lblMetaDynamic, value: dynamicDisplay, inline: true },
-      { name: cfg.lblMetaWarnings, value: warningsDisplay, inline: true },
+      { name: trimTrailingEmoji(cfg.lblMetaDynamic), value: dynamicDisplay, inline: true },
+      { name: trimTrailingEmoji(cfg.lblMetaWarnings), value: warningsDisplay, inline: true },
 
-      { name: cfg.lblMetaMainRelationship, value: mainPairingDisplay, inline: true },
-      { name: cfg.lblMetaOtherRelationships, value: otherRelDisplay, inline: true },
-      { name: cfg.lblMetaCharacters, value: charsDisplay, inline: true },
+      { name: trimTrailingEmoji(cfg.lblMetaMainRelationship), value: mainPairingDisplay, inline: true },
+      { name: trimTrailingEmoji(cfg.lblMetaOtherRelationships), value: otherRelDisplay, inline: true },
+      { name: trimTrailingEmoji(cfg.lblMetaCharacters), value: charsDisplay, inline: true },
 
-      { name: cfg.lblMetaTags, value: tagsDisplay, inline: false },
+      { name: trimTrailingEmoji(cfg.lblMetaTags), value: tagsDisplay, inline: false },
     );
   }
 
