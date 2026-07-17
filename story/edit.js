@@ -481,23 +481,18 @@ async function handleEditModalSubmit(connection, interaction) {
     return await interaction.reply({ content: await getConfigValue(connection, 'txtEditEntryEmpty', state.guildId), flags: MessageFlags.Ephemeral });
   }
 
-  // Read path: acknowledge without touching the read embed.
-  // Command path: deferUpdate so the edit embed stays in place.
-  if (state.fromReadPath) {
-    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  } else {
-    await interaction.deferUpdate();
-  }
+  // This modal's interaction carries the message it was opened from (isFromMessage()) —
+  // the read embed for read-path edits, the edit embed otherwise — so deferUpdate + editReply
+  // on `interaction` refreshes it in place. (state.originalInteraction is the button click that
+  // opened the modal via showModal(); showModal responses have no message of their own, so
+  // editReply on that interaction has nothing to target.)
+  await interaction.deferUpdate();
 
   const [entryRows] = await connection.execute(
     `SELECT content FROM story_entry WHERE story_entry_id = ?`, [state.entryId]
   );
   if (entryRows.length === 0) {
-    if (state.fromReadPath) {
-      await interaction.editReply({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId) });
-    } else {
-      await interaction.followUp({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId), flags: MessageFlags.Ephemeral });
-    }
+    await interaction.followUp({ content: await getConfigValue(connection, 'txtEditEntryNotFound', state.guildId), flags: MessageFlags.Ephemeral });
     return;
   }
 
@@ -541,9 +536,8 @@ async function handleEditModalSubmit(connection, interaction) {
       }
       session.pendingRepostEntryId = state.entryId;
       session.btnRepostEntry = await getConfigValue(connection, 'btnRepostEntry', session.guildId);
-      await state.originalInteraction.editReply(buildReadEmbed(session, session.currentPage));
+      await interaction.editReply(buildReadEmbed(session, session.currentPage));
     }
-    await interaction.deleteReply();
     pendingEditData.delete(userId);
     return;
   }
