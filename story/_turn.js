@@ -236,10 +236,11 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       const channel = await interaction.guild.channels.fetch(storyFeedChannelId);
 
       const threadTitleTemplate = await getConfigValue(connection, 'txtTurnThreadTitle', guild_id);
-      const threadTitle = threadTitleTemplate
-        .replace('[story_id]', writer.guild_story_id)
-        .replace('[storyTurnNumber]', turnNumber)
-        .replace('[user display name]', writer.discord_display_name);
+      const threadTitle = replaceTemplateVariables(threadTitleTemplate, {
+        story_id: writer.guild_story_id,
+        storyTurnNumber: turnNumber,
+        'user display name': writer.discord_display_name
+      });
 
       const isPrivateThread = writer.story_turn_privacy || writer.turn_privacy;
       const thread = await channel.threads.create({
