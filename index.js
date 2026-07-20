@@ -1,4 +1,4 @@
-import { Client, GatewayIntentBits, EmbedBuilder, Collection, Events, MessageFlags } from 'discord.js';
+import { Client, GatewayIntentBits, Collection, Events, MessageFlags } from 'discord.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
 import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories } from './utilities.js';
 import { STORY_STATUS } from './constants.js';
@@ -6,10 +6,6 @@ import { handleWriterDeparted } from './story/_writerDeparted.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner, scheduleOnboardingReminders } from './job-runner.js';
 import fs from 'fs';
-
-// Hub broadcast state — populated at ClientReady from config
-let _hubServerId = null;
-let _hubAnnouncementsChannelId = null;
 
 /**
  * On startup, refresh status embeds for all active/paused stories so buttons
@@ -68,7 +64,6 @@ async function main() {
 
   const client = new Client({ intents: [
     GatewayIntentBits.Guilds,
-    GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration] });
@@ -123,14 +118,8 @@ async function main() {
     }).join('\n');
     log(`Installed on ${client.guilds.cache.size} server(s):\n${guildList}`, { show: true });
 
-    const [hubLogChannelId, hubServerId, hubAnnouncementsChannelId] = await Promise.all([
-      getConfigValue(connection, 'cfgHubLogChannelId'),
-      getConfigValue(connection, 'cfgHubServerId'),
-      getConfigValue(connection, 'cfgHubAnnouncementsChannelId'),
-    ]);
+    const hubLogChannelId = await getConfigValue(connection, 'cfgHubLogChannelId');
     setHubLogClient(client, hubLogChannelId);
-    _hubServerId = hubServerId;
-    _hubAnnouncementsChannelId = hubAnnouncementsChannelId;
     const { version } = JSON.parse(fs.readFileSync('./package.json', 'utf8'));
     log(`✅ Bot online — v${version} on ${client.guilds.cache.size} server(s)`, { show: true, hub: true });
     log('Round Robin StoryBot engine initialized', { show: true });
@@ -159,50 +148,6 @@ async function main() {
     await handleWriterDeparted(connection, client, ban.guild.id, ban.user.id).catch(err =>
       log(`handleWriterDeparted (ban) failed for guild ${ban.guild?.id} user ${ban.user?.id}: ${err?.stack ?? err}`, { show: true })
     );
-  });
-  client.on(Events.MessageCreate, async message => {
-    if (message.author.bot) return;
-    if (!_hubServerId || !_hubAnnouncementsChannelId) return;
-    if (message.guildId !== _hubServerId) return;
-    if (message.channelId !== _hubAnnouncementsChannelId) return;
-    if (!message.content.startsWith('# 📢')) return;
-
-    log(`Hub announcement broadcast triggered by ${message.author.username}`, { show: true });
-
-    const [announcementTitle, announcementFooter] = await Promise.all([
-      getConfigValue(connection, 'txtHubAnnouncementTitle'),
-      getConfigValue(connection, 'txtHubAnnouncementFooter'),
-    ]);
-
-    const embed = new EmbedBuilder()
-      .setTitle(announcementTitle)
-      .setDescription(message.content.slice(0, 4096))
-      .setColor(0xe91e63)
-      .setFooter({ text: announcementFooter });
-
-    let sent = 0;
-    let skipped = 0;
-    for (const guild of client.guilds.cache.values()) {
-      try {
-        if (guild.id === _hubServerId) { skipped++; continue; }
-        if (!await isGuildConfigured(connection, guild.id)) { skipped++; continue; }
-        const changelogEnabled = await getConfigValue(connection, 'cfgChangelogEnabled', guild.id);
-        if (changelogEnabled === '0') { skipped++; continue; }
-        const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guild.id);
-        const channel = await guild.channels.fetch(feedChannelId);
-        if (!channel) { skipped++; continue; }
-        await channel.send({ embeds: [embed] });
-        sent++;
-      } catch (err) {
-        if (err?.code === 'GuildChannelUnowned') {
-          log(`Hub broadcast skipped for guild ${guild.name} (${guild.id}): configured feed channel does not belong to this guild — config may be stale`, { show: true });
-        } else {
-          log(`Hub broadcast failed for guild ${guild.name} (${guild.id}): ${err?.stack ?? err}`, { show: true });
-        }
-        skipped++;
-      }
-    }
-    log(`Hub broadcast complete — sent to ${sent} guild(s), skipped ${skipped}`, { show: true, hub: true });
   });
   function formatCommandLog(interaction) {
     const subcommand = interaction.options.getSubcommand(false);

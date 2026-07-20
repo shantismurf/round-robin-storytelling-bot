@@ -31,7 +31,7 @@ These permissions must be granted to the bot's role when inviting it. `/storyadm
 | Manage Threads | Delete and archive threads on story close or delete |
 | Manage Roles | Allows `/storyadmin setup` to set channel-level permission overrides for the bot and admin role |
 
-The bot uses slash commands, buttons, modals, and select menus — no message content reading is required beyond what the Message Content privileged intent covers for attachment forwarding. The Server Members privileged intent is required to detect writers leaving or being banned from the server (`GuildMemberRemove`/`GuildBanAdd`), so they can be automatically removed from any story they're actively writing.
+The bot uses slash commands, buttons, modals, and select menus for most input. The exception is Normal and Slow mode writing: the writer composes their turn as ordinary chat messages in a private per-turn thread, and the Message Content privileged intent is what lets the bot read those messages back when the writer finalizes the entry. (Quick mode submits through a modal instead and needs no message content.) The Server Members privileged intent is required to detect writers leaving or being banned from the server (`GuildMemberRemove`/`GuildBanAdd`), so they can be automatically removed from any story they're actively writing.
 
 ## Project Layout
 
