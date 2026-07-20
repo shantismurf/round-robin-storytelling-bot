@@ -1,9 +1,10 @@
 /**
  * broadcast.js
- * Sends a hub announcement embed to every configured guild's story feed
- * channel. Replaces the old "post `# 📢 ...` in the hub channel" trigger —
- * run manually from a local machine with DB access instead of listening
- * for a magic message in a live gateway handler.
+ * Sends a hub announcement embed to the hub server's announcements channel
+ * and to every configured guild's story feed channel. Replaces the old
+ * "post `# 📢 ...` in the hub channel" trigger — run manually from a local
+ * machine with DB access instead of listening for a magic message in a
+ * live gateway handler.
  *
  * Edit ANNOUNCEMENT below, then:
  *   node helper/broadcast.js            (dry run — lists target guilds only)
@@ -28,8 +29,9 @@ client.once(Events.ClientReady, async () => {
   const connection = await db.connect();
 
   try {
-    const [hubServerId, announcementTitle, announcementFooter] = await Promise.all([
+    const [hubServerId, hubAnnouncementsChannelId, announcementTitle, announcementFooter] = await Promise.all([
       getConfigValue(connection, 'cfgHubServerId'),
+      getConfigValue(connection, 'cfgHubAnnouncementsChannelId'),
       getConfigValue(connection, 'txtHubAnnouncementTitle'),
       getConfigValue(connection, 'txtHubAnnouncementFooter'),
     ]);
@@ -39,6 +41,21 @@ client.once(Events.ClientReady, async () => {
       .setDescription(ANNOUNCEMENT.slice(0, 4096))
       .setColor(0xe91e63)
       .setFooter({ text: announcementFooter });
+
+    // Post to the hub server's own announcements channel first — unlike the
+    // old trigger, this message never originates there, so it won't show up
+    // unless we send it explicitly.
+    if (!SEND) {
+      console.log(`[dry run] would send to hub announcements channel ${hubAnnouncementsChannelId}`);
+    } else {
+      try {
+        const hubChannel = await client.channels.fetch(hubAnnouncementsChannelId);
+        await hubChannel.send({ embeds: [embed] });
+        console.log(`✅ Sent to hub announcements channel (${hubAnnouncementsChannelId})`);
+      } catch (err) {
+        console.log(`❌ Failed to send to hub announcements channel: ${err.message}`);
+      }
+    }
 
     let sent = 0;
     let skipped = 0;
