@@ -66,6 +66,7 @@ Tag Submission Thread Post (in story thread)
 
 /story edit [story_id]
   → chunkEntryContent → paginated edit modals
+  → story_edit_prev / story_edit_next / story_edit_jump (page-select menu, same pattern as story_read_jump) → jump to any page directly
   → story_edit_modal_* → entry updated
 
 /story tag [story_id]

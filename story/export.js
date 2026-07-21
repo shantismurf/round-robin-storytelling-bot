@@ -203,6 +203,8 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
+  const summaryHtml = story.summary ? await discordMarkdownToHtml(story.summary, guild, story.scene_break_divider) : '';
+
   const ratingLabel = cfg[ratingLabelKey(story.rating)] ?? story.rating;
   const warningsText = story.warnings
     ? formatWarnings(story.warnings, Object.fromEntries(warningOptions.map(k => [k, cfg[k] ?? k])))
@@ -302,7 +304,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     <div class="meta"><span class="meta-label">${cfg.txtExportLblWriters}: ${writersList}</span></div>
     ${ao3MetaLines}
     <div class="meta"><span class="meta-label">${cfg.txtExportLblExported}: ${exportDate}</span></div>
-  </div>${story.summary ? `\n  <div class="summary"><p>${story.summary}</p></div>` : ''}
+  </div>${summaryHtml ? `\n  <div class="summary">${summaryHtml}</div>` : ''}
   <div id="workskin">
   ${entriesHtml}
   </div>

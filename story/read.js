@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, checkIsCreator, discordTimestamp } from '../utilities.js';
+import { getConfigValue, log, resolveStoryId, chunkEntryContent, checkIsAdmin, checkIsCreator, discordTimestamp, replaceTemplateVariables } from '../utilities.js';
 import { generateStoryExport } from './export.js';
 import { isRestricted, ratingBadgeKey } from './_metadata.js';
 import { pendingReadData, lastReadPage, pendingEditData } from './_state.js';
@@ -69,17 +69,22 @@ export function buildReadEmbed(session, pageIndex) {
     let rangeStart = Math.max(0, pageIndex - Math.floor(maxOptions / 2));
     const rangeEnd = Math.min(totalPages, rangeStart + maxOptions);
     rangeStart = Math.max(0, rangeEnd - maxOptions);
+    const optionTemplate = session.lblPageJumpOptionTurn ?? 'Page [page] — Turn [turn]{? ([writer])?}';
+    const placeholderTemplate = session.lblPageJumpPlaceholder ?? 'Page [page] of [total]';
     const options = [];
     for (let i = rangeStart; i < rangeEnd; i++) {
       const p = session.pages[i];
-      const label = `Page ${i + 1} — Turn ${p.turnNumber}${p.writerName ? ` (${p.writerName})` : ''}`.slice(0, 100);
+      const tokens = { page: String(i + 1), turn: String(p.turnNumber) };
+      if (p.writerName) tokens.writer = p.writerName;
+      const label = replaceTemplateVariables(optionTemplate, tokens).slice(0, 100);
       options.push({ label, value: String(i), default: i === pageIndex });
     }
+    const placeholder = replaceTemplateVariables(placeholderTemplate, { page: String(pageIndex + 1), total: String(totalPages) });
     extraButtons.push(
       new ActionRowBuilder().addComponents(
         new StringSelectMenuBuilder()
           .setCustomId('story_read_jump')
-          .setPlaceholder(`Page ${pageIndex + 1} of ${totalPages}`)
+          .setPlaceholder(placeholder)
           .addOptions(options)
       )
     );
@@ -283,13 +288,15 @@ if (isConfigured) {
       [storyId]
     );
 
-    const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay, btnExportNoBreaks, btnExportWithBreaks] = await Promise.all([
+    const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay, btnExportNoBreaks, btnExportWithBreaks, lblPageJumpPlaceholder, lblPageJumpOptionTurn] = await Promise.all([
       getConfigValue(connection, 'btnSubmitTagRead', guildId),
       getConfigValue(connection, 'btnViewProposedTags', guildId),
       getConfigValue(connection, 'btnManageTags', guildId),
       getConfigValue(connection, ratingBadgeKey(story.rating ?? 'NR'), guildId),
       getConfigValue(connection, 'btnExportNoBreaks', guildId),
       getConfigValue(connection, 'btnExportWithBreaks', guildId),
+      getConfigValue(connection, 'lblPageJumpPlaceholder', guildId),
+      getConfigValue(connection, 'lblPageJumpOptionTurn', guildId),
     ]);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
@@ -306,6 +313,7 @@ if (isConfigured) {
       pendingTagCount: Number(pendingTagCount),
       btnSubmitTagRead, btnViewProposedTags, btnManageTags,
       btnExportNoBreaks, btnExportWithBreaks,
+      lblPageJumpPlaceholder, lblPageJumpOptionTurn,
       storyThreadId: story.story_thread_id, imagePageIndex: 0
     };
     pendingReadData.set(interaction.user.id, session);
@@ -363,6 +371,7 @@ export async function handleReadEditButton(connection, interaction, session, ent
       'txtEditRestoreWarningMulti', 'txtEditRestoreWarningSingle',
       'btnEditHistNewer', 'btnEditHistPrevPage', 'btnEditRestore',
       'btnEditHistNextPage', 'btnEditHistOlder', 'btnEditBackToEntry',
+      'lblPageJumpPlaceholder', 'lblPageJumpOption',
       'txtEditRestoreConfirmSingle', 'txtEditRestoreConfirmMulti',
       'txtEditRestoreConfirmTitle', 'btnEditRestoreConfirm', 'btnEditRestoreCancel'
     ], session.guildId);

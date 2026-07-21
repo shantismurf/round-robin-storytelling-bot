@@ -1,5 +1,5 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, EmbedBuilder } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin } from '../utilities.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
+import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin, replaceTemplateVariables } from '../utilities.js';
 import { postThreadEntry } from './_entryRenderer.js';
 import { pendingReadData, pendingEditData } from './_state.js';
 import { buildReadEmbed } from './read.js';
@@ -116,6 +116,7 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
     'txtEditRestoreWarningMulti', 'txtEditRestoreWarningSingle',
     'btnEditHistNewer', 'btnEditHistPrevPage', 'btnEditRestore',
     'btnEditHistNextPage', 'btnEditHistOlder', 'btnEditBackToEntry',
+    'lblPageJumpPlaceholder', 'lblPageJumpOption',
     'txtEditRestoreConfirmSingle', 'txtEditRestoreConfirmMulti',
     'txtEditRestoreConfirmTitle', 'btnEditRestoreConfirm', 'btnEditRestoreCancel'
   ], guildId);
@@ -142,6 +143,31 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
       name: editCfg.lblEditPageSplitNotice,
       value: editCfg.txtEditPageSplitInstructions
     });
+  }
+
+  // Jump-to-page select menu — mirrors the read embed's page-jump menu (read.js buildReadEmbed)
+  const components = [];
+  if (isMultiPage) {
+    const maxOptions = 25;
+    let rangeStart = Math.max(0, chunkPage - Math.floor(maxOptions / 2));
+    const rangeEnd = Math.min(chunks.length, rangeStart + maxOptions);
+    rangeStart = Math.max(0, rangeEnd - maxOptions);
+    const optionTemplate = editCfg.lblPageJumpOption ?? 'Page [page]';
+    const placeholderTemplate = editCfg.lblPageJumpPlaceholder ?? 'Page [page] of [total]';
+    const options = [];
+    for (let i = rangeStart; i < rangeEnd; i++) {
+      const label = replaceTemplateVariables(optionTemplate, { page: String(i + 1) }).slice(0, 100);
+      options.push({ label, value: String(i), default: i === chunkPage });
+    }
+    const placeholder = replaceTemplateVariables(placeholderTemplate, { page: String(chunkPage + 1), total: String(chunks.length) });
+    components.push(
+      new ActionRowBuilder().addComponents(
+        new StringSelectMenuBuilder()
+          .setCustomId('story_edit_jump')
+          .setPlaceholder(placeholder)
+          .addOptions(options)
+      )
+    );
   }
 
   // Only show navigation buttons when there are multiple pages.
@@ -181,7 +207,9 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
     );
   }
 
-  return { embeds: [embed], components: [new ActionRowBuilder().addComponents(...buttons)] };
+  components.push(new ActionRowBuilder().addComponents(...buttons));
+
+  return { embeds: [embed], components };
 }
 
 async function handleEditButton(connection, interaction) {
@@ -206,6 +234,16 @@ async function handleEditButton(connection, interaction) {
   } else if (customId === 'story_edit_next') {
     await interaction.deferUpdate();
     state.chunkPage = Math.min(state.chunks.length - 1, state.chunkPage + 1);
+    await state.originalInteraction.editReply(
+      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {})
+    );
+
+  } else if (customId === 'story_edit_jump') {
+    await interaction.deferUpdate();
+    const selected = parseInt(interaction.values[0]);
+    if (!isNaN(selected)) {
+      state.chunkPage = Math.min(state.chunks.length - 1, Math.max(0, selected));
+    }
     await state.originalInteraction.editReply(
       buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {})
     );

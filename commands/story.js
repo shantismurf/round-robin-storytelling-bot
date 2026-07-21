@@ -333,6 +333,9 @@ async function handleSelectMenuInteraction(connection, interaction) {
   } else if (interaction.customId === 'story_read_jump') {
     await handleReadNav(connection, interaction);
 
+  } else if (interaction.customId === 'story_edit_jump') {
+    await handleEditButton(connection, interaction);
+
   } else if (interaction.customId === 'story_manage_entries_writer_select' || interaction.customId === 'story_manage_entries_entry_select') {
     await handleManageEntriesSelectMenu(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_ta_') && interaction.customId.endsWith('_select')) {
