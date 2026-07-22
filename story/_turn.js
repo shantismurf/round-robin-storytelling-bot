@@ -374,6 +374,7 @@ export async function endTurnThread(connection, guild, threadId, writerDiscordUs
         `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
         ['threadDelete', JSON.stringify({ threadId, guildId }), deleteAt, JOB_STATUS.PENDING]
       );
+      await renameThreadPendingDeletion(connection, thread, threadId, guildId);
       log(`endTurnThread: thread ${threadId} has draft content — scheduled delete at ${deleteAt.toISOString()}`, { show: true, guildName: guild?.name });
     } else {
       await deleteThreadAndAnnouncement(thread);
@@ -381,6 +382,41 @@ export async function endTurnThread(connection, guild, threadId, writerDiscordUs
     }
   } catch (err) {
     log(`endTurnThread failed for thread ${threadId}: ${err}`, { show: true, guildName: guild?.name });
+  }
+}
+
+/**
+ * Marks a preserved draft thread's title with the "pending deletion" status token
+ * (same [status] slot the pause/resume flow uses). Without this, a thread skipped
+ * or reassigned back to the same writer creates a new turn thread with the exact
+ * same title as the old preserved one, since both derive from the same template.
+ */
+async function renameThreadPendingDeletion(connection, thread, threadId, guildId) {
+  try {
+    const [rows] = await connection.execute(
+      `SELECT sw.discord_display_name, s.story_id, s.guild_story_id
+       FROM turn t
+       JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON s.story_id = sw.story_id
+       WHERE t.thread_id = ?`,
+      [threadId]
+    );
+    if (!rows[0]) return;
+    const { discord_display_name, story_id, guild_story_id } = rows[0];
+    const [turnNumber, txtPendingDeletion, threadTitleTemplate] = await Promise.all([
+      getTurnNumber(connection, story_id),
+      getConfigValue(connection, 'txtPendingDeletion', guildId),
+      getConfigValue(connection, 'txtTurnThreadTitle', guildId)
+    ]);
+    const newTitle = replaceTemplateVariables(threadTitleTemplate, {
+      story_id: guild_story_id,
+      storyTurnNumber: turnNumber,
+      'user display name': discord_display_name,
+      status: txtPendingDeletion
+    });
+    await thread.setName(newTitle);
+  } catch (err) {
+    log(`renameThreadPendingDeletion failed for thread ${threadId}: ${err?.stack ?? err}`, { show: true, guildName: thread?.guild?.name });
   }
 }
 
