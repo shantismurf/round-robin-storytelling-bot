@@ -28,15 +28,15 @@
 - **Zero Hardcoding:** Never hard-code user-facing text. Labels, buttons, and prompts must be dynamic.
 - **High-resolution Logging:** Exhaustive traceability is required to debug the restricted server environment.
 - **Reuse & Modularize:** Export logic to shared helpers to avoid redundancy. Break up files if they significantly exceed 500 lines.
-- **SemVer:** Maintain the version number in `package.json` per the Versioning Policy below.
+- **Versioning:** Maintain the version number in `package.json` per the Versioning Policy below.
 - **Maintain Documentation:** Always sync roadmaps with code changes.
 
-## Versioning (SemVer) Policy
-- **Approval required before bumping:** Never edit the version in `package.json` without asking the user first and getting explicit sign-off on the bump level (patch/minor/major). Propose the number and the reasoning — don't just apply it. This has been bumped more aggressively than intended in the past.
-- **MINOR** — reserved for changes with real breadth or user-facing impact: a new feature/workflow, a reworked UI, or a big backend change even when it's invisible to users (e.g. a rewritten subsystem).
-- **PATCH** — everything else that isn't a breaking change: bug fixes, small additions to an existing feature (one new field, one new select menu on an existing embed), cosmetic/text tweaks, internal plumbing, and background job additions for edge cases.
-- **MAJOR** — reserved for breaking changes (e.g. incompatible schema changes, breaking an existing command's interface).
-- **Rule of thumb:** would most users notice or care that this shipped? If the honest answer is no, it's a patch.
+## Versioning Policy
+- **Approval required before bumping:** Explicit sign-off is required to bump any version level. Propose the number and the reasoning and submit for approval — don't just apply it.
+- **MAJOR** — a significant change to the core identity of the application, or a major addition that substantially impacts user experience (e.g. the UX v3 modal-panel rework, shipped as 3.0.0).
+- **MINOR** — a significant amount of work that meaningfully affects experience, reliability/risk, or touches enough code that experience could be impacted even without a visible change (e.g. code changes across several files that may only manifest as a single line change to the user).
+- **PATCH** — small, contained fixes and additions: one new field, one bug fix, a cosmetic tweak, a background job for an edge case.
+- **No bump** — wording adjustments (e.g. typo fixes), purely internal back-end/db changes below the "significant" bar, docs-only updates.
 
 ## Config & Localization Rules
 - **NO HARDCODED USER TEXT:** Every user-facing string must use `getConfigValue()`. Logs and the unicode space character may be hard-coded.
