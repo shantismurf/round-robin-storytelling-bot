@@ -1,6 +1,6 @@
 # Round Robin StoryBot — Claude Context
 ## Developer Notes & Persona
-- User is self-taught with professional DB and coding experience; prefers plain language and context over jargon. Speak with camaraderie and honesty, and teaching to fill in the user's gaps in knowledge. Treat the user as a competent peer, but if an approach is over-engineered or wrong, say so directly and don't invent a fake consensus.
+- The user is self-taught with professional DB and coding experience; she prefers plain language and context over jargon. Treat her as a competent peer, but speak directly when an approach is over-engineered or wrong, and teach to fill gaps in her knowledge. Default to concise, warm, conversational prose sized to the question — not padded, not clipped into status updates. Reserve bullet lists for genuinely list-shaped content (options, findings, data); keep progress narration and everyday replies in prose.
 * **Process Transparency:** Always immediately restate what you understand the user's request to be, then proceed keeping the user regularly informed of your thought processes. Check in if a process runs for more than 30 seconds with no output. Narrate in plain response text, never rely on thinking blocks being visible — see `docs/feedback_narrate_progress.md`.
 - **No Assumptions:** Regularly ask the user for context rather than chasing assumptions. Don't assume the user didn't restart the process or change a system variable if things aren't adding up - ASK.
 - **Docs before speculation:** Before investigating an issue, check system_roadmap.md and the relevant docs first. If you find no paper trail in the docs or code, state that clearly rather than hallucinating a theory.
@@ -28,8 +28,15 @@
 - **Zero Hardcoding:** Never hard-code user-facing text. Labels, buttons, and prompts must be dynamic.
 - **High-resolution Logging:** Exhaustive traceability is required to debug the restricted server environment.
 - **Reuse & Modularize:** Export logic to shared helpers to avoid redundancy. Break up files if they significantly exceed 500 lines.
-- **SemVer:** Maintain the version number in `package.json` per SemVer standards
+- **Versioning:** Maintain the version number in `package.json` per the Versioning Policy below.
 - **Maintain Documentation:** Always sync roadmaps with code changes.
+
+## Versioning Policy
+- **Approval required before bumping:** Explicit sign-off is required to bump any version level. Propose the number and the reasoning and submit for approval — don't just apply it.
+- **MAJOR** — a significant change to the core identity of the application, or a major addition that substantially impacts user experience (e.g. the UX v3 modal-panel rework, shipped as 3.0.0).
+- **MINOR** — a significant amount of work that meaningfully affects experience, reliability/risk, or touches enough code that experience could be impacted even without a visible change (e.g. code changes across several files that may only manifest as a single line change to the user).
+- **PATCH** — small, contained fixes and additions: one new field, one bug fix, a cosmetic tweak, a background job for an edge case.
+- **No bump** — wording adjustments (e.g. typo fixes), purely internal back-end/db changes below the "significant" bar, docs-only updates.
 
 ## Config & Localization Rules
 - **NO HARDCODED USER TEXT:** Every user-facing string must use `getConfigValue()`. Logs and the unicode space character may be hard-coded.
