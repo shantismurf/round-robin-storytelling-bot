@@ -133,6 +133,7 @@ Words: ~[word_count]', 'en', 1),
 -- Thread preservation / skip flow
 ('txtThreadScheduledDelete', 'This turn has now ended and this thread is scheduled for deletion [relative_timestamp].', 'en', 1),
 ('btnDeleteNow', 'Delete Now', 'en', 1),
+('txtPendingDeletion', 'Pending Deletion', 'en', 1),
 ('txtSkipConfirmHasContentKeep', '⚠️ **Skip your turn?** You have posted content in this thread. Choose whether to delete the thread now or keep it for 24 hours.', 'en', 1),
 ('btnSkipDelete', 'Yes, skip and permanently delete', 'en', 1),
 ('btnSkipKeep', 'Yes, skip but keep my thread for 24 hours', 'en', 1),
