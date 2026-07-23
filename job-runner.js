@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, discordTimestamp, closeOrphanedGuildStories, isGuildConfigured } from './utilities.js';
 import { checkStoryDelay } from './story/_delay.js';
 import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, STORY_MODE } from './constants.js';
-import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded, buildSyntheticContext } from './story/_turn.js';
+import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnThread, endTurnGuarded, buildSyntheticContext, deleteThreadAndAnnouncement } from './story/_turn.js';
 import { postStoryFeedActivationAnnouncement } from './announcements.js';
 import { handleWeeklyRoundup, scheduleNextRoundup } from './story/roundup.js';
 import { getActiveThreadId } from './storybot.js';
