@@ -34,18 +34,18 @@ Step by step:
    migrations, config sync, command registration, hub post sync) before
    the bot connects to Discord — see `CLAUDE.md`'s **Startup** bullet.
 
-## Known quirk: `git pull` sometimes aborts on `package-lock.json`
+## Fixed quirk: `git pull` used to abort on `package-lock.json`
 
 Step 3 above (`npm install`, not `npm ci`) runs in the same persistent
 directory every restart, and can rewrite `package-lock.json` on its own —
 even with no `package.json` changes — whenever npm resolves something
 differently (a new compatible package version on the registry, or a
-different npm version after the host updates Node). That rewrite leaves
+different npm version after the host updates Node). That rewrite left
 `package-lock.json` locally modified and uncommitted.
 
-If the *next* restart's `git pull` (step 1) also needs to update
+If the *next* restart's `git pull` (step 1) also needed to update
 `package-lock.json` (e.g. a real dependency change pushed to `main`), git
-refuses to overwrite the local modification and aborts:
+refused to overwrite the local modification and aborted:
 
 ```
 error: Your local changes to the following files would be overwritten by merge:
@@ -54,11 +54,21 @@ Please commit your changes to stash them before you merge.
 Aborting
 ```
 
-Nothing is actually wrong with the file's contents — deleting it and
-restarting works because it clears the local modification blocking the
-merge, and `npm install` regenerates it from `package.json` on the next
-boot. This is unpredictable because it depends on registry timing and the
-host's own npm version, neither of which this project controls.
+Nothing was actually wrong with the file's contents — deleting it and
+restarting worked because it cleared the local modification blocking the
+merge, and `npm install` regenerated it from `package.json` on the next
+boot. This was unpredictable because it depended on registry timing and
+the host's own npm version, neither of which this project controls.
+
+**Fix (2026-07-24):** `package-lock.json` is now gitignored and untracked,
+so `git pull` can never conflict on it — `npm install` just regenerates it
+locally on every restart. Tradeoff: transitive dependencies (packages our
+three direct dependencies pull in) can float to a newer compatible version
+between one restart and the next, instead of staying pinned to exactly
+what was last committed. The three direct dependencies already use `^`
+ranges in `package.json`, so they were never hard-pinned across restarts
+either way — this closes a minor reproducibility gap, not a hard security
+boundary.
 
 ## Node.js version
 
