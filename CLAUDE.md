@@ -8,7 +8,7 @@
 - **No hard-coded text:** All user-facing text must be displayed for and approved by the user unless they provided the exact text already.
 
 ## System Information
-- **Host:** Managed via restricted pterodactyl interface on bot-hosting.net. No manual console access, no local/staging execution — any change, including debug logging, must be pushed to main and the bot restarted before it can be tested.
+- **Host:** Managed via restricted pterodactyl interface on bot-hosting.net. No manual console access, no local/staging execution — any change, including debug logging, must be pushed to main and the bot restarted before it can be tested. Runs Node.js v24.18.0 (as of 2026-07-24); the host keeps this current with new Node releases, so don't assume this stays pinned. See `docs/HOSTING.md` for the container's startup script and known deploy quirks.
 - **Startup:** Pulls main branch -> runs index.js -> fires deploy.js:
   - database_setup: schema checks and migrations.
   - sync_config: aggregates `db/config_files/*.sql` and syncs to DB.
