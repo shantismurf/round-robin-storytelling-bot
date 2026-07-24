@@ -1,14 +1,21 @@
 # Production Hosting — bot-hosting.net (Pterodactyl)
 
-This bot's live deployment runs on a Pterodactyl-managed container at
-bot-hosting.net. See `CLAUDE.md` for the access constraints (no manual
-console, no local/staging environment — every change ships by pushing to
-`main` and restarting).
+## Access
+
+- No shell/console access — the Pterodactyl panel's Console tab only shows
+  the container's stdout, it does not accept commands.
+- No local/staging environment. Every change ships by pushing to `main`
+  and restarting the bot from the panel.
+- **Restart** (re-runs the startup command below against the existing
+  container filesystem) is the normal deploy action, used every time.
+  **Reinstall** (wipes and reprovisions the container) takes several
+  minutes and is only used if something is broken badly enough to need it.
+- A git push does **not** trigger a restart by itself — the panel restart
+  has to be triggered manually after pushing.
 
 ## Startup command
 
-This is the container's startup command (Pterodactyl egg), run fresh on
-every restart:
+Runs on every restart:
 
 ```bash
 if [[ -d .git ]] && [[ ${AUTO_UPDATE} == "1" ]]; then git pull; fi;
@@ -22,55 +29,35 @@ else
 fi;
 ```
 
-Step by step:
-1. `git pull` — pulls the latest `main` into `/home/container`, a persistent
-   directory that is never re-cloned fresh between restarts.
-2. Optionally installs/uninstalls extra packages named in the
-   `NODE_PACKAGES` / `UNNODE_PACKAGES` startup variables (unused by this project).
-3. `npm install` — installs/updates dependencies from `package.json`.
-4. Runs `START_BASH_FILE` if set, otherwise runs `node index.js`
-   (`BOT_JS_FILE`) directly. This project doesn't set `START_BASH_FILE`,
-   so `index.js` runs directly, which in turn fires `deploy.js` (schema
-   migrations, config sync, command registration, hub post sync) before
-   the bot connects to Discord — see `CLAUDE.md`'s **Startup** bullet.
+In order: pull `main` into the persistent `/home/container` directory (not
+a fresh clone), run `npm install`, then run `node index.js`
+(`START_BASH_FILE` is unset for this project). `index.js` fires
+`deploy.js` — schema migrations, config sync, command registration, hub
+post sync — before connecting to Discord; see `CLAUDE.md`'s **Startup**
+bullet.
 
-## Fixed quirk: `git pull` used to abort on `package-lock.json`
+## Fixed quirk: package-lock.json
 
-Step 3 above (`npm install`, not `npm ci`) runs in the same persistent
-directory every restart, and can rewrite `package-lock.json` on its own —
-even with no `package.json` changes — whenever npm resolves something
-differently (a new compatible package version on the registry, or a
-different npm version after the host updates Node). That rewrite left
-`package-lock.json` locally modified and uncommitted.
+`npm install` (step 3, running every restart in the same persistent
+directory) could rewrite `package-lock.json` on its own, even with no
+`package.json` change, leaving it locally modified. The next restart's
+`git pull` would then refuse to overwrite that local change and abort with
+`error: Your local changes to the following files would be overwritten by
+merge: package-lock.json`.
 
-If the *next* restart's `git pull` (step 1) also needed to update
-`package-lock.json` (e.g. a real dependency change pushed to `main`), git
-refused to overwrite the local modification and aborted:
+Fixed by removing `package-lock.json` from git tracking (`.gitignore`) —
+`npm install` now regenerates it locally every restart with nothing for
+`git pull` to conflict with.
 
-```
-error: Your local changes to the following files would be overwritten by merge:
-        package-lock.json
-Please commit your changes to stash them before you merge.
-Aborting
-```
+## config.json
 
-Nothing was actually wrong with the file's contents — deleting it and
-restarting worked because it cleared the local modification blocking the
-merge, and `npm install` regenerated it from `package.json` on the next
-boot. This was unpredictable because it depended on registry timing and
-the host's own npm version, neither of which this project controls.
+Not in git (`.gitignore`). It lives directly in the container's files on
+the host and is not touched by `git pull`. A local backup copy is kept
+outside the repo in case it needs to be re-uploaded.
 
-**Fix (2026-07-24):** `package-lock.json` is now gitignored and untracked,
-so `git pull` can never conflict on it — `npm install` just regenerates it
-locally on every restart. Tradeoff: transitive dependencies (packages our
-three direct dependencies pull in) can float to a newer compatible version
-between one restart and the next, instead of staying pinned to exactly
-what was last committed. The three direct dependencies already use `^`
-ranges in `package.json`, so they were never hard-pinned across restarts
-either way — this closes a minor reproducibility gap, not a hard security
-boundary.
+## Database
 
-## Node.js version
-
-See `CLAUDE.md`'s **Host** bullet — the host tracks current Node.js
-releases rather than pinning to one version.
+Provided by bot-hosting.net, on the same network as the bot container
+(host may be Cloudflare-fronted, unconfirmed). Credentials are viewable in
+the same Pterodactyl interface as the bot — only copy-to-clipboard or
+password-cycle are available, no other access.
