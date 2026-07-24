@@ -84,6 +84,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('cfgHubFaqChannelId', '1499454495044927739', 'en', 1),
 ('cfgHubLogChannelId', '1505941432370724864', 'en', 1),
 ('cfgHubAnnouncementsChannelId', '1498673028203286681', 'en', 1),
+('cfgHubRulesChannelId', '1499435586740682772', 'en', 1),
+('cfgPrivacyPolicyMessageId', '', 'en', 1),
 ('cfgFaqPostIds', '1503509386520166450|1503509384439926844|1503509381939986463|1503509380056748193|1503509377535971329|1503509375493345451|1503509373161439286|1503509370435276950', 'en', 1),
 ('txtSectionBreakLine', '══════', 'en', 1),
 -- Shared page-jump select menu (story/read.js, story/edit.js)

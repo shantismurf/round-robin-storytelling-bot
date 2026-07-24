@@ -1,6 +1,6 @@
 # Round Robin StoryBot
 ## Privacy Policy & Terms of Service
-**Last Updated: July 20, 2026**
+**Last Updated: July 24, 2026**
 
 ---
 
@@ -18,12 +18,13 @@ We only collect data necessary to provide the Bot's core features — running co
 - **Optional Pen Name:** A display alias you may set for a story, separate from your Discord username.
 - **Moderation Records:** When a server admin takes an action on a story or writer (e.g. removing a writer, editing an entry), we log the admin's Discord user ID, the action taken, and any reason given.
 - **Server Configuration:** Guild, channel, and thread IDs needed to operate the Bot in your server.
+- **Story Images:** Images attached to story entries are included in story exports. Images too large to embed directly may be sent to a third-party image resizing service (wsrv.nl) to be shrunk to a manageable size before embedding — only the image file itself is sent, with no story text, usernames, or other identifying information attached.
 
 We do **not** collect presence/online status, message content outside of writers' own turn threads, direct messages, email addresses, IP addresses, or payment information. **We do not allow collected data to be used to train machine learning or AI models.**
 
 ### 2. How We Use Data
 
-Collected data is used exclusively to operate, maintain, and provide the Bot's features — running story turns, displaying and exporting stories, and giving server admins moderation tools. We do not sell, trade, or share your data with external third parties.
+Collected data is used exclusively to operate, maintain, and provide the Bot's features — running story turns, displaying and exporting stories, and giving server admins moderation tools. We do not sell, trade, or share your data with external third parties, except for the limited image-resizing case described above.
 
 ### 3. Data Retention & Deletion
 
