@@ -13,10 +13,13 @@ For config string keys, see `db/config_roadmap.md`.
 | `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration | ~680 |
 | `storybot.js` | Core story engine: CreateStory, NextTurn, PickNextWriter | — |
 | `job-runner.js` | Background job polling and execution | ~250 |
-| `deploy.js` | CLI deploy: migrations, config sync, command registration | ~80 |
-| `sync-config.js` | Syncs SQL config files into the database | — |
-| `database-setup.js` | Schema creation and migrations | — |
+| `deploy.js` | CLI deploy, run on every bot start: migrations, config sync, command registration, hub post sync (FAQ + privacy policy + gated broadcast) | ~125 |
+| `sync-config.js` | Syncs SQL config files into the database; `setupOnlyKeys` excludes per-guild/system-singleton keys (e.g. `cfgPrivacyPolicyMessageId`) that are written programmatically, never by file sync | — |
+| `database-setup.js` | Schema creation + numbered `db/migrations/*.sql` runner (tracked in the `migrations` table, each applied once) | — |
 | `announcements.js` | Story feed announcement embeds | — |
+| `faq.js` | `/story help`, `/mystory help`, `/storyadmin help` page rendering; `syncFaqPosts()` — deletes and reposts all FAQ forum threads in the hub server (deploy-time, gated on `config_help.sql` changing) | — |
+| `privacy-policy.js` | Canonical `POLICY_TEXT` for the Bot's Privacy Policy & Terms of Service (mirrored in `docs/PRIVACY_POLICY.md`); `syncPrivacyPolicy()` — edits the pinned message in the hub's `#rules` channel in place (via stored `cfgPrivacyPolicyMessageId`), or posts + pins a new one. Runs on every deploy via `deploy.js`'s hub post sync step | — |
+| `broadcast.js` | `sendBroadcast()` — sends the `ANNOUNCEMENT` text to the hub announcements channel and every configured guild's story feed channel (opt-out via `cfgChangelogEnabled`). Gated by hardcoded `BROADCAST_ARMED` (must be manually flipped to `true`, then back to `false` after sending) since it's a one-shot send, not an idempotent sync; checked by `deploy.js`'s hub post sync step on every deploy | — |
 | `commands/story.js` | `/story` command handler (delegates to `story/` subcommands) | — |
 | `commands/storyadmin.js` | `/storyadmin` command handler | — |
 | `commands/mystory.js` | `/mystory` command handler | — |

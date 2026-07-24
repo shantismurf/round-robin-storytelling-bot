@@ -17,6 +17,7 @@ import { deployCommands } from './deploy-commands.js';
 import { syncConfig } from './sync-config.js';
 import { syncFaqPosts } from './faq.js';
 import { syncPrivacyPolicy } from './privacy-policy.js';
+import { BROADCAST_ARMED, sendBroadcast } from './broadcast.js';
 import { Client, GatewayIntentBits } from 'discord.js';
 
 function header(label) {
@@ -46,7 +47,7 @@ async function stepDeployCommands(config) {
 }
 
 async function stepSyncHubPosts(config, connection, changedFiles) {
-  header('Step 4 of 4 — Hub post sync (FAQ + privacy policy)');
+  header('Step 4 of 4 — Hub post sync (FAQ + privacy policy + broadcast)');
   if (config.testMode) {
     console.log(`${formattedDate()}: Test mode — skipping hub post sync.`);
     return;
@@ -81,6 +82,17 @@ async function stepSyncHubPosts(config, connection, changedFiles) {
     console.log(policyResult.success
       ? `${formattedDate()}: Privacy policy sync complete.`
       : `${formattedDate()}: Privacy policy sync failed. Check logs.`);
+
+    // Broadcast is a one-shot send to every configured server, not an idempotent
+    // sync — only fires when BROADCAST_ARMED is manually flipped to true in
+    // broadcast.js. Flip it back to false after sending to avoid resending on
+    // the next deploy.
+    if (BROADCAST_ARMED) {
+      const { sent, skipped } = await sendBroadcast(client, connection);
+      console.log(`${formattedDate()}: Broadcast sent — ${sent} sent, ${skipped} skipped. Remember to set BROADCAST_ARMED back to false in broadcast.js.`);
+    } else {
+      console.log(`${formattedDate()}: Broadcast not armed — skipping.`);
+    }
   } finally {
     await client.destroy();
   }
