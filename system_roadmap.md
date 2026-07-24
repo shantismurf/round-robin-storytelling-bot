@@ -38,6 +38,8 @@ For config string keys, see `db/config_roadmap.md`.
 | `story/_writeSkip.js` | Skip-turn flow: `handleSkipTurn`/`handleSkipConfirm` (delete-now vs 24h-preserve), `handleThreadDeleteNow`, `handleViewLastEntry` | — |
 | `story/_entryRenderer.js` | Pure text/embed pagination for entries: `buildEntryPages`, `buildEntryEmbed`, `postThreadEntry` | — |
 | `story/_entryMarkup.js` | Scene-break/markup helpers: `isSceneBreakLine`, `applyEntryMarkup` | — |
+| `story/export.js` | HTML story export used by `/story read` and `/story close`: `discordMarkdownToHtml()`, `generateStoryExport()`, `handleExportPostPublic()` — embeds images as base64 (never expiring CDN links) via `_exportImages.js` | ~395 |
+| `story/_exportImages.js` | Export image embedding pipeline: `collectImageUrls`, `refreshAttachmentUrls` (Discord's `/attachments/refresh-urls`), `buildImageStore` (fetch → oversize resize via Discord media proxy then wsrv.nl fallback → per-image/total byte budget), `buildImageDataBlock` (bottom-of-file base64 store + loader script) | — |
 | `story/_state.js` | Shared in-memory session `Map`s (read/edit/preview/view sessions) used across the `story/` modules | — |
 | `constants.js` | Named status constants for the state-machine fields: `STORY_STATUS`, `TURN_STATUS`, `JOB_STATUS`, `WRITER_STATUS`, `ENTRY_STATUS`, `STORY_MODE` — see db/init.sql + migration 015 for source of truth | ~40 |
 
