@@ -13,10 +13,13 @@ For config string keys, see `db/config_roadmap.md`.
 | `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration | ~680 |
 | `storybot.js` | Core story engine: CreateStory, NextTurn, PickNextWriter | — |
 | `job-runner.js` | Background job polling and execution | ~250 |
-| `deploy.js` | CLI deploy: migrations, config sync, command registration | ~80 |
-| `sync-config.js` | Syncs SQL config files into the database | — |
-| `database-setup.js` | Schema creation and migrations | — |
+| `deploy.js` | CLI deploy, run on every bot start: migrations, config sync, command registration, hub post sync (FAQ + privacy policy + gated broadcast) | ~125 |
+| `sync-config.js` | Syncs SQL config files into the database; `setupOnlyKeys` excludes per-guild/system-singleton keys (e.g. `cfgPrivacyPolicyMessageId`) that are written programmatically, never by file sync | — |
+| `database-setup.js` | Schema creation + numbered `db/migrations/*.sql` runner (tracked in the `migrations` table, each applied once) | — |
 | `announcements.js` | Story feed announcement embeds | — |
+| `faq.js` | `/story help`, `/mystory help`, `/storyadmin help` page rendering; `syncFaqPosts()` — deletes and reposts all FAQ forum threads in the hub server (deploy-time, gated on `config_help.sql` changing) | — |
+| `privacy-policy.js` | Canonical `POLICY_TEXT` for the Bot's Privacy Policy & Terms of Service (mirrored in `docs/PRIVACY_POLICY.md`); `syncPrivacyPolicy()` — edits the pinned message in the hub's `#rules` channel in place (via stored `cfgPrivacyPolicyMessageId`), or posts + pins a new one. Runs on every deploy via `deploy.js`'s hub post sync step | — |
+| `broadcast.js` | `sendBroadcast()` — sends the `ANNOUNCEMENT` text to the hub announcements channel and every configured guild's story feed channel (opt-out via `cfgChangelogEnabled`). Gated by hardcoded `BROADCAST_ARMED` (must be manually flipped to `true`, then back to `false` after sending) since it's a one-shot send, not an idempotent sync; checked by `deploy.js`'s hub post sync step on every deploy | — |
 | `commands/story.js` | `/story` command handler (delegates to `story/` subcommands) | — |
 | `commands/storyadmin.js` | `/storyadmin` command handler | — |
 | `commands/mystory.js` | `/mystory` command handler | — |
@@ -38,6 +41,8 @@ For config string keys, see `db/config_roadmap.md`.
 | `story/_writeSkip.js` | Skip-turn flow: `handleSkipTurn`/`handleSkipConfirm` (delete-now vs 24h-preserve), `handleThreadDeleteNow`, `handleViewLastEntry` | — |
 | `story/_entryRenderer.js` | Pure text/embed pagination for entries: `buildEntryPages`, `buildEntryEmbed`, `postThreadEntry` | — |
 | `story/_entryMarkup.js` | Scene-break/markup helpers: `isSceneBreakLine`, `applyEntryMarkup` | — |
+| `story/export.js` | HTML story export used by `/story read` and `/story close`: `discordMarkdownToHtml()`, `generateStoryExport()`, `handleExportPostPublic()` — embeds images as base64 (never expiring CDN links) via `_exportImages.js` | ~395 |
+| `story/_exportImages.js` | Export image embedding pipeline: `collectImageUrls`, `refreshAttachmentUrls` (Discord's `/attachments/refresh-urls`), `buildImageStore` (fetch → oversize resize via Discord media proxy then wsrv.nl fallback → per-image/total byte budget), `buildImageDataBlock` (bottom-of-file base64 store + loader script) | — |
 | `story/_state.js` | Shared in-memory session `Map`s (read/edit/preview/view sessions) used across the `story/` modules | — |
 | `constants.js` | Named status constants for the state-machine fields: `STORY_STATUS`, `TURN_STATUS`, `JOB_STATUS`, `WRITER_STATUS`, `ENTRY_STATUS`, `STORY_MODE` — see db/init.sql + migration 015 for source of truth | ~40 |
 

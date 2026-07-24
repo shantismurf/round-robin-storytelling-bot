@@ -5,18 +5,32 @@ import { ratingCodes, ratingLabelKey, formatWarnings, warningOptions, dynamicOpt
 import { applyEntryMarkup, isSceneBreakLine } from './_entryMarkup.js';
 import { getActiveThreadId } from '../storybot.js';
 import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS, STORY_MODE } from '../constants.js';
+import { collectImageUrls, refreshAttachmentUrls, buildImageStore, buildImageDataBlock, emojiUrl } from './_exportImages.js';
+
+// Renders an embedded image (data-storybot-img id, filled by the loader script at the
+// bottom of the export) or a visible placeholder span when the image couldn't be embedded.
+function embedOrPlaceholder(imageStore, url, attrs) {
+  const entry = imageStore?.images?.get(url);
+  if (entry?.dataUri) {
+    return `<img data-storybot-img="${entry.id}" ${attrs}>`;
+  }
+  return `<span class="missing-img">${imageStore?.placeholderText ?? ''}</span>`;
+}
 
 // Convert Discord markdown to HTML for export
 // guild is optional — pass the Discord guild object to resolve mentions, channels, and roles
 // dividerText is optional — the story's Scene Break Divider text, used to render [[break]] lines
-export async function discordMarkdownToHtml(text, guild = null, dividerText = null) {
-  // Custom emoji <:name:id> → Discord CDN img (static)
+// imageStore is optional — a { images, placeholderText } built by buildImageStore(); without
+// it, images/emoji always render as placeholders (no CDN links are ever emitted — they expire
+// within ~24h and are worthless in a saved export)
+export async function discordMarkdownToHtml(text, guild = null, dividerText = null, imageStore = null) {
+  // Custom emoji <:name:id> → embedded image (static)
   text = text.replace(/<:([^:>]+):(\d+)>/g, (_, name, id) =>
-    `<img src="https://cdn.discordapp.com/emojis/${id}.png" height="20" alt=":${name}:" style="vertical-align:middle">`
+    embedOrPlaceholder(imageStore, emojiUrl(id, false), `height="20" alt=":${name}:" style="vertical-align:middle"`)
   );
-  // Animated emoji <a:name:id> → Discord CDN img (animated gif)
+  // Animated emoji <a:name:id> → embedded image (animated gif)
   text = text.replace(/<a:([^:>]+):(\d+)>/g, (_, name, id) =>
-    `<img src="https://cdn.discordapp.com/emojis/${id}.gif" height="20" alt=":${name}:" style="vertical-align:middle">`
+    embedOrPlaceholder(imageStore, emojiUrl(id, true), `height="20" alt=":${name}:" style="vertical-align:middle"`)
   );
 
   // Discord timestamps <t:unix:format> → [timestamp]
@@ -107,15 +121,18 @@ export async function discordMarkdownToHtml(text, guild = null, dividerText = nu
   // Run through marked with breaks:true so single newlines render as line breaks (matching Discord behaviour)
   let html = marked.parse(text, { breaks: true });
 
-  // Convert Discord CDN attachment links to inline images after marked has run.
+  // Convert Discord CDN attachment links to embedded images after marked has run.
   // New format [display text](cdn_url): marked renders as <a href="url">text</a> — use text as alt.
   // Legacy format bare url: marked auto-links as <a href="url">url</a> — omit alt when text === url.
+  // marked HTML-escapes '&' in href attributes, so unescape before the imageStore lookup
+  // (keys are the raw URLs collected from entry markdown).
   html = html.replace(
     /<a href="(https:\/\/cdn\.discordapp\.com\/attachments\/[^\s"]+)"[^>]*>([^<]*)<\/a>/g,
-    (_, url, linkText) => {
+    (_, hrefUrl, linkText) => {
+      const url = hrefUrl.replace(/&amp;/g, '&');
       const text = linkText.trim();
       const alt = (text && text !== url) ? ` alt="${text}"` : '';
-      return `<a href="${url}"><img src="${url}"${alt} style="max-width:100%;display:block;margin:8px 0"></a>`;
+      return embedOrPlaceholder(imageStore, url, `${alt} style="max-width:100%;display:block;margin:8px 0"`);
     }
   );
 
@@ -173,9 +190,25 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     'txtExportLblRelationship', 'txtExportLblAdditionalRelationships',
     'txtExportLblCharacters', 'txtExportLblTags',
     'txtExportLblStarted', 'txtExportLblWriters', 'txtExportLblExported',
-    'txtExportNoteBody', 'txtExportStatsLine',
+    'txtExportNoteBody', 'txtExportStatsLine', 'txtExportImageUnavailable',
+    'cfgExportImageMaxBytes', 'cfgExportImageTotalBytes', 'cfgExportImageResizeWidth',
     ...dynamicOptions,
   ], guildId);
+
+  const { attachmentUrls, emojiUrls } = collectImageUrls([...entries.map(e => e.content), story.summary]);
+  const refreshMap = await refreshAttachmentUrls(guild?.client?.rest, attachmentUrls, { guildName: guild?.name });
+  const imageStore = await buildImageStore({
+    attachmentUrls,
+    emojiUrls,
+    refreshMap,
+    maxBytes: parseInt(cfg.cfgExportImageMaxBytes, 10),
+    totalBytes: parseInt(cfg.cfgExportImageTotalBytes, 10),
+    resizeWidth: parseInt(cfg.cfgExportImageResizeWidth, 10),
+    placeholderText: cfg.txtExportImageUnavailable,
+    guildName: guild?.name,
+    storyId,
+  });
+  log(`generateStoryExport: story ${storyId} embedded ${imageStore.embeddedCount} image(s), ${imageStore.failedCount} unavailable, ${imageStore.embeddedBytes} bytes`, { show: false, guildName: guild?.name });
 
   const fmt = d => new Date(d).toISOString().slice(0, 10);
   const publishedDate = fmt(story.created_at);
@@ -199,11 +232,11 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
         : `<div class="turn-label">Turn ${entry.turn_number}${story.show_authors ? ` — ${writerName}` : ''}</div>`;
       entriesHtml += `<div class="turn">${turnHeader}`;
     }
-    entriesHtml += await discordMarkdownToHtml(entry.content, guild, story.scene_break_divider);
+    entriesHtml += await discordMarkdownToHtml(entry.content, guild, story.scene_break_divider, imageStore);
   }
   if (currentTurn !== null) entriesHtml += `</div>`;
 
-  const summaryHtml = story.summary ? await discordMarkdownToHtml(story.summary, guild, story.scene_break_divider) : '';
+  const summaryHtml = story.summary ? await discordMarkdownToHtml(story.summary, guild, story.scene_break_divider, imageStore) : '';
 
   const ratingLabel = cfg[ratingLabelKey(story.rating)] ?? story.rating;
   const warningsText = story.warnings
@@ -233,6 +266,7 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     .meta-stats { font-size: 0.7em; }
     .summary { font-style: italic; margin: 10px 0; border-top: 1px solid; border-bottom: 1px solid; padding-top: 10px; }
     .export-note { font-size: 0.7em; opacity: 0.7; border-top: 1px solid; margin-top: 60px; padding-top: 16px; }
+    .missing-img { display: block; margin: 8px 0; font-style: italic; opacity: 0.7; }
 
     /* ---- Round Robin StoryBot Work Skin ----
        Copy everything between these markers into an AO3 Work Skin
@@ -261,10 +295,16 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
 	    color: #888; 
 	    margin: 0 0 0.5em; 
 	}
-    #workskin .scene-break { 
+    #workskin .scene-break {
 	    text-align: center;
       padding: 10px 0;
 	}
+    #workskin .missing-img {
+      display: block;
+      margin: 8px 0;
+      font-style: italic;
+      opacity: 0.7;
+    }
     #workskin .tooltip {
       display: inline;
       border-bottom: 0.5px dotted;
@@ -305,12 +345,14 @@ export async function generateStoryExport(connection, storyId, guildId, guild = 
     ${ao3MetaLines}
     <div class="meta"><span class="meta-label">${cfg.txtExportLblExported}: ${exportDate}</span></div>
   </div>${summaryHtml ? `\n  <div class="summary">${summaryHtml}</div>` : ''}
+  <!-- ═══ STORY START — for AO3, copy from here... ═══ -->
   <div id="workskin">
   ${entriesHtml}
   </div>
+  <!-- ═══ STORY END — ...to here ═══ -->
   <div class="export-note">
     <p>${cfg.txtExportNoteBody}</p>
-  </div>
+  </div>${buildImageDataBlock(imageStore)}
 </body>
 </html>`;
 

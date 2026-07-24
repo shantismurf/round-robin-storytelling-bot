@@ -16,6 +16,8 @@ import { setupDatabase, dbSetup } from './database-setup.js';
 import { deployCommands } from './deploy-commands.js';
 import { syncConfig } from './sync-config.js';
 import { syncFaqPosts } from './faq.js';
+import { syncPrivacyPolicy } from './privacy-policy.js';
+import { BROADCAST_ARMED, sendBroadcast } from './broadcast.js';
 import { Client, GatewayIntentBits } from 'discord.js';
 
 function header(label) {
@@ -44,19 +46,15 @@ async function stepDeployCommands(config) {
   console.log(`\n${formattedDate()}: Command registration complete.`);
 }
 
-async function stepSyncFaq(config, connection, changedFiles) {
-  header('Step 4 of 4 — FAQ post sync');
+async function stepSyncHubPosts(config, connection, changedFiles) {
+  header('Step 4 of 4 — Hub post sync (FAQ + privacy policy + broadcast)');
   if (config.testMode) {
-    console.log(`${formattedDate()}: Test mode — skipping FAQ sync.`);
-    return;
-  }
-  if (!changedFiles.has('config_help.sql')) {
-    console.log(`${formattedDate()}: config_help.sql unchanged — skipping FAQ sync.`);
+    console.log(`${formattedDate()}: Test mode — skipping hub post sync.`);
     return;
   }
   const hubServerId = await getConfigValue(connection, 'cfgHubServerId', 1);
   if (!hubServerId) {
-    console.log(`${formattedDate()}: cfgHubServerId not set in config table — skipping FAQ sync.`);
+    console.log(`${formattedDate()}: cfgHubServerId not set in config table — skipping hub post sync.`);
     return;
   }
 
@@ -65,12 +63,35 @@ async function stepSyncFaq(config, connection, changedFiles) {
   await new Promise(resolve => client.once('clientReady', resolve));
 
   try {
-    // Sync FAQ for the hub guild (guild_id=1 defaults)
-    const { errors, total } = await syncFaqPosts(client, connection, 1);
-    if (errors === 0) {
-      console.log(`${formattedDate()}: FAQ sync complete — ${total}/${total} pages updated.`);
+    if (changedFiles.has('config_help.sql')) {
+      // Sync FAQ for the hub guild (guild_id=1 defaults)
+      const { errors, total } = await syncFaqPosts(client, connection, 1);
+      if (errors === 0) {
+        console.log(`${formattedDate()}: FAQ sync complete — ${total}/${total} pages updated.`);
+      } else {
+        console.log(`${formattedDate()}: FAQ sync complete — ${total - errors}/${total} pages updated, ${errors} error(s). Check logs.`);
+      }
     } else {
-      console.log(`${formattedDate()}: FAQ sync complete — ${total - errors}/${total} pages updated, ${errors} error(s). Check logs.`);
+      console.log(`${formattedDate()}: config_help.sql unchanged — skipping FAQ sync.`);
+    }
+
+    // Privacy policy has no file-diff signal to gate on (it lives in privacy-policy.js,
+    // not a synced config file), so this runs every deploy — an idempotent edit-in-place
+    // once a message exists, so the cost of running it unconditionally is one API call.
+    const policyResult = await syncPrivacyPolicy(client, connection);
+    console.log(policyResult.success
+      ? `${formattedDate()}: Privacy policy sync complete.`
+      : `${formattedDate()}: Privacy policy sync failed. Check logs.`);
+
+    // Broadcast is a one-shot send to every configured server, not an idempotent
+    // sync — only fires when BROADCAST_ARMED is manually flipped to true in
+    // broadcast.js. Flip it back to false after sending to avoid resending on
+    // the next deploy.
+    if (BROADCAST_ARMED) {
+      const { sent, skipped } = await sendBroadcast(client, connection);
+      console.log(`${formattedDate()}: Broadcast sent — ${sent} sent, ${skipped} skipped. Remember to set BROADCAST_ARMED back to false in broadcast.js.`);
+    } else {
+      console.log(`${formattedDate()}: Broadcast not armed — skipping.`);
     }
   } finally {
     await client.destroy();
@@ -95,7 +116,7 @@ export async function main() {
     await stepMigrations(config, connection);
     const { changedFiles } = await stepSyncConfig(connection);
     await stepDeployCommands(config);
-    await stepSyncFaq(config, connection, changedFiles);
+    await stepSyncHubPosts(config, connection, changedFiles);
 
     console.log(`\n${'═'.repeat(50)}`);
     console.log('  Deploy complete.');
