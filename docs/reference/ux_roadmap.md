@@ -146,11 +146,11 @@ turnSlowReminder job (slow mode only)
 
 ### Unimplemented / Deferred
 - **Request More Time** (`story_request_more_time_*`): button exists but scheduling extension is not implemented. Requires job scheduler update.
-- **DM Support**: Full DM-based story participation planned but not implemented. Implementation order documented in TODO.md.
+- **DM Support**: Full DM-based story participation planned but not implemented. Implementation order documented in `../plans/PLAN-dm-support.md`.
 - **Help pages**: /story help needs page 4 (AO3/tagging); /mystory help and /storyadmin help need overhaul.
 
 ### Hardcoded Text (to be resolved in per-silo audits)
-- `ratingBadgeKey`, `modeText`, `orderText` — referenced in TODO.md as hardcoded; not yet migrated to config keys.
+- `ratingBadgeKey`, `modeText`, `orderText` — referenced in `../TODO.md` as hardcoded; not yet migrated to config keys.
 - Additional items to be identified in Silos 3–5.
 
 ### Deferred Tier B — Story Management (Silo 2)

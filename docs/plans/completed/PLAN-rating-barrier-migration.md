@@ -1,5 +1,12 @@
 # Rating-Barrier Thread Migration Feature
 
+Status: Implemented
+Created: 2026-07-01
+Last Updated: 2026-07-01
+Implemented: 2026-07-10 (commit cbcad61, "rating-barrier sweep" — getActiveThreadId() live in storybot.js / story/_writeFinalize.js as specified)
+
+---
+
 ## Context
 
 When a story's rating crosses the NR/G/T ↔ M/E threshold, the story thread must move to the appropriate feed channel. The manage flow already has `crossesBarrier` logic, but it is broken in two ways and the migration itself lacks cross-link messages and the ability to reopen an existing thread. Additionally the metadata panel gives no warning when a barrier-crossing rating is selected.

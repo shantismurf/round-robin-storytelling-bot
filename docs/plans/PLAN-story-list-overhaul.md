@@ -1,6 +1,10 @@
 # Plan: /story list Overhaul
 
-## Status: Pending — layout decisions established, implementation not started
+Status: Pending
+Created: 2026-07-01
+Last Updated: 2026-07-01
+
+Layout decisions established, implementation not started.
 
 ---
 

@@ -1,5 +1,12 @@
 # Plan: AO3 Name → Pen Name Rename
 
+Status: Implemented
+Created: 2026-07-01
+Last Updated: 2026-07-01
+Implemented: 2026-07-01 (present at repo history baseline — migration 020_rename_ao3_to_pen_name.sql, pen_name column live in db/init.sql)
+
+---
+
 ## Context
 
 The `story_writer` table has a column named `AO3_name` that stores a writer's display alias.

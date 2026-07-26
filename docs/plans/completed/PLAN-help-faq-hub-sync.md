@@ -1,5 +1,12 @@
 # Plan: Help Content → Hub FAQ Forum Sync
 
+Status: Implemented
+Created: 2026-07-01
+Last Updated: 2026-07-01
+Implemented: 2026-07-01 (present at repo history baseline — deploy.js imports and runs syncFaqPosts from faq.js)
+
+---
+
 ## Context
 The bot has three `/story help` pages and planned `/mystory help` / `/storyadmin help` pages.
 The Hub Discord server already has a FAQ forum channel. The goal is:

@@ -54,7 +54,7 @@ Working reference implementation: [story/_metadataModals.js](../story/_metadataM
    "no selection" as "no change", not as clearing the value (see the staged-state pattern
    in `story/add.js` / `story/manage.js`).
 
-## Known cleanup debt (do not "fix" in passing without checking TODO.md)
+## Known cleanup debt (do not "fix" in passing without checking ../TODO.md)
 
 - Legacy `ActionRowBuilder` usage for text inputs is stable and low-priority to migrate.
 - Label/required-flag display polish is tracked externally by the maintainer.

@@ -1,7 +1,7 @@
 # Round Robin StoryBot — System Roadmap
 
 Reference document for architecture, routing, and job infrastructure.
-For config string keys, see `db/config_roadmap.md`.
+For config string keys, see `config_roadmap.md`.
 
 ---
 
@@ -18,7 +18,7 @@ For config string keys, see `db/config_roadmap.md`.
 | `database-setup.js` | Schema creation + numbered `db/migrations/*.sql` runner (tracked in the `migrations` table, each applied once) | — |
 | `announcements.js` | Story feed announcement embeds | — |
 | `faq.js` | `/story help`, `/mystory help`, `/storyadmin help` page rendering; `syncFaqPosts()` — deletes and reposts all FAQ forum threads in the hub server (deploy-time, gated on `config_help.sql` changing) | — |
-| `privacy-policy.js` | Canonical `POLICY_TEXT` for the Bot's Privacy Policy & Terms of Service (mirrored in `docs/PRIVACY_POLICY.md`); `syncPrivacyPolicy()` — edits the pinned message in the hub's `#rules` channel in place (via stored `cfgPrivacyPolicyMessageId`), or posts + pins a new one. Runs on every deploy via `deploy.js`'s hub post sync step | — |
+| `privacy-policy.js` | Canonical `POLICY_TEXT` for the Bot's Privacy Policy & Terms of Service (mirrored in `PRIVACY_POLICY.md`); `syncPrivacyPolicy()` — edits the pinned message in the hub's `#rules` channel in place (via stored `cfgPrivacyPolicyMessageId`), or posts + pins a new one. Runs on every deploy via `deploy.js`'s hub post sync step | — |
 | `broadcast.js` | `sendBroadcast()` — sends the `ANNOUNCEMENT` text to the hub announcements channel and every configured guild's story feed channel (opt-out via `cfgChangelogEnabled`). Gated by hardcoded `BROADCAST_ARMED` (must be manually flipped to `true`, then back to `false` after sending) since it's a one-shot send, not an idempotent sync; checked by `deploy.js`'s hub post sync step on every deploy | — |
 | `commands/story.js` | `/story` command handler (delegates to `story/` subcommands) | — |
 | `commands/storyadmin.js` | `/storyadmin` command handler | — |

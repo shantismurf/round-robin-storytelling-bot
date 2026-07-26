@@ -2,7 +2,7 @@ import { EmbedBuilder } from 'discord.js';
 import { getConfigValue, log } from './utilities.js';
 
 // Single source of truth for the policy text posted to the hub server's #rules channel
-// and mirrored (in slightly more verbose Markdown form) in docs/PRIVACY_POLICY.md.
+// and mirrored (in slightly more verbose Markdown form) in docs/reference/PRIVACY_POLICY.md.
 // Edit here, bump "Last Updated", and both the automatic deploy-time sync (see
 // syncPrivacyPolicy below, wired into deploy.js's hub post-sync step) and the manual
 // helper/post-privacy-policy.js script will pick up the change.
