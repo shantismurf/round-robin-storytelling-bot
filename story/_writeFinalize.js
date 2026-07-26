@@ -221,6 +221,9 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
       return;
     }
 
+    const txtProcessing = await getConfigValue(connection, 'txtEntrySubmittedProcessing', interaction.guild.id).catch(() => null);
+    if (txtProcessing) await thread.send(txtProcessing).catch(() => {});
+
     const [mediaChannelId, mediaPostLabelTemplate] = await Promise.all([
       getConfigValue(connection, 'cfgMediaChannelId', interaction.guild.id),
       getConfigValue(connection, 'txtMediaPostLabel', interaction.guild.id),
@@ -331,8 +334,6 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     }
 
     pendingPreviewData.delete(interaction.user.id);
-    const txtProcessing = await getConfigValue(connection, 'txtEntrySubmittedProcessing', interaction.guild.id).catch(() => null);
-    if (txtProcessing) await thread.send(txtProcessing).catch(() => {});
     await interaction.editReply({ content: await getConfigValue(connection, 'txtEntryFinalized', interaction.guild.id), components: [] });
     log(`doFinalizeEntry: complete — deleting turn thread ${turn.thread_id}`, { show: true, guildName: interaction?.guild?.name });
     await deleteThreadAndAnnouncement(thread);
