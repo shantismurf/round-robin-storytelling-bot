@@ -1,21 +1,22 @@
 # Round Robin StoryBot — Claude Context
 ## Developer Notes & Persona
 - The user is self-taught with professional DB and coding experience; she prefers plain language and context over jargon. Treat her as a competent peer, but speak directly when an approach is over-engineered or wrong, and teach to fill gaps in her knowledge. Default to concise, warm, conversational prose sized to the question — not padded, not clipped into status updates. Reserve bullet lists for genuinely list-shaped content (options, findings, data); keep progress narration and everyday replies in prose.
-* **Process Transparency:** Always immediately restate what you understand the user's request to be, then narrate before and after every distinct investigation step — do not chain more than 2-3 tool calls without an update explaining what was found and what's next. Check in if a process runs for more than 30 seconds with no output. Narrate in plain response text, never rely on thinking blocks being visible — see `docs/feedback_narrate_progress.md`.
+* **Process Transparency:** Always immediately restate what you understand the user's request to be, then narrate before and after every distinct investigation step — do not chain more than 2-3 tool calls without an update explaining what was found and what's next. Check in if a process runs for more than 30 seconds with no output. Narrate in plain response text, never rely on thinking blocks being visible.
 - **No Assumptions:** Regularly ask the user for context rather than chasing assumptions. Don't assume the user didn't restart the process or change a system variable if things aren't adding up - ASK.
-- **Docs before speculation:** Before investigating an issue, check system_roadmap.md and the relevant docs first. If you find no paper trail in the docs or code, state that clearly rather than hallucinating a theory.
+- **Docs before speculation:** Before investigating an issue, check `docs/reference/system_roadmap.md` and the relevant docs first. If you find no paper trail in the docs or code, state that clearly rather than hallucinating a theory.
+- **Commit plan docs before ending a session:** Any implementation plan drafted during a chat session (design decisions, file/function lists, build order) must be committed to `docs/plans/` — with a Status/Created/Last Updated header — before the session is considered done. A plan that exists only in an uploaded or local chat file is not discoverable by a future session and will get lost.
 - **Reuse before you write:** Check for existing logic before implementing. Extract reusable code to shared helpers and modules. Search for existing config values that can be repurposed before creating new keys. Keep files under 500 lines.
 - **No hard-coded text:** All user-facing text must be displayed for and approved by the user unless they provided the exact text already.
 
 ## System Information
-- **Host:** Managed via restricted pterodactyl interface on bot-hosting.net. No manual console access, no local/staging execution — any change, including debug logging, must be pushed to main and the bot restarted before it can be tested. Runs Node.js v24.18.0 (as of 2026-07-24); the host keeps this current with new Node releases, so don't assume this stays pinned. See `docs/HOSTING.md` for the container's startup script and known deploy quirks.
+- **Host:** Managed via restricted pterodactyl interface on bot-hosting.net. No manual console access, no local/staging execution — any change, including debug logging, must be pushed to main and the bot restarted before it can be tested. Runs Node.js v24.18.0 (as of 2026-07-24); the host keeps this current with new Node releases, so don't assume this stays pinned. See `docs/reference/HOSTING.md` for the container's startup script and known deploy quirks.
 - **Startup:** Pulls main branch -> runs index.js -> fires deploy.js:
   - database_setup: schema checks and migrations.
   - sync_config: aggregates `db/config_files/*.sql` and syncs to DB.
   - deploy_commands: registers slash commands (instant in test_mode).
 - **MariaDB:** Uses explicit transactions (`BEGIN`/`COMMIT`/`ROLLBACK`) for all story state changes.
   - The migration runner splits on ; before stripping comments, so any ; inside a comment text corrupts the next statement. NO SEMI-COLONS IN SQL CODE COMMENTS!
-- discord.js 14.26.4: modals DO support selects/radio groups. Before writing or reviewing ANY discord.js component/modal code, read `docs/discordjs_reference.md` and verify against `node_modules/discord.js/src/`, never training data.
+- discord.js 14.26.4: modals DO support selects/radio groups. Before writing or reviewing ANY discord.js component/modal code, read `docs/reference/discordjs_reference.md` and verify against `node_modules/discord.js/src/`, never training data.
 
 ## High-level Architecture 
 - **index.js (The Gateway):** Primary bot entry point. Routes all interactions (isCommand, isButton, isModalSubmit) by customId. Executes `deploy.js` on bot start for database migrations, config table sync, slash command registration, and faq post sync.
@@ -41,7 +42,7 @@
 ## Config & Localization Rules
 - **NO HARDCODED USER TEXT:** Every user-facing string must use `getConfigValue()`. Logs and the unicode space character may be hard-coded.
 - **Missing Config = Error:** Do not use `?? "Fallback"` defaults. Log a high-priority error.
-- **Roadmap-Driven:** Check `config_roadmap.md` before creating keys. Update the roadmap as needed.
+- **Roadmap-Driven:** Check `docs/reference/config_roadmap.md` before creating keys. Update the roadmap as needed.
 - **Naming Convention:** `[type][Location][Purpose][Name]` (e.g., `btnStoryAddPanelCreate`).
   - `lbl`: Labels | `txt`: Content/Titles | `btn`: Buttons | `cfg`: System values.
 - **Token Substitution:** Always use `replaceTemplateVariables(template, keyValueMap)` — never inline `.replace()` on config strings. Wrap optional text in `{?text with [token]?}` markers (no spaces inside markers); the block is stripped if any `[token]` inside it is missing from the map.
@@ -68,8 +69,10 @@ Implement two-tier high-resolution coverage using `log(content, { show, guildNam
   `connection.execute()`) — no live DB or Discord connection required.
 
 ## System Documentation
-Review and maintain roadmaps with every implementation.
-- **system_roadmap.md:** Maps exported functions, state maps, and event routing logic.
-- **db/config_roadmap.md:** Manifest of all database-stored config strings and values.
-- **ux_roadmap.md:** Application workflows and interface structure.
+Review and maintain roadmaps with every implementation. `docs/INDEX.md` is the master map of every doc in the repo (category + status) — start there if you're not sure where something lives.
+- **docs/reference/system_roadmap.md:** Maps exported functions, state maps, and event routing logic.
+- **docs/reference/config_roadmap.md:** Manifest of all database-stored config strings and values.
+- **docs/reference/ux_roadmap.md:** Application workflows and interface structure.
+- **docs/TODO.md:** Running backlog. Anything plan-sized gets its own file in `docs/plans/`, linked from here — TODO.md itself stays short bullets.
+- **docs/plans/:** Feature plans not yet (or partially) built, each with a `Status`/`Created`/`Last Updated` header. Implemented ones move to `docs/plans/completed/`.
 - **Help Sync Rule:** UX Roadmap changes must be reflected in the corresponding user help config keys (e.g., `txtHelp1FindJoin`).

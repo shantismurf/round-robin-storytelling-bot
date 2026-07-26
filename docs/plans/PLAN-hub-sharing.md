@@ -1,5 +1,17 @@
 # Plan: Hub Server Sharing + Consent + Announcement System
 
+Status: Partially Implemented — needs review
+Created: 2026-07-01
+Last Updated: 2026-07-01
+
+Hub infrastructure (broadcast.js, hub FAQ sync, hub privacy-policy posting) is live in the
+codebase, but no evidence was found of this plan's per-guild opt-in toggle, per-story
+opt-out, or writer-consent-at-join flow. Needs an owner pass to confirm what's actually
+built vs. still outstanding before this can be marked Implemented or split into a
+follow-up plan.
+
+---
+
 ## Context
 
 The bot runs on multiple Discord guilds. The owner wants to create a new central "hub" Discord server for bot support and development announcements that also mirrors story activity from participating guilds — giving the hub a vibrant, community-facing feed showcasing stories across all installations. 

@@ -2,9 +2,9 @@
 <!-- What changed and why -->
 
 ## Docs synced?
-- [ ] `system_roadmap.md` (exported functions, state maps, event routing)
-- [ ] `db/config_roadmap.md` (new/changed config keys)
-- [ ] `ux_roadmap.md` (workflow/UI changes)
+- [ ] `docs/reference/system_roadmap.md` (exported functions, state maps, event routing)
+- [ ] `docs/reference/config_roadmap.md` (new/changed config keys)
+- [ ] `docs/reference/ux_roadmap.md` (workflow/UI changes)
 
 ## Testing
 - [ ] `npm test` passed

@@ -1,4 +1,4 @@
-// Minimal fake DB connection for Layer-1 tests (see docs/Fable_Audit_2026-07.md 4.5).
+// Minimal fake DB connection for Layer-1 tests (see docs/audits/Fable_Audit_2026-07.md 4.5).
 // Scripts a queue of results: each call to execute() shifts the next entry off the
 // queue and returns it as `[rows]`, matching mysql2/promise's execute() return shape.
 // Unlike the real pool, this fake has no query-matching — tests must enqueue results

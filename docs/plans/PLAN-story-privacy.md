@@ -1,5 +1,11 @@
 # Story Privacy (Writer-Only Stories)
 
+Status: Pending
+Created: 2026-07-21
+Last Updated: 2026-07-21
+
+---
+
 ## Context
 
 The user wants an option, set at story creation, to restrict a story so only the
