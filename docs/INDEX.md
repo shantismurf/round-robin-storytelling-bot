@@ -25,7 +25,7 @@ Every file has a `Status` / `Created` / `Last Updated` (/ `Implemented`) header.
 | [PLAN-story-privacy.md](plans/PLAN-story-privacy.md) | Pending | Writer-only (private) stories, create-only toggle |
 | [PLAN-hub-sharing.md](plans/PLAN-hub-sharing.md) | Partially Implemented — needs review | Hub server story mirroring, consent, broadcast system |
 | [hub-brainstorming.md](plans/hub-brainstorming.md) | — (companion notes) | Open questions/decisions feeding into PLAN-hub-sharing.md |
-| [PLAN-panel-rework-and-ground-rules.md](plans/PLAN-panel-rework-and-ground-rules.md) | Pending | Add/Manage panel Settings/Metadata split, Ground Rules feature, Warnings checkbox conversion |
+| [PLAN-panel-rework-and-ground-rules.md](plans/PLAN-panel-rework-and-ground-rules.md) | Pending | Add/Manage panel Settings/Metadata split, Move Manage Users onto the panel, Ground Rules feature, Warnings checkbox conversion |
 | [PLAN-dm-support.md](plans/PLAN-dm-support.md) | Pending | Full DM-based story participation |
 | [PLAN-series-system.md](plans/PLAN-series-system.md) | Idea | Group stories into a series with chapters |
 | [PLAN-reactions-kudos.md](plans/PLAN-reactions-kudos.md) | Idea | Reaction-based kudos reposted to the story feed |
