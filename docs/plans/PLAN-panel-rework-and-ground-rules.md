@@ -2,7 +2,7 @@
 
 Status: Pending
 Created: 2026-07-26 (drafted in an earlier Claude Code chat session; committed to the repo on this date)
-Last Updated: 2026-07-26
+Last Updated: 2026-07-26 (added Part 1b, folded in from a separate TODO.md item)
 
 Design finalized in chat, implementation not started.
 
@@ -60,6 +60,32 @@ down to ~7-10 per view.
   fields get added
 - `story/add.js`, `story/manage.js` — new button handlers for the group toggle, state needs an
   `activeGroup` field (defaults to `'settings'`)
+
+---
+
+## Part 1b — Move Manage Users onto the manage panel
+
+Folded in from a standalone TODO.md item. Currently `/storyadmin user` (`commands/storyadmin.js`,
+routes to `story/_manageUser.js`) is a separate slash command taking `story_id` and `user` as
+required options. The idea: add a "Manage Users" button to `/story manage`
+(`story/manage.js`'s `buildManageMessage()`) that opens a two-step modal (pick the writer, then
+manage them) instead of requiring a standalone command with both params typed up front.
+
+**Doesn't actually require the Part 1 rework to fit.** The panel is at 5/5 *action rows* (the
+hard cap — no 6th row possible), but individual rows aren't at their own 5-button cap: row 2
+(Manage Entries, Manage Turns) has 2/5, row 4 (Join toggle, Pause/Resume, Close/Reopen) has 3/5,
+row 5 (Save Settings) has 1/5. A "Manage Users" button could slot into any of those today.
+Bundling it with Part 1 anyway since the panel's layout is already being touched, and because
+the Settings/Metadata split may change which row makes sense for it (e.g. row 2 next to Manage
+Entries/Manage Turns reads as the more natural home once the layout stabilizes).
+
+### Files touched
+- `story/manage.js` — new button (likely row 2, next to Manage Entries/Manage Turns),
+  new button handler that opens the first step of the two-step modal
+- `story/_manageUser.js` — needs a modal-based entry point instead of (or in addition to) the
+  current command-argument-based one; the existing management logic itself shouldn't need to change
+- `commands/storyadmin.js` — decide whether `/storyadmin user` stays as a power-user shortcut or
+  gets removed once the panel button covers the same flow
 
 ---
 
@@ -225,13 +251,15 @@ need to trim.
 
 1. Warnings → Checkbox Group conversion (small, proves the pattern, no schema changes)
 2. Panel display rework (Settings/Metadata split) — unblocks everything else
-3. Ground Rules: server-vocabulary setup modal + parser/validator
-4. Ground Rules: story-level checkbox field in `buildMetadataModal()`
-5. Ground Rules: `story.ground_rules` column + stable-slug generation + storage
-6. Ground Rules: display wiring (status post, join panel, manage panel)
-7. Turn thread welcome message → embed conversion (bundle with scene-break/translation
+3. Move Manage Users onto the manage panel (Part 1b) — independent of the rest, but natural to
+   do alongside Part 1 since both touch `buildManageMessage()`'s button rows
+4. Ground Rules: server-vocabulary setup modal + parser/validator
+5. Ground Rules: story-level checkbox field in `buildMetadataModal()`
+6. Ground Rules: `story.ground_rules` column + stable-slug generation + storage
+7. Ground Rules: display wiring (status post, join panel, manage panel)
+8. Turn thread welcome message → embed conversion (bundle with scene-break/translation
    instructions rework)
-8. Ground Rules: change-notification post to story thread on save
+9. Ground Rules: change-notification post to story thread on save
 
 ---
 
