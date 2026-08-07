@@ -115,7 +115,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtWeeklyRoundupTitle', '📖 Weekly Story Roundup', 'en', 1),
 ('txtRoundupNoActiveStories', '*No active stories this week.*', 'en', 1),
 ('txtRoundupStoryLine', '• **[story_title]** (#[story_id])', 'en', 1),
-('txtRoundupActivity', 'Stories created: **[created]** · Stories completed: **[completed]**\nTurns submitted: **[submitted]** · Turns missed: **[missed]**\nWords written: **~[word_count]**', 'en', 1),
+('txtRoundupActivity', '- Stories created: **[created]**\n- Stories completed: **[completed]**\n- Turns submitted: **[submitted]**\n- Turns missed: **[missed]**\n- Words written: **~[word_count]**', 'en', 1),
 ('txtRoundupOverflow', '*...and [count] more*', 'en', 1),
 ('lblRoundupActiveStories', '📚 Active Stories', 'en', 1),
 ('lblRoundupActivity', '📊 This Week''s Activity', 'en', 1),

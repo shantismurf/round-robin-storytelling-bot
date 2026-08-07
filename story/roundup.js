@@ -1,5 +1,5 @@
 import { EmbedBuilder } from 'discord.js';
-import { getConfigValue, log, storyLastActivitySQL } from '../utilities.js';
+import { getConfigValue, log, storyLastActivitySQL, replaceTemplateVariables } from '../utilities.js';
 import { STORY_STATUS, TURN_STATUS, JOB_STATUS, ENTRY_STATUS } from '../constants.js';
 
 function writerBadge(entryCount) {
@@ -119,17 +119,13 @@ export async function generateRoundupStats(connection, guildId) {
 
 export async function buildRoundupEmbed(connection, client, guildId, stats) {
   const cfg = await getConfigValue(connection, [
-    'cfgWeeklyRoundupColor', 'txtWeeklyRoundupTitle'
+    'cfgWeeklyRoundupColor', 'txtWeeklyRoundupTitle', 'lblRoundupActiveStories',
+    'txtRoundupNoActiveStories', 'txtRoundupStoryLine', 'txtRoundupOverflow',
+    'lblRoundupActivity', 'txtRoundupActivity', 'lblRoundupWriters'
   ], guildId);
 
-  const colorHex = (cfg.cfgWeeklyRoundupColor && cfg.cfgWeeklyRoundupColor !== 'cfgWeeklyRoundupColor')
-    ? cfg.cfgWeeklyRoundupColor : '#57F287';
-  const color = parseInt(colorHex.replace('#', ''), 16);
-
+  const color = parseInt(cfg.cfgWeeklyRoundupColor.replace('#', ''), 16);
   const thumbnailUrl = client.user.displayAvatarURL();
-
-  const title = (cfg.txtWeeklyRoundupTitle && cfg.txtWeeklyRoundupTitle !== 'txtWeeklyRoundupTitle')
-    ? cfg.txtWeeklyRoundupTitle : '📖 Weekly Story Roundup';
 
   const now = new Date();
   const weekAgo = new Date(now - 7 * 24 * 60 * 60 * 1000);
@@ -137,35 +133,40 @@ export async function buildRoundupEmbed(connection, client, guildId, stats) {
   const dateRange = `${fmt(weekAgo)}–${fmt(now)}`;
 
   const embed = new EmbedBuilder()
-    .setTitle(`${title} — ${dateRange}`)
+    .setTitle(`${cfg.txtWeeklyRoundupTitle} — ${dateRange}`)
     .setColor(color)
     .setThumbnail(thumbnailUrl)
     .setTimestamp();
 
   if (stats.activeStories.length > 0) {
     const lines = stats.activeStories.slice(0, 10)
-      .map(s => `• **${s.title}** (#${s.guild_story_id})`).join('\n');
-    const extra = stats.activeStories.length > 10 ? `\n*...and ${stats.activeStories.length - 10} more*` : '';
-    embed.addFields({ name: '📚 Active Stories', value: lines + extra, inline: false });
+      .map(s => replaceTemplateVariables(cfg.txtRoundupStoryLine, { story_title: s.title, story_id: s.guild_story_id }))
+      .join('\n');
+    const extra = stats.activeStories.length > 10
+      ? '\n' + replaceTemplateVariables(cfg.txtRoundupOverflow, { count: stats.activeStories.length - 10 })
+      : '';
+    embed.addFields({ name: cfg.lblRoundupActiveStories, value: lines + extra, inline: false });
   } else {
-    embed.addFields({ name: '📚 Active Stories', value: '*No active stories*', inline: false });
+    embed.addFields({ name: cfg.lblRoundupActiveStories, value: cfg.txtRoundupNoActiveStories, inline: false });
   }
 
-  const activityLines = [
-    `- Stories created: **${stats.created}**`, 
-    `- Stories completed: **${stats.completed}**`,
-    `- Turns submitted: **${stats.submitted}**, 
-    `- Turns missed: **${stats.missed}**`,
-    `Words written: **~${stats.wordSum.toLocaleString()}**`
-  ].join('\n');
-  embed.addFields({ name: '📊 This Week\'s Activity', value: activityLines, inline: false });
+  const activityLines = replaceTemplateVariables(cfg.txtRoundupActivity, {
+    created: stats.created,
+    completed: stats.completed,
+    submitted: stats.submitted,
+    missed: stats.missed,
+    word_count: stats.wordSum.toLocaleString()
+  });
+  embed.addFields({ name: cfg.lblRoundupActivity, value: activityLines, inline: false });
 
   if (stats.writers.length > 0) {
     const writerLines = stats.writers.slice(0, 20)
       .map(w => `${writerBadge(w.entryCount)} ${w.displayName}`)
       .join('\n');
-    const extra = stats.writers.length > 20 ? `\n*...and ${stats.writers.length - 20} more*` : '';
-    embed.addFields({ name: '👥 Active Writers', value: writerLines + extra, inline: false });
+    const extra = stats.writers.length > 20
+      ? '\n' + replaceTemplateVariables(cfg.txtRoundupOverflow, { count: stats.writers.length - 20 })
+      : '';
+    embed.addFields({ name: cfg.lblRoundupWriters, value: writerLines + extra, inline: false });
   }
 
   return embed;
