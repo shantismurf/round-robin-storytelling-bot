@@ -152,8 +152,10 @@ export async function buildRoundupEmbed(connection, client, guildId, stats) {
   }
 
   const activityLines = [
-    `Stories created: **${stats.created}** · Stories completed: **${stats.completed}**`,
-    `Turns submitted: **${stats.submitted}** · Turns missed: **${stats.missed}**`,
+    `- Stories created: **${stats.created}**`, 
+    `- Stories completed: **${stats.completed}**`,
+    `- Turns submitted: **${stats.submitted}**, 
+    `- Turns missed: **${stats.missed}**`,
     `Words written: **~${stats.wordSum.toLocaleString()}**`
   ].join('\n');
   embed.addFields({ name: '📊 This Week\'s Activity', value: activityLines, inline: false });
