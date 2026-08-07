@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { buildEntryPages } from '../story/_entryRenderer.js';
 
 describe('buildEntryPages', () => {
-  test('returns a single page for short content with no partIndex/partCount', () => {
+  test('returns a single page numbered 1/1 for short content', () => {
     const pages = buildEntryPages('Once upon a time.', {
       turnNumber: 1, writerName: 'Alice', showAuthors: true, storyEntryId: 100,
     });
@@ -11,9 +11,21 @@ describe('buildEntryPages', () => {
     assert.equal(pages[0].content, 'Once upon a time.');
     assert.equal(pages[0].turnNumber, 1);
     assert.equal(pages[0].writerName, 'Alice');
-    assert.equal(pages[0].partIndex, null);
-    assert.equal(pages[0].partCount, null);
+    assert.equal(pages[0].partIndex, 1);
+    assert.equal(pages[0].partCount, 1);
     assert.equal(pages[0].isFirstChunk, true);
+  });
+
+  test('computes entryWordCount for the whole entry, matching on every chunk of a split entry', () => {
+    const longContent = 'word '.repeat(2000).trim() + '\n\n' + 'more '.repeat(2000).trim();
+    const pages = buildEntryPages(longContent, {
+      turnNumber: 3, writerName: 'Cass', showAuthors: true, storyEntryId: 102,
+    });
+    assert.ok(pages.length > 1);
+    const expectedCount = longContent.trim().split(/\s+/).filter(Boolean).length;
+    for (const page of pages) {
+      assert.equal(page.entryWordCount, expectedCount);
+    }
   });
 
   test('hides the writer name when showAuthors is false', () => {

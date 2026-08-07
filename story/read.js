@@ -155,13 +155,9 @@ export function buildReadEmbed(session, pageIndex) {
     storyThreadId: session.storyThreadId,
     guildId: session.guildId,
     imagePageIndex: session.imagePageIndex ?? 0,
+    footerTemplate: session.lblEntryFooter,
+    storyWordCount: session.wordCount,
   });
-
-  // Append word count to footer
-  if (result.embeds[0]) {
-    const existing = result.embeds[0].data.footer?.text ?? '';
-    result.embeds[0].setFooter({ text: `${existing} · ~${session.wordCount.toLocaleString()} words total` });
-  }
 
   return result;
 }
@@ -288,7 +284,7 @@ if (isConfigured) {
       [storyId]
     );
 
-    const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay, btnExportNoBreaks, btnExportWithBreaks, lblPageJumpPlaceholder, lblPageJumpOptionTurn] = await Promise.all([
+    const [btnSubmitTagRead, btnViewProposedTags, btnManageTags, ratingBadgeDisplay, btnExportNoBreaks, btnExportWithBreaks, lblPageJumpPlaceholder, lblPageJumpOptionTurn, lblEntryFooter] = await Promise.all([
       getConfigValue(connection, 'btnSubmitTagRead', guildId),
       getConfigValue(connection, 'btnViewProposedTags', guildId),
       getConfigValue(connection, 'btnManageTags', guildId),
@@ -297,6 +293,7 @@ if (isConfigured) {
       getConfigValue(connection, 'btnExportWithBreaks', guildId),
       getConfigValue(connection, 'lblPageJumpPlaceholder', guildId),
       getConfigValue(connection, 'lblPageJumpOptionTurn', guildId),
+      getConfigValue(connection, 'lblEntryFooter', guildId),
     ]);
 
     const wordCount = entries.reduce((total, e) => total + e.content.trim().split(/\s+/).length, 0);
@@ -313,7 +310,7 @@ if (isConfigured) {
       pendingTagCount: Number(pendingTagCount),
       btnSubmitTagRead, btnViewProposedTags, btnManageTags,
       btnExportNoBreaks, btnExportWithBreaks,
-      lblPageJumpPlaceholder, lblPageJumpOptionTurn,
+      lblPageJumpPlaceholder, lblPageJumpOptionTurn, lblEntryFooter,
       storyThreadId: story.story_thread_id, imagePageIndex: 0
     };
     pendingReadData.set(interaction.user.id, session);

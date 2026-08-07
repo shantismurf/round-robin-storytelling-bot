@@ -10,7 +10,7 @@
  */
 
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { splitAtParagraphs } from '../utilities.js';
+import { splitAtParagraphs, replaceTemplateVariables } from '../utilities.js';
 import { applyEntryMarkup } from './_entryMarkup.js';
 
 const IMAGES_PER_PAGE = 4;
@@ -44,12 +44,15 @@ export function buildEntryPages(content, { turnNumber, writerName, showAuthors, 
   content = applyEntryMarkup(content, { dividerText: sceneBreakDivider, target: 'discord' });
   const imageUrls = extractImageUrls(content);
   const chunks = splitAtParagraphs(content);
+  // Word count for the whole entry (all chunks combined) — same figure shown on every page of a split entry.
+  const entryWordCount = content.trim().split(/\s+/).filter(Boolean).length;
   return chunks.map((chunk, i) => ({
     turnNumber,
     writerName: showAuthors ? writerName : null,
     content: chunk,
-    partIndex: chunks.length > 1 ? i + 1 : null,
-    partCount: chunks.length > 1 ? chunks.length : null,
+    partIndex: i + 1,
+    partCount: chunks.length,
+    entryWordCount,
     storyEntryId,
     isFirstChunk: i === 0,
     editInfo: i === 0 ? editInfo : null,
@@ -61,16 +64,14 @@ export function buildEntryPages(content, { turnNumber, writerName, showAuthors, 
  * Render a page and navigation buttons into { embeds, components }.
  *
  * @param {object} page        — one element from buildEntryPages()
- * @param {object} session     — { title, pageIndex, totalPages, imagePageIndex, guildId, storyThreadId, context, extraButtons }
+ * @param {object} session     — { title, pageIndex, totalPages, imagePageIndex, guildId, storyThreadId, context, extraButtons, footerTemplate, storyWordCount }
  *   context: 'read' | 'preview' | 'view'  — selects which customId prefix to use for nav buttons
  *   extraButtons: ActionRowBuilder[]       — injected rows appended after the nav row (e.g. Confirm/Cancel)
+ *   footerTemplate: string|undefined       — lblEntryFooter config value; footer is omitted if not supplied (caller sets its own)
+ *   storyWordCount: number|undefined       — whole-story word count; only read.js has this, so [storyWords] is optional in the template
  */
 export function buildEntryEmbed(page, session) {
-  const { title, pageIndex, totalPages, context = 'read', extraButtons = [], storyThreadId, guildId } = session;
-
-  let turnLabel = `Turn ${page.turnNumber}`;
-  if (page.writerName) turnLabel += ` — ${page.writerName}`;
-  if (page.partIndex)  turnLabel += ` (part ${page.partIndex}/${page.partCount})`;
+  const { title, pageIndex, totalPages, context = 'read', extraButtons = [], storyThreadId, guildId, footerTemplate, storyWordCount } = session;
 
   let description = page.content;
   if (page.editInfo) {
@@ -88,8 +89,21 @@ export function buildEntryEmbed(page, session) {
   const embed = new EmbedBuilder()
     .setTitle(title)
     .setDescription(description)
-    .setColor(0x5865f2)
-    .setFooter({ text: `${turnLabel} · Page ${pageIndex + 1} of ${totalPages}` });
+    .setColor(0x5865f2);
+
+  if (footerTemplate) {
+    const footerTokens = {
+      turn: String(page.turnNumber),
+      part: String(page.partIndex),
+      partCount: String(page.partCount),
+      entryWords: page.entryWordCount.toLocaleString(),
+      page: String(pageIndex + 1),
+      total: String(totalPages),
+    };
+    if (page.writerName) footerTokens.writer = page.writerName;
+    if (storyWordCount !== undefined && storyWordCount !== null) footerTokens.storyWords = storyWordCount.toLocaleString();
+    embed.setFooter({ text: replaceTemplateVariables(footerTemplate, footerTokens) });
+  }
 
   if (imageSlice.length > 0) embed.setURL(groupUrl);
 
