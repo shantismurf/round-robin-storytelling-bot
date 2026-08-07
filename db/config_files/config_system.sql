@@ -91,4 +91,6 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- Shared page-jump select menu (story/read.js, story/edit.js)
 ('lblPageJumpPlaceholder', 'Page [page] of [total]', 'en', 1),
 ('lblPageJumpOption', 'Page [page]', 'en', 1),
-('lblPageJumpOptionTurn', 'Page [page] — Turn [turn]{? ([writer])?}', 'en', 1);
+('lblPageJumpOptionTurn', 'Page [page] — Turn [turn]{? ([writer])?}', 'en', 1),
+-- Shared entry footer template (story/_entryRenderer.js buildEntryEmbed — read, write preview, finalize preview)
+('lblEntryFooter', 'Turn [turn]{? — [writer]?}{? (part [part]/[partCount], ~[entryWords] words)?} · Page [page] of [total]{? · ~[storyWords] words total?}', 'en', 1);

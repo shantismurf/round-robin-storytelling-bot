@@ -33,6 +33,7 @@ export function buildPreviewEmbed(userId, pageIndex, confirmRow) {
     extraButtons: [confirmRow],
     guildId: session.guildId,
     imagePageIndex: session.imagePageIndex ?? 0,
+    footerTemplate: session.lblEntryFooter,
   });
 }
 
@@ -110,10 +111,11 @@ export async function handleFinalizeEntry(connection, interaction) {
       .replace(/^#{1,3} (.+)$/gm, '**$1**')
       .replace(/^-# (.+)$/gm, '*$1*');
 
-    const [txtFinalizeConfirm, btnFinalizeConfirm, btnCancel] = await Promise.all([
+    const [txtFinalizeConfirm, btnFinalizeConfirm, btnCancel, lblEntryFooter] = await Promise.all([
       getConfigValue(connection, 'txtFinalizeConfirm', guildId),
       getConfigValue(connection, 'btnFinalizeConfirm', guildId),
       getConfigValue(connection, 'btnCancel', guildId),
+      getConfigValue(connection, 'lblEntryFooter', guildId),
     ]);
 
     const pages = buildEntryPages(previewContent, { turnNumber: '—', writerName: null, showAuthors: false, storyEntryId: null, sceneBreakDivider: turnInfo[0].scene_break_divider });
@@ -136,6 +138,7 @@ export async function handleFinalizeEntry(connection, interaction) {
       guildId,
       writerId: String(writerId),
       title: txtFinalizeConfirm,
+      lblEntryFooter,
     });
 
     log(`handleFinalizeEntry: showing preview page 1/${pages.length} to user ${interaction.user.username} for writer ${writerId}`, { show: true, guildName: interaction?.guild?.name });
