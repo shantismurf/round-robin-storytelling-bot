@@ -96,7 +96,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblHelp6Read', '📖 Reading a Story', 'en', 1),
 ('txtHelp6Read', '`/story read [id]` — Displays the story in Discord, paginated by entry. Longer entries are broken into additional pages. Each entry shows the writer''s name (if enabled) and the text they submitted. Images are shown as placeholders with their alternate text.', 'en', 1),
 ('lblHelp6Edit', '✏️ Editing an Entry', 'en', 1),
-('txtHelp6Edit', 'You can edit a finalized entry two ways:\n- `/story edit [id] [turn]` — Opens the edit interface directly.\n- Click the **Edit** button in `/story read` — appears on the first page of each entry.\n\nWriters can edit their own entries. Admins can edit or delete any entry and restore previous versions.', 'en', 1),
+('txtHelp6Edit', 'You can edit a finalized entry two ways:\n- `/story edit [id] (turn)` — If you know the turn number, it opens that entry directly. Leave it off to see a list of your entries in that story and pick one.\n- Click the **Edit** button in `/story read` — appears on the first page of each entry.\n\nWriters can edit their own entries. Admins can edit or delete any entry and restore previous versions.', 'en', 1),
 ('lblHelp6EditPages', '📄 Entries Split Across Pages', 'en', 1),
 ('txtHelp6EditPages', 'Entries longer than 3,800 characters are split into pages. Each page is edited separately — changes on one page do not affect the others. You can add up to 200 characters to a page before saving; if you need more space, save and the pages will reload with the updated content.', 'en', 1),
 
@@ -106,7 +106,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp7Title', '📋 Writer Command Reference', 'en', 1),
 ('txtHelp7Footer', 'Use /story help for detailed explanations of story modes, writer order, metadata, and more.', 'en', 1),
 ('lblHelp7StoryCommands', '📖 Story Commands', 'en', 1),
-('txtHelp7StoryCommands', '- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story join [id]` — Join a story\n- `/story write [id]` — Submit your entry *(Quick Mode only)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id] [turn]` — Edit one of your finalized entries\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story ping [id]` — Ping all writers in a story\n- `/story help` — Detailed guide with all writer options', 'en', 1),
+('txtHelp7StoryCommands', '- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story join [id]` — Join a story\n- `/story write [id]` — Submit your entry *(Quick Mode only)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id] (turn)` — Edit a finalized entry; give the turn number to open that entry, or leave it off to see all your entries\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story ping [id]` — Ping all writers in a story\n- `/story help` — Detailed guide with all writer options', 'en', 1),
 ('lblHelp7Dashboard', '🗂️ Your Dashboard', 'en', 1),
 ('txtHelp7Dashboard', '- `/mystory list` — See all your stories — active, paused, delayed, and closed\n- `/mystory catchup [id]` — Read entries written since your last turn\n- `/mystory manage [id]` — Update your settings, pass your turn, pause, or leave a story', 'en', 1),
 ('lblHelp7CreatorCommands', '⚙️ Story Creator Commands', 'en', 1),
