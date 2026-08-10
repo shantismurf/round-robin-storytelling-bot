@@ -1,10 +1,10 @@
 # Plan: Manage Entries Consolidation into the Edit Engine
 
-Status: Pending
+Status: Implemented (pending wording approval on help-text sync, see Implementation Notes)
 Created: 2026-08-05
 Last Updated: 2026-08-05
 
-Design decisions resolved with the user 2026-08-05 (full audit + design conversation); implementation not started.
+Design decisions resolved with the user 2026-08-05 (full audit + design conversation); implemented same day. See Implementation Notes at the bottom for a few refinements made during the build that weren't in the original design.
 
 ---
 
@@ -127,3 +127,16 @@ This is a MINOR-level change under the project's versioning policy (meaningfully
 - Push to main, restart the bot (per `docs/reference/HOSTING.md` — no local/staging execution is possible), then manually walk the golden path in Discord:
   - **Admin side**: `/story manage` → Manage Entries → list appears (no writer step) → pick a long entry → confirm full text pages correctly (no truncation) → Delete → confirm status flips and buttons update → Restore → confirm undelete works even on an entry with no edit history → Back to list → confirm it actually returns (no timeout) → browse edit history on an entry that has some → confirm version-restore still works unchanged. Repeat as a non-admin story creator to confirm the corrected `isAdmin || isCreator` check doesn't wall them out.
   - **Author side**: `/story edit story_id:<id>` with no `turn` given → picker of your own entries appears → pick one → same paging/edit/history experience as before → Back to list returns to your picker (not the admin one) → confirm no Delete/Restore buttons appear. `/story edit story_id:<id> turn:<n>` still works unchanged.
+
+## Implementation Notes (added after building)
+
+A few things changed shape between design and build, all discovered by writing it and its tests:
+
+- **No browse-session map after all.** §5 proposed a small `pendingEntryData` map in `_manageEntries.js` to carry `storyId`/`listOffset` across the open→paginate→pick flow. Building it made clear that's unnecessary: `storyId` is threaded directly through the select menu's customId (`story_manage_entries_list_select_<storyId>` / `story_edit_mypick_select_<storyId>`), the same stateless pattern already used everywhere else in this codebase for IDs riding along on customIds. Both pickers are now fully stateless until an entry is actually opened via `openEditSession`.
+- **Found and fixed a real 25-option overflow bug** while writing `_manageEntriesList.test.js`: pagination as originally coded (in this plan, and identically in the *old* `_manageEntries.js` it replaces) sliced to `ENTRY_PAGE_SIZE` (25) real entries and then unconditionally pushed a "more" sentinel on top, giving up to 26 options — over Discord's 25-option select-menu cap, which throws. Fixed by reserving one slot (`ENTRY_PAGE_SIZE - 1` real entries whenever a sentinel is being added). Worth a mental note that the pre-existing writer/entry pickers this replaces likely had the same latent crash on any story with more than 25 matching rows.
+- **`handleRestoreExecute` (revert-to-a-version) now always leaves the entry CONFIRMED**, not just when it wasn't DELETED. The original plan just said "drop the DELETED branch" but didn't work through that a version-restore on a still-deleted entry would otherwise silently do nothing visible — reverting content while leaving it soft-deleted is a confusing dead end. So the single remaining code path both archives+overwrites content and sets `entry_status = CONFIRMED` unconditionally (harmless no-op if already confirmed).
+- **`handleRestoreConfirm`'s confirmation text** no longer branches on DELETED status either, for the same reason — it always shows the "this replaces your current content" warning now. `txtEditRestoreConfirmSingle` (the DELETED-specific wording) is retired as a result.
+- **Manage-mode permission check** ended up needing `checkIsCreator` imported into `edit.js` (it wasn't there before) — confirmed via direct code reading that `checkIsAdmin` and story-creator status are unrelated checks, and Manage Entries' actual gate (`story/manage.js:123-124`) is `isAdmin || isCreator`, not `isAdmin` alone.
+- **Test coverage lands on `_manageEntriesList.js` only** — the new module is pure/DB-only and fits the project's existing Layer-1 testing pattern (`test/_fakeConnection.js`, no live Discord). The new branches inside `edit.js` (delete/restore/backlist button handlers, `openEditSession`'s manageMode gate) all take a live `interaction` object and aren't unit-testable without diverging from how the rest of this codebase tests things — no existing test file in this repo mocks a Discord interaction. These are covered by the manual verification steps above instead, consistent with `edit.js`'s existing (untested) history/restore-version code.
+- **Help text not yet updated.** `config_help.sql`'s `txtHelp6Edit`/`txtHelp7StoryCommands` and the synced `docs/help/faq-page-4-writer-commands.md`/`faq-all-pages-sql.md` still describe `/story edit [id] [turn]` without mentioning the turn is now optional or that omitting it opens a picker. Per the Help Sync Rule this needs updating, but the exact wording needs sign-off before it's written to config — flagged as an open follow-up, not applied as part of this session.
+- **Pre-existing, out-of-scope items noticed but not touched**: `txtEditRestoreWarningMulti`/`txtEditRestoreWarningSingle` are fetched into `editCfg` in both `edit.js` and `read.js` but appear to have been dead (never read off the object) before this change too — left alone since fixing it wasn't part of what was asked. `story/_manageTurnActions.js`'s duplicate delete/restore-by-ID modal flow (a manually-typed-ID equivalent of what Manage Entries' browse UI now covers with a friendlier picker) was intentionally left as-is — out of scope for this plan, which was about Manage Entries specifically.

@@ -7,7 +7,7 @@ tapering up to the fully-scoped efforts at the end of each section.
 
 # Pending
 
-- **[TOP PRIORITY]** Manage Entries audit found truncated entries, a non-functional Restore button, and a Back button that fails silently with no log trail — see [plans/PLAN-manage-entries-consolidation.md](plans/PLAN-manage-entries-consolidation.md) for the full fix (rebuilds Manage Entries on top of the existing Edit engine) plus a bundled extension: an author-facing entry picker for `/story edit` when no turn number is given.
+- Sync `/story help`/`/story edit` help text to the now-optional `turn` option (picker when omitted) — `txtHelp6Edit`, `txtHelp7StoryCommands` (`config_help.sql`) and their synced copies in `docs/help/faq-page-4-writer-commands.md`/`faq-all-pages-sql.md` still describe the old required-turn behavior. Wording needs approval before applying; see Implementation Notes in [plans/PLAN-manage-entries-consolidation.md](plans/PLAN-manage-entries-consolidation.md) (otherwise implemented).
 - Extract a shared `wordCount` helper — the same `content.split(/\s+/).filter(w => w.length > 0).length` logic is currently duplicated across `_writeQuickMode.js`, `_storyStatus.js`, `export.js`, `read.js`, `close.js`, and `edit.js`. Once it exists, add the word count to the finalize embed footer.
 - formatDuration sweep: apply to `story/_storyStatus.js` line 210 (`${turn_length_hours}h`) and `announcements.js` line 105 (`${turn_length_hours}h Turns`) — these are different UX contexts and need separate review before changing displayed format
 - Code review: inline `.replace()` calls on config strings (replaceTemplateVariables compliance)

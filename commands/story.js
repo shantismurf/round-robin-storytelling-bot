@@ -11,7 +11,7 @@ import { handleRead, handleReadNav } from '../story/read.js';
 import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry } from '../story/edit.js';
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
 import { handleManage, handleManageButton, handleManageSelectMenu, handleTurnActionSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
-import { handleManageEntriesButton, handleManageEntriesSelectMenu, handleManageEntriesActionButton, handleManageEntriesModal } from '../story/_manageEntries.js';
+import { handleManageEntriesButton, handleManageEntriesSelectMenu } from '../story/_manageEntries.js';
 import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton, handleTagReviewNav } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel, handleCloseExportButton } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
@@ -145,8 +145,8 @@ const data = new SlashCommandBuilder()
           .setAutocomplete(true))
       .addIntegerOption(option =>
         option.setName('turn')
-          .setDescription('Turn number (as shown in /story read)')
-          .setRequired(true)
+          .setDescription('Turn number (as shown in /story read) — leave blank to pick from a list')
+          .setRequired(false)
           .setMinValue(1)
           .setAutocomplete(true))
   );
@@ -204,8 +204,6 @@ async function handleModalSubmit(connection, interaction) {
     await handleWriteModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_penname_')) {
     await handleJoinAO3ModalSubmit(connection, interaction);
-  } else if (interaction.customId === 'story_manage_entries_filter_modal') {
-    await handleManageEntriesModal(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageModalSubmit(connection, interaction);
   } else if (interaction.customId.startsWith('story_edit_modal_')) {
@@ -253,8 +251,6 @@ async function handleButtonInteraction(connection, interaction) {
     await handleCloseExportButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_review_tags_read_')) {
     await handleEditTagsButton(connection, interaction);
-  } else if (interaction.customId === 'story_manage_entries_delete' || interaction.customId === 'story_manage_entries_restore') {
-    await handleManageEntriesActionButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_')) {
     await handleManageButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_join_confirm_')) {
@@ -333,10 +329,10 @@ async function handleSelectMenuInteraction(connection, interaction) {
   } else if (interaction.customId === 'story_read_jump') {
     await handleReadNav(connection, interaction);
 
-  } else if (interaction.customId === 'story_edit_jump') {
+  } else if (interaction.customId === 'story_edit_jump' || interaction.customId.startsWith('story_edit_mypick_select_')) {
     await handleEditButton(connection, interaction);
 
-  } else if (interaction.customId === 'story_manage_entries_writer_select' || interaction.customId === 'story_manage_entries_entry_select') {
+  } else if (interaction.customId.startsWith('story_manage_entries_list_select_')) {
     await handleManageEntriesSelectMenu(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_ta_') && interaction.customId.endsWith('_select')) {
     await handleTurnActionSelectMenu(connection, interaction);

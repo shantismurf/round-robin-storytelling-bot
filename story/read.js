@@ -372,7 +372,7 @@ export async function handleReadEditButton(connection, interaction, session, ent
       'btnEditHistNewer', 'btnEditHistPrevPage', 'btnEditRestore',
       'btnEditHistNextPage', 'btnEditHistOlder', 'btnEditBackToEntry',
       'lblPageJumpPlaceholder', 'lblPageJumpOption',
-      'txtEditRestoreConfirmSingle', 'txtEditRestoreConfirmMulti',
+      'txtEditRestoreConfirmMulti',
       'txtEditRestoreConfirmTitle', 'btnEditRestoreConfirm', 'btnEditRestoreCancel'
     ], session.guildId);
     const editState = pendingEditData.get(interaction.user.id);

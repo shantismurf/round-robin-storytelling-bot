@@ -21,7 +21,7 @@ Every file has a `Status` / `Created` / `Last Updated` (/ `Implemented`) header.
 
 | File | Status | Summary |
 |---|---|---|
-| [PLAN-manage-entries-consolidation.md](plans/PLAN-manage-entries-consolidation.md) | Pending | Manage Entries rebuilt to reuse the Edit engine (fixes truncation, Back-button, delete/restore); adds an author entry picker to `/story edit` |
+| [PLAN-manage-entries-consolidation.md](plans/PLAN-manage-entries-consolidation.md) | Implemented (help-text sync pending) | Manage Entries rebuilt to reuse the Edit engine (fixes truncation, Back-button, delete/restore); adds an author entry picker to `/story edit` |
 | [PLAN-story-list-overhaul.md](plans/PLAN-story-list-overhaul.md) | Pending | `/story list` layout/filter overhaul |
 | [PLAN-story-privacy.md](plans/PLAN-story-privacy.md) | Pending | Writer-only (private) stories, create-only toggle |
 | [PLAN-hub-sharing.md](plans/PLAN-hub-sharing.md) | Partially Implemented — needs review | Hub server story mirroring, consent, broadcast system |
