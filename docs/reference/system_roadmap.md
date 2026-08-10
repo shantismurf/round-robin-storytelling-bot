@@ -34,7 +34,8 @@ For config string keys, see `config_roadmap.md`.
 | `story/_managePauseResume.js` | `applyPauseActions`, `applyResumeActions`, `handleReopenStory` — pause/resume/reopen state transitions and thread retitling | — |
 | `story/_manageTurnActions.js` | Admin turn actions panel: skip/reassign/extend the active turn | ~500 |
 | `story/_manageUser.js` | Admin per-writer management panel: pause/unpause/remove a writer, pen-name edits | — |
-| `story/_manageEntries.js` | Admin entry-management panel: browse/edit/delete confirmed entries by writer | — |
+| `story/_manageEntries.js` | Admin "Manage Entries" panel: thin picker (all entries, all writers, flat list) that hands off directly into the Story Edit session engine (`edit.js`) — no view/edit/delete logic of its own | — |
+| `story/_manageEntriesList.js` | Shared entry-picker engine used by both `_manageEntries.js` (admin, all writers + deleted) and `edit.js`'s no-turn `/story edit` picker (author, own entries only): `fetchStoryEntries`, `renderEntryListPage`, `buildEntryPickerMessage` | ~150 |
 | `story/_tagSubmit.js` | Writer-facing tag proposal flow: submit, delete own pending proposal | — |
 | `story/_writeFinalize.js` | Normal/slow-mode entry finalize flow: preview, confirm, image handling, `doFinalizeEntry` | — |
 | `story/_writeQuickMode.js` | Quick-mode write/confirm/discard flow, including the pending-entry recovery path | — |
@@ -68,7 +69,7 @@ Routed by `interaction.commandName` to the matching command in `client.commands`
 | `timeleft` | `handleTimeleft` | |
 | `help` | `handleHelp` | |
 | `ping` | `handlePing` | Creator/admin |
-| `edit` | `handleEdit` | |
+| `edit` | `handleEdit` | `turn` optional — omit to pick from own entries (`_manageEntriesList.js`) |
 | `tag` | `handleTagCommand` | Active writers only; opens tag submit modal |
 
 ### Modal Submissions (`isModalSubmit`)

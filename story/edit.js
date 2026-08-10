@@ -1,9 +1,10 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
 import { postThreadEntry } from './_entryRenderer.js';
 import { pendingReadData, pendingEditData } from './_state.js';
 import { buildReadEmbed } from './read.js';
 import { getActiveThreadId } from '../storybot.js';
+import { buildEntryPickerMessage } from './_manageEntriesList.js';
 import { ENTRY_STATUS } from '../constants.js';
 
 export { pendingEditData };
@@ -17,17 +18,38 @@ async function handleEdit(connection, interaction) {
   }
 
   const turnNumber = interaction.options.getInteger('turn');
+  if (turnNumber == null) {
+    // No turn given — show the caller's own editable entries as a picker instead of requiring
+    // them to already know a turn number.
+    log(`handleEdit: no turn given, opening entry picker for story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
+    const msg = await buildEntryPickerMessage(connection, guildId, storyId, 0, 'author', interaction.user.id);
+    await interaction.editReply(msg);
+    return;
+  }
   await openEditSession(connection, interaction, guildId, storyId, turnNumber, null);
 }
 
-// Shared session-setup used by both /story edit (handleEdit) and the contextual
-// Edit button in /story read (handleReadEditButton).
+// Shared session-setup used by /story edit (handleEdit), the contextual Edit button in
+// /story read (handleReadEditButton), and the entry pickers (handleMyPickSelect below,
+// story/_manageEntries.js for admins).
 // Pass turnNumber to resolve by turn, or entryId to resolve directly.
-async function openEditSession(connection, interaction, guildId, storyId, turnNumber, entryId) {
+//
+// options.manageMode — admin-only capabilities (Delete/Restore buttons) on the resulting view.
+//   Requires the caller to be admin or the story's creator (checked below) — matches the same
+//   gate already used to reach the Manage Entries panel (story/manage.js).
+// options.allowDeleted — when true (only ever passed alongside manageMode), a DELETED entry can
+//   be loaded (normally excluded — deleted entries aren't reachable through /story edit at all).
+// options.pickerContext — { role: 'admin'|'author', listOffset, storyId } set when this session
+//   was opened from either entry picker rather than a direct turn number; enables the generic
+//   "Back to entries list" button.
+async function openEditSession(connection, interaction, guildId, storyId, turnNumber, entryId, options = {}) {
+  const { manageMode = false, allowDeleted = false, pickerContext = null } = options;
+  log(`openEditSession entry storyId=${storyId} turnNumber=${turnNumber} entryId=${entryId} manageMode=${manageMode} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   let entryRows;
 
   if (entryId != null) {
-    // Path B: resolve directly from a known entry ID (from the read view Edit button)
+    // Path B: resolve directly from a known entry ID (from the read view Edit button, or either picker)
+    const statuses = allowDeleted ? [ENTRY_STATUS.CONFIRMED, ENTRY_STATUS.DELETED] : [ENTRY_STATUS.CONFIRMED];
     [entryRows] = await connection.execute(
       `SELECT se.story_entry_id, se.content, se.created_at, se.entry_status,
               sw.discord_user_id AS original_author_id, sw.discord_display_name AS author_name,
@@ -44,8 +66,8 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        JOIN story s ON sw.story_id = s.story_id
        WHERE se.story_entry_id = ?
-         AND se.entry_status = ?`,
-      [ENTRY_STATUS.CONFIRMED, entryId, ENTRY_STATUS.CONFIRMED]
+         AND se.entry_status IN (${statuses.map(() => '?').join(', ')})`,
+      [ENTRY_STATUS.CONFIRMED, entryId, ...statuses]
     );
   } else {
     // Path A: resolve by turn number — uses confirmed-only count to match /story read numbering
@@ -80,7 +102,15 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
   const isAdmin = await checkIsAdmin(connection, interaction, guildId);
   const isAuthor = String(entry.original_author_id) === interaction.user.id;
 
-  if (!isAdmin && !isAuthor) {
+  if (manageMode) {
+    // Manage Entries' admin gate is isAdmin || isCreator (story/manage.js) — match it here so a
+    // non-admin story creator who legitimately reached the panel isn't walled out of using it.
+    const isCreator = await checkIsCreator(connection, storyId, interaction.user.id);
+    if (!isAdmin && !isCreator) {
+      log(`openEditSession: manageMode denied for user ${interaction.user.username} on story ${storyId} (not admin or creator)`, { show: true, guildName: interaction?.guild?.name });
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditNotAuthorized', guildId) });
+    }
+  } else if (!isAdmin && !isAuthor) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtEditNotAuthorized', guildId) });
   }
 
@@ -98,6 +128,7 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
     storyId,
     guildId,
     originalAuthorId: String(entry.original_author_id),
+    authorName: entry.author_name,
     createdAt: entry.created_at,
     currentContent: entry.content,
     chunks,
@@ -107,7 +138,9 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
     turnNumber: resolvedTurnNumber,
     storyTitle,
     guildStoryId: entry.guild_story_id,
-    originalInteraction: interaction
+    originalInteraction: interaction,
+    manageMode,
+    pickerContext: pickerContext ? { ...pickerContext, storyId: pickerContext.storyId ?? storyId } : null,
   });
 
   const editCfg = await getConfigValue(connection, [
@@ -115,19 +148,36 @@ async function openEditSession(connection, interaction, guildId, storyId, turnNu
     'btnEditPrev', 'btnEditNext', 'btnEditOpen', 'btnEditHistory', 'lblEditEntryContent',
     'txtEditRestoreWarningMulti', 'txtEditRestoreWarningSingle',
     'btnEditHistNewer', 'btnEditHistPrevPage', 'btnEditRestore',
-    'btnEditHistNextPage', 'btnEditHistOlder', 'btnEditBackToEntry',
+    'btnEditHistNextPage', 'btnEditHistOlder', 'btnEditBackToEntry', 'btnEditBackToList',
     'lblPageJumpPlaceholder', 'lblPageJumpOption',
-    'txtEditRestoreConfirmSingle', 'txtEditRestoreConfirmMulti',
-    'txtEditRestoreConfirmTitle', 'btnEditRestoreConfirm', 'btnEditRestoreCancel'
+    'txtEditRestoreConfirmMulti',
+    'txtEditRestoreConfirmTitle', 'btnEditRestoreConfirm', 'btnEditRestoreCancel',
+    'btnManageEntriesDelete', 'btnManageEntriesRestore',
+    'txtManageEntryDeleteSuccess', 'txtManageEntryRestoreSuccess',
+    'txtManageEntryAlreadyDeleted', 'txtManageEntryAlreadyConfirmed',
   ], guildId);
 
   const state = pendingEditData.get(interaction.user.id);
   if (state) state.editCfg = editCfg;
 
-  await interaction.editReply(buildEditMessage(chunks, 0, hasHistory, resolvedTurnNumber, storyTitle, entry.guild_story_id, editCfg));
+  log(`openEditSession: opened entry ${entry.story_entry_id} for user ${interaction.user.username} on story ${storyId} (manageMode=${manageMode})`, { show: false, guildName: interaction?.guild?.name });
+
+  await interaction.editReply(buildEditMessageForState(state));
 }
 
-function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle, guildStoryId, editCfg) {
+// Convenience wrapper for the (much more common) case of rendering from a live pendingEditData
+// session — keeps the ~8-param buildEditMessage() call in exactly one place internally, so the
+// several call sites in this file can't drift out of sync with each other.
+function buildEditMessageForState(state) {
+  return buildEditMessage(
+    state.chunks, state.chunkPage, state.hasHistory, state.turnNumber,
+    state.storyTitle, state.guildStoryId, state.editCfg ?? {},
+    { manageMode: state.manageMode, entryStatus: state.entryStatus, hasPicker: !!state.pickerContext }
+  );
+}
+
+function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle, guildStoryId, editCfg, pickerOpts = {}) {
+  const { manageMode = false, entryStatus = null, hasPicker = false } = pickerOpts;
   const chunk = chunks[chunkPage];
   const isMultiPage = chunks.length > 1;
   const pageLabel = isMultiPage ? ` · Page ${chunkPage + 1} of ${chunks.length}` : '';
@@ -209,34 +259,88 @@ function buildEditMessage(chunks, chunkPage, hasHistory, turnNumber, storyTitle,
 
   components.push(new ActionRowBuilder().addComponents(...buttons));
 
+  // Admin-only actions (Manage Entries) — Delete/Restore toggle entry_status directly and are
+  // independent of edit history (Restore works even on an entry that's never been edited).
+  if (manageMode) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('story_edit_manage_delete')
+        .setLabel(editCfg.btnManageEntriesDelete)
+        .setStyle(ButtonStyle.Danger)
+        .setDisabled(entryStatus === ENTRY_STATUS.DELETED),
+      new ButtonBuilder()
+        .setCustomId('story_edit_manage_restore')
+        .setLabel(editCfg.btnManageEntriesRestore)
+        .setStyle(ButtonStyle.Secondary)
+        .setDisabled(entryStatus !== ENTRY_STATUS.DELETED)
+    ));
+  }
+
+  // Shown whenever this session was reached via either entry picker (admin or author), so there's
+  // a way back to it — not shown when reached directly by turn number or Read's Edit button.
+  if (hasPicker) {
+    components.push(new ActionRowBuilder().addComponents(
+      new ButtonBuilder()
+        .setCustomId('story_edit_backlist')
+        .setLabel(editCfg.btnEditBackToList)
+        .setStyle(ButtonStyle.Secondary)
+    ));
+  }
+
   return { embeds: [embed], components };
+}
+
+// The entry picker's select menu (author role, /story edit with no turn given) has no
+// pendingEditData session yet the first time it's used, so it's handled before the generic
+// "no state" bail below — the storyId travels in the customId itself (stateless, same pattern
+// already used elsewhere in this file for entry/edit IDs).
+async function handleMyPickSelect(connection, interaction) {
+  const storyId = parseInt(interaction.customId.replace('story_edit_mypick_select_', ''), 10);
+  const guildId = interaction.guild.id;
+  const selected = interaction.values[0];
+  log(`handleMyPickSelect entry storyId=${storyId} selected=${selected} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+
+  if (selected.startsWith('__entrypage__')) {
+    const newOffset = parseInt(selected.replace('__entrypage__', ''), 10);
+    const msg = await buildEntryPickerMessage(connection, guildId, storyId, newOffset, 'author', interaction.user.id);
+    await interaction.update(msg);
+    return;
+  }
+
+  const entryId = parseInt(selected, 10);
+  log(`handleMyPickSelect: entry ${entryId} selected by ${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+  await interaction.deferUpdate();
+  await openEditSession(connection, interaction, guildId, storyId, null, entryId, {
+    pickerContext: { role: 'author', listOffset: 0, storyId }
+  });
 }
 
 async function handleEditButton(connection, interaction) {
   const userId = interaction.user.id;
+  const customId = interaction.customId;
+
+  if (customId.startsWith('story_edit_mypick_select_')) {
+    await handleMyPickSelect(connection, interaction);
+    return;
+  }
+
   const state = pendingEditData.get(userId);
-  log(`handleEditButton entry customId=${interaction.customId} userId=${userId} hasState=${!!state}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleEditButton entry customId=${customId} userId=${userId} hasState=${!!state}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!state) {
     await interaction.deferUpdate();
     return;
   }
 
-  const customId = interaction.customId;
-
   if (customId === 'story_edit_prev') {
     await interaction.deferUpdate();
     state.chunkPage = Math.max(0, state.chunkPage - 1);
-    await state.originalInteraction.editReply(
-      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {})
-    );
+    await state.originalInteraction.editReply(buildEditMessageForState(state));
 
   } else if (customId === 'story_edit_next') {
     await interaction.deferUpdate();
     state.chunkPage = Math.min(state.chunks.length - 1, state.chunkPage + 1);
-    await state.originalInteraction.editReply(
-      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {})
-    );
+    await state.originalInteraction.editReply(buildEditMessageForState(state));
 
   } else if (customId === 'story_edit_jump') {
     await interaction.deferUpdate();
@@ -244,9 +348,49 @@ async function handleEditButton(connection, interaction) {
     if (!isNaN(selected)) {
       state.chunkPage = Math.min(state.chunks.length - 1, Math.max(0, selected));
     }
-    await state.originalInteraction.editReply(
-      buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {})
-    );
+    await state.originalInteraction.editReply(buildEditMessageForState(state));
+
+  } else if (customId === 'story_edit_manage_delete') {
+    await interaction.deferUpdate();
+    if (state.entryStatus === ENTRY_STATUS.DELETED) {
+      log(`story_edit_manage_delete: entry ${state.entryId} already deleted`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.followUp({ content: state.editCfg?.txtManageEntryAlreadyDeleted, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await connection.execute(`UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?`, [ENTRY_STATUS.DELETED, state.entryId]);
+    state.entryStatus = ENTRY_STATUS.DELETED;
+    log(`Entry deleted via Manage Entries: ${state.entryId} by ${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+    const editMsg = buildEditMessageForState(state);
+    await state.originalInteraction.editReply({
+      ...editMsg,
+      content: replaceTemplateVariables(state.editCfg?.txtManageEntryDeleteSuccess ?? '', { entry_id: String(state.entryId) })
+    });
+
+  } else if (customId === 'story_edit_manage_restore') {
+    await interaction.deferUpdate();
+    if (state.entryStatus !== ENTRY_STATUS.DELETED) {
+      log(`story_edit_manage_restore: entry ${state.entryId} not deleted`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.followUp({ content: state.editCfg?.txtManageEntryAlreadyConfirmed, flags: MessageFlags.Ephemeral });
+      return;
+    }
+    await connection.execute(`UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?`, [ENTRY_STATUS.CONFIRMED, state.entryId]);
+    state.entryStatus = ENTRY_STATUS.CONFIRMED;
+    log(`Entry restored via Manage Entries: ${state.entryId} by ${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+    const editMsg = buildEditMessageForState(state);
+    await state.originalInteraction.editReply({
+      ...editMsg,
+      content: replaceTemplateVariables(state.editCfg?.txtManageEntryRestoreSuccess ?? '', { writer_name: state.authorName ?? '' })
+    });
+
+  } else if (customId === 'story_edit_backlist') {
+    await interaction.deferUpdate();
+    const picker = state.pickerContext;
+    const guildId = state.guildId;
+    pendingEditData.delete(userId);
+    if (!picker) return; // button is only ever shown when pickerContext is set
+    log(`story_edit_backlist: returning to ${picker.role} entry list for story ${picker.storyId} (user ${interaction.user.username})`, { show: false, guildName: interaction?.guild?.name });
+    const msg = await buildEntryPickerMessage(connection, guildId, picker.storyId, picker.listOffset ?? 0, picker.role, picker.role === 'author' ? userId : null);
+    await state.originalInteraction.editReply(msg);
 
   } else if (customId === 'story_edit_open_modal') {
     // No defer — showModal must be the first response
@@ -347,7 +491,7 @@ async function renderHistoryPage(connection, interaction, state, histPage, histC
   const editCfg = state.editCfg ?? {};
 
   if (rows.length === 0) {
-    return buildEditMessage(state.chunks, state.chunkPage, state.hasHistory, state.turnNumber, state.storyTitle, state.guildStoryId, editCfg);
+    return buildEditMessageForState(state);
   }
 
   const histRow = rows[0];
@@ -406,13 +550,10 @@ async function handleRestoreConfirm(connection, interaction, editId) {
   if (!state) return;
 
   const editCfg = state.editCfg ?? {};
-  const confirmText = state.entryStatus === ENTRY_STATUS.DELETED
-    ? (editCfg.txtEditRestoreConfirmSingle ?? 'Restore this entry to the story? It will reappear in `/story read` and exports, and will alter the story\'s turn count.')
-    : (editCfg.txtEditRestoreConfirmMulti ?? 'Restore this version? This will replace your entire current entry, including content not shown on this page, and will alter the story\'s turn count.');
 
   const embed = new EmbedBuilder()
     .setTitle(editCfg.txtEditRestoreConfirmTitle ?? 'Confirm Restore')
-    .setDescription(confirmText)
+    .setDescription(editCfg.txtEditRestoreConfirmMulti ?? 'Restore this version? This will replace your entire current entry, including content not shown on this page, and will alter the story\'s turn count.')
     .setColor(0xff6b6b);
 
   const row = new ActionRowBuilder().addComponents(
@@ -443,27 +584,25 @@ async function handleRestoreExecute(connection, interaction, editId) {
 
   const editorName = interaction.member?.displayName ?? interaction.user.username;
 
+  // Reverting to a historical version always leaves the entry CONFIRMED (harmless no-op if it
+  // already was), even if it happened to be DELETED going in — restoring a deleted entry is a
+  // separate, dedicated action (the Restore button, story_edit_manage_restore) that doesn't
+  // depend on any history existing; this flow's job is purely "make the content this version's
+  // content", and a version restore that silently stayed invisible would be a confusing dead end.
   const txn = await connection.getConnection();
   await txn.beginTransaction();
   try {
-    if (state.entryStatus === ENTRY_STATUS.DELETED) {
-      await txn.execute(
-        `UPDATE story_entry SET entry_status = ? WHERE story_entry_id = ?`,
-        [ENTRY_STATUS.CONFIRMED, state.entryId]
-      );
-    } else {
-      const [current] = await txn.execute(
-        `SELECT content FROM story_entry WHERE story_entry_id = ?`, [state.entryId]
-      );
-      await txn.execute(
-        `INSERT INTO story_entry_edit (entry_id, content, edited_by, edited_by_name) VALUES (?, ?, ?, ?)`,
-        [state.entryId, current[0].content, interaction.user.id, editorName]
-      );
-      await txn.execute(
-        `UPDATE story_entry SET content = ? WHERE story_entry_id = ?`,
-        [histRows[0].content, state.entryId]
-      );
-    }
+    const [current] = await txn.execute(
+      `SELECT content FROM story_entry WHERE story_entry_id = ?`, [state.entryId]
+    );
+    await txn.execute(
+      `INSERT INTO story_entry_edit (entry_id, content, edited_by, edited_by_name) VALUES (?, ?, ?, ?)`,
+      [state.entryId, current[0].content, interaction.user.id, editorName]
+    );
+    await txn.execute(
+      `UPDATE story_entry SET content = ?, entry_status = ? WHERE story_entry_id = ?`,
+      [histRows[0].content, ENTRY_STATUS.CONFIRMED, state.entryId]
+    );
     await txn.commit();
   } catch (err) {
     await txn.rollback();
@@ -480,6 +619,8 @@ async function handleRestoreExecute(connection, interaction, editId) {
   state.chunks = chunkEntryContent(state.currentContent);
   state.chunkPage = 0;
   state.hasHistory = true;
+  state.entryStatus = ENTRY_STATUS.CONFIRMED;
+  log(`handleRestoreExecute: entry ${state.entryId} reverted to edit ${editId} by ${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
 
   const [btnRepostEntry, txtEditRestoreSuccess] = await Promise.all([
     getConfigValue(connection, 'btnRepostEntry', state.guildId),
@@ -493,7 +634,7 @@ async function handleRestoreExecute(connection, interaction, editId) {
       .setStyle(ButtonStyle.Secondary)
   );
 
-  const editMsg = buildEditMessage(state.chunks, 0, true, state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {});
+  const editMsg = buildEditMessageForState(state);
   await state.originalInteraction.editReply({
     ...editMsg,
     content: txtEditRestoreSuccess,
@@ -609,10 +750,7 @@ async function handleEditModalSubmit(connection, interaction) {
     entryPages.forEach((p, i) => { if (freshReadChunks[i] !== undefined) p.content = freshReadChunks[i]; });
   }
 
-  const editMsg = buildEditMessage(
-    state.chunks, state.chunkPage, state.hasHistory,
-    state.turnNumber, state.storyTitle, state.guildStoryId, state.editCfg ?? {}
-  );
+  const editMsg = buildEditMessageForState(state);
 
   const extraButtons = [];
 

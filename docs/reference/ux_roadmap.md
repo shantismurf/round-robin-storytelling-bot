@@ -44,7 +44,10 @@ For system architecture and routing, see `system_roadmap.md`.
   → story_manage_open_tags → modal: main pairing, other rels, characters, tags, scene break
   → story_manage_toggle_pauseresume → toggles pause/resume state (staged until save)
   → story_manage_save → writes all staged fields + barrier check + pause/resume actions
-  → story_manage_entries_open → Manage Entries panel
+  → story_manage_entries_open → Manage Entries panel: flat, paginated picker of every entry in
+    the story (all writers, includes deleted — story_manage_entries_list_select_<storyId>) →
+    picking an entry opens it directly in the Story Edit session (below) with manageMode: full
+    paging/history, plus admin-only Delete/Restore buttons and a "← Back to List" button
   → story_manage_turns_open → Manage Turns panel
   → story_manage_review_tags (when pending tags > 0) → Manage Tags panel (approve/reject queue)
   → story_manage_close_open → reuses /story close confirm/cancel flow (story_close_confirm_*/story_close_cancel_*)
@@ -64,10 +67,16 @@ Tag Submission Thread Post (in story thread)
   → story_list_* (pagination, filter select menus)
     → filters: All Stories, Joinable Stories, My Stories, Active Stories, Paused Stories
 
-/story edit [story_id]
-  → chunkEntryContent → paginated edit modals
+/story edit [story_id] [turn]
+  → turn given → chunkEntryContent → paginated edit modals
+  → turn omitted → entry picker (own CONFIRMED entries only, story_edit_mypick_select_<storyId>)
+    → picking an entry opens the same edit session below, with a "← Back to List" button added
   → story_edit_prev / story_edit_next / story_edit_jump (page-select menu, same pattern as story_read_jump) → jump to any page directly
   → story_edit_modal_* → entry updated
+  → story_edit_browse_history / story_edit_restore_* → edit-history browse + revert to a version
+  → (Manage Entries sessions only) story_edit_manage_delete / story_edit_manage_restore →
+    soft-delete / undelete, independent of edit history; story_edit_backlist → back to
+    whichever picker (admin or author) opened this session
 
 /story tag [story_id]
   → Active writers only; opens tag submission modal

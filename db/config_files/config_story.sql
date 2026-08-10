@@ -114,11 +114,16 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnEditHistNextPage', 'Next Page →', 'en', 1),
 ('btnEditHistOlder', 'Older →', 'en', 1),
 ('btnEditBackToEntry', '← Back to Entry', 'en', 1),
-('txtEditRestoreConfirmSingle', 'Restore this entry to the story? It will reappear in `/story read` and exports, and will alter the story''s turn count.', 'en', 1),
 ('txtEditRestoreConfirmMulti', 'Restore this version? This will replace your entire current entry, including content not shown on this page, and will alter the story''s turn count.', 'en', 1),
 ('txtEditRestoreConfirmTitle', 'Confirm Restore', 'en', 1),
 ('btnEditRestoreConfirm', 'Confirm Restore', 'en', 1),
 ('btnEditRestoreCancel', 'Cancel', 'en', 1),
+-- Added: Manage Entries consolidation — author entry picker (/story edit with no turn given)
+-- and the "Back to entries list" button shared by both the admin and author pickers
+('btnEditBackToList', '← Back to List', 'en', 1),
+('lblEditMyEntryOption', 'Turn [turn_number] — [word_count] words — [preview]', 'en', 1),
+('txtEditMyEntriesSelect', 'Select an entry to edit:', 'en', 1),
+('txtEditMyEntriesNone', 'You have no editable entries in this story yet.', 'en', 1),
 -- Moved from config_other: story join/manage display keys
 ('lblKeepYourPrivate', 'Keep your turn threads private?:', 'en', 1),
 ('txtStoryAlreadyClosed', 'This story is already closed.', 'en', 1),
@@ -133,7 +138,6 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageJoinOpen', '🔓 Open', 'en', 1),
 ('txtManageJoinClosed', '🔒 Closed', 'en', 1),
 ('lblManageSetTitleField', 'New Title', 'en', 1),
-('lblManageEntriesFilterField', 'Name fragment (partial match)', 'en', 1),
 -- Silo 4: manage modal placeholders
 ('txtManageMaxWritersPlaceholder', 'Enter a number, or leave blank for no limit', 'en', 1),
 ('txtManageTagsPlaceholder', 'Comma-separated tags (e.g. fluff, AU, slow burn)', 'en', 1);

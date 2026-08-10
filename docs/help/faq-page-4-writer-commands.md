@@ -18,7 +18,7 @@
 - `/story join [id]` — Join a story
 - `/story write [id]` — Submit your entry *(Quick Mode only)*
 - `/story read [id]` — Read the story in Discord
-- `/story edit [id]` — Edit one of your finalized entries
+- `/story edit [id] (turn)` — Edit a finalized entry; give the turn number to open that entry, or leave it off to see all your entries
 - `/story timeleft [id]` — See how much time is left in the current turn
 - `/story ping [id]` — Ping all writers in a story
 - `/story help` — Detailed guide with all writer options
