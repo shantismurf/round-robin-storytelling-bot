@@ -234,11 +234,11 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
     } else if (customId === 'story_add_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_add_metadata_dynamic')?.[0];
       const rating = interaction.fields.getStringSelectValues('story_add_metadata_rating')?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues('story_add_metadata_warnings') ?? [];
+      const warningsRaw = interaction.fields.getCheckboxGroup('story_add_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;
-      state.warnings = (warningsRaw ?? []).filter(v => v !== '__dismiss__');
+      state.warnings = warningsRaw;
 
     } else if (customId === 'story_add_storyinfo_modal') {
       const modeVal = interaction.fields.getRadioGroup('story_add_storyinfo_mode');

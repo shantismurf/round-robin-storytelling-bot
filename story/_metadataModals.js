@@ -1,4 +1,4 @@
-import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder } from 'discord.js';
+import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder } from 'discord.js';
 import { getConfigValue, formatDuration, trimTrailingEmoji } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
 import { STORY_MODE } from '../constants.js';
@@ -30,7 +30,6 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaMainRelationship', 'lblMetaOtherRelationships',
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary', 'lblMetaSceneBreakDivider',
     'txtMetaMainRelationshipPlaceholder', 'txtMetaSceneBreakDividerPlaceholder',
-    'txtManageWarningSelectInstructions',
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
     'btnSaveSettings', 'btnCreateStory',
     'optWarnAllClear',
@@ -181,20 +180,18 @@ export function buildMetadataModal(cfg, state, namespace) {
       default: (state.rating ?? 'NR') === code,
     })));
 
-  const warningsSelect = new StringSelectMenuBuilder()
+  const warningsGroup = new CheckboxGroupBuilder()
     .setCustomId(`${ns}_metadata_warnings`)
-    .setPlaceholder(cfg.lblMetaWarnings)
     .setRequired(false)
     .setMinValues(0)
     .setMaxValues(warningOptions.length)
-    .addOptions([
-      { label: cfg.txtManageWarningSelectInstructions ?? cfg.txtNone, value: '__dismiss__', default: false },
-      ...warningOptions.map(k => ({
-        label: cfg[k] ?? k,
-        value: k,
-        default: (Array.isArray(state.warnings) ? state.warnings : (state.warnings ?? '').split(',').map(w => w.trim())).includes(k),
-      })),
-    ]);
+    .addOptions(
+      warningOptions.map(k => new CheckboxGroupOptionBuilder()
+        .setLabel(cfg[k] ?? k)
+        .setValue(k)
+        .setDefault((Array.isArray(state.warnings) ? state.warnings : (state.warnings ?? '').split(',').map(w => w.trim())).includes(k))
+      )
+    );
 
   return new ModalBuilder()
     .setCustomId(`${ns}_metadata_modal`)
@@ -202,7 +199,7 @@ export function buildMetadataModal(cfg, state, namespace) {
     .addLabelComponents(
       new LabelBuilder().setLabel(cfg.lblMetaDynamic).setStringSelectMenuComponent(dynamicSelect),
       new LabelBuilder().setLabel(cfg.lblMetaRating).setStringSelectMenuComponent(ratingSelect),
-      new LabelBuilder().setLabel(cfg.lblMetaWarnings).setStringSelectMenuComponent(warningsSelect),
+      new LabelBuilder().setLabel(cfg.lblMetaWarnings).setCheckboxGroupComponent(warningsGroup),
     );
 }
 

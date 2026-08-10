@@ -561,11 +561,11 @@ async function handleManageModalSubmit(connection, interaction) {
     } else if (customId === 'story_manage_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_manage_metadata_dynamic')?.[0];
       const rating = interaction.fields.getStringSelectValues('story_manage_metadata_rating')?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues('story_manage_metadata_warnings') ?? [];
+      const warningsRaw = interaction.fields.getCheckboxGroup('story_manage_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;
-      state.warnings = (warningsRaw ?? []).filter(v => v !== '__dismiss__');
+      state.warnings = warningsRaw;
       log(`handleManageModalSubmit: metadata staged dynamic=${state.dynamic} rating=${state.rating} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
     } else if (customId === 'story_manage_tags_modal') {
@@ -598,22 +598,11 @@ async function handleManageSelectMenu(connection, interaction) {
     return;
   }
 
-  const customId = interaction.customId;
-
-  if (customId === 'story_manage_rating_select') {
-    const newRating = interaction.values[0];
-    const currentRating = state.rating;
-    state.rating = newRating;
-    log(`handleManageSelectMenu: rating staged ${currentRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-  } else if (customId === 'story_manage_warnings_select') {
-    state.warnings = interaction.values.filter(v => v !== '__dismiss__');
-    log(`handleManageSelectMenu: warnings staged for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-  } else {
-    return;
-  }
-
-  await interaction.deferUpdate();
-  await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+  // Rating/warnings moved to modal-based selects (read via handleManageModalSubmit's
+  // interaction.fields, not here) — no live select-menu component in the manage panel
+  // currently routes here. Kept wired in commands/story.js's isSelectMenuInteraction routing
+  // as the entry point for any future non-modal select menu the manage panel adds.
+  return;
 }
 
 export {
