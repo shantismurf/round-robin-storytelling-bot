@@ -2,7 +2,8 @@
 
 Status: Pending
 Created: 2026-07-26 (drafted in an earlier Claude Code chat session; committed to the repo on this date)
-Last Updated: 2026-07-26 (added Part 1b, folded in from a separate TODO.md item)
+Last Updated: 2026-08-10 (added Part 1c — unsaved-changes indicator, folded in from the TODO.md
+top-priority item; resolved the Rating grouping open decision — stays in Settings)
 
 Design finalized in chat, implementation not started.
 
@@ -30,19 +31,22 @@ Two groups only, per decision: **Settings** and **Metadata**.
 - Mode, Writer Order
 - Turn Length, Timeout Reminder, Delay Start, Max Writers
 - Show Authors, Turn Privacy, Scene Break Divider
+- Rating — **stays in Settings, not Metadata** (resolved 2026-08-10: rating determines which
+  channel/thread a story is posted in — restricted vs. main feed — so it reads as a structural
+  setting rather than descriptive metadata, unlike Dynamic/Warnings/pairings/etc.)
 - *(story add only)* Join Settings — pen name, join privacy, notifications
 
 **Metadata** (AO3-style descriptive):
-- Rating, Dynamic, Warnings
+- Dynamic, Warnings
 - Main Pairing, Other Relationships, Characters, Tags
 - Ground Rules (new — see Part 2)
 
-**Open decision to confirm before building:** Rating currently lives in the "always shown"
-14-field block in `buildStoryEmbed()` (`story/_metadataModals.js` line ~109), not the
-metadata-only block. Moving it into Metadata is a recategorization, not just a display change
-— confirm this is wanted. Similarly, Join Settings only applies to `/story add` (not manage);
-current assumption is it folds into the Settings group for the add flow specifically, since
-`isManage` already branches this in `buildStoryEmbed()`.
+**Resolved decisions:**
+- Rating stays in Settings (see above) — no recategorization needed, `buildStoryEmbed()`'s
+  existing always-shown placement for it just needs to move under the Settings-group filter
+  rather than the Metadata one.
+- Join Settings folds into the Settings group for the `/story add` flow specifically, since
+  `isManage` already branches this in `buildStoryEmbed()`.
 
 ### UI mechanism
 
@@ -86,6 +90,53 @@ Entries/Manage Turns reads as the more natural home once the layout stabilizes).
   current command-argument-based one; the existing management logic itself shouldn't need to change
 - `commands/storyadmin.js` — decide whether `/storyadmin user` stays as a power-user shortcut or
   gets removed once the panel button covers the same flow
+
+---
+
+## Part 1c — Unsaved-changes indicator on `/story manage`
+
+Folded in 2026-08-10 from TODO.md's top-priority item: nothing typed into the manage panel
+persists to the DB until **Save Settings** is clicked (`story_manage_save` →
+`handleManageSave`, `story/manage.js`). Everything staged before that lives only in the
+in-memory `pendingManageData` session state. Discord gives the bot no hook for a user dismissing
+an ephemeral message, and the 15-minute interaction-token expiry is likewise silent — so a user
+who edits several fields and then dismisses or lets the panel time out loses those edits with no
+warning today. The only real fix is a persistent on-panel warning while unsaved edits exist, not
+an interception of the dismiss itself (not possible).
+
+**Scope: `/story manage` only.** `/story add` was considered and explicitly excluded — creation
+already carries the obvious expectation that nothing exists until the final Create button is
+clicked, so a matching warning there would be redundant. (Decided with user 2026-08-10.)
+
+**Mechanism — dirty-state detection:** on every mutation of `state` in `handleManageModalSubmit`
+/ `handleManageSelectMenu` / the toggle buttons in `handleManageButton`, the current field values
+already diverge from what was loaded from the DB into `state` at `handleManage` open time (the
+existing `original*` fields — `originalStatus`, `originalRating` — establish this pattern
+already). `buildManageMessage()` needs a cheap dirty check comparing current staged fields
+against their DB-loaded originals; if any differ, the panel is dirty.
+
+**Display — dedicated embed field, bottom of the embed, shown only when dirty** (decided
+2026-08-10 over an embed-footer or Save-button-label treatment, for visibility — this sits below
+the fold less than a footer would on the manage panel's long embed).
+
+- Field name: **"⚠️ Unsaved Changes"**
+- Field value: **"You have changes that haven't been saved yet. Click **Save Settings** below to
+  keep them."**
+- New config keys (approved 2026-08-10): `lblManageUnsavedChangesTitle`,
+  `txtManageUnsavedChangesBody`.
+- Field is omitted entirely when the panel is clean (no `?? ''` — per `?? "Fallback"` ban, this
+  is a conditional field push, not a fallback string).
+
+### Files touched
+- `story/manage.js` — `buildManageMessage()` needs the dirty check and conditional field push;
+  needs each of the DB-loaded original values already present in `state` (or newly captured
+  ones, for fields like `sceneBreakDivider`/`mainPairing`/etc. that don't yet have an
+  `original*` counterpart) to diff against
+- `story/_metadataModals.js` or `story/manage.js` — wherever the dirty-check helper lives; keep
+  it colocated with `buildStoryEmbed()`/`buildManageMessage()` since both files already share
+  this state shape
+- `db/config_files/config_story.sql` (or wherever the panel's other manage-panel config rows
+  live) — the two new config keys
 
 ---
 
@@ -253,13 +304,15 @@ need to trim.
 2. Panel display rework (Settings/Metadata split) — unblocks everything else
 3. Move Manage Users onto the manage panel (Part 1b) — independent of the rest, but natural to
    do alongside Part 1 since both touch `buildManageMessage()`'s button rows
-4. Ground Rules: server-vocabulary setup modal + parser/validator
-5. Ground Rules: story-level checkbox field in `buildMetadataModal()`
-6. Ground Rules: `story.ground_rules` column + stable-slug generation + storage
-7. Ground Rules: display wiring (status post, join panel, manage panel)
-8. Turn thread welcome message → embed conversion (bundle with scene-break/translation
+4. Unsaved-changes indicator (Part 1c) — independent of the rest, but natural to do alongside
+   Part 1 since both touch `buildManageMessage()`/`buildStoryEmbed()`
+5. Ground Rules: server-vocabulary setup modal + parser/validator
+6. Ground Rules: story-level checkbox field in `buildMetadataModal()`
+7. Ground Rules: `story.ground_rules` column + stable-slug generation + storage
+8. Ground Rules: display wiring (status post, join panel, manage panel)
+9. Turn thread welcome message → embed conversion (bundle with scene-break/translation
    instructions rework)
-9. Ground Rules: change-notification post to story thread on save
+10. Ground Rules: change-notification post to story thread on save
 
 ---
 
