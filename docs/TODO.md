@@ -1,5 +1,7 @@
 # To-Do List
 
+Top Priority - there is no message telling a user they have unsaved changes to the story manage panel. revisit the manage and ad panel redesign and add that to the plan. 
+
 Sorted quick wins to biggest lifts within each group — small, no-plan-needed items first,
 tapering up to the fully-scoped efforts at the end of each section.
 
