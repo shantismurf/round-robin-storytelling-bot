@@ -1,11 +1,44 @@
 import { Client, GatewayIntentBits, Collection, Events, MessageFlags } from 'discord.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
-import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories } from './utilities.js';
+import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories, createFailureThrottle } from './utilities.js';
 import { STORY_STATUS } from './constants.js';
 import { handleWriterDeparted } from './story/_writerDeparted.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner, scheduleOnboardingReminders } from './job-runner.js';
 import fs from 'fs';
+
+const DB_STARTUP_POLL_INTERVAL_MS = 30 * 1000;
+
+/**
+ * Blocks until the DB is reachable, retrying indefinitely with throttled logging instead of
+ * letting startup crash-loop when the DB is simply down. deploy() (migrations, config sync,
+ * command registration) needs a live DB and exits the process on any failure, so this runs
+ * ahead of it as a cheap, quiet probe — once it succeeds, deploy() proceeds as normal and
+ * only fails fast on a genuine problem (bad migration, bad config), not "not up yet."
+ */
+async function waitForDatabase(dbConfig) {
+  const throttle = createFailureThrottle();
+  for (;;) {
+    const probe = new DB(dbConfig);
+    try {
+      await probe.connect(true); // quiet — this loop owns its own logging
+      await probe.disconnect();
+      const recovery = throttle.onSuccess();
+      log(recovery
+        ? `Database reachable — recovered after ${recovery.consecutiveFailures} consecutive failure(s) (~${recovery.downForMin}m down)`
+        : 'Database reachable.', { show: true });
+      return;
+    } catch (err) {
+      const result = throttle.onFailure();
+      if (result.isSummary) {
+        log(`Still waiting on the database — ${result.consecutiveFailures} consecutive failures, down for ~${result.downForMin}m. Latest: ${err}`, { show: true });
+      } else {
+        log(`Database not reachable yet: ${err}`, { show: result.show });
+      }
+      await new Promise(resolve => setTimeout(resolve, DB_STARTUP_POLL_INTERVAL_MS));
+    }
+  }
+}
 
 /**
  * On startup, refresh status embeds for all active/paused stories so buttons
@@ -45,6 +78,10 @@ async function main() {
   setTestMode(config.testMode);
 
   log(`Initializing Round Robin StoryBot... (${config.testMode ? 'TEST MODE' : 'production'})`, { show: true });
+
+  // Wait for the DB to actually be reachable before attempting deploy — retries with
+  // throttled logging instead of crash-looping the whole container if it's down at boot.
+  await waitForDatabase(config.db);
 
   // Run all pre-launch steps: schema, migrations, config sync, command registration
   try {

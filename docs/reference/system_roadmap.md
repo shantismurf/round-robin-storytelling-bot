@@ -9,8 +9,8 @@ For config string keys, see `config_roadmap.md`.
 
 | File | Purpose | Lines |
 |------|---------|-------|
-| `index.js` | Entry point, Discord client, interaction router | ~250 |
-| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration | ~680 |
+| `index.js` | Entry point, Discord client, interaction router. Waits for DB reachability (`waitForDatabase()`) before running `deploy.js`, so a DB outage at boot retries with throttled logging instead of crash-looping | ~280 |
+| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration, `createFailureThrottle()` (burst-then-summary logging for a repeating failure/recovery cycle, e.g. DB connectivity) | ~720 |
 | `storybot.js` | Core story engine: CreateStory, NextTurn, PickNextWriter | — |
 | `job-runner.js` | Background job polling and execution | ~250 |
 | `deploy.js` | CLI deploy, run on every bot start: migrations, config sync, command registration, hub post sync (FAQ + privacy policy + gated broadcast) | ~125 |

@@ -31,10 +31,10 @@ fi;
 
 In order: pull `main` into the persistent `/home/container` directory (not
 a fresh clone), run `npm install`, then run `node index.js`
-(`START_BASH_FILE` is unset for this project). `index.js` fires
-`deploy.js` — schema migrations, config sync, command registration, hub
-post sync — before connecting to Discord; see `CLAUDE.md`'s **Startup**
-bullet.
+(`START_BASH_FILE` is unset for this project). `index.js` first waits for
+the DB to be reachable (see quirk below), then fires `deploy.js` — schema
+migrations, config sync, command registration, hub post sync — before
+connecting to Discord; see `CLAUDE.md`'s **Startup** bullet.
 
 ## Fixed quirk: package-lock.json
 
@@ -105,6 +105,31 @@ immediately, no waiting on any background job.
 
 The host pulled the community-made uptime monitor that used to show
 legacy-node up/down status, so there's currently no passive way to see
-this happening — it only surfaces via the `ECONNREFUSED` log spam in
-`#logs`. No shell/console access to check disk usage directly; confirm
-with host support or the panel.
+this happening — it only surfaces via the log spam in `#logs`. No shell/
+console access to check disk usage directly; confirm with host support or
+the panel.
+
+**Follow-up fixes (2026-08-13):** two problems this incident exposed have
+since been fixed in code —
+
+- The `ECONNREFUSED` spam itself: every poll failure used to log
+  identically to the hub channel forever. `job-runner.js` now uses a
+  shared `createFailureThrottle()` helper (`utilities.js`) that alerts on
+  every failure for the first 10 consecutive failures (so a real outage
+  is unmistakable, not a one-off blip), then throttles to one "still
+  failing" summary every 10 minutes until it recovers, then logs one
+  recovery line. Console still gets every tick for traceability — only
+  the hub channel is throttled.
+- The bigger problem from this incident: restarting the bot *while the
+  DB was still down* took the entire bot offline, not just the job
+  runner, because `deploy()` needs a live DB and `index.js` treated any
+  failure there — including plain unreachability — as fatal
+  (`process.exit(1)`), which also tripped Pterodactyl's crash-loop guard
+  ("Aborting automatic restart, last crash occurred less than 600 seconds
+  ago"). The only way to know the DB was back was to blindly retry
+  Restart. `index.js` now calls `waitForDatabase()` before `deploy()`,
+  which polls quietly every 30s (using the same burst/summary throttle
+  above) until the DB answers, then proceeds into `deploy()` and normal
+  startup automatically — no manual restart-and-hope needed. A genuine
+  deploy failure (bad migration, bad config) still fails fast as before;
+  only plain unreachability retries.
