@@ -14,8 +14,16 @@ const JOB_RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 const JOB_PURGE_EVERY_N_TICKS = 24 * 60; // once per day at a 60s poll interval
 const JOB_PURGE_AGE_DAYS = 30;
 const ONBOARDING_REMINDER_DAYS = { onboardingDay1: 1, onboardingDay7: 7, onboardingDay14: 14, onboardingDay30: 30 };
+const DB_POLL_ALERT_BURST_COUNT = 10; // log every failure to the hub channel for the first N consecutive poll failures
+const DB_POLL_SUMMARY_INTERVAL_MS = 10 * 60 * 1000; // then throttle to one "still failing" summary every N minutes until recovery
 
 let pollTickCount = 0;
+// Poll-failure state — in-memory only (not DB-backed) so it keeps working while the DB itself is down.
+// Resets itself on the next successful poll; nothing to reset by hand.
+let dbPollFailing = false;
+let dbPollConsecutiveFailures = 0;
+let dbPollFirstFailureAt = null;
+let dbPollLastAlertAt = null;
 
 export async function startJobRunner(connection, client) {
   // Jobs only sit at job_status=1 while processJob's synchronous handler is running —
@@ -52,11 +60,37 @@ async function runDueJobs(connection, client) {
       `SELECT * FROM job WHERE job_status = ? AND run_at <= NOW() ORDER BY run_at ASC LIMIT 20`,
       [JOB_STATUS.PENDING]
     );
+    if (dbPollFailing) {
+      const downForMin = Math.round((Date.now() - dbPollFirstFailureAt) / 60000);
+      log(`Job runner poll recovered after ${dbPollConsecutiveFailures} consecutive failure(s) (~${downForMin}m down)`, { show: true });
+      dbPollFailing = false;
+      dbPollConsecutiveFailures = 0;
+      dbPollFirstFailureAt = null;
+      dbPollLastAlertAt = null;
+    }
     for (const job of jobs) {
       await processJob(connection, client, job);
     }
   } catch (err) {
-    log(`Job runner poll error: ${err}`, { show: true });
+    dbPollConsecutiveFailures++;
+    if (!dbPollFailing) {
+      // First failure after a healthy run — alert immediately and start tracking the streak.
+      dbPollFailing = true;
+      dbPollFirstFailureAt = Date.now();
+      dbPollLastAlertAt = dbPollFirstFailureAt;
+      log(`Job runner poll error: ${err}`, { show: true });
+    } else if (dbPollConsecutiveFailures <= DB_POLL_ALERT_BURST_COUNT) {
+      // Still within the initial burst — keep alerting so the pattern is unmistakable, not a one-off blip.
+      log(`Job runner poll error: ${err}`, { show: true });
+    } else if (Date.now() - dbPollLastAlertAt >= DB_POLL_SUMMARY_INTERVAL_MS) {
+      // Past the burst — throttle to a periodic "still down" summary instead of spamming every tick.
+      dbPollLastAlertAt = Date.now();
+      const downForMin = Math.round((Date.now() - dbPollFirstFailureAt) / 60000);
+      log(`Job runner poll still failing — ${dbPollConsecutiveFailures} consecutive failures, down for ~${downForMin}m. Latest: ${err}`, { show: true });
+    } else {
+      // Between summaries — still logged for console traceability, just not spammed to the hub channel.
+      log(`Job runner poll error: ${err}`, { show: false });
+    }
   }
 }
 
