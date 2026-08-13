@@ -109,8 +109,8 @@ this happening — it only surfaces via the log spam in `#logs`. No shell/
 console access to check disk usage directly; confirm with host support or
 the panel.
 
-**Follow-up fixes (2026-08-13):** two problems this incident exposed have
-since been fixed in code —
+**Follow-up fixes (2026-08-13, v3.3.2 and v3.4.0):** two problems this
+incident exposed have since been fixed in code —
 
 - The `ECONNREFUSED` spam itself: every poll failure used to log
   identically to the hub channel forever. `job-runner.js` now uses a
