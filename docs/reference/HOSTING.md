@@ -61,3 +61,26 @@ Provided by bot-hosting.net, on the same network as the bot container
 (host may be Cloudflare-fronted, unconfirmed). Credentials are viewable in
 the same Pterodactyl interface as the bot — only copy-to-clipboard or
 password-cycle are available, no other access.
+
+### Known quirk: DB outage from disk-full crash, no uptime visibility
+
+Confirmed 2026-08-13 (host support): the legacy DB node's disk filled up,
+which crashed MariaDB and left it down. Symptoms in order:
+
+1. A query fails with MariaDB's own disk-full error surfacing through the
+   driver, e.g. `NextTurn failed: Error: Disk got full writing
+   '.(temporary)' (Errcode: 28 "No space left on device")` — this is the
+   server rejecting a temp-file write, not a bot-side disk issue.
+2. Once mysqld actually goes down, every subsequent query fails instead
+   with `connect ECONNREFUSED <ip>:3306` — the job runner poll
+   (`job-runner.js`, every 60s) logs this on every tick since it just
+   retries against the pool (`utilities.js`'s `DB.connect()` uses
+   `mysql.createPool`, so this isn't a single dead connection needing a
+   code-level reconnect — the pool is dialing fresh sockets and getting
+   refused every time because nothing is listening on that port).
+
+The host pulled the community-made uptime monitor that used to show
+legacy-node up/down status, so there's currently no passive way to see
+this happening — it only surfaces via the `ECONNREFUSED` log spam in
+`#logs`. No shell/console access to check disk usage directly; confirm
+with host support or the panel.
