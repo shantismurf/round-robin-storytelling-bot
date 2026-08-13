@@ -6,6 +6,7 @@ import {
   formatDuration,
   replaceTemplateVariables,
   chunkEntryContent,
+  createFailureThrottle,
 } from '../utilities.js';
 
 describe('splitAtParagraphs', () => {
@@ -76,6 +77,62 @@ describe('replaceTemplateVariables', () => {
   test('keeps an optional block when its token is present', () => {
     const result = replaceTemplateVariables('Base{? — [extra]?} text', { extra: 'more' });
     assert.equal(result, 'Base — more text');
+  });
+});
+
+describe('createFailureThrottle', () => {
+  test('alerts on the first failure and starts the streak at 1', () => {
+    const throttle = createFailureThrottle({ burstCount: 2, summaryIntervalMs: 1000 });
+    const result = throttle.onFailure();
+    assert.deepEqual(result, { show: true, isSummary: false, consecutiveFailures: 1, downForMin: 0 });
+  });
+
+  test('keeps alerting on every failure through the end of the burst', () => {
+    const throttle = createFailureThrottle({ burstCount: 2, summaryIntervalMs: 1000 });
+    throttle.onFailure(); // 1st — burst
+    const second = throttle.onFailure(); // 2nd — still within burstCount=2
+    assert.equal(second.show, true);
+    assert.equal(second.isSummary, false);
+    assert.equal(second.consecutiveFailures, 2);
+  });
+
+  test('goes quiet once past the burst, before the summary interval elapses', () => {
+    const throttle = createFailureThrottle({ burstCount: 2, summaryIntervalMs: 1000 });
+    throttle.onFailure(); // 1st
+    throttle.onFailure(); // 2nd — end of burst
+    const third = throttle.onFailure(); // 3rd — past burst, summary interval not up yet
+    assert.equal(third.show, false);
+    assert.equal(third.isSummary, false);
+    assert.equal(third.consecutiveFailures, 3);
+  });
+
+  test('emits a summary once the summary interval has elapsed', async () => {
+    const throttle = createFailureThrottle({ burstCount: 1, summaryIntervalMs: 20 });
+    throttle.onFailure(); // 1st — burst, also anchors lastAlertAt
+    throttle.onFailure(); // 2nd — past burst, quiet
+    await new Promise(resolve => setTimeout(resolve, 25));
+    const result = throttle.onFailure(); // 3rd — summary interval elapsed
+    assert.equal(result.show, true);
+    assert.equal(result.isSummary, true);
+    assert.equal(result.consecutiveFailures, 3);
+  });
+
+  test('onSuccess is a no-op when there is no ongoing failure streak', () => {
+    const throttle = createFailureThrottle();
+    assert.equal(throttle.onSuccess(), null);
+  });
+
+  test('onSuccess reports and resets an ongoing failure streak', () => {
+    const throttle = createFailureThrottle({ burstCount: 2, summaryIntervalMs: 1000 });
+    throttle.onFailure();
+    throttle.onFailure();
+    const recovery = throttle.onSuccess();
+    assert.equal(recovery.consecutiveFailures, 2);
+    assert.equal(typeof recovery.downForMin, 'number');
+
+    // Reset confirmed: the next failure is treated as a fresh first failure, not a continuation.
+    const freshFailure = throttle.onFailure();
+    assert.deepEqual(freshFailure, { show: true, isSummary: false, consecutiveFailures: 1, downForMin: 0 });
   });
 });
 

@@ -33,13 +33,66 @@ export function discordTimestamp (input, form) {
     R	Relative Time	2 minutes ago or in 5 years
      */
 }
+const FAILURE_ALERT_BURST_COUNT = 10; // log every failure to the hub channel for the first N consecutive failures
+const FAILURE_SUMMARY_INTERVAL_MS = 10 * 60 * 1000; // then throttle to one summary every N minutes until recovery
+
+/**
+ * Tracks a repeating failure/recovery cycle (DB connectivity, etc.) and decides how loudly
+ * each attempt should log: every failure during the initial burst (so a real outage pattern
+ * is unmistakable, not a one-off blip), then throttled to a periodic summary until recovery.
+ * State is in-memory only — works even when the thing being checked is unreachable — and
+ * resets itself the moment a recovery is reported, no manual reset needed.
+ */
+export function createFailureThrottle({ burstCount = FAILURE_ALERT_BURST_COUNT, summaryIntervalMs = FAILURE_SUMMARY_INTERVAL_MS } = {}) {
+  let failing = false;
+  let consecutiveFailures = 0;
+  let firstFailureAt = null;
+  let lastAlertAt = null;
+
+  return {
+    // Call on each failure. Returns { show, isSummary, consecutiveFailures, downForMin } —
+    // the caller formats its own message text using these.
+    onFailure() {
+      consecutiveFailures++;
+      if (!failing) {
+        failing = true;
+        firstFailureAt = Date.now();
+        lastAlertAt = firstFailureAt;
+        return { show: true, isSummary: false, consecutiveFailures, downForMin: 0 };
+      }
+      const downForMin = Math.round((Date.now() - firstFailureAt) / 60000);
+      if (consecutiveFailures <= burstCount) {
+        return { show: true, isSummary: false, consecutiveFailures, downForMin };
+      }
+      if (Date.now() - lastAlertAt >= summaryIntervalMs) {
+        lastAlertAt = Date.now();
+        return { show: true, isSummary: true, consecutiveFailures, downForMin };
+      }
+      return { show: false, isSummary: false, consecutiveFailures, downForMin };
+    },
+    // Call on each success. Returns null if there was no ongoing failure streak (nothing to
+    // report), otherwise { consecutiveFailures, downForMin } for a recovery log line — and
+    // resets all tracking state for the next incident.
+    onSuccess() {
+      if (!failing) return null;
+      const downForMin = Math.round((Date.now() - firstFailureAt) / 60000);
+      const result = { consecutiveFailures, downForMin };
+      failing = false;
+      consecutiveFailures = 0;
+      firstFailureAt = null;
+      lastAlertAt = null;
+      return result;
+    }
+  };
+}
+
 export class DB {
   constructor(dbConfig) {
     this.dbConfig = dbConfig;
     this.connection = null;
   }
-  
-  async connect() {
+
+  async connect(quiet = false) {
     try {
       this.pool = mysql.createPool({
         host: this.dbConfig.host,
@@ -55,10 +108,10 @@ export class DB {
       });
       await this.pool.execute('SELECT 1');
       this.connection = this.pool;
-      log('Database connected successfully', { show: true });
+      if (!quiet) log('Database connected successfully', { show: true });
       return this.pool;
     } catch (error) {
-      log(`Database connection failed: ${error.message}`, { show: true });
+      if (!quiet) log(`Database connection failed: ${error.message}`, { show: true });
       throw error;
     }
   }
