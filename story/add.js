@@ -60,7 +60,8 @@ export async function handleAddStory(connection, interaction) {
       dynamic: '',
       tags: '',
       summary: '',
-      sceneBreakDivider: ''
+      sceneBreakDivider: '',
+      activeGroup: 'settings'
     };
 
     pendingStoryData.set(interaction.user.id, {
@@ -83,7 +84,8 @@ export async function handleAddStory(connection, interaction) {
 }
 
 export function buildStoryAddMessage(cfg, state) {
-  const embed = buildStoryEmbed(cfg, state, cfg.txtCreateStoryTitle);
+  const activeGroup = state.activeGroup ?? 'settings';
+  const embed = buildStoryEmbed(cfg, state, cfg.txtCreateStoryTitle, false, activeGroup);
 
   // Row 1: Set Title and Summary | Story Info | Story Settings
   const row1 = new ActionRowBuilder().addComponents(
@@ -117,8 +119,16 @@ export function buildStoryAddMessage(cfg, state) {
       .setStyle(ButtonStyle.Primary),
   );
 
-  // Row 3: Create Story
+  // Row 3: View Settings | View Metadata | Create Story
   const row3 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_add_group_settings')
+      .setLabel(cfg.btnPanelViewSettings)
+      .setStyle(activeGroup === 'settings' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_add_group_metadata')
+      .setLabel(cfg.btnPanelViewMetadata)
+      .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_add_create')
       .setLabel(cfg.btnCreateStory)
@@ -447,6 +457,11 @@ export async function handleAddStoryButton(connection, interaction) {
               ),
           )
       );
+
+    } else if (customId === 'story_add_group_settings' || customId === 'story_add_group_metadata') {
+      state.activeGroup = customId === 'story_add_group_metadata' ? 'metadata' : 'settings';
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
 
     } else if (customId === 'story_add_create') {
       await handleCreateStorySubmit(connection, interaction, state);

@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, UserSelectMenuBuilder, LabelBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
@@ -8,6 +8,7 @@ import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm,
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
 import { applyPauseActions, applyResumeActions, handleReopenStory } from './_managePauseResume.js';
+import { handleManageUser } from './_manageUser.js';
 import { STORY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
 
 const pendingManageData = new Map();
@@ -15,8 +16,9 @@ const pendingManageData = new Map();
 function buildManageMessage(cfg, state, activeTurn = null) {
   const isPaused = state.targetStatus === STORY_STATUS.PAUSED;
   const isClosed = state.targetStatus === STORY_STATUS.CLOSED;
+  const activeGroup = state.activeGroup ?? 'settings';
 
-  const embed = buildStoryEmbed(cfg, state, cfg.txtManageEmbedTitle, true);
+  const embed = buildStoryEmbed(cfg, state, cfg.txtManageEmbedTitle, true, activeGroup);
 
   // Row 1 (3): Set Title and Summary | Story Info | Story Settings
   const row1 = new ActionRowBuilder().addComponents(
@@ -34,7 +36,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Primary),
   );
 
-  // Row 2 (2): Manage Entries | Manage Turns
+  // Row 2 (3): Manage Entries | Manage Turns | Manage Users
   const row2 = new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_entries_open')
@@ -43,6 +45,10 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     new ButtonBuilder()
       .setCustomId('story_manage_turns_open')
       .setLabel(cfg.btnManageTurns)
+      .setStyle(ButtonStyle.Primary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_users_open')
+      .setLabel(cfg.btnManageUsers)
       .setStyle(ButtonStyle.Primary),
   );
 
@@ -86,8 +92,16 @@ function buildManageMessage(cfg, state, activeTurn = null) {
           .setStyle(ButtonStyle.Danger),
   );
 
-  // Row 5 (1): Save Settings
+  // Row 5 (3): View Settings | View Metadata | Save Settings
   const row5 = new ActionRowBuilder().addComponents(
+    new ButtonBuilder()
+      .setCustomId('story_manage_group_settings')
+      .setLabel(cfg.btnPanelViewSettings)
+      .setStyle(activeGroup === 'settings' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder()
+      .setCustomId('story_manage_group_metadata')
+      .setLabel(cfg.btnPanelViewMetadata)
+      .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder()
       .setCustomId('story_manage_save')
       .setLabel(cfg.btnSaveSettings)
@@ -136,7 +150,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'lblOpenToWriters', 'lblTags', 'btnSetTags',
       'btnReviewTags',
       'txtSelectionStaged',
-      'txtSectionBreakLine', 'txtManageSectionBreakMeta',
+      'txtSectionBreakLine',
       'lblManageStoryTitle', 'lblManageStoryStatus', 'btnManageJoinsOpen', 'btnManageJoinsClose',
       'txtManageStoryStatusActive', 'txtManageStoryStatusPaused',
       'txtManageJoinOpen', 'txtManageJoinClosed',
@@ -147,7 +161,8 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtManageValidationTimeout', 'txtManageValidationMaxWriters',
       'txtMustBeNo', 'txtTimeoutReminderValidation',
       'txtAddValidationTitleEmpty',
-      'btnManageTurns', 'btnManageEntries',
+      'btnManageTurns', 'btnManageEntries', 'btnManageUsers',
+      'txtManageUsersModalTitle', 'lblManageUsersPickWriter',
       'txtTagPendingTitle', 'txtTagNoPending', 'btnTagApprove', 'btnTagReject', 'txtTagVoteCount',
       'txtManageTurnsPanelTitle', 'txtManageTurnsNoTurn', 'txtManageTurnsActiveTurn',
       'btnTurnSkip', 'btnTurnExtend', 'btnTurnNext', 'btnTurnReassign',
@@ -215,6 +230,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       activeTurn,
       delayHours: null,
       delayWriters: null,
+      activeGroup: 'settings',
     };
 
     pendingManageData.set(interaction.user.id, state);
@@ -369,6 +385,30 @@ async function handleManageButton(connection, interaction) {
     } else if (customId === 'story_manage_entries_open') {
       await handleManageEntriesButton(connection, interaction, state);
 
+    } else if (customId === 'story_manage_users_open') {
+      const cfg = state.cfg;
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_manage_users_pick_modal')
+          .setTitle(cfg.txtManageUsersModalTitle)
+          .addLabelComponents(
+            new LabelBuilder()
+              .setLabel(cfg.lblManageUsersPickWriter)
+              .setUserSelectMenuComponent(
+                new UserSelectMenuBuilder()
+                  .setCustomId('story_manage_users_pick')
+                  .setMinValues(1)
+                  .setMaxValues(1)
+                  .setRequired(true)
+              )
+          )
+      );
+
+    } else if (customId === 'story_manage_group_settings' || customId === 'story_manage_group_metadata') {
+      state.activeGroup = customId === 'story_manage_group_metadata' ? 'metadata' : 'settings';
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
     } else if (customId === 'story_manage_review_tags') {
       await handleReviewTags(connection, interaction, state);
       return;
@@ -497,6 +537,25 @@ async function handleManageModalSubmit(connection, interaction) {
   }
 
   const customId = interaction.customId;
+
+  // Manage Users (Part 1b): opens the target writer's management panel as its own ephemeral
+  // reply — separate from the story manage panel, same as Manage Entries/Manage Turns — so it
+  // returns early instead of falling through to the shared buildManageMessage() re-render below.
+  if (customId === 'story_manage_users_pick_modal') {
+    try {
+      const users = interaction.fields.getSelectedUsers('story_manage_users_pick', true);
+      const targetUser = users?.first?.() ?? null;
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await handleManageUser(connection, interaction, state.storyId, targetUser);
+    } catch (error) {
+      log(`handleManageModalSubmit failed: customId=${customId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+      if (!interaction.replied && !interaction.deferred) {
+        await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      }
+    }
+    return;
+  }
+
   try {
     if (customId === 'story_manage_titlesummary_modal') {
       const value = sanitizeModalInput(interaction.fields.getTextInputValue('story_title'), 500);

@@ -69,7 +69,11 @@ async function execute(connection, interaction) {
       content: await getConfigValue(connection, 'txtAdminOnly', guildId),
     });
   }
-  if (subcommand === 'user')         await handleManageUser(connection, interaction);
+  if (subcommand === 'user') {
+    const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
+    const targetUser = interaction.options.getUser('user');
+    await handleManageUser(connection, interaction, storyId, targetUser);
+  }
   else if (subcommand === 'delete')  await handleDelete(connection, interaction);
   else if (subcommand === 'faqsync') await handleFaqSync(connection, interaction);
 }

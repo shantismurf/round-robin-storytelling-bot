@@ -31,7 +31,7 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary', 'lblMetaSceneBreakDivider',
     'txtMetaMainRelationshipPlaceholder', 'txtMetaSceneBreakDividerPlaceholder',
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
-    'btnSaveSettings', 'btnCreateStory',
+    'btnSaveSettings', 'btnCreateStory', 'btnPanelViewSettings', 'btnPanelViewMetadata',
     'optWarnAllClear',
     ...ratingCodes.map(ratingLabelKey),
     ...dynamicOptions,
@@ -41,9 +41,13 @@ export async function getMetaCfg(connection, guildId) {
 
 /**
  * Shared embed builder for /story add and /story manage panels.
- * isManage: shows metadata section, hides join settings and intro description.
+ * isManage: hides join settings and intro description (still shown as part of the Settings
+ * group for /story add).
+ * activeGroup: 'settings' (default) or 'metadata' — which field group to render. The two-group
+ * split (Part 1 of the panel rework plan) keeps the embed under Discord's 25-field cap and
+ * frees room for fields like Ground Rules; only the active group's fields are added per call.
  */
-export function buildStoryEmbed(cfg, state, title, isManage = false) {
+export function buildStoryEmbed(cfg, state, title, isManage = false, activeGroup = 'settings') {
   title = title ?? cfg.txtCreateStoryTitle;
 
   const modeEmojis = { 0: '🟢', 1: '🟣', 2: '🔵' };
@@ -95,34 +99,12 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   if (cfg.txtStoryAddIntro && !isManage) {
     embed.setDescription(cfg.txtStoryAddIntro);
   }
-  //25 fields total, 14 for story info/settings, 7 for metadata, 4 for join settings
-  embed.addFields( //14 fields
-    { name: trimTrailingEmoji(cfg.lblStoryTitle), value: titleDisplay, inline: false },
 
-    { name: trimTrailingEmoji(cfg.lblMetaSummary), value: summaryDisplay, inline: false },
-
-    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakInfo +' '+ sectionLine, value: '​', inline: false },
-
-    { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
-    { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-    { name: trimTrailingEmoji(cfg.lblMetaRating) + cfg.lblMetadataAddon, value: ratingLabel, inline: true },
-
-    { name: trimTrailingEmoji(cfg.lblShowAuthors), value: state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc, inline: true },
-    { name: trimTrailingEmoji(cfg.lblTurnPrivacy), value: state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc, inline: true },
-    { name: trimTrailingEmoji(cfg.lblMetaSceneBreakDivider), value: sceneBreakDisplay, inline: true },
-
-    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
-
-    { name: trimTrailingEmoji(cfg.lblTurnLength), value: turnLengthDisplay, inline: true },
-    { name: isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder), value: timeoutDisplay, inline: true },
-    { name: trimTrailingEmoji(cfg.lblDelayStart), value: `-+*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
-
-    { name: trimTrailingEmoji(cfg.lblMaxWriters), value: maxWritersDisplay, inline: false },
-
-  );
-
-  if (isManage) {
-    embed.addFields( //7 fields
+  // Settings/Metadata split (Part 1, panel rework plan): only the active group's fields render
+  // per call, keeping each view well under the 25-field cap and leaving room for future fields
+  // (e.g. Ground Rules) in the Metadata group.
+  if (activeGroup === 'metadata') {
+    embed.addFields( // 7 fields
       { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine, value: '​', inline: false },
 
       { name: trimTrailingEmoji(cfg.lblMetaDynamic), value: dynamicDisplay, inline: true },
@@ -134,16 +116,40 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
 
       { name: trimTrailingEmoji(cfg.lblMetaTags), value: tagsDisplay, inline: false },
     );
-  }
+  } else {
+    embed.addFields( // 14 fields — Rating stays here (drives thread placement, reads as structural)
+      { name: trimTrailingEmoji(cfg.lblStoryTitle), value: titleDisplay, inline: false },
 
-  if (!isManage) {
-    embed.addFields( //4 fields
-      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine, value: '​', inline: false },
+      { name: trimTrailingEmoji(cfg.lblMetaSummary), value: summaryDisplay, inline: false },
 
-      { name: cfg.lblYourPenName, value: state.penName || state.displayName || cfg.txtNotSet, inline: true },
-      { name: cfg.lblJoinPrivacy, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
-      { name: cfg.lblJoinNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
+      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakInfo +' '+ sectionLine, value: '​', inline: false },
+
+      { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
+      { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
+      { name: trimTrailingEmoji(cfg.lblMetaRating) + cfg.lblMetadataAddon, value: ratingLabel, inline: true },
+
+      { name: trimTrailingEmoji(cfg.lblShowAuthors), value: state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc, inline: true },
+      { name: trimTrailingEmoji(cfg.lblTurnPrivacy), value: state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc, inline: true },
+      { name: trimTrailingEmoji(cfg.lblMetaSceneBreakDivider), value: sceneBreakDisplay, inline: true },
+
+      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
+
+      { name: trimTrailingEmoji(cfg.lblTurnLength), value: turnLengthDisplay, inline: true },
+      { name: isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder), value: timeoutDisplay, inline: true },
+      { name: trimTrailingEmoji(cfg.lblDelayStart), value: `-+*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
+
+      { name: trimTrailingEmoji(cfg.lblMaxWriters), value: maxWritersDisplay, inline: false },
     );
+
+    if (!isManage) {
+      embed.addFields( // 4 fields — /story add only
+        { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine, value: '​', inline: false },
+
+        { name: cfg.lblYourPenName, value: state.penName || state.displayName || cfg.txtNotSet, inline: true },
+        { name: cfg.lblJoinPrivacy, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
+        { name: cfg.lblJoinNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
+      );
+    }
   }
 
   return embed;

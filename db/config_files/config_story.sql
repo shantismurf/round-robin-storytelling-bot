@@ -65,6 +65,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnAddTags', 'Story Tags', 'en', 1),
 ('btnAddMySettings', 'My Join Settings', 'en', 1),
 ('btnCreateStory', '✅ Create Story', 'en', 1),
+('btnPanelViewSettings', 'Settings', 'en', 1),
+('btnPanelViewMetadata', 'Metadata', 'en', 1),
 ('lblModeToggle', 'Story Mode', 'en', 1),
 ('lblPrivateToggle', 'Turns', 'en', 1),
 ('lblDelayStart', '🫷 Delay Start (optional) 🫸', 'en', 1),

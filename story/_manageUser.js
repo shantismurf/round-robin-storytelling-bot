@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnGuarded, endTurnThread, departWriter } from './_turn.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { TURN_STATUS, WRITER_STATUS } from '../constants.js';
@@ -63,13 +63,15 @@ function buildManageUserPanel(state) {
   return { embeds: [embed], components: [row1, row2, row3] };
 }
 
-export async function handleManageUser(connection, interaction) {
-  log(`handleManageUser: entry for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+/**
+ * storyId/targetUser are passed in explicitly rather than read from interaction.options, so this
+ * works both from the /storyadmin user slash command (options resolved by the caller) and from
+ * the /story manage panel's Manage Users button (storyId already known from panel state,
+ * targetUser picked via a UserSelect modal — see story/manage.js's story_manage_users_open flow).
+ */
+export async function handleManageUser(connection, interaction, storyId, targetUser) {
+  log(`handleManageUser: entry for user=${interaction.user.username} storyId=${storyId} targetUser=${targetUser?.username}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
-  const targetUser = interaction.options.getUser('user');
-
-  log(`handleManageUser: storyId=${storyId} targetUser=${targetUser?.username}`, { show: false, guildName: interaction?.guild?.name });
 
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
