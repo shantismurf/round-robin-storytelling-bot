@@ -61,6 +61,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtAdminPauseUserSuccess', '✅ **[user_name]** has been paused in **[story_title]**.', 'en', 1),
 ('txtAdminUnpauseUserSuccess', '✅ **[user_name]** has been returned to active rotation in **[story_title]**.', 'en', 1),
 ('txtAdminUnpauseNotPaused', '❌ [user_name] is not currently paused in this story.', 'en', 1),
+('txtAdminSweepSuccess', '✅ Removed **[user_name]** from the following active/paused stories: [story_titles]', 'en', 1),
+('txtAdminSweepNoneFound', '❌ **[user_name]** wasn''t found in any active or paused story in this server.', 'en', 1),
 ('txtAdminPenNameSuccess', '✅ Pen name for **[user_name]** updated to **[pen_name]**.', 'en', 1),
 ('txtAdminMUPauseConfirmDesc', '**[user_name]** will be temporarily removed from the turn rotation in **[story_title]**. They can rejoin at any time with /mystory resume.', 'en', 1),
 ('txtAdminMUUnpauseConfirmDesc', '**[user_name]** will be returned to active rotation in **[story_title]** and will be selected the next time the cycle reaches them.', 'en', 1),

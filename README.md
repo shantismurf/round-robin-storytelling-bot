@@ -4,7 +4,7 @@ A Discord bot for running collaborative relay-style stories where writers take t
 
 ## Quick Start
 
-1. In the Discord Developer Portal, create an application and bot. Enable the **Message Content** and **Server Members** privileged intents (Bot → Privileged Gateway Intents).
+1. In the Discord Developer Portal, create an application and bot. Enable the **Message Content** privileged intent (Bot → Privileged Gateway Intents).
 2. Invite the bot to your server using an OAuth2 URL with scopes **`bot`** and **`applications.commands`** and the permissions listed below.
 3. Copy `config.example.json` to `config.json` and fill in your bot token, client ID, guild ID, and database credentials. Set `testMode: true` for a single-server test deployment.
 4. Run `npm install`
@@ -31,7 +31,7 @@ These permissions must be granted to the bot's role when inviting it. `/storyadm
 | Manage Threads | Delete and archive threads on story close or delete |
 | Manage Roles | Allows `/storyadmin setup` to set channel-level permission overrides for the bot and admin role |
 
-The bot uses slash commands, buttons, modals, and select menus for most input. The exception is Normal and Slow mode writing: the writer composes their turn as ordinary chat messages in a private per-turn thread, and the Message Content privileged intent is what lets the bot read those messages back when the writer finalizes the entry. (Quick mode submits through a modal instead and needs no message content.) The Server Members privileged intent is required to detect writers leaving or being banned from the server (`GuildMemberRemove`/`GuildBanAdd`), so they can be automatically removed from any story they're actively writing.
+The bot uses slash commands, buttons, modals, and select menus for most input. The exception is Normal and Slow mode writing: the writer composes their turn as ordinary chat messages in a private per-turn thread, and the Message Content privileged intent is what lets the bot read those messages back when the writer finalizes the entry. (Quick mode submits through a modal instead and needs no message content.) The bot does not use the Server Members privileged intent — a daily background job checks guild membership for active/paused writers directly (a single-user REST lookup, which isn't gated by that intent) and alerts the story feed channel if it finds someone who's left, so an admin can run `/storyadmin sweep` to remove them from any stories they're still listed as active in.
 
 ## Project Layout
 

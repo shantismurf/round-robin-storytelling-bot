@@ -99,6 +99,7 @@ const PAGE_DEFS = [
       { lbl: 'lblHelp8ManageStory', txt: 'txtHelp8ManageStory' },
       { lbl: 'lblHelp8ManageUser',  txt: 'txtHelp8ManageUser' },
       { lbl: 'lblHelp8Delete',      txt: 'txtHelp8Delete' },
+      { lbl: 'lblHelp8Sweep',       txt: 'txtHelp8Sweep' },
     ],
   },
 ];

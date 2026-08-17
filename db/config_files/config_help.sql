@@ -131,6 +131,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp8ManageUser', '*(admin only)*\n- `/storyadmin user [story_id] [writer]` — Manage a writer''s participation in a story: pause, remove, change their notification or privacy settings, or update their pen name.', 'en', 1),
 ('lblHelp8Delete', '🗑️ Delete a Story', 'en', 1),
 ('txtHelp8Delete', '*(requires confirmation)*\n- `/storyadmin delete [id]` — Permanently delete a story and all its data', 'en', 1),
+('lblHelp8Sweep', '🧹 Sweep a Departed Writer', 'en', 1),
+('txtHelp8Sweep', '*(admin only)*\n- `/storyadmin sweep [user]` — Remove a user who left the server from every active or paused story they''re in. The bot also checks daily and posts a reminder in the story feed if it finds an active writer who''s no longer in the server.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
 -- FAQ sync status messages
