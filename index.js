@@ -2,7 +2,6 @@ import { Client, GatewayIntentBits, Collection, Events, MessageFlags } from 'dis
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
 import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories, createFailureThrottle } from './utilities.js';
 import { STORY_STATUS } from './constants.js';
-import { handleWriterDeparted } from './story/_writerDeparted.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner, scheduleOnboardingReminders } from './job-runner.js';
 import fs from 'fs';
@@ -102,7 +101,6 @@ async function main() {
   const client = new Client({ intents: [
     GatewayIntentBits.Guilds,
     GatewayIntentBits.MessageContent,
-    GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildModeration] });
   // Create initiate slash commands
   client.commands = new Collection();
@@ -173,18 +171,6 @@ async function main() {
   client.on(Events.GuildDelete, async guild => {
     log(`Bot removed from guild ${guild.name ?? 'unknown'} (${guild.id})`, { show: true, hub: true });
     await closeOrphanedGuildStories(connection, guild.id);
-  });
-  client.on(Events.GuildMemberRemove, async member => {
-    log(`Member left guild ${member.guild?.name ?? 'unknown'} (${member.guild?.id}): ${member.user?.tag ?? member.id}`, { show: false, guildName: member.guild?.name });
-    await handleWriterDeparted(connection, client, member.guild.id, member.id).catch(err =>
-      log(`handleWriterDeparted (leave) failed for guild ${member.guild?.id} user ${member.id}: ${err?.stack ?? err}`, { show: true })
-    );
-  });
-  client.on(Events.GuildBanAdd, async ban => {
-    log(`Member banned from guild ${ban.guild?.name ?? 'unknown'} (${ban.guild?.id}): ${ban.user?.tag ?? ban.user?.id}`, { show: false, guildName: ban.guild?.name });
-    await handleWriterDeparted(connection, client, ban.guild.id, ban.user.id).catch(err =>
-      log(`handleWriterDeparted (ban) failed for guild ${ban.guild?.id} user ${ban.user?.id}: ${err?.stack ?? err}`, { show: true })
-    );
   });
   function formatCommandLog(interaction) {
     const subcommand = interaction.options.getSubcommand(false);

@@ -25,7 +25,6 @@ For config string keys, see `config_roadmap.md`.
 | `commands/mystory.js` | `/mystory` command handler | — |
 | `story/` | Per-subcommand modules: add, close, edit, help, join, list, manage, ping, read, timeleft, write, roundup | — |
 | `story/_metadataModals.js` | Shared embed/modal builders for /story add and /story manage: getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal | ~255 |
-| `story/_writerDeparted.js` | `handleWriterDeparted()` — sweeps a user out of every story they're writing in a guild on `GuildMemberRemove`/`GuildBanAdd`; mirrors the voluntary-leave protocol | ~75 |
 | `story/_turn.js` | The turn engine core: `PickNextWriter`, `NextTurn`, `endTurnGuarded` (atomic guarded turn-end), `endTurnThread`/`deleteThreadAndAnnouncement` (draft preservation), `closeStoryInternals`, `departWriter` (shared writer-exit logic) | ~700 |
 | `story/_delay.js` | `checkStoryDelay()` — evaluates a delayed story's writer-count/hour-based activation conditions | — |
 | `story/_storyStatus.js` | `buildThreadTitle()`, `updateStoryStatusMessage()` — persistent status-embed maintenance | — |
@@ -129,6 +128,7 @@ Jobs are stored in the `job` table and polled every 60 seconds by `job-runner.js
 | `turnReminder` | `handleTurnReminder()` | Fires once partway through a turn (at `reminder_timing`% of turn length) to remind the active writer. Normal/quick mode only. |
 | `turnSlowReminder` | `handleSlowTurnReminder()` | Fires every `reminder_timing` hours to remind the writer of an open slow mode turn. Self-rescheduling: inserts a new job on fire. Cancelled on turn end or story pause. |
 | `weeklyRoundup` | `handleWeeklyRoundup()` (story/roundup.js) | Weekly summary post. Dedup via `job_log` table — `INSERT IGNORE` on `(job_type, guild_id, window_key)` ensures only the first execution per window posts. |
+| `departedWriterAudit` | `handleDepartedWriterAudit()` | Daily, global (not per-guild). Replaces the old `GuildMemberRemove`/`GuildBanAdd`-driven auto-sweep (removed along with the `GuildMembers` privileged intent) — checks guild membership once per distinct active/paused writer per guild, and if they're gone, posts one alert to the story feed channel listing every story they're still in, telling admins to run `/storyadmin sweep`. Self-rescheduling: inserts a new job 24h out on completion; `scheduleDepartedWriterAudit()` seeds the first one on startup if none is pending. |
 
 Job retry: max 3 attempts, 5-minute delay between retries. Status codes: `0`=pending, `1`=in-progress, `2`=permanently failed, `3`=cancelled, `4`=completed.
 

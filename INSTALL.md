@@ -14,7 +14,7 @@
 2. Give it a name and save.
 3. Go to the **Bot** tab:
    - Click **Add Bot** if prompted.
-   - Under **Privileged Gateway Intents**, enable **Message Content Intent** (required to read a writer's turn text out of their private writing thread in Normal/Slow mode — Quick mode submits through a modal and doesn't need it) and **Server Members Intent** (required to detect writers leaving or being banned from the server so they can be removed from active stories).
+   - Under **Privileged Gateway Intents**, enable **Message Content Intent** (required to read a writer's turn text out of their private writing thread in Normal/Slow mode — Quick mode submits through a modal and doesn't need it). **Server Members Intent** is not needed — the bot detects departed writers via a daily background check instead.
    - Copy your **bot token** — you will need it for `config.json`.
 4. Go to the **OAuth2** tab and copy your **Client ID**.
 

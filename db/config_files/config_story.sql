@@ -132,6 +132,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtStoryFeedJoinAnnouncementSlow', '🔵 **[joiner_name]** just joined **[story_title]**! It''s currently **[current_writer]**''s turn (no turn timer).', 'en', 1),
 ('txtStoryFeedNowActive', '🎬 **[story_title] is now active!** [first_writer] will start the story. Turn ends [turn_end_date].', 'en', 1),
 ('txtStoryFeedNowActiveSlow', '🔵 **[story_title] is now active!** [first_writer] will start the story (no turn timer).', 'en', 1),
+('txtStoryFeedDepartedWriterAlert', '⚠️ **[writer_name]** is no longer a member of this server, but is still an active writer in: [story_titles]. Run /storyadmin sweep to remove them from any active or paused stories that they''ve joined.', 'en', 1),
 ('txtPrivacyValidation', 'Keep Private must be "yes" or "no".', 'en', 1),
 ('txtManageStoryStatusActive', '▶️ Active', 'en', 1),
 ('txtManageStoryStatusPaused', '⏸️ Paused', 'en', 1),

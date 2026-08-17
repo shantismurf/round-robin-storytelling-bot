@@ -1,9 +1,9 @@
 import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
-import { STORY_STATUS, JOB_STATUS } from '../constants.js';
+import { STORY_STATUS, JOB_STATUS, WRITER_STATUS } from '../constants.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
 import { syncFaqPosts, handleAdminHelp } from '../faq.js';
-import { deleteThreadAndAnnouncement } from '../story/_turn.js';
+import { deleteThreadAndAnnouncement, departWriter } from '../story/_turn.js';
 import { handleSetup, handleSetupButton, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetup.js';
 
 async function logAdminAction(connection, adminUserId, actionType, storyId, targetUserId = null, reason = null) {
@@ -34,6 +34,12 @@ const data = new SlashCommandBuilder()
       .setDescription('Permanently delete a story and all its data')
       .addStringOption(o =>
         o.setName('story_id').setDescription('Story to delete').setRequired(true).setAutocomplete(true))
+  )
+  .addSubcommand(s =>
+    s.setName('sweep')
+      .setDescription('Remove a user who left the server from all their active/paused stories')
+      .addUserOption(o =>
+        o.setName('user').setDescription('The departed user to sweep').setRequired(true))
   )
   .addSubcommand(s =>
     s.setName('setup')
@@ -71,7 +77,55 @@ async function execute(connection, interaction) {
   }
   if (subcommand === 'user')         await handleManageUser(connection, interaction);
   else if (subcommand === 'delete')  await handleDelete(connection, interaction);
+  else if (subcommand === 'sweep')   await handleSweep(connection, interaction);
   else if (subcommand === 'faqsync') await handleFaqSync(connection, interaction);
+}
+
+// ---------------------------------------------------------------------------
+// /storyadmin sweep
+// ---------------------------------------------------------------------------
+
+async function handleSweep(connection, interaction) {
+  const guildId = interaction.guild.id;
+  const targetUser = interaction.options.getUser('user');
+  log(`handleSweep entry admin=${interaction.user.username} target=${targetUser.username}`, { show: false, guildName: interaction?.guild?.name });
+
+  const [writerRows] = await connection.execute(
+    `SELECT sw.story_writer_id, sw.story_id, s.title
+     FROM story_writer sw
+     JOIN story s ON sw.story_id = s.story_id
+     WHERE sw.discord_user_id = ? AND s.guild_id = ? AND sw.sw_status IN (?, ?) AND s.story_status IN (?, ?, ?)`,
+    [targetUser.id, guildId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED]
+  );
+
+  if (writerRows.length === 0) {
+    const msg = replaceTemplateVariables(
+      await getConfigValue(connection, 'txtAdminSweepNoneFound', guildId),
+      { user_name: targetUser.username }
+    );
+    return interaction.editReply({ content: msg });
+  }
+
+  const sweptTitles = [];
+  for (const { story_writer_id: writerId, story_id: storyId, title } of writerRows) {
+    try {
+      const { isLastWriter } = await departWriter(connection, interaction, storyId, writerId, targetUser.id);
+      if (isLastWriter) {
+        log(`handleSweep: story ${storyId} auto-closed — last writer removed`, { show: true, guildName: interaction?.guild?.name });
+      }
+      sweptTitles.push(title);
+    } catch (err) {
+      log(`handleSweep failed for story ${storyId} writer ${writerId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
+    }
+  }
+
+  await logAdminAction(connection, interaction.user.id, 'sweep', null, targetUser.id);
+
+  const msg = replaceTemplateVariables(
+    await getConfigValue(connection, 'txtAdminSweepSuccess', guildId),
+    { user_name: targetUser.username, story_titles: sweptTitles.join(', ') }
+  );
+  await interaction.editReply({ content: msg });
 }
 
 // ---------------------------------------------------------------------------

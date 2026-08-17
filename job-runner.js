@@ -14,6 +14,7 @@ const JOB_RETRY_DELAY_MS = 5 * 60 * 1000; // 5 minutes
 const JOB_PURGE_EVERY_N_TICKS = 24 * 60; // once per day at a 60s poll interval
 const JOB_PURGE_AGE_DAYS = 30;
 const ONBOARDING_REMINDER_DAYS = { onboardingDay1: 1, onboardingDay7: 7, onboardingDay14: 14, onboardingDay30: 30 };
+const DEPARTED_WRITER_AUDIT_INTERVAL_MS = 24 * 60 * 60 * 1000; // once a day
 
 let pollTickCount = 0;
 const dbPollThrottle = createFailureThrottle(); // in-memory poll-failure tracker; keeps working while the DB itself is down
@@ -30,7 +31,26 @@ export async function startJobRunner(connection, client) {
     log(`Job runner startup: re-queued ${stuck.length} job(s) orphaned by a previous restart (${stuck.map(j => `${j.job_id}:${j.job_type}`).join(', ')})`, { show: true });
   }
   log('Job runner started, polling every 60s', { show: true });
+  await scheduleDepartedWriterAudit(connection);
   setInterval(() => runDueJobs(connection, client), JOB_POLL_INTERVAL_MS);
+}
+
+/**
+ * Schedules the recurring departedWriterAudit job if one isn't already
+ * pending/in-progress — safe to call on every startup without creating
+ * duplicates.
+ */
+async function scheduleDepartedWriterAudit(connection) {
+  const [existing] = await connection.execute(
+    `SELECT job_id FROM job WHERE job_type = 'departedWriterAudit' AND job_status IN (?, ?) LIMIT 1`,
+    [JOB_STATUS.PENDING, JOB_STATUS.IN_PROGRESS]
+  );
+  if (existing.length > 0) return;
+  await connection.execute(
+    `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
+    ['departedWriterAudit', JSON.stringify({}), new Date(Date.now() + DEPARTED_WRITER_AUDIT_INTERVAL_MS), JOB_STATUS.PENDING]
+  );
+  log('Scheduled first departedWriterAudit job', { show: true });
 }
 
 async function purgeOldJobs(connection) {
@@ -109,6 +129,9 @@ async function processJob(connection, client, job) {
         break;
       case 'onboardingDay30':
         await handleOnboardingRemoval(connection, client, payload);
+        break;
+      case 'departedWriterAudit':
+        await handleDepartedWriterAudit(connection, client);
         break;
       default:
         log(`Unknown job type: ${job.job_type} (job_id=${job.job_id})`, { show: true });
@@ -403,6 +426,80 @@ async function sendMentionReminder(connection, ctx, guildId, writerUserId, modeK
   const storyFeedChannelId = await resolveFeedChannelId(connection, guildId, rating);
   const channel = await ctx.guild.channels.fetch(storyFeedChannelId);
   await channel.send(`<@${writerUserId}> ${applyTokens(txt)}`);
+}
+
+// ---------------------------------------------------------------------------
+// departedWriterAudit — daily sweep-in-place: catches writers who left the
+// server without triggering an in-app path (kicked/banned outside a story
+// action, left voluntarily). Checks guild membership once per distinct
+// writer per guild (not once per story — the same departure affects every
+// story that writer is active/paused in) and posts one consolidated alert
+// per guild per departed writer, telling admins to run /storyadmin sweep.
+// ---------------------------------------------------------------------------
+async function handleDepartedWriterAudit(connection, client) {
+  log('handleDepartedWriterAudit entry', { show: false });
+
+  const [rows] = await connection.execute(
+    `SELECT sw.discord_user_id, sw.discord_display_name, s.guild_id, s.title
+     FROM story_writer sw
+     JOIN story s ON sw.story_id = s.story_id
+     WHERE sw.sw_status IN (?, ?) AND s.story_status IN (?, ?, ?)`,
+    [WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED, STORY_STATUS.ACTIVE, STORY_STATUS.PAUSED, STORY_STATUS.DELAYED]
+  );
+
+  // Group rows into guild -> writer -> { displayName, titles[] } so each distinct
+  // writer only gets one membership check and one alert per guild, however many
+  // stories they're active/paused in there.
+  const byGuild = new Map();
+  for (const row of rows) {
+    if (!byGuild.has(row.guild_id)) byGuild.set(row.guild_id, new Map());
+    const guildMap = byGuild.get(row.guild_id);
+    if (!guildMap.has(row.discord_user_id)) {
+      guildMap.set(row.discord_user_id, { displayName: row.discord_display_name, titles: [] });
+    }
+    guildMap.get(row.discord_user_id).titles.push(row.title);
+  }
+
+  for (const [guildId, userMap] of byGuild) {
+    let guild;
+    try {
+      guild = await client.guilds.fetch(guildId);
+    } catch (err) {
+      log(`handleDepartedWriterAudit: could not fetch guild ${guildId}, skipping: ${err}`, { show: false });
+      continue;
+    }
+
+    for (const [userId, { displayName, titles }] of userMap) {
+      try {
+        await guild.members.fetch(userId); // still a member — nothing to do
+      } catch (err) {
+        if (err?.code !== 10007) { // not Unknown Member — a transient/unexpected error, not a confirmed departure
+          log(`handleDepartedWriterAudit: membership check failed for user ${userId} guild ${guildId}: ${err}`, { show: true, guildName: guild.name });
+          continue;
+        }
+        try {
+          const feedChannelId = await getConfigValue(connection, 'cfgStoryFeedChannelId', guildId);
+          const channel = await guild.channels.fetch(feedChannelId).catch(() => null);
+          if (!channel) continue;
+          const msg = replaceTemplateVariables(
+            await getConfigValue(connection, 'txtStoryFeedDepartedWriterAlert', guildId),
+            { writer_name: displayName, story_titles: titles.join(', ') }
+          );
+          await channel.send(msg);
+          log(`handleDepartedWriterAudit: alerted guild ${guildId} about departed writer ${userId} (${titles.length} stor${titles.length === 1 ? 'y' : 'ies'})`, { show: true, guildName: guild.name });
+        } catch (alertErr) {
+          log(`handleDepartedWriterAudit: failed to post alert for user ${userId} guild ${guildId}: ${alertErr}`, { show: true, guildName: guild.name });
+        }
+      }
+    }
+  }
+
+  // Reschedule for tomorrow
+  await connection.execute(
+    `INSERT INTO job (job_type, payload, run_at, job_status) VALUES (?, ?, ?, ?)`,
+    ['departedWriterAudit', JSON.stringify({}), new Date(Date.now() + DEPARTED_WRITER_AUDIT_INTERVAL_MS), JOB_STATUS.PENDING]
+  );
+  log('handleDepartedWriterAudit complete — rescheduled for tomorrow', { show: false });
 }
 
 // ---------------------------------------------------------------------------
