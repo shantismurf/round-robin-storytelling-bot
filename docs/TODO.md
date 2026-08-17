@@ -113,3 +113,5 @@ Full implementation plan extracted to [plans/PLAN-dm-support.md](plans/PLAN-dm-s
 - Series System — see [plans/PLAN-series-system.md](plans/PLAN-series-system.md)
 - Reactions Kudos — see [plans/PLAN-reactions-kudos.md](plans/PLAN-reactions-kudos.md)
 - Hub Sharing — full design in [plans/PLAN-hub-sharing.md](plans/PLAN-hub-sharing.md) and [plans/hub-brainstorming.md](plans/hub-brainstorming.md)
+- Bulk per-user story management — let admins pause/resume (or otherwise act on) all of a user's stories in a server at once, instead of one story at a time via `/storyadmin user`. Raised 2026-07-20 alongside the member-departure redesign; not something anyone's asked for, no known multi-server usage yet.
+- Block/ban feature — no way currently to block a specific user from joining stories in a server. Same origin as above.
