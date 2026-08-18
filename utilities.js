@@ -341,14 +341,15 @@ export async function getConfigValue(connection, key, guildId = 1) {
       );
       const result = {};
       for (const row of rows) {
-        // Prefer guild-specific value over system default
-        if (!result[row.config_key] || row.guild_id == guildId) {
+        // Prefer guild-specific value over system default, but preserve deliberate empty-string values.
+        const hasExplicitValue = Object.prototype.hasOwnProperty.call(result, row.config_key);
+        if (!hasExplicitValue || row.guild_id == guildId) {
           result[row.config_key] = row.config_value;
         }
       }
-      // Fall back to key name for any that weren't found
+      // Fall back to key name only if the key truly has no rows at all.
       for (const k of key) {
-        if (!result[k]) {
+        if (!Object.prototype.hasOwnProperty.call(result, k)) {
           log(`Config key not found: '${k}' (guild ${guildId})`, { show: true });
           result[k] = k;
         }
@@ -359,10 +360,11 @@ export async function getConfigValue(connection, key, guildId = 1) {
       `SELECT config_value FROM config WHERE config_key = ? AND guild_id IN (1, ?) ORDER BY (guild_id = ?) DESC LIMIT 1`,
       [key, guildId, guildId]
     );
-    if (!configRows[0]?.config_value) {
+    if (!configRows[0]) {
       log(`Config key not found: '${key}' (guild ${guildId})`, { show: true });
+      return key;
     }
-    return configRows[0]?.config_value || key;
+    return configRows[0].config_value ?? key;
   } catch (error) {
     log(`Config lookup failed for key '${Array.isArray(key) ? key.join(', ') : key}': ${error?.stack ?? error}`, { show: true });
     if (Array.isArray(key)) {

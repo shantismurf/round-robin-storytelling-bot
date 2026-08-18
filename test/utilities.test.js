@@ -7,6 +7,7 @@ import {
   replaceTemplateVariables,
   chunkEntryContent,
   createFailureThrottle,
+  getConfigValue,
 } from '../utilities.js';
 
 describe('splitAtParagraphs', () => {
@@ -147,5 +148,39 @@ describe('chunkEntryContent', () => {
     assert.equal(chunks.length, 2);
     assert.equal(chunks[0].start, 0);
     assert.equal(chunks[1].end, content.length);
+  });
+});
+
+describe('getConfigValue', () => {
+  test('treats an empty-string guild config as a valid unset value instead of a missing key', async () => {
+    const connection = {
+      execute: async (sql, params) => {
+        if (sql.includes('IN (')) {
+          return [[{ config_key: 'cfgAdminRoleName', config_value: '', guild_id: 1509192156491940011 }]];
+        }
+        return [[{ config_value: '' }]];
+      }
+    };
+
+    const value = await getConfigValue(connection, 'cfgAdminRoleName', 1509192156491940011);
+    assert.equal(value, '');
+  });
+
+  test('preserves empty-string values when fetching multiple keys', async () => {
+    const connection = {
+      execute: async (sql, params) => {
+        if (sql.includes('IN (')) {
+          return [[
+            { config_key: 'cfgAdminRoleName', config_value: '', guild_id: 1509192156491940011 },
+            { config_key: 'cfgStoryFeedChannelId', config_value: '123', guild_id: 1509192156491940011 },
+          ]];
+        }
+        return [[{ config_value: '' }]];
+      }
+    };
+
+    const values = await getConfigValue(connection, ['cfgAdminRoleName', 'cfgStoryFeedChannelId'], 1509192156491940011);
+    assert.equal(values.cfgAdminRoleName, '');
+    assert.equal(values.cfgStoryFeedChannelId, '123');
   });
 });
