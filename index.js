@@ -201,13 +201,17 @@ async function main() {
         log(formatCommandLog(interaction), { show: true, guildName: interaction?.guild?.name });
         const command = interaction.client.commands.get(interaction.commandName);
         if (command) {
-          // Block all commands (except /storyadmin setup) if the bot has not been configured for this server
-          const isSetupCommand = interaction.commandName === 'storyadmin'
-            && interaction.options.getSubcommand(false) === 'setup';
-          if (!isSetupCommand && interaction.guild) {
+          // Block all commands (except /storyadmin setup and any `help` subcommand) if the
+          // bot has not been configured for this server. `help` stays open so a stuck admin
+          // has a working escape hatch to documentation instead of hitting this same wall
+          // no matter what they try.
+          const subcommand = interaction.options.getSubcommand(false);
+          const isSetupCommand = interaction.commandName === 'storyadmin' && subcommand === 'setup';
+          const isHelpCommand = subcommand === 'help';
+          if (!isSetupCommand && !isHelpCommand && interaction.guild) {
             const configured = await isGuildConfigured(connection, interaction.guild.id);
             if (!configured) {
-              log(`Setup required: blocked /${interaction.commandName}`, { show: true, guildName: interaction.guild.name });
+              log(`Setup required: blocked /${interaction.commandName}${subcommand ? ` ${subcommand}` : ''}`, { show: true, guildName: interaction.guild.name });
               const isAdmin = interaction.member?.permissions?.has('ManageGuild');
               const msgKey = isAdmin ? 'txtSetupRequiredAdmin' : 'txtSetupRequiredUser';
               const msg = await getConfigValue(connection, msgKey, 1);
