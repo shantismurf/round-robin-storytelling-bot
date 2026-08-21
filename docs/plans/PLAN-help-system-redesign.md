@@ -28,7 +28,7 @@ It's been edited piecemeal since (confirmed by measuring actual content, not jus
 |---|---|
 | Inconsistent structure | Pages 1, 2, 8 use nested sub-sections (`children` in `PAGE_DEFS`); pages 4 and 5 cram 8–11 distinct concepts into one wall of bullets under a single header instead |
 | Duplicated content | Pen Name, Notifications, and Turn Privacy are each explained from scratch on 2–3 different pages with slightly different wording, no cross-links — drift risk every time one copy gets updated and the others don't |
-| Fragile lookup | `handleWriterHelp`/`handleAdminHelp` reach into `PAGE_DEFS[6]`/`PAGE_DEFS[7]` by raw array index, trusting a comment to stay accurate. Reordering `PAGE_DEFS` silently breaks this with no error. |
+| Fragile lookup | `handleWriterHelp`/`handleAdminHelp` reach into `PAGE_DEFS[6]`/`PAGE_DEFS[7]` by raw array index, trusting a comment to stay accurate. Reordering `PAGE_DEFS` silently breaks this with no error. The same fragility runs through the config keys themselves — `txtHelp1*`...`txtHelp8*` bake page *position* into ~100 key names, so splitting/reordering pages (exactly what this plan does to pages 4 and 5) either forces a mass rename or leaves the numbering meaningless. **Decision: move to content-based naming for both** — see Naming Convention below. |
 | Doesn't fix the actual problem | `txtHelp8Setup` just says "run `/storyadmin setup`" — never explains it opens a multi-step panel needing Configure Feed Channels → pick a channel → Save. Someone stuck exactly like alegria, now able to reach this page, still wouldn't learn what to do. |
 | No page-to-page flow | `/story help`'s select menu has no "back to menu" or next/prev between pages — dead end after one selection |
 
@@ -99,11 +99,11 @@ only ever consulted in interactive mode:
 ```js
 {
   key: 'admin-commands',           // stable lookup — no more PAGE_DEFS[7] guessing
-  titleKey: 'txtHelp8Title',
+  titleKey: 'txtHelpAdminCmdsTitle',
   entries: [
     {
-      lbl: 'lblHelp8Setup', txt: 'txtHelp8Setup',
-      action: { labelKey: 'btnHelp8OpenSetup', customId: 'storyadmin_setup_open' }, // interactive-only
+      lbl: 'lblHelpAdminCmdsSetup', txt: 'txtHelpAdminCmdsSetup',
+      action: { labelKey: 'btnHelpAdminCmdsOpenSetup', customId: 'storyadmin_setup_open' }, // interactive-only
       children: [ /* ... */ ],
     },
   ],
@@ -111,6 +111,39 @@ only ever consulted in interactive mode:
 ```
 
 `handleWriterHelp`/`handleAdminHelp` look up by `key`, not index.
+
+### Naming Convention
+
+Config keys move from position-based (`txtHelp1*`...`txtHelp8*`) to content-based, following this
+repo's existing `[type][Location][Purpose][Name]` rule (`docs/reference/config_roadmap.md`) — `Location`
+becomes a semantic topic segment instead of a page number, so it survives pages being split, merged,
+or reordered without ever needing a mass rename again.
+
+Representative mapping for the current 8 pages (final segmentation for the split pages 4/5 gets
+finalized during Phase 3's content draft, not here — the *rule* is what's being locked in now):
+
+| Old prefix | New `Location` segment | Page |
+|---|---|---|
+| `txtHelp1*` / `lblHelp1*` | `HelpOverview` | Overview |
+| `txtHelp2*` / `lblHelp2*` | `HelpMyStories` | Your Stories & Turns |
+| `txtHelp3*` / `lblHelp3*` | `HelpCreateStory` | Create a New Story — General Options |
+| `txtHelp4*` / `lblHelp4*` | `HelpCreateStory` + new sub-topic segments once split (Phase 3) | Join Options & Metadata |
+| `txtHelp5*` / `lblHelp5*` | `HelpManageStory` + new sub-topic segments once split (Phase 3) | Managing a Story |
+| `txtHelp6*` / `lblHelp6*` | `HelpReadEdit` | Reading & Editing |
+| `txtHelp7*` / `lblHelp7*` | `HelpWriterCmds` | Writer Command Reference |
+| `txtHelp8*` / `lblHelp8*` | `HelpAdminCmds` | Admin Command Reference |
+
+e.g. `txtHelp8SetupChannels` → `txtHelpAdminCmdsSetupChannels`; `lblHelp1PenName` → `lblHelpOverviewPenName`.
+
+**Migration mechanics — this is not a simple find-and-replace in the SQL files.** `sync-config.js` is
+additive-only: it inserts keys missing from the DB and updates changed values, but explicitly never
+deletes a DB key that's no longer present in the config files (confirmed by reading it — it just logs
+"note: N key(s) in DB not found... will not be touched"). Renaming ~100 keys by editing
+`config_help.sql` alone would leave every old numbered key as a permanent orphan row in the live
+`config` table — silent drift, the exact thing this plan exists to stop. The rename needs an explicit
+one-time migration (`db/migrations/NNN_rename_help_keys.sql`, this repo's existing mechanism for
+one-shot DB changes, tracked so it runs once) that deletes the old key names after the new ones are
+confirmed synced. This lands as part of Phase 3.
 
 ### Two renderers, one data source
 
@@ -160,10 +193,13 @@ restructuring, not the copy itself:
 
 ## Open Risks
 
-- **Forum + Components V2 compatibility is unverified.** Phase 0 below tests this on one page before
-  committing the whole FAQ sync to it. If it doesn't work, the forum sync may need to stay on classic
-  embeds while interactive help moves to Components V2 — the dual-render-mode architecture above
-  already supports that split if it comes to it.
+- **Forum + Components V2 compatibility — mostly de-risked, not fully confirmed.** Traced
+  `GuildForumThreadManager.create()` in the installed discord.js source: it runs the `message` payload
+  through the same generic `MessagePayload.create().resolveBody()` pipeline as any other channel send,
+  with no forum-specific filtering of `flags`/`components` — identical code path to `channel.send()`.
+  No client-side blocker found. What source can't confirm is a server-side-only restriction on
+  Discord's end. Phase 0 below is now a cheap final check rather than an open question, and stays in
+  the plan for that reason.
 - **40-component budget per message.** Comfortable for current page sizes, but splitting pages 4/5
   into more entries adds components (each entry ≈ 1 TextDisplay, more with `children`). Worth a
   quick per-page component count once the content split is drafted, not just a character count.
@@ -187,7 +223,10 @@ mirroring `_entryRenderer.js`. `/storyadmin help` / `/mystory help` unaffected (
 jumps) except for getting the new visual treatment.
 
 **Phase 3 — Content restructuring.** Split pages 4 & 5, de-duplicate the repeated concepts, fix
-`txtHelp8Setup`. All wording drafted for review before it goes into `config_help.sql`.
+`txtHelp8Setup`, and rename all `txtHelp1*`...`txtHelp8*` keys to the content-based convention (see
+Naming Convention above). Includes the one-time `db/migrations/NNN_rename_help_keys.sql` that deletes
+the old key names — `sync-config.js` won't do this on its own. All wording drafted for review before
+it goes into `config_help.sql`.
 
 **Phase 4 — Action accessories.** Wire the "Open Setup Panel" button (and any other clear candidates
 found during Phase 3) into the interactive-only render path.
@@ -196,8 +235,8 @@ found during Phase 3) into the interactive-only render path.
 using Phase 0's confirmed approach. Re-evaluate thread count against the Phase 3 page split.
 
 **Phase 6 — Docs sync.** Update `docs/reference/system_roadmap.md` (new render functions),
-`docs/reference/config_roadmap.md` (any new/changed keys), `docs/reference/ux_roadmap.md` (new nav
-flow). Move this plan to `docs/plans/completed/` once shipped.
+`docs/reference/config_roadmap.md` (full key rename from Phase 3, plus any newly split keys),
+`docs/reference/ux_roadmap.md` (new nav flow). Move this plan to `docs/plans/completed/` once shipped.
 
 ---
 
