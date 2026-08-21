@@ -2,7 +2,7 @@
 
 Status: Pending
 Created: 2026-07-26 (drafted in an earlier Claude Code chat session; committed to the repo on this date)
-Last Updated: 2026-08-21 (Part 1 shipped)
+Last Updated: 2026-08-21 (Parts 1 and 1b shipped)
 
 Design finalized in chat, implementation not started.
 
@@ -209,7 +209,24 @@ builder function itself.
 
 ---
 
-## Part 1b — Move Manage Users onto the manage panel
+## Part 1b — Move Manage Users onto the manage panel ✅ Implemented 2026-08-21
+
+**Shipped as designed**, with the two-step flow landing as: click "Manage Users" (persistent row,
+admin-only — hidden entirely for non-admin creators, not shown-disabled, since `/storyadmin user`
+requires `checkIsAdmin` while `/story manage` itself allows creator-or-admin) → a modal with a
+`StringSelectMenu` of the story's current active/paused writers (built from `story_writer`'s
+already-stored `discord_display_name`, no extra Discord API fetch needed) → submitting it opens the
+existing Manage User panel, unchanged.
+
+**Refactor to enable reuse:** extracted `handleManageUser`'s body (from the story lookup onward)
+into `openManageUserPanel(connection, interaction, storyId, targetUserId, guildId,
+writerDisplayName?)` in `story/_manageUser.js` — called by both the original `/storyadmin user`
+slash command (unchanged, kept as a power-user shortcut per the plan's own open choice) and the new
+panel button. The actual writer-management logic (pause/unpause/remove/pen name/etc.) needed no
+changes at all, as anticipated.
+
+**Server-side admin re-check** on both the button click and the modal submit, not just the
+client-side hide — a hidden button is not an authorization boundary on its own.
 
 Folded in from a standalone TODO.md item. Currently `/storyadmin user` (`commands/storyadmin.js`,
 routes to `story/_manageUser.js`) is a separate slash command taking `story_id` and `user` as
@@ -408,8 +425,7 @@ need to trim.
 
 1. ✅ Warnings → Checkbox Group conversion (small, proves the pattern, no schema changes) — done 2026-08-21
 2. ✅ Panel display rework (Settings/Metadata split, Components V2) — done 2026-08-21, unblocks everything else
-3. Move Manage Users onto the manage panel (Part 1b) — independent of the rest, but natural to
-   do alongside Part 1 since both touch `buildManageMessage()`'s button rows
+3. ✅ Move Manage Users onto the manage panel (Part 1b) — done 2026-08-21
 4. Ground Rules: server-vocabulary setup modal + parser/validator
 5. Ground Rules: story-level checkbox field in `buildMetadataModal()`
 6. Ground Rules: `story.ground_rules` column + stable-slug generation + storage

@@ -1,4 +1,4 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
@@ -8,7 +8,8 @@ import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm,
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
 import { applyPauseActions, applyResumeActions, handleReopenStory } from './_managePauseResume.js';
-import { STORY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
+import { openManageUserPanel } from './_manageUser.js';
+import { STORY_STATUS, TURN_STATUS, STORY_MODE, WRITER_STATUS } from '../constants.js';
 
 const pendingManageData = new Map();
 
@@ -39,7 +40,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
 
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
+  const row1Buttons = [
     new ButtonBuilder()
       .setCustomId('story_manage_entries_open')
       .setLabel(cfg.btnManageEntries)
@@ -53,7 +54,19 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setLabel(replaceTemplateVariables(cfg.btnReviewTags, { count: state.pendingTagCount || 0 }))
       .setStyle(ButtonStyle.Primary)
       .setDisabled(!state.pendingTagCount),
-  ));
+  ];
+  // Admin-only, hidden entirely rather than shown-disabled: /storyadmin user (the command this
+  // button replaces the argument-typing for) requires checkIsAdmin, but /story manage itself
+  // allows creator-or-admin — a non-admin creator has no valid reason to see this at all.
+  if (state.isAdmin) {
+    row1Buttons.push(
+      new ButtonBuilder()
+        .setCustomId('story_manage_users_open')
+        .setLabel(cfg.btnManageUsers)
+        .setStyle(ButtonStyle.Primary)
+    );
+  }
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(...row1Buttons));
 
   const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -154,6 +167,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtReopenStory', 'txtStoryCloseConfirm', 'btnCloseConfirm',
       'txtAdminConfigSaved', 'errProcessingRequest', 'txtActionCancelled', 'txtActionSessionExpired',
       'txtManageNotAuthorized', 'txtStoryNotFound',
+      'btnManageUsers', 'txtManageUsersPickModalTitle', 'lblManageUsersPickSelect', 'txtManageUsersNoWriters',
     ], guildId);
 
     Object.assign(cfg, extraCfg);
@@ -206,6 +220,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
+      isAdmin,
       guildName: interaction.guild.name,
       activeTurn,
       delayHours: null,
@@ -376,6 +391,47 @@ async function handleManageButton(connection, interaction) {
 
     } else if (customId === 'story_manage_entries_open') {
       await handleManageEntriesButton(connection, interaction, state);
+
+    } else if (customId === 'story_manage_users_open') {
+      // Re-check admin status server-side — the button is hidden for non-admin creators, but
+      // hiding a button client-side is not an authorization boundary on its own.
+      if (!state.isAdmin) {
+        await interaction.reply({ content: await getConfigValue(connection, 'txtAdminOnly', interaction.guild.id), flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const [writerRows] = await connection.execute(
+        `SELECT discord_user_id, discord_display_name, sw_status FROM story_writer
+         WHERE story_id = ? AND sw_status IN (?, ?) ORDER BY discord_display_name`,
+        [state.storyId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
+      );
+      if (writerRows.length === 0) {
+        await interaction.reply({ content: cfg.txtManageUsersNoWriters, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      // Discord select menus cap at 25 options — realistic round-robin story sizes are well
+      // under that, but truncate defensively rather than error if one somehow isn't.
+      const pickable = writerRows.slice(0, 25);
+      if (writerRows.length > 25) {
+        log(`handleManageButton: story ${state.storyId} has ${writerRows.length} writers, truncating picker to 25`, { show: true, guildName: interaction?.guild?.name });
+      }
+      const pickerSelect = new StringSelectMenuBuilder()
+        .setCustomId('writer')
+        .setRequired(true)
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(pickable.map(w => ({
+          label: w.discord_display_name || w.discord_user_id,
+          value: w.discord_user_id,
+          description: w.sw_status === WRITER_STATUS.PAUSED ? cfg.txtMyStoryManagePausedStatus : cfg.txtMyStoryManageActiveStatus,
+        })));
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_manage_users_pick_modal')
+          .setTitle(cfg.txtManageUsersPickModalTitle)
+          .addLabelComponents(
+            new LabelBuilder().setLabel(cfg.lblManageUsersPickSelect).setStringSelectMenuComponent(pickerSelect)
+          )
+      );
 
     } else if (customId === 'story_manage_review_tags') {
       await handleReviewTags(connection, interaction, state);
@@ -565,6 +621,20 @@ async function handleManageModalSubmit(connection, interaction) {
       state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
       state.characters = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
       state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
+
+    } else if (customId === 'story_manage_users_pick_modal') {
+      // Opens a new, separate ephemeral panel (the existing Manage User panel) rather than
+      // re-rendering the story-manage panel — early return, skips the shared re-render tail below.
+      if (!state.isAdmin) {
+        return await interaction.reply({ content: await getConfigValue(connection, 'txtAdminOnly', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      }
+      const targetUserId = interaction.fields.getStringSelectValues('writer')?.[0];
+      if (!targetUserId) {
+        return await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await openManageUserPanel(connection, interaction, state.storyId, targetUserId, interaction.guild.id);
+      return;
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
