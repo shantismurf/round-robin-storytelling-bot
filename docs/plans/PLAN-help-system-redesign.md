@@ -28,7 +28,7 @@ It's been edited piecemeal since (confirmed by measuring actual content, not jus
 |---|---|
 | Inconsistent structure | Pages 1, 2, 8 use nested sub-sections (`children` in `PAGE_DEFS`); pages 4 and 5 cram 8–11 distinct concepts into one wall of bullets under a single header instead |
 | Duplicated content | Pen Name, Notifications, and Turn Privacy are each explained from scratch on 2–3 different pages with slightly different wording, no cross-links — drift risk every time one copy gets updated and the others don't |
-| Fragile lookup | `handleWriterHelp`/`handleAdminHelp` reach into `PAGE_DEFS[6]`/`PAGE_DEFS[7]` by raw array index, trusting a comment to stay accurate. Reordering `PAGE_DEFS` silently breaks this with no error. The same fragility runs through the config keys themselves — `txtHelp1*`...`txtHelp8*` bake page *position* into ~100 key names, so splitting/reordering pages (exactly what this plan does to pages 4 and 5) either forces a mass rename or leaves the numbering meaningless. **Decision: move to content-based naming for both** — see Naming Convention below. |
+| Fragile lookup | `handleWriterHelp`/`handleAdminHelp` reach into `PAGE_DEFS[6]`/`PAGE_DEFS[7]` by raw array index, trusting a comment to stay accurate. Reordering `PAGE_DEFS` silently breaks this with no error. The same fragility runs through the config keys themselves — `txtHelp1*`...`txtHelp8*` bake page *position* into ~100 key names, so reordering, merging, or renaming pages at all forces either a mass rename or leaves the numbering meaningless. **Decision: move to content-based naming for both** — see Naming Convention below. |
 | Doesn't fix the actual problem | `txtHelp8Setup` just says "run `/storyadmin setup`" — never explains it opens a multi-step panel needing Configure Feed Channels → pick a channel → Save. Someone stuck exactly like alegria, now able to reach this page, still wouldn't learn what to do. |
 | No page-to-page flow | `/story help`'s select menu has no "back to menu" or next/prev between pages — dead end after one selection |
 
@@ -67,9 +67,26 @@ in-Discord interactive help.
 
 ## Design Principles
 
-1. **Progressive disclosure, not walls of text.** People arrive at help mid-task, usually already
-   confused. One focused idea per screen, not 8–11 concepts under one header. This is the fix for
-   pages 4 and 5 specifically.
+1. **Match structure to content shape — don't uniformly maximize separation.** A first pass of this
+   plan assumed "split into more labeled entries" was the fix wherever a section felt dense. It isn't,
+   for everything. Three shapes show up across the help content, and each wants different treatment:
+   - **Field/glossary lists** — independent, parallel facts with no order or dependency between them
+     (Metadata's Rating/Warnings/Dynamic/etc. on page 4, the 9 story-creation settings on page 3, the
+     11 editable settings on page 5). Boxing each one separately adds scroll cost with no comprehension
+     gain — there's nothing to lose by reading them in any order. These stay **compact**: one tight,
+     well-formatted block (clean label:value lines), not a `Separator` between every item. Components V2
+     doesn't mean "always split."
+   - **Procedures/workflows** — order matters, and skipping a step is a real failure mode (Setup on
+     page 8 is the clear case — it's the section directly tied to the incident). These are where
+     separation earns its keep, and probably deserve to go further than boxes: actual numbered steps,
+     since this is the one place a numbered marker encodes something true about the content rather than
+     decorating it.
+   - **Options/decision sets** — the reader is comparing mutually exclusive alternatives (Normal vs.
+     Quick vs. Slow mode on page 2, the grouped admin-control capabilities on page 5). Moderate
+     separation, so each option reads as distinct from its neighbors — not as heavy as a workflow, not
+     as compact as a glossary.
+   This changes the plan for pages 3, 4, and 5 specifically — see Content Restructuring Targets below,
+   corrected from the original "split everything" version.
 2. **Two render surfaces need two modes, from one source of truth.**
    - **Interactive** (`/story help`, `/storyadmin help`, `/mystory help`) — ephemeral, in the
      admin's own guild, can safely include *actionable* accessories (e.g., a button that actually
@@ -127,8 +144,8 @@ finalized during Phase 3's content draft, not here — the *rule* is what's bein
 | `txtHelp1*` / `lblHelp1*` | `HelpOverview` | Overview |
 | `txtHelp2*` / `lblHelp2*` | `HelpMyStories` | Your Stories & Turns |
 | `txtHelp3*` / `lblHelp3*` | `HelpCreateStory` | Create a New Story — General Options |
-| `txtHelp4*` / `lblHelp4*` | `HelpCreateStory` + new sub-topic segments once split (Phase 3) | Join Options & Metadata |
-| `txtHelp5*` / `lblHelp5*` | `HelpManageStory` + new sub-topic segments once split (Phase 3) | Managing a Story |
+| `txtHelp4*` / `lblHelp4*` | `HelpCreateStory` | Join Options & Metadata |
+| `txtHelp5*` / `lblHelp5*` | `HelpManageStory` | Managing a Story |
 | `txtHelp6*` / `lblHelp6*` | `HelpReadEdit` | Reading & Editing |
 | `txtHelp7*` / `lblHelp7*` | `HelpWriterCmds` | Writer Command Reference |
 | `txtHelp8*` / `lblHelp8*` | `HelpAdminCmds` | Admin Command Reference |
@@ -179,23 +196,36 @@ Not final wording — every user-facing string change needs sign-off before land
 `config_help.sql`, per this repo's zero-hardcoding rule. This is the list of *what* needs
 restructuring, not the copy itself:
 
-1. **Split page 4** (`txtHelp4Metadata`) into a `children` tree — Rating, Warnings, Dynamic,
-   Relationships, Characters, Tags, Summary, Scene Break Divider each get their own labeled entry,
-   matching the pattern already used elsewhere.
-2. **Split page 5** (`txtHelp5WhatEdit`) the same way — each of the 11 editable settings becomes its
-   own entry instead of one bulleted wall.
-3. **De-duplicate, don't re-explain:** Pen Name, Notifications, and Turn Privacy each need exactly
+**Corrected from an earlier draft of this plan**, which called for splitting pages 4 and 5 into one
+box per field. That was the wrong default — see Design Principle 1 above. Both are glossaries, not
+workflows, so the fix is compaction, not fragmentation.
+
+1. **Tighten page 4** (`txtHelp4Metadata`) into one compact, well-formatted block — Rating, Warnings,
+   Dynamic, Relationships, Characters, Tags, Summary, Scene Break Divider as clean label:value lines in
+   a single `TextDisplay`, not eight separate boxes. Better formatting than today's run-on paragraph,
+   same density.
+2. **Tighten page 5's `txtHelp5WhatEdit`** the same way — 11 editable settings as one compact list, not
+   11 entries. The bigger fix here is item 3 below: most of these settings shouldn't be re-explained at
+   all, just pointed back to page 3.
+3. **Also reclassify page 3** (`txtHelp3*`, 9 story-creation settings) — not originally flagged, but
+   it's the same glossary shape as pages 4 and 5. Under this repo's current classic-embed rendering
+   each setting already gets its own `##` header, which is cheap; naively porting that to one bordered
+   Components V2 box per setting would make it *more* bulky than today, not less. Keep this one compact
+   too.
+4. **De-duplicate, don't re-explain:** Pen Name, Notifications, and Turn Privacy each need exactly
    one canonical explanation. Where a second page needs the concept, cross-reference (a "see also"
    line, or — since we now have Section accessories — a jump button in interactive mode) instead of
-   restating it with different wording.
-4. **Fix `txtHelp8Setup`** to actually describe the panel flow: run the command → a panel opens →
-   Configure Feed Channels (pick a channel — required) → click Save Settings to apply. This is the
-   one content fix directly tied to the incident that started this review.
-5. **Re-evaluate page granularity.** Splitting 4 and 5 by topic may mean more, smaller top-level
-   pages rather than deeper nesting within 8 pages — fits the "one-stop wiki" framing better (a wiki
-   with focused articles, not 8 long ones) and the select menu has headroom (8 of 25 options used).
-   This changes the FAQ forum's thread count too. Worth deciding once the content split is drafted,
-   not before.
+   restating it with different wording. This absorbs most of what page 5's `txtHelp5WhatEdit` was doing
+   — those settings are already explained on page 3; page 5 should point back, not restate.
+5. **Fix `txtHelp8Setup`** to actually describe the panel as a real procedure: run the command → a
+   panel opens → Configure Feed Channels (pick a channel — required) → click Save Settings to apply.
+   This is the workflow case — numbered steps, real separation, the action button. This is the one
+   content fix directly tied to the incident that started this review.
+6. **Page 2's mode comparison** (Normal/Quick/Slow, already using `children` today) is the
+   options/decision-set case — keep the existing per-mode separation, it's doing real work there.
+7. **Re-evaluate page granularity** once the above is drafted — with 4 and 5 staying compact rather
+   than exploding into many entries, the case for more top-level pages is weaker than originally
+   assumed. Revisit this after the content pass, not before.
 
 ---
 
