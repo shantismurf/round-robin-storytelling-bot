@@ -2,7 +2,7 @@
 
 Status: Pending
 Created: 2026-07-26 (drafted in an earlier Claude Code chat session; committed to the repo on this date)
-Last Updated: 2026-08-21 (cross-referenced against the help-system redesign)
+Last Updated: 2026-08-21 (Part 1 rebuilt as Components V2, not a bigger classic embed)
 
 Design finalized in chat, implementation not started.
 
@@ -42,47 +42,129 @@ panels until the display is reworked.
 
 ---
 
-## Part 1 — Panel Display Rework (Settings / Metadata split)
+## Part 1 — Panel Display Rework (Components V2, Settings / Metadata split)
 
-Two groups only, per decision: **Settings** and **Metadata**.
+**Revised 2026-08-21 — rebuilt as Components V2, not a bigger classic embed.** Original design
+extended `EmbedBuilder` with an `activeGroup` param; superseded because the real blocker here is
+the 25-field embed cap itself (`/story manage` is at 21/25 today), not just which fields show when.
+Components V2's `TextDisplay` has no analogous field-count ceiling, and modals are unaffected
+either way — see the "Can Components V2 replace modals?" note below. Decided against doing the
+small version now and a bigger rebuild later: this panel gets rebuilt once, correctly.
 
-### Proposed field grouping
+### What stays the same, what changes
 
-**Settings** (mechanical/structural):
-- Title & Summary
-- Mode, Writer Order
-- Turn Length, Timeout Reminder, Delay Start, Max Writers
-- Show Authors, Turn Privacy, Scene Break Divider
-- *(story add only)* Join Settings — pen name, join privacy, notifications
+**Modals are untouched.** `TextInputBuilder`, `RadioGroupBuilder`, and `CheckboxGroupBuilder` are
+all exclusively modal-bound — confirmed against `@discordjs/builders` types: `ModalBuilder`'s own
+component type is `(ActionRowBuilder<ModalActionRowComponentBuilder> | LabelBuilder |
+TextDisplayBuilder)[]`, and `LabelBuilder` (which wraps radio/checkbox/select) never appears as a
+valid child of `ContainerComponentBuilder` or anywhere outside `ModalBuilder`. So every existing
+modal — Title & Summary, Story Info (mode/order/show-authors/turn-privacy/scene-break), Settings
+(turn length/reminder/delay/max writers), Metadata (dynamic/rating/warnings), Tags, My Settings
+(join) — stays exactly as built. **What changes is `buildStoryEmbed()`/`buildStoryAddMessage()`/
+`buildManageMessage()`** — the read-only summary panel and its button rows, rebuilt as a
+`ContainerBuilder` instead of an `EmbedBuilder`.
+
+### Field grouping (corrected from the original list)
+
+**Settings** (mechanical/structural — reuses the existing section-break groupings already in
+`buildStoryEmbed()`, just converted from fake `sectionLine`-padded embed fields to real
+`TextDisplay`+`Separator` sub-clusters):
+- *(top, unlabeled)* Title, Summary
+- *("Info" cluster)* Mode, Writer Order, Show Authors, Turn Privacy, Scene Break Divider, **Rating**
+- *("Settings" cluster)* Turn Length, Timeout Reminder, Delay Start, Max Writers
+- *("Join" cluster, add only)* Pen Name, Join Privacy, Notifications — folded in per decision below
 
 **Metadata** (AO3-style descriptive):
-- Rating, Dynamic, Warnings
-- Main Pairing, Other Relationships, Characters, Tags
+- *("Meta" cluster)* Dynamic, Warnings, **Rating** (shown again — see below), Main Pairing, Other
+  Relationships, Characters, Tags
 - Ground Rules (new — see Part 2)
 
-**Open decision to confirm before building:** Rating currently lives in the "always shown"
-14-field block in `buildStoryEmbed()` (`story/_metadataModals.js` line ~109), not the
-metadata-only block. Moving it into Metadata is a recategorization, not just a display change
-— confirm this is wanted. Similarly, Join Settings only applies to `/story add` (not manage);
-current assumption is it folds into the Settings group for the add flow specifically, since
-`isManage` already branches this in `buildStoryEmbed()`.
+**Resolved: Rating displays on both tabs.** Rating drives real mechanics (`_migration.js`'s thread
+routing between restricted/unrestricted feed channels on a rating change) — that's why it belongs
+in Settings, not with the purely descriptive Metadata fields. But it's edited via the Metadata
+modal, together with Dynamic and Warnings — no reason to split that modal apart over a display
+change. So: Settings tab shows Rating's value because it matters there mechanically; Metadata tab
+shows it too because that's where the edit button lives. One read-only value line duplicated is a
+trivial cost — nothing like the hand-authored-prose duplication problem found in the help-content
+audit.
 
-### UI mechanism
+**Resolved: Join Settings folds into the Settings tab** for `/story add` (manage doesn't have it —
+you don't rejoin your own story). Two tabs everywhere, not three; Join Settings are mechanical
+("how you personally participate"), same category as everything else in Settings.
 
-Two-group is a binary choice — use a **button pair, not a select menu**: `[Settings]` /
-`[Metadata]`, with the currently-active view visually distinct (e.g. `ButtonStyle.Success` for
-active, `ButtonStyle.Secondary` for inactive) so "you are here" is unambiguous at a glance.
-This is clearer than a dropdown for a 2-option choice and costs only 1 action row.
+### Layout
 
-The embed re-renders to show only the active group's fields when toggled. This is what frees
-the room needed for Ground Rules and any future fields — collapsing ~21 always-visible fields
-down to ~7-10 per view.
+```
+┌─ Container ──────────────────────────────────────────┐
+│ [Settings] [Metadata]              ← tab toggle row   │
+│                                                        │
+│ Title: ...                          ← TextDisplay,    │
+│ Summary: ...                          top, unlabeled  │
+│ [Edit Title & Summary]              ← ActionRow       │
+│ ─────────────────────               ← Separator       │
+│ 🚦 Mode  🎲 Order  📑 Show Authors                     │
+│ 🔑 Turn Privacy  ⁘ Scene Break  🛡️ Rating              │
+│ [Edit Story Info]                   ← ActionRow       │
+│ ─────────────────────               ← Separator       │
+│ ⌛ Turn Length  ⏰ Reminder                             │
+│ 🫸 Delay Start  #️⃣ Max Writers                         │
+│ [Edit Settings]                     ← ActionRow       │
+│ ─────────────────────  (add only)                     │
+│ ✒️ Pen Name  🔒 Join Privacy  💬 Notifications          │
+│ [Edit My Settings]      (add only) ← ActionRow         │
+│                                                        │
+│ ═══════════════════ (persistent, both tabs) ══════════│
+│ [Manage Entries] [Manage Turns] [Review Tags (N)]      │
+│ [Open/Close Joins] [Pause/Resume] [Close/Reopen]       │
+│ [Save Settings]                                        │
+└────────────────────────────────────────────────────────┘
+```
+
+Metadata tab swaps the middle section for its own clusters (Dynamic/Warnings/Rating + `[Edit
+Metadata]`, then Pairings/Characters/Tags + `[Edit Tags]`); the persistent bottom row set doesn't
+change with the tab, since none of those are "edit a currently-shown field" actions — they're
+story-lifecycle actions (Manage Entries, Manage Turns, Review Tags, Joins, Pause/Resume,
+Close/Reopen, Save Settings). `/story add` has no persistent row (just `[Create Story]`) and no
+Manage Entries/Turns/Joins/etc., since those only apply to an existing story.
+
+Each field cluster follows the compact-glossary pattern already established for the help-system
+redesign: one `TextDisplay` with tight label:value lines, not one box per field — these are
+independent facts (content shape: glossary), not a sequence, so per that plan's Design Principle 1,
+boxing each one separately would add scroll cost with no comprehension gain. Each cluster's edit
+button is its own `TextDisplay` + trailing `ActionRow` (not a `Section` accessory) — same
+verified pattern as the help redesign's Setup button, for the same reason: `Section`'s accessory
+is side-by-side-only and squeezes the text.
+
+The existing `sectionLine`-padded fake-header embed fields (e.g. `{ name: sectionLine + ' ' +
+cfg.txtStoryAddSectionBreakInfo + ' ' + sectionLine, value: '​' }`, using a zero-width space
+because classic embed fields can't have an empty value) go away entirely — a `TextDisplay` heading
+line doesn't need that workaround.
+
+### Component budget check
+
+Estimated for `/story manage`, Settings tab active (busiest realistic case, conservatively
+assuming nested children count individually toward the 40-component cap — unconfirmed either way
+per the help-redesign plan's Open Risks): tab-toggle row (~3) + 3 field clusters, each
+`TextDisplay` + `ActionRow` + `Separator` (~5 each, ~15 total) + persistent action rows (Manage
+Entries/Turns/Review Tags, Joins/Pause/Close, Save Settings — ~9) + Container wrapper (1) ≈ 28.
+Comfortable headroom under 40 even in the conservative interpretation.
+
+### `IsComponentsV2` is all-or-nothing per message
+
+Every caller of `buildStoryEmbed()`/`buildStoryAddMessage()`/`buildManageMessage()` needs its reply
+payload shape changed from `{ embeds: [...], components: [...] }` to `{ components: [...], flags:
+MessageFlags.IsComponentsV2 }` — confirmed against Discord's docs that this flag disables `content`
+and `embeds` entirely, no mixing. Every call site sending this panel needs auditing, not just the
+builder function itself.
 
 ### Files touched
-- `story/_metadataModals.js` — `buildStoryEmbed()` needs a `activeGroup` param to filter which
-  fields get added
-- `story/add.js`, `story/manage.js` — new button handlers for the group toggle, state needs an
-  `activeGroup` field (defaults to `'settings'`)
+- `story/_metadataModals.js` — `buildStoryEmbed()` becomes `buildStoryPanel()`, rebuilt as a
+  `ContainerBuilder` per the layout above, with an `activeGroup` param
+- `story/add.js`, `story/manage.js` — button handlers for the tab toggle and each cluster's edit
+  button (mostly relabeled/repositioned versions of the existing `story_*_open_*` handlers — the
+  modals they open don't change); state needs an `activeGroup` field (defaults to `'settings'`);
+  every `interaction.reply`/`editReply` call sending this panel updates to the Components V2
+  payload shape
 
 ---
 
@@ -94,13 +176,12 @@ required options. The idea: add a "Manage Users" button to `/story manage`
 (`story/manage.js`'s `buildManageMessage()`) that opens a two-step modal (pick the writer, then
 manage them) instead of requiring a standalone command with both params typed up front.
 
-**Doesn't actually require the Part 1 rework to fit.** The panel is at 5/5 *action rows* (the
-hard cap — no 6th row possible), but individual rows aren't at their own 5-button cap: row 2
-(Manage Entries, Manage Turns) has 2/5, row 4 (Join toggle, Pause/Resume, Close/Reopen) has 3/5,
-row 5 (Save Settings) has 1/5. A "Manage Users" button could slot into any of those today.
-Bundling it with Part 1 anyway since the panel's layout is already being touched, and because
-the Settings/Metadata split may change which row makes sense for it (e.g. row 2 next to Manage
-Entries/Manage Turns reads as the more natural home once the layout stabilizes).
+**Doesn't actually require the Part 1 rework to fit** — this was true under the original classic-
+embed design (row 2's 2/5, row 4's 3/5, row 5's 1/5 all had spare slots) and remains true under
+Part 1's Components V2 rebuild: the persistent action-row area (Part 1's component budget check
+already has headroom to ~40) has plenty of room for one more button. Bundling it with Part 1 anyway
+since the panel's layout is already being touched — natural home is next to Manage Entries/Manage
+Turns in the persistent row set, unaffected by which tab (Settings/Metadata) is active.
 
 ### Files touched
 - `story/manage.js` — new button (likely row 2, next to Manage Entries/Manage Turns),
