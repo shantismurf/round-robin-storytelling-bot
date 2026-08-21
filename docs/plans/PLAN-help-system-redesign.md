@@ -103,6 +103,60 @@ in-Discord interactive help.
    `/story help` should feel like that, not like re-running a command to see a different page.
 4. **Command entry points stay need-driven.** `/storyadmin help` and `/mystory help` jumping straight
    to their relevant page (no ToC detour) is correct and doesn't need to change.
+5. **Help isn't only a destination — it's sometimes a moment inside a flow.** Someone choosing Story
+   Mode while creating a story, someone about to click Close, someone blocked by the setup gate: each
+   needs the answer *right where they are*, not "go run a separate command and find the right page."
+   See Entry-Point Audit below for where this already works, and where it doesn't.
+
+---
+
+## Entry-Point Audit
+
+Before designing more contextual help, mapped where it's actually needed — every panel/modal/button in
+`docs/reference/ux_roadmap.md`'s flow map, checked against what inline explanatory text (`*Desc`,
+`*Note`, `*Hint` config keys) already exists there. Three access patterns showed up, and they need
+different treatment — not more "?" buttons sprinkled everywhere reflexively:
+
+1. **In-flow decision-point help** — someone is actively choosing between options. Already solved well
+   in most places: Story Mode/Writer Order/Show Authors/Turn Privacy each carry their own inline
+   description right in the radio group (`txtNormalModeDesc`, `txtOrderRandomDesc`, etc. —
+   `story/_metadataModals.js`) at the exact moment of the decision. The `/mystory` Leave/Pass/Pause
+   confirmations are the best examples in the whole bot — specific, consequence-aware wording
+   (`txtLeaveConfirmLastWriter`: *"You are the last active writer... Leaving will automatically close
+   the story."*). **No gap here — this is the bar everything else should match, not a place needing
+   more help content bolted on.**
+
+2. **Shallow inline coverage, fuller answer already exists on a help page nobody's pointed to.** The
+   Setup panel's field descriptions (`txtSetupEmbedDescFeed`, etc.) are one-liners — they say what a
+   field *is*, not why it's required or what happens if you skip it. This is already the incident and
+   already in this plan (Phase 3's `txtHelp8Setup` fix + the interactive-only action button).
+
+3. **Zero inline coverage, consequential action, answer exists only on a help page.**
+   - **Manage Turns panel** (Skip / Extend / Reassign) — no explanatory text anywhere on what each
+     button actually does; the only explanation is `txtHelp5AdminControls`, a help page most admins
+     using this panel have never opened.
+   - **`/story close` confirmation** — `txtStoryCloseConfirm` is just *"Are you sure you want to close
+     **[story_title]**?"* No mention that closing posts a full export, ends the current turn, keeps the
+     thread open for discussion, and is reversible via reopen. That's all on `txtHelp5Closing`,
+     unlinked. A first-time story creator clicking Close has no idea what they're actually agreeing to.
+   - **`/storyadmin skip` / `close` / `pause`** — per the flow map, these are *"Immediate actions; no
+     confirm panel."* This isn't a documentation gap, it's a missing confirmation step entirely — worth
+     flagging as its own small fix, separate from this plan's scope, not folded in here.
+
+**One structural asymmetry worth its own note, independent of content shape or access pattern:** both
+`/storyadmin setup` and `/story manage` use the identical "stage changes, nothing applies until you
+click Save" pattern. Setup has a loud, impossible-to-miss warning about this
+(`txtSetupModalSaveWarning`) — and it still caused a real incident. `/story manage`'s save button has no
+equivalent warning at all. If Setup needed one badly enough to add `## === You Must Click Save Settings
+to Apply Changes! ===`, the same latent risk likely exists on `/story manage` — it just hasn't produced
+a reported incident yet. Worth a small fix regardless of help-system timing.
+
+**What this means for the architecture:** contextual entry points aren't a new content type — they're
+alternate routes into the same page-definition model and interactive renderer already planned. A button
+anywhere in the app (Manage Turns panel, Close confirmation) can carry a customId that opens one
+specific entry directly, by its stable content-based key, reusing `renderInteractive()`. No duplicate
+copies of the content, no new rendering path — just another way in, added only at the three real gaps
+found above (Manage Turns, Close, and Setup's existing plan), not universally.
 
 ---
 
