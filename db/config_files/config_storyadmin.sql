@@ -142,7 +142,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnManageEntries', 'Manage Entries', 'en', 1),
 ('btnManageUsers', 'Manage Users', 'en', 1),
 ('txtManageUsersPickModalTitle', 'Manage a Writer', 'en', 1),
-('lblManageUsersPickSelect', 'Select a Writer', 'en', 1),
+('lblManageUsersPickSelect', 'Writer', 'en', 1),
 ('txtManageUsersNoWriters', 'This story has no active or paused writers to manage.', 'en', 1),
 ('txtManageTurnsPanelTitle', 'Turn Actions — [story_title]', 'en', 1),
 ('txtManageTurnsNoTurn', 'No active turn.', 'en', 1),

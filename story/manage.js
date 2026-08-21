@@ -55,10 +55,10 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setStyle(ButtonStyle.Primary)
       .setDisabled(!state.pendingTagCount),
   ];
-  // Admin-only, hidden entirely rather than shown-disabled: /storyadmin user (the command this
-  // button replaces the argument-typing for) requires checkIsAdmin, but /story manage itself
-  // allows creator-or-admin — a non-admin creator has no valid reason to see this at all.
-  if (state.isAdmin) {
+  // Gated to creator-or-admin, matching /story manage's own access level — not admin-only like
+  // the standalone /storyadmin user command. Deliberately broader here: managing writers in
+  // your own story is a natural extension of the creator controls already on this panel.
+  if (state.isAdminOrCreator) {
     row1Buttons.push(
       new ButtonBuilder()
         .setCustomId('story_manage_users_open')
@@ -220,7 +220,6 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
-      isAdmin,
       guildName: interaction.guild.name,
       activeTurn,
       delayHours: null,
@@ -393,10 +392,12 @@ async function handleManageButton(connection, interaction) {
       await handleManageEntriesButton(connection, interaction, state);
 
     } else if (customId === 'story_manage_users_open') {
-      // Re-check admin status server-side — the button is hidden for non-admin creators, but
-      // hiding a button client-side is not an authorization boundary on its own.
-      if (!state.isAdmin) {
-        await interaction.reply({ content: await getConfigValue(connection, 'txtAdminOnly', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      // Re-check server-side — the button is hidden for anyone who isn't creator-or-admin, but
+      // hiding a button client-side is not an authorization boundary on its own. In practice this
+      // is unreachable (handleManage's own entry gate already requires creator-or-admin), but
+      // checked explicitly rather than assumed.
+      if (!state.isAdminOrCreator) {
+        await interaction.reply({ content: cfg.txtManageNotAuthorized, flags: MessageFlags.Ephemeral });
         return;
       }
       const [writerRows] = await connection.execute(
@@ -625,8 +626,8 @@ async function handleManageModalSubmit(connection, interaction) {
     } else if (customId === 'story_manage_users_pick_modal') {
       // Opens a new, separate ephemeral panel (the existing Manage User panel) rather than
       // re-rendering the story-manage panel — early return, skips the shared re-render tail below.
-      if (!state.isAdmin) {
-        return await interaction.reply({ content: await getConfigValue(connection, 'txtAdminOnly', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      if (!state.isAdminOrCreator) {
+        return await interaction.reply({ content: state.cfg.txtManageNotAuthorized, flags: MessageFlags.Ephemeral });
       }
       const targetUserId = interaction.fields.getStringSelectValues('writer')?.[0];
       if (!targetUserId) {
