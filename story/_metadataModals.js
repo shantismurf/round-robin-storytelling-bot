@@ -31,7 +31,7 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary', 'lblMetaSceneBreakDivider',
     'txtMetaMainRelationshipPlaceholder', 'txtMetaSceneBreakDividerPlaceholder',
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
-    'btnSaveSettings', 'btnCreateStory', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtStoryActionsLabel', 'txtManageSaveWarning',
+    'btnSaveSettings', 'btnCreateStory', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtStoryManagementLabel', 'txtManageSaveWarning',
     'optWarnAllClear',
     ...ratingCodes.map(ratingLabelKey),
     ...dynamicOptions,
@@ -119,7 +119,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     container.addSeparatorComponents(new SeparatorBuilder());
 
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `**${cfg.txtStoryAddSectionBreakInfo}**\n` +
+      `${cfg.txtStoryAddSectionBreakInfo}\n` +
       `${modeEmoji} **${trimTrailingEmoji(cfg.lblModeToggle)}:** ${modeLabel} — ${modeDesc}\n` +
       `${orderEmoji} **${trimTrailingEmoji(cfg.lblWriterOrder)}:** ${orderLabel} — ${orderDesc}\n` +
       `**${trimTrailingEmoji(cfg.lblShowAuthors)}:** ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}\n` +
@@ -133,7 +133,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     container.addSeparatorComponents(new SeparatorBuilder());
 
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `**${cfg.txtStoryAddSectionBreakSettings}**\n` +
+      `${cfg.txtStoryAddSectionBreakSettings}\n` +
       `**${trimTrailingEmoji(cfg.lblTurnLength)}:** ${turnLengthDisplay}\n` +
       `**${isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder)}:** ${timeoutDisplay}\n` +
       `**${trimTrailingEmoji(cfg.lblDelayStart)}:** ${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC} _(${cfg.txtDelayHint})_\n` +
@@ -146,7 +146,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     if (!isManage) {
       container.addSeparatorComponents(new SeparatorBuilder());
       container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-        `**${cfg.txtStoryAddSectionBreakJoin}**\n` +
+        `${cfg.txtStoryAddSectionBreakJoin}\n` +
         `**${cfg.lblYourPenName}:** ${state.penName || state.displayName || cfg.txtNotSet}\n` +
         `**${cfg.lblJoinPrivacy}:** ${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n` +
         `**${cfg.lblJoinNotifications}:** ${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`
@@ -160,7 +160,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     // (drives restricted-channel thread routing), but edited via this same Metadata modal
     // alongside Dynamic/Warnings, so the edit button naturally lives here.
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `**${cfg.txtStoryAddSectionBreakMeta}**\n` +
+      `${cfg.txtStoryAddSectionBreakMeta}\n` +
       `**${trimTrailingEmoji(cfg.lblMetaRating)}:** ${ratingLabel}\n` +
       `**${trimTrailingEmoji(cfg.lblMetaDynamic)}:** ${dynamicDisplay}\n` +
       `**${trimTrailingEmoji(cfg.lblMetaWarnings)}:** ${warningsDisplay}`

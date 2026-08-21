@@ -158,7 +158,9 @@ Close/Reopen, Save Settings). `/story add` has no persistent row (just `[Create 
 Manage Entries/Turns/Joins/etc., since those only apply to an existing story.
 
 **Added 2026-08-21:** the persistent action-row area gets a short `TextDisplay` label above it
-(e.g. "⚙️ Story Actions") — this is the direct fix for the entry-point audit's Manage Turns finding
+(landed as "🛠️ Story Management" — "Story Actions" read as too generic, and this echoes the
+existing "Manage Entries"/"Manage Turns" button vocabulary already in the same row) — this is the
+direct fix for the entry-point audit's Manage Turns finding
 (`PLAN-help-system-redesign.md`: Skip/Extend/Reassign have zero inline explanation anywhere,
 only on a help page most admins never open). Same pattern as everything else here: label +
 orientation text stays inline (a person looking at this panel needs to know what "Manage Turns"

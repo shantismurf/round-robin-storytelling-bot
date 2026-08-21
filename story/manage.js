@@ -37,7 +37,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   // edit a currently-shown field cluster. Labeled per the entry-point audit finding that
   // Manage Turns (Skip/Extend/Reassign) had zero inline explanation anywhere.
   container.addSeparatorComponents(new SeparatorBuilder());
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${cfg.txtStoryActionsLabel}**`));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
 
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
