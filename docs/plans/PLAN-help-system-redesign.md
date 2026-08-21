@@ -6,6 +6,20 @@ Last Updated: 2026-08-21
 
 ---
 
+## Sequencing — Phase 3 waits on the panel-rework plan
+
+Cross-referenced 2026-08-21 against
+[PLAN-panel-rework-and-ground-rules.md](PLAN-panel-rework-and-ground-rules.md), which is **going
+first**. Phases 0–2 here (de-risk spike, rendering engine, interactive navigation) don't depend on
+it and can proceed regardless — only Phase 3 (content restructuring) needs to wait, since that plan
+changes what Phase 3 would otherwise be documenting: Ground Rules is new content with nothing to
+restructure yet, the Settings/Metadata panel split changes the actual structure pages 3 and 4
+describe, and Manage Users relocating onto the manage panel makes `txtHelp8ManageUser` stale. Writing
+Phase 3's content against panels that are about to change risks a second rewrite almost immediately —
+exactly the kind of waste this whole redesign exists to avoid.
+
+---
+
 ## Context
 
 Triggered by a real incident: an admin (alegria.defaro, The AFK Cafe™) got stuck partway through
@@ -337,7 +351,8 @@ pure renderer functions, unit tests for both against fake config data.
 mirroring `_entryRenderer.js`. `/storyadmin help` / `/mystory help` unaffected (still single-page
 jumps) except for getting the new visual treatment.
 
-**Phase 3 — Content restructuring.** Split pages 4 & 5, de-duplicate the repeated concepts, fix
+**Phase 3 — Content restructuring** *(waits on `PLAN-panel-rework-and-ground-rules.md` shipping first
+— see Sequencing above).* Split pages 4 & 5, de-duplicate the repeated concepts, fix
 `txtHelp8Setup`, and move all `txtHelp1*`...`txtHelp8*` keys to the content-based convention (see
 Naming Convention above) by adding the new keys and dropping the old ones from the SQL files — old
 keys go orphaned-but-harmless in the DB, not deleted yet. All wording drafted for review before it

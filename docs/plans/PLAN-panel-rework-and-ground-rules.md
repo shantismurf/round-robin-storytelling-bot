@@ -2,9 +2,32 @@
 
 Status: Pending
 Created: 2026-07-26 (drafted in an earlier Claude Code chat session; committed to the repo on this date)
-Last Updated: 2026-07-26 (added Part 1b, folded in from a separate TODO.md item)
+Last Updated: 2026-08-21 (cross-referenced against the help-system redesign)
 
 Design finalized in chat, implementation not started.
+
+---
+
+## Sequencing — goes before the help-system redesign's content pass
+
+Cross-referenced 2026-08-21 against [PLAN-help-system-redesign.md](PLAN-help-system-redesign.md).
+**This plan should ship first.** Its Phase 3 (content restructuring) would otherwise document panels
+that are about to change out from under it:
+
+- **Ground Rules is entirely new** — no existing help content covers it. Needs real entries in both
+  `/story help` and `/storyadmin help` once built, not bolted on after.
+- **The Settings/Metadata split (Part 1) changes the actual panel structure** that help pages 3 and 4
+  currently describe as one flat set of fields. Those two pages already roughly correspond to
+  Settings vs. Metadata by coincidence — worth making that alignment deliberate in the help redesign's
+  content pass, once this split has actually shipped and the real field grouping is settled.
+- **Manage Users relocating onto the manage panel (Part 1b)** makes `txtHelp8ManageUser`'s current
+  description of `/storyadmin user [story_id] [writer]` stale the moment it lands.
+- **Ground Rules' setup-modal authoring field** (Part 2) is workflow-shaped — good candidate for the
+  same numbered-steps/compact-glossary distinction established in the help redesign. Specifically:
+  keep the compressed format instructions (max 10 rules, label ≤40 chars, etc.) inline in the modal —
+  load-bearing for completing the task — and let a "?" contextual button (once that mechanism exists)
+  point to the fuller worked example in help, rather than cramming both into the modal's `Label`
+  description text.
 
 ---
 
