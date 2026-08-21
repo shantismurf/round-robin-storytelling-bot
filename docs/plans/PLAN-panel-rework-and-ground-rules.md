@@ -2,7 +2,7 @@
 
 Status: Pending
 Created: 2026-07-26 (drafted in an earlier Claude Code chat session; committed to the repo on this date)
-Last Updated: 2026-08-21 (Part 1 rebuilt as Components V2, not a bigger classic embed)
+Last Updated: 2026-08-21 (Part 1 shipped)
 
 Design finalized in chat, implementation not started.
 
@@ -42,7 +42,37 @@ panels until the display is reworked.
 
 ---
 
-## Part 1 — Panel Display Rework (Components V2, Settings / Metadata split)
+## Part 1 — Panel Display Rework (Components V2, Settings / Metadata split) ✅ Implemented 2026-08-21
+
+**Shipped as designed** (`buildStoryPanel()` in `story/_metadataModals.js`, wired into
+`story/add.js` and `story/manage.js`), verified with `node --check`, a runtime smoke test
+building all `isManage`×`activeGroup` combinations and both full message payloads (all clean,
+`.toJSON()` running Discord's own component validators without throwing), and `npm test` (95/95
+still passing). Component count came in at ~25 nested for the manage panel — comfortably under
+the 40 budget even before the conservative-vs-actual nesting question is ever resolved.
+
+**Found and handled along the way:**
+- **Closed the TODO top-priority item** ("no unsaved-changes warning on the manage panel") as
+  part of this same rework — `/story manage`'s save button is also called "Save Settings," so
+  Setup's exact approved warning text got reused verbatim (new key `txtManageSaveWarning`),
+  placed directly above the Save Settings button.
+- **Two more dead code paths found and removed** in `story/manage.js`, same shape as Part 3's
+  `handleManageSelectMenu` finding: `story_manage_rating_select`'s branch (no builder anywhere
+  produces that customId — same file, same function, missed in the first pass) and
+  `story_manage_cancel` (no builder anywhere either).
+- **One real open risk, deliberately not resolved by guessing:** the `story_manage_close_open`
+  transition edits from this now-Components-V2 panel to a plain `content`/`components` reply,
+  because it feeds into `story/close.js`'s `handleCloseConfirm`/`handleCloseCancel` — shared with
+  the standalone `/story close` command, out of this plan's scope, and not using Components V2.
+  Whether Discord allows removing the `IsComponentsV2` flag on an edit is genuinely undocumented
+  and untestable without staging. Left this one transition exactly as it worked before. **Needs a
+  live spot-check after deploy** — if it breaks, the fix is converting `close.js`'s shared
+  handlers too, a separate change since it touches a command outside this plan.
+- `story/manage.js` grew to 593 lines, `story/add.js` to 501 — both now over the 500-line
+  standard; logged in `docs/TODO.md`'s existing file-size-split item rather than opportunistically
+  splitting mid-rework.
+
+Original design notes below, kept for reference.
 
 **Revised 2026-08-21 — rebuilt as Components V2, not a bigger classic embed.** Original design
 extended `EmbedBuilder` with an `activeGroup` param; superseded because the real blocker here is
@@ -375,7 +405,7 @@ need to trim.
 ## Suggested build order
 
 1. ✅ Warnings → Checkbox Group conversion (small, proves the pattern, no schema changes) — done 2026-08-21
-2. Panel display rework (Settings/Metadata split) — unblocks everything else
+2. ✅ Panel display rework (Settings/Metadata split, Components V2) — done 2026-08-21, unblocks everything else
 3. Move Manage Users onto the manage panel (Part 1b) — independent of the rest, but natural to
    do alongside Part 1 since both touch `buildManageMessage()`'s button rows
 4. Ground Rules: server-vocabulary setup modal + parser/validator

@@ -1,4 +1,4 @@
-import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder } from 'discord.js';
+import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfigValue, formatDuration, trimTrailingEmoji } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
 import { STORY_MODE } from '../constants.js';
@@ -31,7 +31,7 @@ export async function getMetaCfg(connection, guildId) {
     'lblMetaCharacters', 'lblMetaTags', 'lblMetaSummary', 'lblMetaSceneBreakDivider',
     'txtMetaMainRelationshipPlaceholder', 'txtMetaSceneBreakDividerPlaceholder',
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
-    'btnSaveSettings', 'btnCreateStory',
+    'btnSaveSettings', 'btnCreateStory', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtStoryActionsLabel', 'txtManageSaveWarning',
     'optWarnAllClear',
     ...ratingCodes.map(ratingLabelKey),
     ...dynamicOptions,
@@ -40,11 +40,18 @@ export async function getMetaCfg(connection, guildId) {
 }
 
 /**
- * Shared embed builder for /story add and /story manage panels.
- * isManage: shows metadata section, hides join settings and intro description.
+ * Shared panel builder for /story add and /story manage — Components V2 Container.
+ * isManage: shows Join Settings cluster only when false (join settings don't apply post-join).
+ * activeGroup: 'settings' | 'metadata' — which tab's field clusters render.
+ * namespace: 'story_add' or 'story_manage' — customId prefix for the tab-toggle and edit buttons.
+ *
+ * Returns a ContainerBuilder, not a finished message payload — callers append their own
+ * trailing components (e.g. manage's persistent story-action buttons, add's Create Story
+ * button) before sending with `{ components: [...], flags: MessageFlags.IsComponentsV2 }`.
  */
-export function buildStoryEmbed(cfg, state, title, isManage = false) {
+export function buildStoryPanel(cfg, state, title, { isManage = false, activeGroup = 'settings', namespace = 'story_add' } = {}) {
   title = title ?? cfg.txtCreateStoryTitle;
+  const ns = namespace;
 
   const modeEmojis = { 0: '🟢', 1: '🟣', 2: '🔵' };
   const modeLabels = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC };
@@ -69,9 +76,7 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
 
   const titleDisplay = state.storyTitle || cfg.txtStoryTitlePrompt;
-  // Defensive cap for stories saved before the modal itself enforced this limit — Discord embed field values max out at 1024 chars.
-  const summaryRaw = state.summary || cfg.txtNotSet;
-  const summaryDisplay = summaryRaw.length > 1024 ? summaryRaw.slice(0, 1023) + '…' : summaryRaw;
+  const summaryDisplay = state.summary || cfg.txtNotSet;
   const mainPairingDisplay = state.mainPairing || cfg.txtNotSet;
   const otherRelDisplay = state.otherRelationships || cfg.txtNotSet;
   const charsDisplay = state.characters || cfg.txtNotSet;
@@ -85,68 +90,98 @@ export function buildStoryEmbed(cfg, state, title, isManage = false) {
     ? (state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}h`)
     : (state.timeoutReminder === 0 ? cfg.txtNone : `${state.timeoutReminder}%`);
 
-  const sectionLine = cfg.txtSectionBreakLine;
-  const turnLengthDisplay = isSlowMode ? cfg.txtNA : formatDuration(state.turnLength)
+  const turnLengthDisplay = isSlowMode ? cfg.txtNA : formatDuration(state.turnLength);
 
-  const embed = new EmbedBuilder()
-    .setTitle(title)
-    .setColor(state.storyMode === STORY_MODE.QUICK ? 0xE040FB : state.storyMode === STORY_MODE.SLOW ? 0x5865F2 : 0x57F287);
+  const container = new ContainerBuilder()
+    .setAccentColor(state.storyMode === STORY_MODE.QUICK ? 0xE040FB : state.storyMode === STORY_MODE.SLOW ? 0x5865F2 : 0x57F287)
+    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`));
 
   if (cfg.txtStoryAddIntro && !isManage) {
-    embed.setDescription(cfg.txtStoryAddIntro);
-  }
-  //25 fields total, 14 for story info/settings, 7 for metadata, 4 for join settings
-  embed.addFields( //14 fields
-    { name: trimTrailingEmoji(cfg.lblStoryTitle), value: titleDisplay, inline: false },
-
-    { name: trimTrailingEmoji(cfg.lblMetaSummary), value: summaryDisplay, inline: false },
-
-    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakInfo +' '+ sectionLine, value: '​', inline: false },
-
-    { name: `${modeEmoji} ${cfg.lblModeToggle}`, value: `${modeLabel} — ${modeDesc}`, inline: true },
-    { name: `${orderEmoji} ${cfg.lblWriterOrder}`, value: `${orderLabel} — ${orderDesc}`, inline: true },
-    { name: trimTrailingEmoji(cfg.lblMetaRating) + cfg.lblMetadataAddon, value: ratingLabel, inline: true },
-
-    { name: trimTrailingEmoji(cfg.lblShowAuthors), value: state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc, inline: true },
-    { name: trimTrailingEmoji(cfg.lblTurnPrivacy), value: state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc, inline: true },
-    { name: trimTrailingEmoji(cfg.lblMetaSceneBreakDivider), value: sceneBreakDisplay, inline: true },
-
-    { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakSettings +' '+ sectionLine, value: '​', inline: false },
-
-    { name: trimTrailingEmoji(cfg.lblTurnLength), value: turnLengthDisplay, inline: true },
-    { name: isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder), value: timeoutDisplay, inline: true },
-    { name: trimTrailingEmoji(cfg.lblDelayStart), value: `-+*${cfg.txtDelayHint}*\n${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}`, inline: true },
-
-    { name: trimTrailingEmoji(cfg.lblMaxWriters), value: maxWritersDisplay, inline: false },
-
-  );
-
-  if (isManage) {
-    embed.addFields( //7 fields
-      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakMeta +' '+ sectionLine, value: '​', inline: false },
-
-      { name: trimTrailingEmoji(cfg.lblMetaDynamic), value: dynamicDisplay, inline: true },
-      { name: trimTrailingEmoji(cfg.lblMetaWarnings), value: warningsDisplay, inline: true },
-
-      { name: trimTrailingEmoji(cfg.lblMetaMainRelationship), value: mainPairingDisplay, inline: true },
-      { name: trimTrailingEmoji(cfg.lblMetaOtherRelationships), value: otherRelDisplay, inline: true },
-      { name: trimTrailingEmoji(cfg.lblMetaCharacters), value: charsDisplay, inline: true },
-
-      { name: trimTrailingEmoji(cfg.lblMetaTags), value: tagsDisplay, inline: false },
-    );
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryAddIntro));
   }
 
-  if (!isManage) {
-    embed.addFields( //4 fields
-      { name: sectionLine +' '+ cfg.txtStoryAddSectionBreakJoin +' '+ sectionLine, value: '​', inline: false },
+  // Tab toggle — active tab styled Success, inactive Secondary, so "you are here" is unambiguous.
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`${ns}_tab_settings`).setLabel(cfg.btnPanelTabSettings)
+      .setStyle(activeGroup === 'settings' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`${ns}_tab_metadata`).setLabel(cfg.btnPanelTabMetadata)
+      .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
+  ));
+  container.addSeparatorComponents(new SeparatorBuilder());
 
-      { name: cfg.lblYourPenName, value: state.penName || state.displayName || cfg.txtNotSet, inline: true },
-      { name: cfg.lblJoinPrivacy, value: state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic, inline: true },
-      { name: cfg.lblJoinNotifications, value: state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff), inline: true },
-    );
+  if (activeGroup === 'settings') {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${trimTrailingEmoji(cfg.lblStoryTitle)}**\n${titleDisplay}\n\n**${trimTrailingEmoji(cfg.lblMetaSummary)}**\n${summaryDisplay}`
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`${ns}_open_titlesummary`).setLabel(cfg.btnAddTitleAndSummary).setStyle(ButtonStyle.Primary)
+    ));
+    container.addSeparatorComponents(new SeparatorBuilder());
+
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${cfg.txtStoryAddSectionBreakInfo}**\n` +
+      `${modeEmoji} **${trimTrailingEmoji(cfg.lblModeToggle)}:** ${modeLabel} — ${modeDesc}\n` +
+      `${orderEmoji} **${trimTrailingEmoji(cfg.lblWriterOrder)}:** ${orderLabel} — ${orderDesc}\n` +
+      `**${trimTrailingEmoji(cfg.lblShowAuthors)}:** ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}\n` +
+      `**${trimTrailingEmoji(cfg.lblTurnPrivacy)}:** ${state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaSceneBreakDivider)}:** ${sceneBreakDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaRating)}${cfg.lblMetadataAddon}:** ${ratingLabel}`
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`${ns}_open_storyinfo`).setLabel(cfg.btnAddStoryInfo).setStyle(ButtonStyle.Primary)
+    ));
+    container.addSeparatorComponents(new SeparatorBuilder());
+
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${cfg.txtStoryAddSectionBreakSettings}**\n` +
+      `**${trimTrailingEmoji(cfg.lblTurnLength)}:** ${turnLengthDisplay}\n` +
+      `**${isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder)}:** ${timeoutDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblDelayStart)}:** ${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC} _(${cfg.txtDelayHint})_\n` +
+      `**${trimTrailingEmoji(cfg.lblMaxWriters)}:** ${maxWritersDisplay}`
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`${ns}_open_settings`).setLabel(cfg.btnAddSettings).setStyle(ButtonStyle.Primary)
+    ));
+
+    if (!isManage) {
+      container.addSeparatorComponents(new SeparatorBuilder());
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+        `**${cfg.txtStoryAddSectionBreakJoin}**\n` +
+        `**${cfg.lblYourPenName}:** ${state.penName || state.displayName || cfg.txtNotSet}\n` +
+        `**${cfg.lblJoinPrivacy}:** ${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n` +
+        `**${cfg.lblJoinNotifications}:** ${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`
+      ));
+      container.addActionRowComponents(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId(`${ns}_open_mysettings`).setLabel(cfg.btnAddMySettings).setStyle(ButtonStyle.Primary)
+      ));
+    }
+  } else {
+    // Rating shown again here (not just Settings tab) — mechanically relevant to Settings
+    // (drives restricted-channel thread routing), but edited via this same Metadata modal
+    // alongside Dynamic/Warnings, so the edit button naturally lives here.
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${cfg.txtStoryAddSectionBreakMeta}**\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaRating)}:** ${ratingLabel}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaDynamic)}:** ${dynamicDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaWarnings)}:** ${warningsDisplay}`
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`${ns}_open_metadata`).setLabel(cfg.btnAddMetadata).setStyle(ButtonStyle.Primary)
+    ));
+    container.addSeparatorComponents(new SeparatorBuilder());
+
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${trimTrailingEmoji(cfg.lblMetaMainRelationship)}:** ${mainPairingDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaOtherRelationships)}:** ${otherRelDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaCharacters)}:** ${charsDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaTags)}:** ${tagsDisplay}`
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId(`${ns}_open_tags`).setLabel(cfg.btnAddTags).setStyle(ButtonStyle.Primary)
+    ));
   }
 
-  return embed;
+  return container;
 }
 
 /**

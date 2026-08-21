@@ -1,9 +1,9 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
 import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
-import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
+import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
@@ -12,30 +12,34 @@ import { STORY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
 
 const pendingManageData = new Map();
 
+// Terminal/interstitial-state messages (save success/error, cancel, close-confirm) — kept as
+// Components V2 rather than plain `content`, since the panel that precedes them already uses
+// IsComponentsV2 and whether that flag can be removed on a later edit is unconfirmed against
+// Discord's docs. A one-block Container sidesteps the question entirely.
+function finalMessage(text, extraComponents = []) {
+  return {
+    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)), ...extraComponents],
+    flags: MessageFlags.IsComponentsV2,
+  };
+}
+
 function buildManageMessage(cfg, state, activeTurn = null) {
   const isPaused = state.targetStatus === STORY_STATUS.PAUSED;
   const isClosed = state.targetStatus === STORY_STATUS.CLOSED;
 
-  const embed = buildStoryEmbed(cfg, state, cfg.txtManageEmbedTitle, true);
+  const container = buildStoryPanel(cfg, state, cfg.txtManageEmbedTitle, {
+    isManage: true,
+    activeGroup: state.activeGroup ?? 'settings',
+    namespace: 'story_manage',
+  });
 
-  // Row 1 (3): Set Title and Summary | Story Info | Story Settings
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_titlesummary')
-      .setLabel(cfg.btnAddTitleAndSummary)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_storyinfo')
-      .setLabel(cfg.btnAddStoryInfo)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_settings')
-      .setLabel(cfg.btnAddSettings)
-      .setStyle(ButtonStyle.Primary),
-  );
+  // Persistent story-action area — doesn't change with the active tab, since none of these
+  // edit a currently-shown field cluster. Labeled per the entry-point audit finding that
+  // Manage Turns (Skip/Extend/Reassign) had zero inline explanation anywhere.
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${cfg.txtStoryActionsLabel}**`));
 
-  // Row 2 (2): Manage Entries | Manage Turns
-  const row2 = new ActionRowBuilder().addComponents(
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_entries_open')
       .setLabel(cfg.btnManageEntries)
@@ -44,28 +48,15 @@ function buildManageMessage(cfg, state, activeTurn = null) {
       .setCustomId('story_manage_turns_open')
       .setLabel(cfg.btnManageTurns)
       .setStyle(ButtonStyle.Primary),
-  );
-
-  // Row 3 (3): Story Metadata | Story Tags | Review Tags (always shown, disabled if none pending)
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_metadata')
-      .setLabel(cfg.btnAddMetadata)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_tags')
-      .setLabel(cfg.btnAddTags)
-      .setStyle(ButtonStyle.Primary),
     new ButtonBuilder()
       .setCustomId('story_manage_review_tags')
       .setLabel(replaceTemplateVariables(cfg.btnReviewTags, { count: state.pendingTagCount || 0 }))
       .setStyle(ButtonStyle.Primary)
       .setDisabled(!state.pendingTagCount),
-  );
+  ));
 
-  // Row 4 (3): Open/Close Joins | Pause/Resume Story | Close/Reopen Story
   const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
-  const row4 = new ActionRowBuilder().addComponents(
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_latejoins')
       .setLabel(state.allowJoins ? cfg.btnManageJoinsClose : cfg.btnManageJoinsOpen)
@@ -84,17 +75,21 @@ function buildManageMessage(cfg, state, activeTurn = null) {
           .setCustomId('story_manage_close_open')
           .setLabel(cfg.btnCloseConfirm)
           .setStyle(ButtonStyle.Danger),
-  );
+  ));
 
-  // Row 5 (1): Save Settings
-  const row5 = new ActionRowBuilder().addComponents(
+  // TODO.md top-priority item: /story manage uses the identical stage-then-save pattern as
+  // /storyadmin setup, which needed this exact warning (txtSetupModalSaveWarning) after a real
+  // incident where an admin never clicked Save and got silently blocked. Reused verbatim here
+  // (new key, same approved text) since this panel's save button is also called "Save Settings".
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageSaveWarning));
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_save')
       .setLabel(cfg.btnSaveSettings)
       .setStyle(ButtonStyle.Success),
-  );
+  ));
 
-  return { embeds: [embed], components: [row1, row2, row3, row4, row5] };
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 async function handleManage(connection, interaction, alreadyDeferred = false) {
@@ -215,6 +210,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       activeTurn,
       delayHours: null,
       delayWriters: null,
+      activeGroup: 'settings',
     };
 
     pendingManageData.set(interaction.user.id, state);
@@ -242,7 +238,12 @@ async function handleManageButton(connection, interaction) {
   const customId = interaction.customId;
 
   try {
-    if (customId === 'story_manage_open_storyinfo') {
+    if (customId === 'story_manage_tab_settings' || customId === 'story_manage_tab_metadata') {
+      state.activeGroup = customId === 'story_manage_tab_settings' ? 'settings' : 'metadata';
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+    } else if (customId === 'story_manage_open_storyinfo') {
       await interaction.showModal(buildStoryInfoModal(state.cfg, state, 'story_manage'));
 
     } else if (customId === 'story_manage_toggle_latejoins') {
@@ -253,6 +254,13 @@ async function handleManageButton(connection, interaction) {
     } else if (customId === 'story_manage_close_open') {
       // Reuses the standalone /story close confirm/cancel flow — story_close_confirm_<id> and
       // story_close_cancel_<id> are routed centrally in commands/story.js to handleCloseConfirm/handleCloseCancel.
+      // Deliberately NOT converted to Components V2: those shared handlers (story/close.js) also
+      // serve the standalone /story close command and reply with plain content/components — this
+      // edit transitions FROM the (Components V2) manage panel TO that plain shape, and whether
+      // Discord allows removing the IsComponentsV2 flag on an edit is unverified (undocumented,
+      // no staging to test). Left exactly as it worked before this rework. If it breaks live,
+      // the fix is converting close.js's shared handlers too — a separate, bigger change since
+      // it's shared with a command outside this plan's scope.
       const cfg = state.cfg;
       const confirmMsg = replaceTemplateVariables(cfg.txtStoryCloseConfirm, { story_title: state.title });
       const row = new ActionRowBuilder().addComponents(
@@ -389,14 +397,6 @@ async function handleManageButton(connection, interaction) {
       await interaction.deferUpdate();
       await handleManageSave(connection, interaction, state);
 
-    } else if (customId === 'story_manage_cancel') {
-      await interaction.deferUpdate();
-      pendingManageData.delete(userId);
-      await state.originalInteraction.editReply({
-        content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
-        embeds: [],
-        components: []
-      });
     }
   } catch (error) {
     log(`handleManageButton failed: customId=${customId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
@@ -466,18 +466,10 @@ async function handleManageSave(connection, interaction, state) {
 
     pendingManageData.delete(interaction.user.id);
 
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
-      embeds: [],
-      components: []
-    });
+    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'txtAdminConfigSaved', guildId)));
   } catch (error) {
     log(`handleManageSave failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'errProcessingRequest', guildId),
-      embeds: [],
-      components: []
-    });
+    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
