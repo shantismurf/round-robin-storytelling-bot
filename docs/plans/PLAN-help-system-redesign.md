@@ -151,12 +151,27 @@ equivalent warning at all. If Setup needed one badly enough to add `## === You M
 to Apply Changes! ===`, the same latent risk likely exists on `/story manage` — it just hasn't produced
 a reported incident yet. Worth a small fix regardless of help-system timing.
 
-**What this means for the architecture:** contextual entry points aren't a new content type — they're
-alternate routes into the same page-definition model and interactive renderer already planned. A button
-anywhere in the app (Manage Turns panel, Close confirmation) can carry a customId that opens one
-specific entry directly, by its stable content-based key, reusing `renderInteractive()`. No duplicate
-copies of the content, no new rendering path — just another way in, added only at the three real gaps
-found above (Manage Turns, Close, and Setup's existing plan), not universally.
+**What this means for the architecture — corrected:** a contextual "?" shouldn't open the full containing
+page. Someone clicking it on Reassign wants to know what Reassign does, not be handed the whole Admin
+Command Reference (Setup, Delete, Sweep, and everything else on that page) to scroll past. That needs a
+**third render mode**, smaller than either existing one:
+
+- `renderInteractive(pageDef, cfg, { session })` — the full page, nav buttons, `/story help` etc.
+  (unchanged from before)
+- `renderStatic(pageDef, cfg)` — the full page, no nav, forum wiki (unchanged from before)
+- **`renderContextual(entry, cfg, { pageTitleKey })`** — *new.* Just the one entry that was asked
+  about (its label, its text, its own `children` if it has them — not its siblings), rendered compact,
+  plus a single `ActionRow` button: *"See full topic: [Page Title] →"* that opens the real full page via
+  `renderInteractive` for anyone who wants more than the one answer. This is genuinely a small popup,
+  not a shortcut into the big one.
+
+No new addressing scheme needed for this: once Phase 3's rename lands, an entry's own config key
+(e.g. `txtHelpAdminCmdsSetup`) is already a stable, content-based identifier for that specific entry —
+a contextual button's customId just carries that key directly (`help_open_txtHelpAdminCmdsSetup`),
+same source of truth, no parallel index to keep in sync.
+
+Added only at the real gaps found above (Manage Turns, Close, and Setup's existing plan) — not
+universally.
 
 ---
 
@@ -229,16 +244,19 @@ found... will not be touched"). That's a feature here, not a gap to patch around
    into Phase 3 — scheduled once things have actually been spot-checked in production, tracked as a
    short follow-up in `docs/TODO.md` pointing back to this plan.
 
-### Two renderers, one data source
+### Three renderers, one data source
 
-- `renderInteractive(pageDef, cfg, { session })` → Components V2 payload with nav buttons
-  (prev/next/back-to-menu, mirroring `_entryRenderer.js`'s button pattern) and `action` accessories
-  wired to real customIds.
-- `renderStatic(pageDef, cfg)` → Components V2 payload, no nav chrome (the forum's thread list *is*
-  the nav), no `action` accessories — informational only, safe to post anywhere.
+- `renderInteractive(pageDef, cfg, { session })` → the full page, Components V2 payload with nav
+  buttons (prev/next/back-to-menu, mirroring `_entryRenderer.js`'s button pattern) and any `action`
+  buttons (`TextDisplay` + trailing `ActionRow`) wired to real customIds.
+- `renderStatic(pageDef, cfg)` → the full page, no nav chrome (the forum's thread list *is* the nav),
+  no action buttons — informational only, safe to post anywhere (see Entry-Point Audit above for why).
+- `renderContextual(entry, cfg, { pageTitleKey })` → **one entry only**, compact, plus a single
+  "See full topic →" button that opens the same page via `renderInteractive`. This is what a contextual
+  "?" in the Manage Turns panel or the Close confirmation actually opens — not the full containing page.
 
-Both are pure functions of `(pageDef, cfg)` plus rendering mode — testable without a live Discord
-connection, following this repo's existing `test/*.test.js` convention (pure/DB-only logic via
+All three are pure functions of `(pageDef or entry, cfg)` plus rendering mode — testable without a live
+Discord connection, following this repo's existing `test/*.test.js` convention (pure/DB-only logic via
 `test/_fakeConnection.js`).
 
 ### Session state for `/story help` navigation
