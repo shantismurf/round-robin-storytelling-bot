@@ -127,6 +127,15 @@ story-lifecycle actions (Manage Entries, Manage Turns, Review Tags, Joins, Pause
 Close/Reopen, Save Settings). `/story add` has no persistent row (just `[Create Story]`) and no
 Manage Entries/Turns/Joins/etc., since those only apply to an existing story.
 
+**Added 2026-08-21:** the persistent action-row area gets a short `TextDisplay` label above it
+(e.g. "⚙️ Story Actions") — this is the direct fix for the entry-point audit's Manage Turns finding
+(`PLAN-help-system-redesign.md`: Skip/Extend/Reassign have zero inline explanation anywhere,
+only on a help page most admins never open). Same pattern as everything else here: label +
+orientation text stays inline (a person looking at this panel needs to know what "Manage Turns"
+even opens without a click), and the fuller explanation stays reachable as a `renderContextual`
+popup from that same help plan, once that mechanism exists — this panel doesn't need to duplicate
+it.
+
 Each field cluster follows the compact-glossary pattern already established for the help-system
 redesign: one `TextDisplay` with tight label:value lines, not one box per field — these are
 independent facts (content shape: glossary), not a sequence, so per that plan's Design Principle 1,
