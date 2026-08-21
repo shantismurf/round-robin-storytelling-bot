@@ -249,10 +249,22 @@ does not trigger any story thread posts.
 
 ---
 
-## Part 3 — Warnings: convert to Checkbox Group
+## Part 3 — Warnings: convert to Checkbox Group ✅ Implemented 2026-08-21
 
 Same component conversion as Ground Rules, smaller and self-contained — good first PR to prove
 the pattern before Ground Rules builds on top of it.
+
+**Shipped as designed, plus two things found along the way:**
+- `handleManageSelectMenu` (`story/manage.js`) turned out to be entirely dead code — both its
+  branches (`story_manage_rating_select`, `story_manage_warnings_select`) had zero component
+  builders anywhere producing those customIds, confirmed by exhaustive search. Removed the whole
+  function, its export, its import in `commands/story.js`, and its dispatch branch (the only live
+  `story_manage_*_select` customId, `story_manage_ta_next_select`, was already claimed by the more
+  specific `story_manage_ta_*` branch checked first).
+- `txtManageWarningSelectInstructions` (the `__dismiss__` placeholder's label) is now orphaned —
+  removed from `config_metadata.sql` and `config_roadmap.md`. Left as a harmless orphan row in the
+  live DB per the same additive-only `sync-config.js` behavior established in the help-redesign
+  plan, not force-deleted.
 
 Currently a `StringSelectMenuBuilder` with `setMaxValues(warningOptions.length)`
 (`story/_metadataModals.js` line ~184), carrying a workaround: a fake `__dismiss__` placeholder
@@ -272,7 +284,7 @@ need to trim.
 
 ## Suggested build order
 
-1. Warnings → Checkbox Group conversion (small, proves the pattern, no schema changes)
+1. ✅ Warnings → Checkbox Group conversion (small, proves the pattern, no schema changes) — done 2026-08-21
 2. Panel display rework (Settings/Metadata split) — unblocks everything else
 3. Move Manage Users onto the manage panel (Part 1b) — independent of the rest, but natural to
    do alongside Part 1 since both touch `buildManageMessage()`'s button rows

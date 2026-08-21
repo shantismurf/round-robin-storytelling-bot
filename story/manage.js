@@ -561,11 +561,11 @@ async function handleManageModalSubmit(connection, interaction) {
     } else if (customId === 'story_manage_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_manage_metadata_dynamic')?.[0];
       const rating = interaction.fields.getStringSelectValues('story_manage_metadata_rating')?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues('story_manage_metadata_warnings') ?? [];
+      const warningsRaw = interaction.fields.getCheckboxGroup('story_manage_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;
-      state.warnings = (warningsRaw ?? []).filter(v => v !== '__dismiss__');
+      state.warnings = warningsRaw ?? [];
       log(`handleManageModalSubmit: metadata staged dynamic=${state.dynamic} rating=${state.rating} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
     } else if (customId === 'story_manage_tags_modal') {
@@ -587,41 +587,11 @@ async function handleManageModalSubmit(connection, interaction) {
   }
 }
 
-async function handleManageSelectMenu(connection, interaction) {
-  log(`handleManageSelectMenu entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
-  const userId = interaction.user.id;
-  const state = pendingManageData.get(userId);
-
-  if (!state) {
-    await interaction.deferUpdate();
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), components: [] });
-    return;
-  }
-
-  const customId = interaction.customId;
-
-  if (customId === 'story_manage_rating_select') {
-    const newRating = interaction.values[0];
-    const currentRating = state.rating;
-    state.rating = newRating;
-    log(`handleManageSelectMenu: rating staged ${currentRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-  } else if (customId === 'story_manage_warnings_select') {
-    state.warnings = interaction.values.filter(v => v !== '__dismiss__');
-    log(`handleManageSelectMenu: warnings staged for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-  } else {
-    return;
-  }
-
-  await interaction.deferUpdate();
-  await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-}
-
 export {
   pendingManageData,
   buildManageMessage,
   handleManage,
   handleManageButton,
-  handleManageSelectMenu,
   handleTagReviewButton,
   handleManageSave,
   applyPauseActions,

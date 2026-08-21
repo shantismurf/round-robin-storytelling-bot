@@ -10,7 +10,7 @@ import { pendingPreviewData } from '../story/_state.js';
 import { handleRead, handleReadNav } from '../story/read.js';
 import { handleEdit, handleEditButton, handleEditModalSubmit, handleRepostEntry } from '../story/edit.js';
 import { handleListStories, handleListNavigation, handleFilterButton, renderStoryListReply } from '../story/list.js';
-import { handleManage, handleManageButton, handleManageSelectMenu, handleTurnActionSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
+import { handleManage, handleManageButton, handleTurnActionSelectMenu, handleTagReviewButton, handleManageModalSubmit } from '../story/manage.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from '../story/_manageEntries.js';
 import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleViewTagsNav, handleEditTagsButton, handleViewProposedTags, handleTagDeleteButton, handleTagDeleteConfirm, handleTagDeleteCancel, handleTagManageButton, handleTagReviewNav } from '../story/tags.js';
 import { handleClose, handleCloseConfirm, handleCloseCancel, handleCloseExportButton } from '../story/close.js';
@@ -338,8 +338,6 @@ async function handleSelectMenuInteraction(connection, interaction) {
     await handleManageEntriesSelectMenu(connection, interaction);
   } else if (interaction.customId.startsWith('story_manage_ta_') && interaction.customId.endsWith('_select')) {
     await handleTurnActionSelectMenu(connection, interaction);
-  } else if (interaction.customId.startsWith('story_manage_') && interaction.customId.endsWith('_select')) {
-    await handleManageSelectMenu(connection, interaction);
   }
 }
 
