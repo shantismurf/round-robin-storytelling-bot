@@ -80,11 +80,6 @@ Check for Missing or outdated info:
 
 # Deferred
 
-## Address deprecated framework [deferred]
-Update to a component-based approach using ActionRows. Instead of passing components directly, they must be wrapped in an ActionRowBuilder to ensure proper layout and compliance with current interaction API standards.
-
----
-
 ## turn reminder notifications — Request More Time button [deferred: requires scheduler]
 
 The "Request More Time" button logic is implemented and working on `/story timeleft`. Adding it to reminder notifications requires the scheduler to store the message ID of each reminder sent, so the button can be edited/disabled after use.
