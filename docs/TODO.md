@@ -1,6 +1,6 @@
 # To-Do List
 
-Top Priority - there is no message telling a user they have unsaved changes to the story manage panel. revisit the manage and ad panel redesign and add that to the plan. 
+Top Priority - there is no message telling a user they have unsaved changes to the story manage panel. revisit the manage and ad panel redesign and add that to the plan. **Concrete precedent found 2026-08-21** (help-system redesign entry-point audit): `/storyadmin setup` uses the identical stage-then-save pattern and has a loud, impossible-to-miss warning about it (`txtSetupModalSaveWarning`, set as both embed description and footer) — and it still caused a real incident (admin never clicked Save, got silently blocked from every command afterward). `/story manage`'s save button (`story_manage_save`, `story/manage.js`) has no equivalent warning at all. Same fix shape as Setup's, just needs applying here too.
 
 Sorted quick wins to biggest lifts within each group — small, no-plan-needed items first,
 tapering up to the fully-scoped efforts at the end of each section.
@@ -9,6 +9,7 @@ tapering up to the fully-scoped efforts at the end of each section.
 
 # Pending
 
+- **`/storyadmin skip` / `close` / `pause` have no confirmation step at all** — per `docs/reference/ux_roadmap.md`'s flow map, these are "immediate actions; no confirm panel." Found 2026-08-21 during the help-system redesign entry-point audit. An admin can fat-finger `/storyadmin close` on the wrong story with no undo prompt. Every comparable action elsewhere in the bot (writer-side leave/pass/pause, `/story close`, story-manage save) has at least a confirm dialog, even if some of those dialogs also need better wording (see `/story close`'s confirm in [plans/PLAN-help-system-redesign.md](plans/PLAN-help-system-redesign.md)'s Entry-Point Audit) — these three have none.
 - Extract a shared `wordCount` helper — the same `content.split(/\s+/).filter(w => w.length > 0).length` logic is currently duplicated across `_writeQuickMode.js`, `_storyStatus.js`, `export.js`, `read.js`, `close.js`, and `edit.js`. Once it exists, add the word count to the finalize embed footer.
 - formatDuration sweep: apply to `story/_storyStatus.js` line 210 (`${turn_length_hours}h`) and `announcements.js` line 105 (`${turn_length_hours}h Turns`) — these are different UX contexts and need separate review before changing displayed format
 - Code review: inline `.replace()` calls on config strings (replaceTemplateVariables compliance)
