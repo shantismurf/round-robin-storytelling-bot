@@ -135,15 +135,23 @@ finalized during Phase 3's content draft, not here — the *rule* is what's bein
 
 e.g. `txtHelp8SetupChannels` → `txtHelpAdminCmdsSetupChannels`; `lblHelp1PenName` → `lblHelpOverviewPenName`.
 
-**Migration mechanics — this is not a simple find-and-replace in the SQL files.** `sync-config.js` is
-additive-only: it inserts keys missing from the DB and updates changed values, but explicitly never
-deletes a DB key that's no longer present in the config files (confirmed by reading it — it just logs
-"note: N key(s) in DB not found... will not be touched"). Renaming ~100 keys by editing
-`config_help.sql` alone would leave every old numbered key as a permanent orphan row in the live
-`config` table — silent drift, the exact thing this plan exists to stop. The rename needs an explicit
-one-time migration (`db/migrations/NNN_rename_help_keys.sql`, this repo's existing mechanism for
-one-shot DB changes, tracked so it runs once) that deletes the old key names after the new ones are
-confirmed synced. This lands as part of Phase 3.
+**Migration mechanics — two deliberate steps, not one.** `sync-config.js` is additive-only: it inserts
+keys missing from the DB and updates changed values, but explicitly never deletes a DB key that's no
+longer present in the config files (confirmed by reading it — it just logs "note: N key(s) in DB not
+found... will not be touched"). That's a feature here, not a gap to patch around:
+
+1. **Phase 3 ships only the new keys.** Old numbered keys get pulled from `config_help.sql`; new
+   content-based keys get added. Deploy runs `sync-config` as normal — new keys insert, old keys become
+   orphaned but stay in the DB, untouched and harmless. This is a safety net for free: if any code path
+   still references an old key name, it keeps working while that gets caught and fixed, instead of a
+   rename+delete landing atomically and taking something down with no live staging to catch it first.
+   `sync-config.js`'s own output ("Note: N key(s) in DB not found in the config files") lists exactly
+   which old keys are now pending cleanup on every run after that — no separate tracking needed, it's
+   already the queue.
+2. **A separate, later cleanup migration** (`db/migrations/NNN_remove_old_help_keys.sql`) deletes the
+   old numbered keys once Phase 3 is confirmed working live with no lingering references. Not bundled
+   into Phase 3 — scheduled once things have actually been spot-checked in production, tracked as a
+   short follow-up in `docs/TODO.md` pointing back to this plan.
 
 ### Two renderers, one data source
 
@@ -223,20 +231,27 @@ mirroring `_entryRenderer.js`. `/storyadmin help` / `/mystory help` unaffected (
 jumps) except for getting the new visual treatment.
 
 **Phase 3 — Content restructuring.** Split pages 4 & 5, de-duplicate the repeated concepts, fix
-`txtHelp8Setup`, and rename all `txtHelp1*`...`txtHelp8*` keys to the content-based convention (see
-Naming Convention above). Includes the one-time `db/migrations/NNN_rename_help_keys.sql` that deletes
-the old key names — `sync-config.js` won't do this on its own. All wording drafted for review before
-it goes into `config_help.sql`.
+`txtHelp8Setup`, and move all `txtHelp1*`...`txtHelp8*` keys to the content-based convention (see
+Naming Convention above) by adding the new keys and dropping the old ones from the SQL files — old
+keys go orphaned-but-harmless in the DB, not deleted yet. All wording drafted for review before it
+goes into `config_help.sql`.
 
 **Phase 4 — Action accessories.** Wire the "Open Setup Panel" button (and any other clear candidates
 found during Phase 3) into the interactive-only render path.
+
+**Phase 3½ — Old-key cleanup (later, separate).** Once Phase 3 is confirmed working live with nothing
+still referencing the old numbered keys, a short follow-up migration
+(`db/migrations/NNN_remove_old_help_keys.sql`) deletes them. Tracked as its own `docs/TODO.md` line
+pointing back here, not bundled into Phase 3 itself.
 
 **Phase 5 — FAQ forum migration.** Convert `syncFaqPosts()` to the static renderer, informational-only,
 using Phase 0's confirmed approach. Re-evaluate thread count against the Phase 3 page split.
 
 **Phase 6 — Docs sync.** Update `docs/reference/system_roadmap.md` (new render functions),
-`docs/reference/config_roadmap.md` (full key rename from Phase 3, plus any newly split keys),
-`docs/reference/ux_roadmap.md` (new nav flow). Move this plan to `docs/plans/completed/` once shipped.
+`docs/reference/config_roadmap.md` (new key names from Phase 3; note old keys pending Phase 3½ cleanup
+until that lands), `docs/reference/ux_roadmap.md` (new nav flow). Move this plan to
+`docs/plans/completed/` once Phase 3½'s cleanup also ships — not before, since that's still open work
+this plan is tracking.
 
 ---
 
