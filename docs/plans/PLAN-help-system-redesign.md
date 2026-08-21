@@ -110,8 +110,13 @@ in-Discord interactive help.
 
 ### Page-definition model (replaces/extends `PAGE_DEFS`)
 
-Each entry gains an explicit key (not array position) and a per-entry action-accessory field that's
-only ever consulted in interactive mode:
+Each entry gains an explicit key (not array position) and a per-entry `action` field that's only ever
+consulted in interactive mode. **Correction from an earlier draft:** this renders as a `TextDisplay`
+followed by a plain `ActionRow` holding the button — stacked on its own line, not a `Section` accessory.
+A `Section`'s accessory is Discord's side-by-side-only layout (text with a button or thumbnail to its
+right); confirmed against `@discordjs/builders`' types that `ActionRowBuilder` is a valid `Container`
+child alongside `TextDisplayBuilder`, so stacking them gives a deterministic "button on its own line
+below the text" layout instead:
 
 ```js
 {
@@ -120,7 +125,7 @@ only ever consulted in interactive mode:
   entries: [
     {
       lbl: 'lblHelpAdminCmdsSetup', txt: 'txtHelpAdminCmdsSetup',
-      action: { labelKey: 'btnHelpAdminCmdsOpenSetup', customId: 'storyadmin_setup_open' }, // interactive-only
+      action: { labelKey: 'btnHelpAdminCmdsOpenSetup', customId: 'storyadmin_setup_open' }, // interactive-only — renders as TextDisplay + a following ActionRow, not a Section accessory
       children: [ /* ... */ ],
     },
   ],
@@ -214,7 +219,7 @@ workflows, so the fix is compaction, not fragmentation.
    too.
 4. **De-duplicate, don't re-explain:** Pen Name, Notifications, and Turn Privacy each need exactly
    one canonical explanation. Where a second page needs the concept, cross-reference (a "see also"
-   line, or — since we now have Section accessories — a jump button in interactive mode) instead of
+   line, or — since we now have action buttons via a trailing `ActionRow` — a jump button in interactive mode) instead of
    restating it with different wording. This absorbs most of what page 5's `txtHelp5WhatEdit` was doing
    — those settings are already explained on page 3; page 5 should point back, not restate.
 5. **Fix `txtHelp8Setup`** to actually describe the panel as a real procedure: run the command → a
