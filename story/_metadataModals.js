@@ -142,27 +142,39 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     ));
     container.addSeparatorComponents(new SeparatorBuilder());
 
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `${cfg.txtStoryAddSectionBreakInfo}\n` +
-      `${modeEmoji} **${trimTrailingEmoji(cfg.lblModeToggle)}:** ${modeLabel} — ${modeDesc}\n\n` +
-      `${orderEmoji} **${trimTrailingEmoji(cfg.lblWriterOrder)}:** ${orderLabel} — ${orderDesc}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblShowAuthors)}:** ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblTurnPrivacy)}:** ${state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaSceneBreakDivider)}:** ${sceneBreakDisplay}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaRating)}${cfg.lblMetadataAddon}:** ${ratingLabel}`
-    ));
+    // Each field is "label: value" then its explanation as -# subtext directly under it (own
+    // line, no blank line between the two — they're one unit), single line break between fields.
+    // No blank line between fields here: the two-line-per-field shape plus the subtext's muted
+    // weight already separates them, and the panel is long enough without adding one on top.
+    const infoLines = [
+      cfg.txtStoryAddSectionBreakInfo,
+      `${modeEmoji} **${trimTrailingEmoji(cfg.lblModeToggle)}:** ${modeLabel}\n-# ${modeDesc}`,
+      `${orderEmoji} **${trimTrailingEmoji(cfg.lblWriterOrder)}:** ${orderLabel}\n-# ${orderDesc}`,
+      `**${trimTrailingEmoji(cfg.lblShowAuthors)}:** ${state.showAuthors ? cfg.txtOn : cfg.txtOff}\n-# ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}`,
+      `**${trimTrailingEmoji(cfg.lblTurnPrivacy)}:** ${state.storyTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic}\n-# ${state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc}`,
+      // No description text exists for these two, so they stay single-line rather than
+      // inventing filler under them.
+      `**${trimTrailingEmoji(cfg.lblMetaSceneBreakDivider)}:** ${sceneBreakDisplay}`,
+      `**${trimTrailingEmoji(cfg.lblMetaRating)}${cfg.lblMetadataAddon}:** ${ratingLabel}`,
+    ];
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(infoLines.join('\n')));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`${ns}_open_storyinfo`).setLabel(cfg.btnAddStoryInfo).setStyle(ButtonStyle.Primary)
     ));
     container.addSeparatorComponents(new SeparatorBuilder());
 
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-      `${cfg.txtStoryAddSectionBreakSettings}\n` +
-      `**${trimTrailingEmoji(cfg.lblTurnLength)}:** ${turnLengthDisplay}\n\n` +
-      `**${isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder)}:** ${timeoutDisplay}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblDelayStart)}:** ${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC} _(${cfg.txtDelayHint})_\n\n` +
-      `**${trimTrailingEmoji(cfg.lblMaxWriters)}:** ${maxWritersDisplay}`
-    ));
+    // Delay Start only applies before a story's first turn starts -- Manage never loads or lets
+    // you edit it (state.delayHours/delayWriters are hardcoded null there, and its Edit Story
+    // Settings modal has no delay fields), so showing "0 hours / 0 writers" here was always
+    // meaningless leftover display, not a real setting. Add-only.
+    const settingsLines = [
+      cfg.txtStoryAddSectionBreakSettings,
+      `**${trimTrailingEmoji(cfg.lblTurnLength)}:** ${turnLengthDisplay}`,
+      `**${isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder)}:** ${timeoutDisplay}`,
+      ...(!isManage ? [`**${trimTrailingEmoji(cfg.lblDelayStart)}:** ${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC}\n-# ${cfg.txtDelayHint}`] : []),
+      `**${trimTrailingEmoji(cfg.lblMaxWriters)}:** ${maxWritersDisplay}`,
+    ];
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(settingsLines.join('\n')));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`${ns}_open_settings`).setLabel(cfg.btnAddSettings).setStyle(ButtonStyle.Primary)
     ));
