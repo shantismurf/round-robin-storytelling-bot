@@ -37,6 +37,17 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   // Persistent story-action area — doesn't change with the active tab, since none of these
   // edit a currently-shown field cluster. Labeled per the entry-point audit finding that
   // Manage Turns (Skip/Extend/Reassign) had zero inline explanation anywhere.
+  //
+  // COMPONENT BUDGET: the Settings tab (isAdminOrCreator = true, all fields populated) recurses
+  // to exactly 40 components counting every nested node (Container, each TextDisplay, each
+  // ActionRow, and each Button inside it) — Discord's documented per-message ceiling
+  // (docs.discord.com/developers/components/reference). @discordjs/builders does not validate
+  // this client-side, and it's unconfirmed whether Discord's server-side enforcement counts
+  // nested children individually (as above) or only top-level container children — so this could
+  // already be at the limit or comfortably under it. Decision: ship as-is and confirm live, since
+  // no staging environment exists. If Discord rejects the payload, the first thing to cut is the
+  // Separator on the line directly below this comment — it's the one purely decorative node in
+  // the tree and removes 1 from the count without touching any label or button.
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
 
