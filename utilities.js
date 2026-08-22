@@ -475,7 +475,16 @@ export async function getTurnNumber(connection, storyId) {
  */
 export function trimTrailingEmoji(label) {
   const segments = [...new Intl.Segmenter('en', { granularity: 'grapheme' }).segment(label)];
-  return segments.slice(0, -1).map(s => s.segment).join('').trimEnd();
+  const last = segments.at(-1);
+  // Only strip the last grapheme if it actually contains an emoji — the previous version
+  // unconditionally dropped it, which silently ate the final letter of any label that doesn't
+  // end in emoji (e.g. "Story Mode" -> "Story Mod", "Writer Order" -> "Writer Orde"). Test
+  // against the segment, not a single code point, since a compound/flagged emoji (variation
+  // selector, ZWJ sequence) is multiple code points but one grapheme.
+  if (last && /\p{Extended_Pictographic}/u.test(last.segment)) {
+    return segments.slice(0, -1).map(s => s.segment).join('').trimEnd();
+  }
+  return label;
 }
 
 export function replaceTemplateVariables(template, keyValueMap) {
