@@ -148,7 +148,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageEntriesDesc', '-# Edit, delete, or restore an entry', 'en', 1),
 ('txtManageTurnsDesc', '-# Skip Current Turn, Extend Deadline, Designate Next Writer, Reassign to Previous', 'en', 1),
 ('txtReviewTagsDesc', '-# Approve or reject submitted tags', 'en', 1),
-('txtManageUsersDesc', '-# Change user settings: Pause or Remove a user, or change a user''s Pen Name, Notifications, and Turn Privacy', 'en', 1),
+('txtManageUsersDesc', '-# Pause or Remove a user, change Pen Name, Notifications, and Turn Privacy', 'en', 1),
 ('txtChangeStoryStatusLabel', '**🚦 Change Story Status**', 'en', 1),
 ('txtManageTurnsPanelTitle', 'Turn Actions — [story_title]', 'en', 1),
 ('txtManageTurnsNoTurn', 'No active turn.', 'en', 1),
