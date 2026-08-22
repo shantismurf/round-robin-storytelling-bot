@@ -354,6 +354,13 @@ async function handleManageButton(connection, interaction) {
     } else if (customId === 'story_manage_reopen') {
       try {
         const { reopenMsg } = await handleReopenStory(connection, interaction, state);
+        // handleReopenStory sets state.targetStatus/originalStatus to ACTIVE for an immediate,
+        // already-committed DB write — but the Part 1c dirty check compares against
+        // state.originalFields, a separate snapshot taken at panel-open time. Without this,
+        // targetStatus would diverge from originalFields.targetStatus (still the pre-reopen
+        // CLOSED value) and the panel would show a false "Unsaved Changes" warning for a change
+        // that was never staged in the first place.
+        state.originalFields.targetStatus = state.targetStatus;
         pendingManageData.set(userId, state);
         await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, null));
         await interaction.followUp({ content: reopenMsg, flags: MessageFlags.Ephemeral });

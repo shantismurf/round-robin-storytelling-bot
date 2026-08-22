@@ -57,4 +57,22 @@ describe('isManageDirty', () => {
     delete state.originalFields;
     assert.equal(isManageDirty(state), false);
   });
+
+  test('reopen (an immediate, already-committed action) does not read as dirty once its originalFields entry is synced', () => {
+    // Regression for the bug found 2026-08-22: handleReopenStory sets state.targetStatus and
+    // state.originalStatus to ACTIVE directly (an immediate DB write, not a staged Save), but
+    // originally left state.originalFields.targetStatus at its pre-reopen CLOSED snapshot —
+    // which made isManageDirty falsely report unsaved changes right after reopening. The
+    // story_manage_reopen handler now syncs originalFields.targetStatus alongside targetStatus;
+    // this test locks that in.
+    const state = makeState({ targetStatus: 'closed' });
+    state.originalFields.targetStatus = 'closed';
+
+    // Simulate handleReopenStory's writes plus the fix's sync.
+    state.originalStatus = 'active';
+    state.targetStatus = 'active';
+    state.originalFields.targetStatus = state.targetStatus;
+
+    assert.equal(isManageDirty(state), false);
+  });
 });

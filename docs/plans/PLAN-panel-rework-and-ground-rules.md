@@ -436,14 +436,18 @@ Settings" hard-coded into the body text, so it can't drift from `btnSaveSettings
   array-reorder-is-not-dirty, an untracked field (tab switch) not tripping it, and the
   not-yet-snapshotted guard
 
-### Found, not fixed (separate, pre-existing bug)
-While tracing `state.targetStatus`/`originalStatus` for the dirty check, found that
-`story_manage_reopen` (`handleManageButton`) writes the reopen straight to the DB but never
-updates `state.targetStatus`/`originalStatus` afterward — the re-rendered panel still shows the
-"Reopen" button and a disabled Pause/Resume row until the panel is reopened fresh. Predates this
-session and this feature; doesn't interact with the dirty check (reopen isn't a staged field, so
-it correctly reports clean either way) — logged in `docs/TODO.md` rather than fixed here, since
-it's out of Part 1c's scope.
+### Found and fixed during build: reopen falsely tripped the new warning
+`handleReopenStory` (`story/_managePauseResume.js`) already correctly sets `state.targetStatus`/
+`state.originalStatus` to `ACTIVE` after an immediate, already-committed reopen — that part was
+fine before this feature and needed no fix. What the dirty check got wrong on its own first pass:
+it compares against a separate snapshot, `state.originalFields`, taken once at panel-open time —
+and `story_manage_reopen`'s handler didn't know that snapshot existed, so
+`originalFields.targetStatus` stayed at its pre-reopen `CLOSED` value while `state.targetStatus`
+jumped to `ACTIVE`. Result: the panel would falsely show "⚠️ Unsaved Changes" immediately after a
+reopen, for a change that was never staged (reopen writes straight to the DB, no Save needed).
+Fixed by syncing `state.originalFields.targetStatus = state.targetStatus` in that same handler,
+right after `handleReopenStory` returns. Covered by a regression test in
+`test/manage_isManageDirty.test.js`.
 
 ---
 
