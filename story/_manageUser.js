@@ -63,17 +63,17 @@ function buildManageUserPanel(state) {
   return { embeds: [embed], components: [row1, row2, row3] };
 }
 
-export async function handleManageUser(connection, interaction) {
-  log(`handleManageUser: entry for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-  const guildId = interaction.guild.id;
-  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
-  const targetUser = interaction.options.getUser('user');
-
-  log(`handleManageUser: storyId=${storyId} targetUser=${targetUser?.username}`, { show: false, guildName: interaction?.guild?.name });
-
-  if (storyId === null) {
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
-  }
+/**
+ * Shared core: fetches writer data and shows the manage-user panel for a given story/writer
+ * pair. Used by both /storyadmin user (direct slash command, storyId/targetUserId resolved
+ * from options) and the /story manage panel's Manage Users button (two-step: pick a writer
+ * from a modal, then this) — the management logic itself doesn't change between entry points.
+ * writerDisplayName: optional pre-known display name (the panel-button path already has this
+ * from the picker it just built, no Discord API call needed at this end); falls back to
+ * story_writer's own stored discord_display_name if not given.
+ */
+export async function openManageUserPanel(connection, interaction, storyId, targetUserId, guildId, writerDisplayName = null) {
+  log(`openManageUserPanel: entry storyId=${storyId} targetUserId=${targetUserId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
     const [storyRows] = await connection.execute(
@@ -81,40 +81,40 @@ export async function handleManageUser(connection, interaction) {
       [storyId, guildId]
     );
     if (storyRows.length === 0) {
-      log(`handleManageUser: story ${storyId} not found in guild ${guildId}`, { show: false, guildName: interaction?.guild?.name });
+      log(`openManageUserPanel: story ${storyId} not found in guild ${guildId}`, { show: false, guildName: interaction?.guild?.name });
       return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
     }
     const story = storyRows[0];
-    log(`handleManageUser: story found — "${story.title}"`, { show: false, guildName: interaction?.guild?.name });
+    log(`openManageUserPanel: story found — "${story.title}"`, { show: false, guildName: interaction?.guild?.name });
 
     const [writerRows] = await connection.execute(
-      `SELECT story_writer_id, sw_status, pen_name, notification_prefs, turn_privacy
+      `SELECT story_writer_id, sw_status, pen_name, notification_prefs, turn_privacy, discord_display_name
        FROM story_writer WHERE story_id = ? AND discord_user_id = ? AND sw_status IN (?, ?)`,
-      [storyId, targetUser.id, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
+      [storyId, targetUserId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
     );
     if (writerRows.length === 0) {
-      log(`handleManageUser: target user ${targetUser.id} is not an active writer in story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
+      log(`openManageUserPanel: target user ${targetUserId} is not an active writer in story ${storyId}`, { show: false, guildName: interaction?.guild?.name });
       return await interaction.editReply({
         content: replaceTemplateVariables(
           await getConfigValue(connection, 'txtAdminKickNotWriter', guildId),
-          { user_name: targetUser.displayName || targetUser.username }
+          { user_name: writerDisplayName ?? targetUserId }
         )
       });
     }
     const writer = writerRows[0];
-    log(`handleManageUser: writer found — writerId=${writer.story_writer_id} status=${writer.sw_status} notif=${writer.notification_prefs} privacy=${writer.turn_privacy}`, { show: false, guildName: interaction?.guild?.name });
+    log(`openManageUserPanel: writer found — writerId=${writer.story_writer_id} status=${writer.sw_status} notif=${writer.notification_prefs} privacy=${writer.turn_privacy}`, { show: false, guildName: interaction?.guild?.name });
 
     const [activeTurnRows] = await connection.execute(
       `SELECT t.turn_id, t.thread_id FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
        WHERE sw.story_id = ? AND sw.discord_user_id = ? AND t.turn_status = ?`,
-      [storyId, targetUser.id, TURN_STATUS.ACTIVE]
+      [storyId, targetUserId, TURN_STATUS.ACTIVE]
     );
     const [remainingRows] = await connection.execute(
       `SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = ? AND discord_user_id != ?`,
-      [storyId, WRITER_STATUS.ACTIVE, targetUser.id]
+      [storyId, WRITER_STATUS.ACTIVE, targetUserId]
     );
-    log(`handleManageUser: activeTurn=${activeTurnRows.length > 0} remainingWriters=${remainingRows[0].count}`, { show: false, guildName: interaction?.guild?.name });
+    log(`openManageUserPanel: activeTurn=${activeTurnRows.length > 0} remainingWriters=${remainingRows[0].count}`, { show: false, guildName: interaction?.guild?.name });
 
     const cfg = await getConfigValue(connection, [
       'txtManageUserPanelTitle', 'txtManageUserPanelDesc',
@@ -137,7 +137,7 @@ export async function handleManageUser(connection, interaction) {
     ], guildId);
 
     const isActiveTurn = activeTurnRows.length > 0;
-    const writerName = targetUser.displayName || targetUser.username;
+    const writerName = writerDisplayName ?? writer.discord_display_name ?? targetUserId;
 
     const state = {
       action: null,
@@ -145,7 +145,7 @@ export async function handleManageUser(connection, interaction) {
       guildId,
       guildName: interaction.guild.name,
       storyTitle: story.title,
-      targetUserId: targetUser.id,
+      targetUserId,
       writerId: writer.story_writer_id,
       writerName,
       writerStatus: writer.sw_status,
@@ -161,13 +161,28 @@ export async function handleManageUser(connection, interaction) {
     };
 
     pendingManageUserData.set(interaction.user.id, state);
-    log(`handleManageUser: panel built, sending reply`, { show: false, guildName: interaction?.guild?.name });
+    log(`openManageUserPanel: panel built, sending reply`, { show: false, guildName: interaction?.guild?.name });
     await interaction.editReply(buildManageUserPanel(state));
 
   } catch (error) {
-    log(`handleManageUser failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
+    log(`openManageUserPanel failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
   }
+}
+
+export async function handleManageUser(connection, interaction) {
+  log(`handleManageUser: entry for user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+  const guildId = interaction.guild.id;
+  const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
+  const targetUser = interaction.options.getUser('user');
+
+  log(`handleManageUser: storyId=${storyId} targetUser=${targetUser?.username}`, { show: false, guildName: interaction?.guild?.name });
+
+  if (storyId === null) {
+    return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
+  }
+
+  await openManageUserPanel(connection, interaction, storyId, targetUser.id, guildId, targetUser.displayName || targetUser.username);
 }
 
 export async function handleManageUserButton(connection, interaction) {

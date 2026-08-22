@@ -1,11 +1,22 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, parseDuration, formatDuration } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
-import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
+import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
 import { STORY_MODE } from '../constants.js';
 
 // Temporary storage for story add session state
 export const pendingStoryData = new Map();
+
+// Terminal-state messages (create success/error, session end) — kept as Components V2 rather
+// than plain `content`, since the panel that precedes them already uses IsComponentsV2 and
+// whether that flag can be removed on a later edit is unconfirmed against Discord's docs.
+// A one-block Container sidesteps the question entirely.
+function finalMessage(text) {
+  return {
+    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text))],
+    flags: MessageFlags.IsComponentsV2,
+  };
+}
 
 async function getPreviousPenName(connection, userId) {
   try {
@@ -60,7 +71,8 @@ export async function handleAddStory(connection, interaction) {
       dynamic: '',
       tags: '',
       summary: '',
-      sceneBreakDivider: ''
+      sceneBreakDivider: '',
+      activeGroup: 'settings',
     };
 
     pendingStoryData.set(interaction.user.id, {
@@ -83,49 +95,22 @@ export async function handleAddStory(connection, interaction) {
 }
 
 export function buildStoryAddMessage(cfg, state) {
-  const embed = buildStoryEmbed(cfg, state, cfg.txtCreateStoryTitle);
+  const container = buildStoryPanel(cfg, state, cfg.txtCreateStoryTitle, {
+    isManage: false,
+    activeGroup: state.activeGroup ?? 'settings',
+    namespace: 'story_add',
+  });
 
-  // Row 1: Set Title and Summary | Story Info | Story Settings
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_add_open_titlesummary')
-      .setLabel(cfg.btnAddTitleAndSummary)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_add_open_storyinfo')
-      .setLabel(cfg.btnAddStoryInfo)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_add_open_settings')
-      .setLabel(cfg.btnAddSettings)
-      .setStyle(ButtonStyle.Primary),
-  );
+  container.addSeparatorComponents(new SeparatorBuilder());
 
-  // Row 2: My Settings | Story Metadata | Story Tags
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_add_open_mysettings')
-      .setLabel(cfg.btnAddMySettings)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_add_open_metadata')
-      .setLabel(cfg.btnAddMetadata)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_add_open_tags')
-      .setLabel(cfg.btnAddTags)
-      .setStyle(ButtonStyle.Primary),
-  );
-
-  // Row 3: Create Story
-  const row3 = new ActionRowBuilder().addComponents(
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_add_create')
       .setLabel(cfg.btnCreateStory)
       .setStyle(ButtonStyle.Success)
-  );
+  ));
 
-  return { embeds: [embed], components: [row1, row2, row3] };
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 export async function handleAddStoryModalSubmit(connection, interaction) {
@@ -234,11 +219,11 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
     } else if (customId === 'story_add_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_add_metadata_dynamic')?.[0];
       const rating = interaction.fields.getStringSelectValues('story_add_metadata_rating')?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues('story_add_metadata_warnings') ?? [];
+      const warningsRaw = interaction.fields.getCheckboxGroup('story_add_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;
-      state.warnings = (warningsRaw ?? []).filter(v => v !== '__dismiss__');
+      state.warnings = warningsRaw ?? [];
 
     } else if (customId === 'story_add_storyinfo_modal') {
       const modeVal = interaction.fields.getRadioGroup('story_add_storyinfo_mode');
@@ -298,7 +283,12 @@ export async function handleAddStoryButton(connection, interaction) {
   log(`handleAddStoryButton: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
-    if (customId === 'story_add_open_storyinfo') {
+    if (customId === 'story_add_tab_settings' || customId === 'story_add_tab_metadata') {
+      state.activeGroup = customId === 'story_add_tab_settings' ? 'settings' : 'metadata';
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
+
+    } else if (customId === 'story_add_open_storyinfo') {
       await interaction.showModal(buildStoryInfoModal(state.cfg, state, 'story_add'));
 
     } else if (customId === 'story_add_open_titlesummary') {
@@ -500,24 +490,12 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
     pendingStoryData.delete(interaction.user.id);
 
     if (result.success) {
-      await state.originalInteraction.editReply({
-        content: result.message,
-        embeds: [],
-        components: []
-      });
+      await state.originalInteraction.editReply(finalMessage(result.message));
     } else {
-      await state.originalInteraction.editReply({
-        content: result.error,
-        embeds: [],
-        components: []
-      });
+      await state.originalInteraction.editReply(finalMessage(result.error));
     }
   } catch (error) {
     log(`Error creating story: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'txtStoryCreationError', interaction.guild.id),
-      embeds: [],
-      components: []
-    });
+    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'txtStoryCreationError', interaction.guild.id)));
   }
 }

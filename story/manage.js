@@ -1,14 +1,16 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
 import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
-import { getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
+import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal, finalMessage } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
 import { applyPauseActions, applyResumeActions, handleReopenStory } from './_managePauseResume.js';
-import { STORY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
+import { openManageUserPanel } from './_manageUser.js';
+import { handleManageCloseConfirm } from './_manageClose.js';
+import { STORY_STATUS, TURN_STATUS, STORY_MODE, WRITER_STATUS } from '../constants.js';
 
 const pendingManageData = new Map();
 
@@ -16,56 +18,67 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const isPaused = state.targetStatus === STORY_STATUS.PAUSED;
   const isClosed = state.targetStatus === STORY_STATUS.CLOSED;
 
-  const embed = buildStoryEmbed(cfg, state, cfg.txtManageEmbedTitle, true);
+  const container = buildStoryPanel(cfg, state, cfg.txtManageEmbedTitle, {
+    isManage: true,
+    activeGroup: state.activeGroup ?? 'settings',
+    namespace: 'story_manage',
+    titleMetadata: cfg.txtManageEmbedTitleMetadata,
+  });
 
-  // Row 1 (3): Set Title and Summary | Story Info | Story Settings
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_titlesummary')
-      .setLabel(cfg.btnAddTitleAndSummary)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_storyinfo')
-      .setLabel(cfg.btnAddStoryInfo)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_settings')
-      .setLabel(cfg.btnAddSettings)
-      .setStyle(ButtonStyle.Primary),
-  );
+  // Story-action area — Settings tab only. These used to sit on both tabs on the theory that
+  // none of them edit a currently-shown field cluster, but Manage Entries/Turns/Users don't
+  // relate to Metadata content at all, so there's no reason to pay their component cost (or
+  // clutter the view) while metadata-editing — one click back to Settings gets them. Review
+  // Tags moved the other way, into buildStoryPanel's Metadata branch, since it feeds the Tags
+  // field shown there. Labeled per the entry-point audit finding that Manage Turns
+  // (Skip/Extend/Reassign) had zero inline explanation anywhere.
+  //
+  // COMPONENT BUDGET: worst case (Settings tab, isAdminOrCreator = true, all fields populated)
+  // recurses to 37 components counting every nested node (Container, each TextDisplay, each
+  // ActionRow, and each Button inside it) — under Discord's documented 40-per-message ceiling
+  // (docs.discord.com/developers/components/reference), with the Metadata tab well under that
+  // at 25. @discordjs/builders does not validate this client-side, and it's unconfirmed whether
+  // Discord's server-side enforcement counts nested children individually (as above) or only
+  // top-level container children — so treat 37 as the number to watch if more fields are added
+  // later, not as headroom already spent. If it ever needs trimming, the first cut is the
+  // Separator on the line directly below this comment — the one purely decorative node in the
+  // tree, removing 1 from the count without touching any label or button.
+  if ((state.activeGroup ?? 'settings') === 'settings') {
+    container.addSeparatorComponents(new SeparatorBuilder());
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
 
-  // Row 2 (2): Manage Entries | Manage Turns
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_entries_open')
-      .setLabel(cfg.btnManageEntries)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_turns_open')
-      .setLabel(cfg.btnManageTurns)
-      .setStyle(ButtonStyle.Primary),
-  );
+    // One button per row, each followed by its own -# subtext caption — these hide multiple
+    // sub-actions behind a single label (e.g. Manage Turns opens Skip/Extend/Reassign), so
+    // knowing what's inside before clicking matters, the same reasoning as the inline mode
+    // descriptions already used for Story Mode/Writer Order. Closes the entry-point audit's
+    // Manage Turns finding directly, without waiting on the help redesign's contextual-popup
+    // mechanism.
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('story_manage_entries_open').setLabel(cfg.btnManageEntries).setStyle(ButtonStyle.Primary)
+    ));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageEntriesDesc));
 
-  // Row 3 (3): Story Metadata | Story Tags | Review Tags (always shown, disabled if none pending)
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_metadata')
-      .setLabel(cfg.btnAddMetadata)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_open_tags')
-      .setLabel(cfg.btnAddTags)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_review_tags')
-      .setLabel(replaceTemplateVariables(cfg.btnReviewTags, { count: state.pendingTagCount || 0 }))
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(!state.pendingTagCount),
-  );
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('story_manage_turns_open').setLabel(cfg.btnManageTurns).setStyle(ButtonStyle.Primary)
+    ));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageTurnsDesc));
 
-  // Row 4 (3): Open/Close Joins | Pause/Resume Story | Close/Reopen Story
+    // Gated to creator-or-admin, matching /story manage's own access level — not admin-only like
+    // the standalone /storyadmin user command. Deliberately broader here: managing writers in
+    // your own story is a natural extension of the creator controls already on this panel.
+    if (state.isAdminOrCreator) {
+      container.addActionRowComponents(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('story_manage_users_open').setLabel(cfg.btnManageUsers).setStyle(ButtonStyle.Primary)
+      ));
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageUsersDesc));
+    }
+  }
+
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtChangeStoryStatusLabel));
+
   const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
-  const row4 = new ActionRowBuilder().addComponents(
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_toggle_latejoins')
       .setLabel(state.allowJoins ? cfg.btnManageJoinsClose : cfg.btnManageJoinsOpen)
@@ -84,17 +97,21 @@ function buildManageMessage(cfg, state, activeTurn = null) {
           .setCustomId('story_manage_close_open')
           .setLabel(cfg.btnCloseConfirm)
           .setStyle(ButtonStyle.Danger),
-  );
+  ));
 
-  // Row 5 (1): Save Settings
-  const row5 = new ActionRowBuilder().addComponents(
+  // TODO.md top-priority item: /story manage uses the identical stage-then-save pattern as
+  // /storyadmin setup, which needed this exact warning (txtSetupModalSaveWarning) after a real
+  // incident where an admin never clicked Save and got silently blocked. Reused verbatim here
+  // (new key, same approved text) since this panel's save button is also called "Save Settings".
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageSaveWarning));
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_save')
       .setLabel(cfg.btnSaveSettings)
       .setStyle(ButtonStyle.Success),
-  );
+  ));
 
-  return { embeds: [embed], components: [row1, row2, row3, row4, row5] };
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 async function handleManage(connection, interaction, alreadyDeferred = false) {
@@ -159,6 +176,9 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtReopenStory', 'txtStoryCloseConfirm', 'btnCloseConfirm',
       'txtAdminConfigSaved', 'errProcessingRequest', 'txtActionCancelled', 'txtActionSessionExpired',
       'txtManageNotAuthorized', 'txtStoryNotFound',
+      'btnManageUsers', 'txtManageUsersPickModalTitle', 'lblManageUsersPickSelect', 'txtManageUsersNoWriters',
+      'txtManageEntriesDesc', 'txtManageTurnsDesc', 'txtReviewTagsDesc', 'txtManageUsersDesc', 'txtChangeStoryStatusLabel',
+      'txtManageEmbedTitleMetadata',
     ], guildId);
 
     Object.assign(cfg, extraCfg);
@@ -215,6 +235,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       activeTurn,
       delayHours: null,
       delayWriters: null,
+      activeGroup: 'settings',
     };
 
     pendingManageData.set(interaction.user.id, state);
@@ -242,7 +263,12 @@ async function handleManageButton(connection, interaction) {
   const customId = interaction.customId;
 
   try {
-    if (customId === 'story_manage_open_storyinfo') {
+    if (customId === 'story_manage_tab_settings' || customId === 'story_manage_tab_metadata') {
+      state.activeGroup = customId === 'story_manage_tab_settings' ? 'settings' : 'metadata';
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+    } else if (customId === 'story_manage_open_storyinfo') {
       await interaction.showModal(buildStoryInfoModal(state.cfg, state, 'story_manage'));
 
     } else if (customId === 'story_manage_toggle_latejoins') {
@@ -251,22 +277,39 @@ async function handleManageButton(connection, interaction) {
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
     } else if (customId === 'story_manage_close_open') {
-      // Reuses the standalone /story close confirm/cancel flow — story_close_confirm_<id> and
-      // story_close_cancel_<id> are routed centrally in commands/story.js to handleCloseConfirm/handleCloseCancel.
+      // Own customIds (story_manage_close_confirm/story_manage_close_cancel), NOT the
+      // standalone /story close command's story_close_confirm_<id>/story_close_cancel_<id> —
+      // confirmed against Discord's docs that IsComponentsV2 can never be removed once a message
+      // carries it ("Once a message has been sent with this flag, it can't be removed from that
+      // message"), so this prompt and everything downstream of it must stay Components V2. The
+      // standalone command's close.js handlers reply in plain content/components and must not be
+      // reused directly here — see story/_manageClose.js for the manage-panel-specific confirm
+      // flow (reuses close.js's actual close logic, just not its reply formatting).
       const cfg = state.cfg;
       const confirmMsg = replaceTemplateVariables(cfg.txtStoryCloseConfirm, { story_title: state.title });
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`story_close_confirm_${state.storyId}`)
+          .setCustomId('story_manage_close_confirm')
           .setLabel(cfg.btnCloseConfirm)
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-          .setCustomId(`story_close_cancel_${state.storyId}`)
+          .setCustomId('story_manage_close_cancel')
           .setLabel(cfg.btnCancel)
           .setStyle(ButtonStyle.Secondary)
       );
       await interaction.deferUpdate();
-      await state.originalInteraction.editReply({ content: confirmMsg, embeds: [], components: [row] });
+      await state.originalInteraction.editReply(finalMessage(confirmMsg, [row]));
+
+    } else if (customId === 'story_manage_close_confirm') {
+      if (!state.isAdminOrCreator) {
+        return await interaction.followUp({ content: await getConfigValue(connection, 'txtManageNotAuthorized', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      }
+      await handleManageCloseConfirm(connection, interaction, state);
+      pendingManageData.delete(userId);
+
+    } else if (customId === 'story_manage_close_cancel') {
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
     } else if (customId === 'story_manage_reopen') {
       try {
@@ -369,6 +412,49 @@ async function handleManageButton(connection, interaction) {
     } else if (customId === 'story_manage_entries_open') {
       await handleManageEntriesButton(connection, interaction, state);
 
+    } else if (customId === 'story_manage_users_open') {
+      // Re-check server-side — the button is hidden for anyone who isn't creator-or-admin, but
+      // hiding a button client-side is not an authorization boundary on its own. In practice this
+      // is unreachable (handleManage's own entry gate already requires creator-or-admin), but
+      // checked explicitly rather than assumed.
+      if (!state.isAdminOrCreator) {
+        await interaction.reply({ content: cfg.txtManageNotAuthorized, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      const [writerRows] = await connection.execute(
+        `SELECT discord_user_id, discord_display_name, sw_status FROM story_writer
+         WHERE story_id = ? AND sw_status IN (?, ?) ORDER BY discord_display_name`,
+        [state.storyId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
+      );
+      if (writerRows.length === 0) {
+        await interaction.reply({ content: cfg.txtManageUsersNoWriters, flags: MessageFlags.Ephemeral });
+        return;
+      }
+      // Discord select menus cap at 25 options — realistic round-robin story sizes are well
+      // under that, but truncate defensively rather than error if one somehow isn't.
+      const pickable = writerRows.slice(0, 25);
+      if (writerRows.length > 25) {
+        log(`handleManageButton: story ${state.storyId} has ${writerRows.length} writers, truncating picker to 25`, { show: true, guildName: interaction?.guild?.name });
+      }
+      const pickerSelect = new StringSelectMenuBuilder()
+        .setCustomId('writer')
+        .setRequired(true)
+        .setMinValues(1)
+        .setMaxValues(1)
+        .addOptions(pickable.map(w => ({
+          label: w.discord_display_name || w.discord_user_id,
+          value: w.discord_user_id,
+          description: w.sw_status === WRITER_STATUS.PAUSED ? cfg.txtMyStoryManagePausedStatus : cfg.txtMyStoryManageActiveStatus,
+        })));
+      await interaction.showModal(
+        new ModalBuilder()
+          .setCustomId('story_manage_users_pick_modal')
+          .setTitle(cfg.txtManageUsersPickModalTitle)
+          .addLabelComponents(
+            new LabelBuilder().setLabel(cfg.lblManageUsersPickSelect).setStringSelectMenuComponent(pickerSelect)
+          )
+      );
+
     } else if (customId === 'story_manage_review_tags') {
       await handleReviewTags(connection, interaction, state);
       return;
@@ -389,14 +475,6 @@ async function handleManageButton(connection, interaction) {
       await interaction.deferUpdate();
       await handleManageSave(connection, interaction, state);
 
-    } else if (customId === 'story_manage_cancel') {
-      await interaction.deferUpdate();
-      pendingManageData.delete(userId);
-      await state.originalInteraction.editReply({
-        content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
-        embeds: [],
-        components: []
-      });
     }
   } catch (error) {
     log(`handleManageButton failed: customId=${customId} user=${interaction.user.username}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
@@ -466,18 +544,10 @@ async function handleManageSave(connection, interaction, state) {
 
     pendingManageData.delete(interaction.user.id);
 
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'txtAdminConfigSaved', guildId),
-      embeds: [],
-      components: []
-    });
+    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'txtAdminConfigSaved', guildId)));
   } catch (error) {
     log(`handleManageSave failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
-    await state.originalInteraction.editReply({
-      content: await getConfigValue(connection, 'errProcessingRequest', guildId),
-      embeds: [],
-      components: []
-    });
+    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
@@ -561,11 +631,11 @@ async function handleManageModalSubmit(connection, interaction) {
     } else if (customId === 'story_manage_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_manage_metadata_dynamic')?.[0];
       const rating = interaction.fields.getStringSelectValues('story_manage_metadata_rating')?.[0];
-      const warningsRaw = interaction.fields.getStringSelectValues('story_manage_metadata_warnings') ?? [];
+      const warningsRaw = interaction.fields.getCheckboxGroup('story_manage_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;
-      state.warnings = (warningsRaw ?? []).filter(v => v !== '__dismiss__');
+      state.warnings = warningsRaw ?? [];
       log(`handleManageModalSubmit: metadata staged dynamic=${state.dynamic} rating=${state.rating} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
     } else if (customId === 'story_manage_tags_modal') {
@@ -573,6 +643,20 @@ async function handleManageModalSubmit(connection, interaction) {
       state.otherRelationships = sanitizeModalInput(interaction.fields.getTextInputValue('other_relationships'), 1000, true) || '';
       state.characters = sanitizeModalInput(interaction.fields.getTextInputValue('characters'), 500) || '';
       state.tags = sanitizeModalInput(interaction.fields.getTextInputValue('tags'), 1000, true) || '';
+
+    } else if (customId === 'story_manage_users_pick_modal') {
+      // Opens a new, separate ephemeral panel (the existing Manage User panel) rather than
+      // re-rendering the story-manage panel — early return, skips the shared re-render tail below.
+      if (!state.isAdminOrCreator) {
+        return await interaction.reply({ content: state.cfg.txtManageNotAuthorized, flags: MessageFlags.Ephemeral });
+      }
+      const targetUserId = interaction.fields.getStringSelectValues('writer')?.[0];
+      if (!targetUserId) {
+        return await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      }
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+      await openManageUserPanel(connection, interaction, state.storyId, targetUserId, interaction.guild.id);
+      return;
     }
 
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
@@ -587,41 +671,11 @@ async function handleManageModalSubmit(connection, interaction) {
   }
 }
 
-async function handleManageSelectMenu(connection, interaction) {
-  log(`handleManageSelectMenu entry user=${interaction.user.username} customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
-  const userId = interaction.user.id;
-  const state = pendingManageData.get(userId);
-
-  if (!state) {
-    await interaction.deferUpdate();
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), components: [] });
-    return;
-  }
-
-  const customId = interaction.customId;
-
-  if (customId === 'story_manage_rating_select') {
-    const newRating = interaction.values[0];
-    const currentRating = state.rating;
-    state.rating = newRating;
-    log(`handleManageSelectMenu: rating staged ${currentRating}→${newRating} for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-  } else if (customId === 'story_manage_warnings_select') {
-    state.warnings = interaction.values.filter(v => v !== '__dismiss__');
-    log(`handleManageSelectMenu: warnings staged for user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
-  } else {
-    return;
-  }
-
-  await interaction.deferUpdate();
-  await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
-}
-
 export {
   pendingManageData,
   buildManageMessage,
   handleManage,
   handleManageButton,
-  handleManageSelectMenu,
   handleTagReviewButton,
   handleManageSave,
   applyPauseActions,

@@ -6,8 +6,10 @@ import { generateStoryExport } from './export.js';
 import { getActiveThreadId } from '../storybot.js';
 import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS, TURN_STATUS, STORY_MODE } from '../constants.js';
 
-// Direct stats query — independent of export generation, since export is now a manual, optional step after close.
-async function getStoryStats(connection, storyId) {
+// Direct stats query — independent of export generation, since export is now a manual, optional
+// step after close. Exported for story/_manageClose.js, which needs the same numbers for the
+// manage-panel close flow.
+export async function getStoryStats(connection, storyId) {
   const [writerRows] = await connection.execute(
     `SELECT COUNT(*) AS writerCount FROM story_writer WHERE story_id = ? AND sw_status = ?`,
     [storyId, WRITER_STATUS.ACTIVE]
