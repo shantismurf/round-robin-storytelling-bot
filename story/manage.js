@@ -3,26 +3,16 @@ import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, reso
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
 import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
-import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
+import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal, finalMessage } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
 import { applyPauseActions, applyResumeActions, handleReopenStory } from './_managePauseResume.js';
 import { openManageUserPanel } from './_manageUser.js';
+import { handleManageCloseConfirm } from './_manageClose.js';
 import { STORY_STATUS, TURN_STATUS, STORY_MODE, WRITER_STATUS } from '../constants.js';
 
 const pendingManageData = new Map();
-
-// Terminal/interstitial-state messages (save success/error, cancel, close-confirm) — kept as
-// Components V2 rather than plain `content`, since the panel that precedes them already uses
-// IsComponentsV2 and whether that flag can be removed on a later edit is unconfirmed against
-// Discord's docs. A one-block Container sidesteps the question entirely.
-function finalMessage(text, extraComponents = []) {
-  return {
-    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)), ...extraComponents],
-    flags: MessageFlags.IsComponentsV2,
-  };
-}
 
 function buildManageMessage(cfg, state, activeTurn = null) {
   const isPaused = state.targetStatus === STORY_STATUS.PAUSED;
@@ -287,29 +277,39 @@ async function handleManageButton(connection, interaction) {
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
     } else if (customId === 'story_manage_close_open') {
-      // Reuses the standalone /story close confirm/cancel flow — story_close_confirm_<id> and
-      // story_close_cancel_<id> are routed centrally in commands/story.js to handleCloseConfirm/handleCloseCancel.
-      // Deliberately NOT converted to Components V2: those shared handlers (story/close.js) also
-      // serve the standalone /story close command and reply with plain content/components — this
-      // edit transitions FROM the (Components V2) manage panel TO that plain shape, and whether
-      // Discord allows removing the IsComponentsV2 flag on an edit is unverified (undocumented,
-      // no staging to test). Left exactly as it worked before this rework. If it breaks live,
-      // the fix is converting close.js's shared handlers too — a separate, bigger change since
-      // it's shared with a command outside this plan's scope.
+      // Own customIds (story_manage_close_confirm/story_manage_close_cancel), NOT the
+      // standalone /story close command's story_close_confirm_<id>/story_close_cancel_<id> —
+      // confirmed against Discord's docs that IsComponentsV2 can never be removed once a message
+      // carries it ("Once a message has been sent with this flag, it can't be removed from that
+      // message"), so this prompt and everything downstream of it must stay Components V2. The
+      // standalone command's close.js handlers reply in plain content/components and must not be
+      // reused directly here — see story/_manageClose.js for the manage-panel-specific confirm
+      // flow (reuses close.js's actual close logic, just not its reply formatting).
       const cfg = state.cfg;
       const confirmMsg = replaceTemplateVariables(cfg.txtStoryCloseConfirm, { story_title: state.title });
       const row = new ActionRowBuilder().addComponents(
         new ButtonBuilder()
-          .setCustomId(`story_close_confirm_${state.storyId}`)
+          .setCustomId('story_manage_close_confirm')
           .setLabel(cfg.btnCloseConfirm)
           .setStyle(ButtonStyle.Danger),
         new ButtonBuilder()
-          .setCustomId(`story_close_cancel_${state.storyId}`)
+          .setCustomId('story_manage_close_cancel')
           .setLabel(cfg.btnCancel)
           .setStyle(ButtonStyle.Secondary)
       );
       await interaction.deferUpdate();
-      await state.originalInteraction.editReply({ content: confirmMsg, embeds: [], components: [row] });
+      await state.originalInteraction.editReply(finalMessage(confirmMsg, [row]));
+
+    } else if (customId === 'story_manage_close_confirm') {
+      if (!state.isAdminOrCreator) {
+        return await interaction.followUp({ content: await getConfigValue(connection, 'txtManageNotAuthorized', interaction.guild.id), flags: MessageFlags.Ephemeral });
+      }
+      await handleManageCloseConfirm(connection, interaction, state);
+      pendingManageData.delete(userId);
+
+    } else if (customId === 'story_manage_close_cancel') {
+      await interaction.deferUpdate();
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 
     } else if (customId === 'story_manage_reopen') {
       try {

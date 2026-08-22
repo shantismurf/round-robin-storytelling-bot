@@ -1,7 +1,22 @@
-import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, formatDuration, trimTrailingEmoji, replaceTemplateVariables } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
 import { STORY_MODE } from '../constants.js';
+
+// Wraps a plain text message (optionally with trailing components, e.g. a confirm row or an
+// export-button row) as a one-block Components V2 Container — for terminal/interstitial states
+// (save success/error, close-confirm, close success) that follow a V2 panel. Confirmed against
+// Discord's docs that IsComponentsV2 can never be removed once a message carries it ("Once a
+// message has been sent with this flag, it can't be removed from that message"), so anything
+// editing a message that started as this panel must stay in this shape. Shared by manage.js and
+// _manageClose.js — lives here rather than in either of them to avoid a circular import between
+// the two.
+export function finalMessage(text, extraComponents = []) {
+  return {
+    components: [new ContainerBuilder().addTextDisplayComponents(new TextDisplayBuilder().setContent(text)), ...extraComponents],
+    flags: MessageFlags.IsComponentsV2,
+  };
+}
 
 export async function getMetaCfg(connection, guildId) {
   return await getConfigValue(connection, [

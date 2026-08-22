@@ -60,17 +60,27 @@ the 40 budget even before the conservative-vs-actual nesting question is ever re
   `handleManageSelectMenu` finding: `story_manage_rating_select`'s branch (no builder anywhere
   produces that customId — same file, same function, missed in the first pass) and
   `story_manage_cancel` (no builder anywhere either).
-- **One real open risk, deliberately not resolved by guessing:** the `story_manage_close_open`
-  transition edits from this now-Components-V2 panel to a plain `content`/`components` reply,
-  because it feeds into `story/close.js`'s `handleCloseConfirm`/`handleCloseCancel` — shared with
-  the standalone `/story close` command, out of this plan's scope, and not using Components V2.
-  Whether Discord allows removing the `IsComponentsV2` flag on an edit is genuinely undocumented
-  and untestable without staging. Left this one transition exactly as it worked before. **Needs a
-  live spot-check after deploy** — if it breaks, the fix is converting `close.js`'s shared
-  handlers too, a separate change since it touches a command outside this plan.
-- `story/manage.js` grew to 593 lines, `story/add.js` to 501 — both now over the 500-line
-  standard; logged in `docs/TODO.md`'s existing file-size-split item rather than opportunistically
-  splitting mid-rework.
+- **Resolved 2026-08-22 — was flagged as an open risk, now confirmed and fixed.** The
+  `story_manage_close_open` transition originally edited from this Components-V2 panel to a
+  plain `content`/`components` reply, reusing `story/close.js`'s `handleCloseConfirm`/
+  `handleCloseCancel` (shared with the standalone `/story close` command). Confirmed against
+  Discord's own docs that `IsComponentsV2` can never be removed once a message carries it ("Once
+  a message has been sent with this flag, it can't be removed from that message") — so that plain
+  reply was actually broken, not just unverified, and simply switching it to Components V2 would
+  have only moved the same problem one click later, since `handleCloseCancel` and part of
+  `handleCloseConfirm` also reply in plain format. Fixed by giving the manage panel its own
+  `story_manage_close_confirm`/`story_manage_close_cancel` customIds, handled in the new
+  `story/_manageClose.js` — reuses `close.js`'s actual close logic (`closeStoryInternals`,
+  `getStoryStats`, export-row build, thread-post, feed announcement) but replies in Components V2
+  throughout. `close.js`'s existing handlers are untouched and still serve the standalone command
+  exactly as before. This is intentionally a temporary fork, not a permanent duplication — tracked
+  in `docs/TODO.md` as a follow-up to eventually convert `close.js` to V2 as well and delete
+  `_manageClose.js`, restoring the single shared flow.
+- `story/manage.js` is at 690 lines, `story/add.js` at 501 — both over the 500-line standard;
+  logged in `docs/TODO.md`'s existing file-size-split item rather than opportunistically splitting
+  mid-rework. The close-confirm fix above deliberately went to its own new file
+  (`story/_manageClose.js`, 125 lines) instead of growing `manage.js` further, given it was
+  already over budget.
 
 Original design notes below, kept for reference.
 
