@@ -2,7 +2,8 @@
 
 Status: Pending
 Created: 2026-07-26 (drafted in an earlier Claude Code chat session; committed to the repo on this date)
-Last Updated: 2026-08-21 (Parts 1 and 1b shipped)
+Last Updated: 2026-08-22 (Part 1c shipped — ported over from a separate, never-merged branch
+where it had been designed/approved 2026-08-10 but never coded; see Part 1c's own note)
 
 Design finalized in chat, implementation not started.
 
@@ -359,6 +360,90 @@ Turns in the persistent row set, unaffected by which tab (Settings/Metadata) is 
   current command-argument-based one; the existing management logic itself shouldn't need to change
 - `commands/storyadmin.js` — decide whether `/storyadmin user` stays as a power-user shortcut or
   gets removed once the panel button covers the same flow
+
+---
+
+## Part 1c — Unsaved-changes indicator on `/story manage`
+
+**Status: Shipped 2026-08-22.**
+
+Originally designed and approved 2026-08-10 on a separate, never-merged branch
+(`claude/todo-panel-rework-review-t4leg9`) that had independently rebuilt overlapping Part 1/1b/3
+work — that branch's plan doc had this section, this repo's didn't, and the gap wasn't noticed
+until the user asked about it directly during this session. The design below carries over that
+approved reasoning and text verbatim; only the mechanism/display sections were re-decided against
+the current, already-shipped Components V2 panel rather than applied as originally written.
+
+Nothing typed into the manage panel persists to the DB until **Save Settings** is clicked
+(`story_manage_save` → `handleManageSave`, `story/manage.js`). Everything staged before that lives
+only in the in-memory `pendingManageData` session state. Discord gives the bot no hook for a user
+dismissing an ephemeral message, and the 15-minute interaction-token expiry is likewise silent —
+so a user who edits several fields and then dismisses or lets the panel time out loses those edits
+with no warning. The only real fix is a persistent on-panel warning while unsaved edits exist, not
+an interception of the dismiss itself (not possible).
+
+**Scope: `/story manage` only.** `/story add` was considered and explicitly excluded — creation
+already carries the obvious expectation that nothing exists until the final Create button is
+clicked, so a matching warning there would be redundant. (Decided 2026-08-10.)
+
+**Mechanism — dirty-state detection (as built):** `story/manage.js` lists every state field a
+manage-panel modal or toggle button stages before Save in a flat `STAGED_FIELDS` array (title,
+summary, storyMode, orderType, showAuthors, storyTurnPrivacy, sceneBreakDivider, turnLength,
+timeoutReminder, maxWriters, dynamic, rating, warnings, mainPairing, otherRelationships,
+characters, tags, allowJoins, targetStatus). `handleManage()` snapshots those fields into
+`state.originalFields` right after `state` is built (current === original for all of them at that
+point by construction). `isManageDirty(state)` diffs current values against that snapshot on every
+`buildManageMessage()` render — array fields (just `warnings`) are compared order-independently,
+since a checkbox-group resubmit can return the same set in a different order without that being a
+real edit. This is a flat list diffed generically rather than a matching `originalX` field per
+entry (the `originalStatus`/`originalRating` pattern the 2026-08-10 design note started from) —
+one list to keep in sync with the staging call sites, not two. Both `isManageDirty` and
+`STAGED_FIELDS` are exported and covered by `test/manage_isManageDirty.test.js`.
+
+**Display — replaces the static banner, doesn't sit alongside it.** The panel already had a
+different, always-visible warning here (`txtManageSaveWarning`, `### === You Must Click Save
+Settings to Apply Changes! ===`) shipped independently earlier this same session, without
+knowledge of this approved design. Decided to replace it rather than keep both: `/storyadmin
+setup` still carries its own always-on version of that same warning (`txtSetupModalSaveWarning`,
+out of this scope), so the "this panel stages, remember to save" education isn't lost — repeating
+it unconditionally on every single manage-panel render on top of that was just noise. The
+dirty-only version now shows a Components V2 `TextDisplay` immediately above the Save Settings
+button, only when `isManageDirty(state)` is true:
+
+```
+**⚠️ Unsaved Changes**
+You have changes that haven't been saved yet. Click **Save Settings** below to keep them.
+```
+
+The original 2026-08-10 design called for a dedicated embed field (name/value) — re-decided
+against that shape since the panel is Components V2 now, not embeds; a two-line `TextDisplay`
+with a bold title line is the direct translation of "field name, field value" into this panel's
+existing conventions. The exact wording is unchanged from what was approved 2026-08-10. Config
+keys: `lblManageUnsavedChangesTitle` (title, was `lblManageUnsavedChangesTitle` in the original
+design too) and `txtManageUnsavedChangesBody` (body, with the button label as a real
+`[save_label]` token via `replaceTemplateVariables()` rather than the literal string "Save
+Settings" hard-coded into the body text, so it can't drift from `btnSaveSettings`).
+
+### Files touched (as built)
+- `story/manage.js` — `STAGED_FIELDS`, `isManageDirty()`, the `state.originalFields` snapshot in
+  `handleManage()`, and the conditional `TextDisplay` replacing the static banner in
+  `buildManageMessage()`
+- `story/_metadataModals.js` — `getMetaCfg()`'s shared config fetch list swapped
+  `txtManageSaveWarning` for the two new keys (shared with `/story add`, which doesn't use them)
+- `db/config_files/config_story.sql` — removed `txtManageSaveWarning`, added
+  `lblManageUnsavedChangesTitle`/`txtManageUnsavedChangesBody`
+- `test/manage_isManageDirty.test.js` — new, 7 tests covering clean/dirty scalar and array cases,
+  array-reorder-is-not-dirty, an untracked field (tab switch) not tripping it, and the
+  not-yet-snapshotted guard
+
+### Found, not fixed (separate, pre-existing bug)
+While tracing `state.targetStatus`/`originalStatus` for the dirty check, found that
+`story_manage_reopen` (`handleManageButton`) writes the reopen straight to the DB but never
+updates `state.targetStatus`/`originalStatus` afterward — the re-rendered panel still shows the
+"Reopen" button and a disabled Pause/Resume row until the panel is reopened fresh. Predates this
+session and this feature; doesn't interact with the dirty check (reopen isn't a staged field, so
+it correctly reports clean either way) — logged in `docs/TODO.md` rather than fixed here, since
+it's out of Part 1c's scope.
 
 ---
 
