@@ -350,7 +350,9 @@ in `commands/_storyadminSetup.js`.
   intermediate ephemeral reply + "Try Again" button (which reopens the pre-filled modal) is
   needed — check installed `discord.js` source per `docs/reference/discordjs_reference.md`'s own guidance
   rather than assuming from training data.
-- **On success:** re-render the **setup panel embed** (not the modal) showing confirmation.
+- **On success** (immediately if the diff is pure-additions, otherwise after the admin clicks
+  Confirm on the summary screen in the Storage section below): re-render the **setup panel
+  embed** (not the modal) showing confirmation.
   Display green check and rule labels only, comma-separated, not full text — full descriptions can exceed
   a single embed field's 1024-char cap across 10 rules, and the setup panel only needs an
   at-a-glance confirmation, not a place to re-read full rule text. This field behaves like every
@@ -389,19 +391,40 @@ not acceptable, so the save handler needs an explicit diff step:
 3. Labels unchanged between old and new (wherever they've moved to) keep their existing slug
    automatically — no admin involvement.
 4. What remains after that match is two small sets: labels that disappeared, labels that are new.
-5. **If exactly one label disappeared and exactly one appeared in the same save** — the
-   single-rename case (e.g. a typo fix) — do not resolve this silently. Surface a one-question
-   confirmation before finalizing the save: *"'[old label]' → '[new label]' — same rule renamed
-   (existing stories keep it), or a new rule replacing it (existing stories lose the old tag)?"*
-   Two buttons. Only this specific ambiguous case requires the extra step.
+5. **If exactly one label disappeared and exactly one appeared in the same save**, it's a rename
+   *candidate* (e.g. a typo fix) — flagged as such on the confirmation screen below, not applied
+   silently.
 6. If multiple labels vanish and multiple appear in the same save, the mapping between them is
-   genuinely ambiguous — default to treating each as an independent delete/add (matches the
-   plain "orphan on deletion" behavior below), but list the affected labels to the admin as a
-   heads-up rather than resolving it fully silently.
+   genuinely ambiguous — no rename guess is made; each shows as a separate Added/Removed entry
+   on the same confirmation screen instead.
 
 If a story references a slug no longer present in the guild's current vocabulary after all of
 the above (a rule was actually deleted, not renamed), skip it silently at render time rather
 than erroring.
+
+**Revised 2026-08-22 — unified confirmation screen.** Originally this was two separate
+mechanisms: a blocking two-button prompt only for the single-rename case, and a vaguely-specified
+"heads-up" for everything else (unclear whether it blocked the save or just informed after).
+Replaced with one screen, shown after validation and the diff above, before anything is written
+to `cfgGroundRules`:
+
+- **Added:** [labels] — no confirmation needed on its own (nothing existing can break from an
+  addition), so if the diff contains *only* additions, skip this screen and save immediately.
+- **Removed:** [labels], each with how many stories currently reference it — `SELECT
+  COUNT(*) FROM story WHERE FIND_IN_SET(?, ground_rules)` per removed slug (or one query across
+  all removed slugs). "Keep It Clean — currently used by 12 stories" is the actual warning; a
+  bare label name isn't.
+- **Renamed:** [old label] → [new label], for the single-swap case only from step 5 above.
+  Multi-swap ambiguity (step 6) still lists as separate Added/Removed entries on this same
+  screen, never guessed at as a rename.
+- **Confirm / Cancel.** Cancel returns to the pre-filled paragraph modal with the admin's
+  submitted text intact (same re-show behavior as a validation failure); nothing is written to
+  `cfgGroundRules` until Confirm. This is the only point where the write happens — the diff step
+  above is read-only until this gate passes.
+
+This subsumes the old single-rename prompt (now just one row on the summary rather than its own
+interruption) and resolves the old ambiguity about whether the multi-change case blocked the
+save — it now unambiguously does, on the same screen as everything else.
 
 ### Story-level selection — `/story add` AND `/story manage`
 
