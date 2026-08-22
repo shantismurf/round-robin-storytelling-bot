@@ -161,7 +161,7 @@ Manage Entries/Turns/Joins/etc., since those only apply to an existing story.
 walking through mockups of both tab states surfaced two problems the original design hadn't
 caught, so the row split by relevance instead of staying uniform:
 - **Tab toggle now renders above the header line, and the header line itself switches with it**
-  (`# Story Info and Settings` / `# Story Metadata` via `buildStoryPanel`'s new `titleMetadata`
+  (`# Story Info and Settings` / `# Story Metadata and Tags` via `buildStoryPanel`'s new `titleMetadata`
   param) — previously the header was a single static string shown unchanged regardless of which
   tab was active, which read as broken once the Metadata tab existed. Tab button labels also
   changed from "Settings"/"Metadata" to "**Display Settings**"/"**Display Metadata**" so the verb
@@ -172,8 +172,8 @@ Story Settings`, `🗂️ Story Metadata`, `🖊️ My Join Settings`) became re
 instead of manually bolded text (`**...**`), and `🛠️ Story Management` was promoted to `#` —
 same visual weight as the page title, marking it as a distinct region rather than another field
 cluster. A `## 🏷️ Story Tags` header was added above the Relationships/Characters/Tags cluster,
-which previously had none. Page-level `#` titles (Story Info and Settings / Story Metadata /
-Add's Create New Story) deliberately stay emoji-free — there's exactly one per screen and `#`'s
+which previously had none. Page-level `#` titles (Story Info and Settings / Story Metadata and
+Tags / Add's Create New Story) deliberately stay emoji-free — there's exactly one per screen and `#`'s
 size already carries it; emoji are reserved for the repeated `##` pattern where they help you find
 the right section. `lblStoryTitle` changed from `📝 Story Title 📝` to `📖 Story Title` (matching
 the emoji `lblManageStoryTitle` already used for the same concept elsewhere) and `lblMetaSummary`
@@ -425,8 +425,11 @@ time (not a hardcoded array like `warningOptions`/`dynamicOptions`).
   of what admin-authored text ends up in them. This is the only place in the bot currently
   sending user-adjacent freeform text as plain content — closing it before Ground Rules text
   flows through it matters.
-- **Manage panel** — blocked until Part 1 (section split) lands. Add to the Metadata group once
-  it exists.
+- **Manage panel** — blocked until Part 1 (section split) lands. **Revised 2026-08-22:** now that
+  Part 1 shipped and the Metadata tab split into two `##` sub-clusters, Ground Rules belongs in
+  the **🗂️ Story Metadata cluster** (Rating/Dynamic/Warnings), not the 🏷️ Story Tags cluster —
+  it's edited via the same `buildMetadataModal()` opened by `[Edit Story Metadata]`, so display
+  location should follow the edit button it's paired with, same as every other field here.
 
 ### Change notifications
 

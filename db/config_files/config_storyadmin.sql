@@ -131,7 +131,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnTurnRestoreEntry', '♻️ Restore Deleted Entry', 'en', 1),
 ('txtTurnActionsNoTurn', 'No active turn.', 'en', 1),
 ('txtManageEmbedTitle', 'Story Info and Settings', 'en', 1),
-('txtManageEmbedTitleMetadata', 'Story Metadata', 'en', 1),
+('txtManageEmbedTitleMetadata', 'Story Metadata and Tags', 'en', 1),
 ('lblManageStoryTitle', '📖 Story Title', 'en', 1),
 ('lblManageStoryStatus', 'Story Status', 'en', 1),
 ('btnManageJoinsOpen', 'Open Joins', 'en', 1),
