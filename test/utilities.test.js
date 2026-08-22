@@ -5,6 +5,7 @@ import {
   parseDuration,
   formatDuration,
   replaceTemplateVariables,
+  trimTrailingEmoji,
   chunkEntryContent,
   createFailureThrottle,
   getConfigValue,
@@ -78,6 +79,22 @@ describe('replaceTemplateVariables', () => {
   test('keeps an optional block when its token is present', () => {
     const result = replaceTemplateVariables('Base{? — [extra]?} text', { extra: 'more' });
     assert.equal(result, 'Base — more text');
+  });
+});
+
+describe('trimTrailingEmoji', () => {
+  test('strips a trailing single emoji', () => {
+    assert.equal(trimTrailingEmoji('🔏 Turn Thread Privacy 🔏'), '🔏 Turn Thread Privacy');
+  });
+  test('strips a trailing compound/ZWJ emoji as one grapheme, not one code point', () => {
+    assert.equal(trimTrailingEmoji('🧑‍♂️ Characters 🧑‍♀️'), '🧑‍♂️ Characters');
+  });
+  test('leaves a label with no trailing emoji untouched, not eating its last letter', () => {
+    assert.equal(trimTrailingEmoji('Story Mode'), 'Story Mode');
+    assert.equal(trimTrailingEmoji('Writer Order'), 'Writer Order');
+  });
+  test('leaves a label with only a leading emoji untouched', () => {
+    assert.equal(trimTrailingEmoji('📖 Story Title'), '📖 Story Title');
   });
 });
 
