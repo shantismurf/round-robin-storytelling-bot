@@ -161,11 +161,26 @@ Manage Entries/Turns/Joins/etc., since those only apply to an existing story.
 walking through mockups of both tab states surfaced two problems the original design hadn't
 caught, so the row split by relevance instead of staying uniform:
 - **Tab toggle now renders above the header line, and the header line itself switches with it**
-  (`## Story Settings` / `## Story Metadata` via `buildStoryPanel`'s new `titleMetadata` param) —
-  previously the header was a single static string shown unchanged regardless of which tab was
-  active, which read as broken once the Metadata tab existed. Tab button labels also changed from
-  "Settings"/"Metadata" to "**Display Settings**"/"**Display Metadata**" so the verb makes clear
-  they toggle the view, not act on it.
+  (`# Story Info and Settings` / `# Story Metadata` via `buildStoryPanel`'s new `titleMetadata`
+  param) — previously the header was a single static string shown unchanged regardless of which
+  tab was active, which read as broken once the Metadata tab existed. Tab button labels also
+  changed from "Settings"/"Metadata" to "**Display Settings**"/"**Display Metadata**" so the verb
+  makes clear they toggle the view, not act on it.
+
+**Revised 2026-08-22 (header hierarchy pass):** the field-cluster labels (`ℹ️ Story Info`, `⚙️
+Story Settings`, `🗂️ Story Metadata`, `🖊️ My Join Settings`) became real `##` markdown headers
+instead of manually bolded text (`**...**`), and `🛠️ Story Management` was promoted to `#` —
+same visual weight as the page title, marking it as a distinct region rather than another field
+cluster. A `## 🏷️ Story Tags` header was added above the Relationships/Characters/Tags cluster,
+which previously had none. Page-level `#` titles (Story Info and Settings / Story Metadata /
+Add's Create New Story) deliberately stay emoji-free — there's exactly one per screen and `#`'s
+size already carries it; emoji are reserved for the repeated `##` pattern where they help you find
+the right section. `lblStoryTitle` changed from `📝 Story Title 📝` to `📖 Story Title` (matching
+the emoji `lblManageStoryTitle` already used for the same concept elsewhere) and `lblMetaSummary`
+dropped its trailing `📝` — the two fields shared one emoji before this, now they don't. Review
+Tags' caption moved from trailing the button to sitting between Edit Story Tags and Review Tags,
+and its text simplified to "Approve or reject submitted tags." Component counts unaffected (37
+Settings / 25 Metadata) — the new heading text replaced existing text in place, no new nodes.
 - **Manage Entries, Manage Turns, and Manage Users are Settings-tab only now** — none of them
   relate to Metadata content, so there's no reason to show them (or pay their component cost)
   while metadata-editing; switching back to Settings is one click. **Review Tags moved the other

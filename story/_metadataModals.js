@@ -18,7 +18,7 @@ export async function getMetaCfg(connection, guildId) {
     'txtPrivateOffDesc', 'txtPrivateOnDesc',
     'txtOrderRandom', 'txtOrderRoundRobin', 'txtOrderFixed',
     'txtOrderRandomDesc', 'txtOrderRoundRobinDesc', 'txtOrderFixedDesc',
-    'txtStoryAddSectionBreakInfo','txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin',
+    'txtStoryAddSectionBreakInfo','txtStoryAddSectionBreakSettings', 'txtStoryAddSectionBreakMeta', 'txtStoryAddSectionBreakJoin', 'txtStoryAddSectionBreakTags',
     'lblStoryTitle', 'lblModeToggle', 'lblWriterOrder', 'lblTurnPrivacy', 'lblShowAuthors',
     'lblTurnLength', 'lblTimeoutReminder', 'lblTimeoutReminderSlow',
     'lblMaxWriters', 'lblDelayStart', 'txtDelayHint',
@@ -110,7 +110,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     new ButtonBuilder().setCustomId(`${ns}_tab_metadata`).setLabel(cfg.btnPanelTabMetadata)
       .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
   ));
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${headerText}`));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${headerText}`));
 
   if (cfg.txtStoryAddIntro && !isManage) {
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryAddIntro));
@@ -180,6 +180,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     container.addSeparatorComponents(new SeparatorBuilder());
 
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `${cfg.txtStoryAddSectionBreakTags}\n` +
       `**${trimTrailingEmoji(cfg.lblMetaMainRelationship)}:** ${mainPairingDisplay}\n` +
       `**${trimTrailingEmoji(cfg.lblMetaOtherRelationships)}:** ${otherRelDisplay}\n` +
       `**${trimTrailingEmoji(cfg.lblMetaCharacters)}:** ${charsDisplay}\n` +
@@ -192,7 +193,11 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     if (isManage) {
       // Review Tags lives here, not with the other manage actions on the Settings tab — it
       // approves/rejects submissions that feed this Tags field directly, so it belongs with
-      // the Metadata content it affects, not the story-lifecycle buttons on Settings.
+      // the Metadata content it affects, not the story-lifecycle buttons on Settings. Caption
+      // sits between the two buttons (not trailing, like the Settings-tab captions) — there's
+      // headroom on this tab (25/40) to try it, and it reads as a note bridging Edit Story Tags
+      // into the review action right below it.
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtReviewTagsDesc));
       container.addActionRowComponents(new ActionRowBuilder().addComponents(
         new ButtonBuilder()
           .setCustomId('story_manage_review_tags')
@@ -200,7 +205,6 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
           .setStyle(ButtonStyle.Primary)
           .setDisabled(!state.pendingTagCount)
       ));
-      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtReviewTagsDesc));
     }
   }
 

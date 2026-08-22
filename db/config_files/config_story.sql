@@ -1,6 +1,6 @@
 -- Context: config_story
 INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
-('lblStoryTitle', '📝 Story Title 📝', 'en', 1),
+('lblStoryTitle', '📖 Story Title', 'en', 1),
 ('lblQuickMode', 'Quick Mode?:', 'en', 1),
 ('lblTurnLength', '⏱️ Turn Length (hours) ⏱️', 'en', 1),
 ('lblTimeoutReminder', '🔔 Reminder Timing (%) 🔔', 'en', 1),
@@ -67,7 +67,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnCreateStory', '✅ Create Story', 'en', 1),
 ('btnPanelTabSettings', 'Display Settings', 'en', 1),
 ('btnPanelTabMetadata', 'Display Metadata', 'en', 1),
-('txtStoryManagementLabel', '**🛠️ Story Management**', 'en', 1),
+('txtStoryManagementLabel', '# 🛠️ Story Management', 'en', 1),
 ('txtManageSaveWarning', '## === You Must Click Save Settings to Apply Changes! ===', 'en', 1),
 ('lblModeToggle', 'Story Mode', 'en', 1),
 ('lblPrivateToggle', 'Turns', 'en', 1),
@@ -88,10 +88,11 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtAddValidationTitleEmpty', 'Story title cannot be empty.', 'en', 1),
 ('txtAddValidationTitleRequired', 'Please set a story title before creating the story.', 'en', 1),
 ('txtListFilterPrompt', '🔍 **Filter stories:**', 'en', 1),
-('txtStoryAddSectionBreakInfo', '**ℹ️ Story Info**', 'en', 1),
-('txtStoryAddSectionBreakSettings', '**⚙️ Story Settings**', 'en', 1),
-('txtStoryAddSectionBreakMeta', '**🗂️ Story Metadata**', 'en', 1),
-('txtStoryAddSectionBreakJoin', '**🖊️ My Join Settings**', 'en', 1),
+('txtStoryAddSectionBreakInfo', '## ℹ️ Story Info', 'en', 1),
+('txtStoryAddSectionBreakSettings', '## ⚙️ Story Settings', 'en', 1),
+('txtStoryAddSectionBreakMeta', '## 🗂️ Story Metadata', 'en', 1),
+('txtStoryAddSectionBreakJoin', '## 🖊️ My Join Settings', 'en', 1),
+('txtStoryAddSectionBreakTags', '## 🏷️ Story Tags', 'en', 1),
 -- close.js: confirmation reply after successful story close
 ('txtStoryCloseSuccess', '✅ Story closed.', 'en', 1),
 -- join.js: pen name modal title
