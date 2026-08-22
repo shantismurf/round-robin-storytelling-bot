@@ -37,9 +37,12 @@ function buildManageUserPanel(state) {
       { name: cfg.lblManageUserStatus, value: statusLabel,                   inline: true },
       { name: cfg.lblManageUserPenName, value: state.penName || cfg.txtNotSet, inline: true },
       { name: cfg.lblAdminMUNotif,     value: notifLabel,                    inline: true },
-      { name: cfg.lblAdminMUPrivacy,   value: privacyLabel,                  inline: true }
-    )
-    .setDescription(cfg.txtManageUserPanelDesc);
+      { name: cfg.lblAdminMUPrivacy,   value: privacyLabel,                  inline: true },
+      // Trailing note field (zero-width name, same convention already used below for
+      // txtAdminMUActiveTurnWarning/txtAdminMULastWriterWarning) rather than .setDescription() —
+      // this reads as a footnote at the bottom of the embed, not an intro at the top.
+      { name: '​', value: cfg.txtManageUserPanelSaveNote }
+    );
 
   const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
   const privacyToggleLabel = state.writerTurnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
@@ -117,7 +120,7 @@ export async function openManageUserPanel(connection, interaction, storyId, targ
     log(`openManageUserPanel: activeTurn=${activeTurnRows.length > 0} remainingWriters=${remainingRows[0].count}`, { show: false, guildName: interaction?.guild?.name });
 
     const cfg = await getConfigValue(connection, [
-      'txtManageUserPanelTitle', 'txtManageUserPanelDesc',
+      'txtManageUserPanelTitle', 'txtManageUserPanelSaveNote',
       'lblManageUserStatus', 'lblManageUserPenName',
       'lblAdminMUNotif', 'lblAdminMUPrivacy', 'btnManageUserClose',
       'btnAdminMUPause', 'btnAdminMUUnpause', 'btnAdminMURemove', 'btnAdminMUPenName',
@@ -221,8 +224,8 @@ export async function handleManageUserButton(connection, interaction) {
     log(`handleManageUserButton: save initiated for writerId=${pending.writerId}`, { show: false, guildName: interaction?.guild?.name });
     try {
       await connection.execute(
-        `UPDATE story_writer SET notification_prefs = ?, turn_privacy = ? WHERE story_writer_id = ?`,
-        [pending.notificationPrefs, pending.writerTurnPrivacy, pending.writerId]
+        `UPDATE story_writer SET pen_name = ?, notification_prefs = ?, turn_privacy = ? WHERE story_writer_id = ?`,
+        [pending.penName, pending.notificationPrefs, pending.writerTurnPrivacy, pending.writerId]
       );
       await logAdminAction(connection, adminId, 'update_writer_settings', pending.storyId, pending.targetUserId);
       log(`handleManageUserButton: save complete`, { show: false, guildName: interaction?.guild?.name });
@@ -417,9 +420,10 @@ export async function handleManageUserModalSubmit(connection, interaction) {
   try {
     const rawName = interaction.fields.getTextInputValue('pen_name_input');
     const newName = sanitizeModalInput(rawName, 100) || null;
-    log(`handleManageUserModalSubmit: new pen name="${newName}" for writerId=${pending.writerId}`, { show: false, guildName: interaction?.guild?.name });
-    await connection.execute(`UPDATE story_writer SET pen_name = ? WHERE story_writer_id = ?`, [newName, pending.writerId]);
-    await logAdminAction(connection, adminId, 'penname', pending.storyId, pending.targetUserId, newName);
+    // Staged, not written immediately — same as the Notifications/Turn Privacy toggles below,
+    // committed together on storyadmin_mu_save. Pen Name used to save on modal submit directly,
+    // which the panel's own note text never actually described correctly.
+    log(`handleManageUserModalSubmit: staged pen name="${newName}" for writerId=${pending.writerId}`, { show: false, guildName: interaction?.guild?.name });
     pending.penName = newName;
     await interaction.deferReply({ flags: MessageFlags.Ephemeral });
     await pending.originalInteraction.editReply(buildManageUserPanel(pending));
