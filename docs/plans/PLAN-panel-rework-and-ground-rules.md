@@ -312,6 +312,11 @@ with a `StringSelectMenu` of the story's current active/paused writers (built fr
 already-stored `discord_display_name`, no extra Discord API fetch needed) → submitting it opens the
 existing Manage User panel, unchanged.
 
+**Bug found live 2026-08-22:** the `story_manage_users_open` button handler never declared
+`const cfg = state.cfg;` (every sibling branch in `handleManageButton` does), so clicking Manage
+Users threw `ReferenceError: cfg is not defined` on the first bare `cfg.` reference. Fixed by
+adding the same declaration the other branches already use.
+
 **Refactor to enable reuse:** extracted `handleManageUser`'s body (from the story lookup onward)
 into `openManageUserPanel(connection, interaction, storyId, targetUserId, guildId,
 writerDisplayName?)` in `story/_manageUser.js` — called by both the original `/storyadmin user`
