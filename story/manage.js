@@ -413,6 +413,7 @@ async function handleManageButton(connection, interaction) {
       await handleManageEntriesButton(connection, interaction, state);
 
     } else if (customId === 'story_manage_users_open') {
+      const cfg = state.cfg;
       // Re-check server-side — the button is hidden for anyone who isn't creator-or-admin, but
       // hiding a button client-side is not an authorization boundary on its own. In practice this
       // is unreachable (handleManage's own entry gate already requires creator-or-admin), but
