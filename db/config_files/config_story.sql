@@ -68,7 +68,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('btnPanelTabSettings', 'Display Settings', 'en', 1),
 ('btnPanelTabMetadata', 'Display Metadata', 'en', 1),
 ('txtStoryManagementLabel', '# 🛠️ Story Management', 'en', 1),
-('txtManageSaveWarning', '## === You Must Click Save Settings to Apply Changes! ===', 'en', 1),
+('txtManageSaveWarning', '### === You Must Click Save Settings to Apply Changes! ===', 'en', 1),
 ('lblModeToggle', 'Story Mode', 'en', 1),
 ('lblPrivateToggle', 'Turns', 'en', 1),
 ('lblDelayStart', '🫷 Delay Start (optional) 🫸', 'en', 1),

@@ -191,6 +191,36 @@ dropped its trailing `📝` — the two fields shared one emoji before this, now
 Tags' caption moved from trailing the button to sitting between Edit Story Tags and Review Tags,
 and its text simplified to "Approve or reject submitted tags." Component counts unaffected (37
 Settings / 25 Metadata) — the new heading text replaced existing text in place, no new nodes.
+
+**Revised 2026-08-22 (readability pass — Story Info / Story Settings restructure):** each field
+in these two clusters changed from one dense line (`emoji **Label:** value — description`) to
+two: `**Label:** value` on its own line, then the description as `-#` subtext directly under it
+— same small/muted treatment the Story Management captions already used, so the description
+reads as secondary to the label+value line above it. The blank line between fields (added
+earlier this same day) was dropped again for just these two clusters once fields started taking
+two lines each — the two-line shape plus the subtext's muted weight already separates them, and
+the panel was getting long. Metadata's and Tags' clusters keep the blank-line spacing, since
+their fields are still single-line with nothing else to keep them from running together.
+Show Names and Turn Thread Privacy previously had no short value, only a description — reused
+the existing generic `txtOn`/`txtOff`/`txtPrivate`/`txtPublic` keys rather than adding new ones.
+Scene Break Divider, Rating, Turn Length, Reminder Timing, and Max Writers have no description
+text at all, so they stayed single-line rather than inventing filler.
+
+**Also found and fixed in the same pass:** Delay Start was rendering on the Manage panel
+("0 hours / 0 writers (leave blank to start immediately)") despite being meaningless there —
+`state.delayHours`/`delayWriters` are hardcoded `null` in `manage.js`'s state init and never
+loaded from the DB, and Manage's "Edit Story Settings" modal has no delay fields at all (only
+Turn Length, Timeout Reminder, Max Writers). It's an Add-only concept (governs when a story's
+first turn starts, before the story exists yet as far as Manage is concerned) and is now gated
+`!isManage`.
+
+**Also: `txtManageSaveWarning`'s heading level.** Started at `##`. A live screenshot comparing
+`🛠️ Story Management` (`#`) against `ℹ️ Story Info` (`##`) against plain `**bold**` field labels
+settled the actual hierarchy Discord renders — three real tiers, not two: `#` is a distinctly
+large headline, `##` is visibly bigger than bold body text (a genuine middle tier), and `###`
+renders close to bold weight but with more line-height around it. Landed on `###` for the save
+warning — smaller than the `##` cluster headers it doesn't need to compete with, but still reads
+as its own line rather than blending into plain body text.
 - **Manage Entries, Manage Turns, and Manage Users are Settings-tab only now** — none of them
   relate to Metadata content, so there's no reason to show them (or pay their component cost)
   while metadata-editing; switching back to Settings is one click. **Review Tags moved the other
