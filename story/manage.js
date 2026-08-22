@@ -40,33 +40,42 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
 
-  const row1Buttons = [
-    new ButtonBuilder()
-      .setCustomId('story_manage_entries_open')
-      .setLabel(cfg.btnManageEntries)
-      .setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('story_manage_turns_open')
-      .setLabel(cfg.btnManageTurns)
-      .setStyle(ButtonStyle.Primary),
+  // One button per row, each followed by its own -# subtext caption — these four hide multiple
+  // sub-actions behind a single label (e.g. Manage Turns opens Skip/Extend/Reassign), so knowing
+  // what's inside before clicking matters, the same reasoning as the inline mode descriptions
+  // already used for Story Mode/Writer Order. Closes the entry-point audit's Manage Turns finding
+  // directly, without waiting on the help redesign's contextual-popup mechanism.
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('story_manage_entries_open').setLabel(cfg.btnManageEntries).setStyle(ButtonStyle.Primary)
+  ));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageEntriesDesc));
+
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('story_manage_turns_open').setLabel(cfg.btnManageTurns).setStyle(ButtonStyle.Primary)
+  ));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageTurnsDesc));
+
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_review_tags')
       .setLabel(replaceTemplateVariables(cfg.btnReviewTags, { count: state.pendingTagCount || 0 }))
       .setStyle(ButtonStyle.Primary)
-      .setDisabled(!state.pendingTagCount),
-  ];
+      .setDisabled(!state.pendingTagCount)
+  ));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtReviewTagsDesc));
+
   // Gated to creator-or-admin, matching /story manage's own access level — not admin-only like
   // the standalone /storyadmin user command. Deliberately broader here: managing writers in
   // your own story is a natural extension of the creator controls already on this panel.
   if (state.isAdminOrCreator) {
-    row1Buttons.push(
-      new ButtonBuilder()
-        .setCustomId('story_manage_users_open')
-        .setLabel(cfg.btnManageUsers)
-        .setStyle(ButtonStyle.Primary)
-    );
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('story_manage_users_open').setLabel(cfg.btnManageUsers).setStyle(ButtonStyle.Primary)
+    ));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageUsersDesc));
   }
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(...row1Buttons));
+
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtChangeStoryStatusLabel));
 
   const pauseResumeLabel = cfg.txtStory + ' ' + (isPaused ? cfg.txtResume : cfg.txtPause);
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -168,6 +177,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtAdminConfigSaved', 'errProcessingRequest', 'txtActionCancelled', 'txtActionSessionExpired',
       'txtManageNotAuthorized', 'txtStoryNotFound',
       'btnManageUsers', 'txtManageUsersPickModalTitle', 'lblManageUsersPickSelect', 'txtManageUsersNoWriters',
+      'txtManageEntriesDesc', 'txtManageTurnsDesc', 'txtReviewTagsDesc', 'txtManageUsersDesc', 'txtChangeStoryStatusLabel',
     ], guildId);
 
     Object.assign(cfg, extraCfg);
