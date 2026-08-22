@@ -14,6 +14,36 @@ import { STORY_STATUS, TURN_STATUS, STORY_MODE, WRITER_STATUS } from '../constan
 
 const pendingManageData = new Map();
 
+// Part 1c (docs/plans/PLAN-panel-rework-and-ground-rules.md) — dirty-state detection for the
+// unsaved-changes warning below. Every field a manage-panel modal or toggle button stages before
+// Save Settings is listed here; handleManage() snapshots them into state.originalFields at panel
+// open (when current === original for all of them by construction), and buildManageMessage()
+// diffs current state against that snapshot on every render. Deliberately a flat list diffed
+// generically rather than a matching originalX field per entry (the originalStatus/originalRating
+// pattern this plan's design note started from) — one list to keep in sync with the staging call
+// sites below, instead of two.
+const STAGED_FIELDS = [
+  'title', 'summary', 'storyMode', 'orderType', 'showAuthors', 'storyTurnPrivacy',
+  'sceneBreakDivider', 'turnLength', 'timeoutReminder', 'maxWriters',
+  'dynamic', 'rating', 'warnings', 'mainPairing', 'otherRelationships', 'characters', 'tags',
+  'allowJoins', 'targetStatus',
+];
+
+function isManageDirty(state) {
+  if (!state.originalFields) return false;
+  return STAGED_FIELDS.some((key) => {
+    const current = state[key];
+    const original = state.originalFields[key];
+    // Arrays (warnings) are always reassigned wholesale, never mutated in place, so a reference
+    // snapshot is safe — but the checkbox group can return the same set in a different order
+    // than the DB-loaded original, which isn't a real edit. Sort before comparing.
+    if (Array.isArray(current) || Array.isArray(original)) {
+      return JSON.stringify([...(current ?? [])].sort()) !== JSON.stringify([...(original ?? [])].sort());
+    }
+    return current !== original;
+  });
+}
+
 function buildManageMessage(cfg, state, activeTurn = null) {
   const isPaused = state.targetStatus === STORY_STATUS.PAUSED;
   const isClosed = state.targetStatus === STORY_STATUS.CLOSED;
@@ -99,11 +129,16 @@ function buildManageMessage(cfg, state, activeTurn = null) {
           .setStyle(ButtonStyle.Danger),
   ));
 
-  // TODO.md top-priority item: /story manage uses the identical stage-then-save pattern as
-  // /storyadmin setup, which needed this exact warning (txtSetupModalSaveWarning) after a real
-  // incident where an admin never clicked Save and got silently blocked. Reused verbatim here
-  // (new key, same approved text) since this panel's save button is also called "Save Settings".
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageSaveWarning));
+  // Part 1c: originally a static always-on warning here (same pattern/incident as
+  // /storyadmin setup's txtSetupModalSaveWarning — an admin who never clicked Save got silently
+  // blocked). Replaced with a real dirty-state check: only nag when there's actually something
+  // unsaved, since /storyadmin setup's blanket warning already covers the "this panel stages,
+  // remember to save" education and doesn't need repeating on every single render here too.
+  if (isManageDirty(state)) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${cfg.lblManageUnsavedChangesTitle}**\n${replaceTemplateVariables(cfg.txtManageUnsavedChangesBody, { save_label: cfg.btnSaveSettings })}`
+    ));
+  }
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('story_manage_save')
@@ -237,6 +272,11 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       delayWriters: null,
       activeGroup: 'settings',
     };
+
+    // Snapshot after state is fully built — current === original for every staged field at this
+    // point by construction, so this doubles as the dirty-check baseline (see STAGED_FIELDS/
+    // isManageDirty above).
+    state.originalFields = Object.fromEntries(STAGED_FIELDS.map((key) => [key, state[key]]));
 
     pendingManageData.set(interaction.user.id, state);
     log(`handleManage: sending panel`, { show: false, guildName: interaction?.guild?.name });
@@ -686,6 +726,8 @@ export {
   handleTurnActionCancel,
   handleTurnActionSelectMenu,
   handleTurnActionModal,
+  isManageDirty,
+  STAGED_FIELDS,
 };
 
 export default handleManage;
