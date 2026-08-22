@@ -144,11 +144,11 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
 
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `${cfg.txtStoryAddSectionBreakInfo}\n` +
-      `${modeEmoji} **${trimTrailingEmoji(cfg.lblModeToggle)}:** ${modeLabel} — ${modeDesc}\n` +
-      `${orderEmoji} **${trimTrailingEmoji(cfg.lblWriterOrder)}:** ${orderLabel} — ${orderDesc}\n` +
-      `**${trimTrailingEmoji(cfg.lblShowAuthors)}:** ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}\n` +
-      `**${trimTrailingEmoji(cfg.lblTurnPrivacy)}:** ${state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc}\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaSceneBreakDivider)}:** ${sceneBreakDisplay}\n` +
+      `${modeEmoji} **${trimTrailingEmoji(cfg.lblModeToggle)}:** ${modeLabel} — ${modeDesc}\n\n` +
+      `${orderEmoji} **${trimTrailingEmoji(cfg.lblWriterOrder)}:** ${orderLabel} — ${orderDesc}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblShowAuthors)}:** ${state.showAuthors ? cfg.txtShowAuthorsOnDesc : cfg.txtShowAuthorsOffDesc}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblTurnPrivacy)}:** ${state.storyTurnPrivacy ? cfg.txtTurnPrivacyPrivateDesc : cfg.txtTurnPrivacyPublicDesc}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaSceneBreakDivider)}:** ${sceneBreakDisplay}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaRating)}${cfg.lblMetadataAddon}:** ${ratingLabel}`
     ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -158,9 +158,9 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
 
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `${cfg.txtStoryAddSectionBreakSettings}\n` +
-      `**${trimTrailingEmoji(cfg.lblTurnLength)}:** ${turnLengthDisplay}\n` +
-      `**${isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder)}:** ${timeoutDisplay}\n` +
-      `**${trimTrailingEmoji(cfg.lblDelayStart)}:** ${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC} _(${cfg.txtDelayHint})_\n` +
+      `**${trimTrailingEmoji(cfg.lblTurnLength)}:** ${turnLengthDisplay}\n\n` +
+      `**${isSlowMode ? trimTrailingEmoji(cfg.lblTimeoutReminderSlow) : trimTrailingEmoji(cfg.lblTimeoutReminder)}:** ${timeoutDisplay}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblDelayStart)}:** ${delayHours} ${cfg.txtHoursLC} / ${delayWriters} ${cfg.txtWritersLC} _(${cfg.txtDelayHint})_\n\n` +
       `**${trimTrailingEmoji(cfg.lblMaxWriters)}:** ${maxWritersDisplay}`
     ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -171,8 +171,8 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
       container.addSeparatorComponents(new SeparatorBuilder());
       container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
         `${cfg.txtStoryAddSectionBreakJoin}\n` +
-        `**${cfg.lblYourPenName}:** ${state.penName || state.displayName || cfg.txtNotSet}\n` +
-        `**${cfg.lblJoinPrivacy}:** ${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n` +
+        `**${cfg.lblYourPenName}:** ${state.penName || state.displayName || cfg.txtNotSet}\n\n` +
+        `**${cfg.lblJoinPrivacy}:** ${state.keepPrivate ? cfg.txtPrivate : cfg.txtPublic}\n\n` +
         `**${cfg.lblJoinNotifications}:** ${state.notifications ? (cfg.txtNotifDM || cfg.txtOn) : (cfg.txtNotifMention || cfg.txtOff)}`
       ));
       container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -185,8 +185,8 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     // alongside Dynamic/Warnings, so the edit button naturally lives here.
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `${cfg.txtStoryAddSectionBreakMeta}\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaRating)}:** ${ratingLabel}\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaDynamic)}:** ${dynamicDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaRating)}:** ${ratingLabel}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaDynamic)}:** ${dynamicDisplay}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaWarnings)}:** ${warningsDisplay}`
     ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -196,9 +196,9 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
 
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `${cfg.txtStoryAddSectionBreakTags}\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaMainRelationship)}:** ${mainPairingDisplay}\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaOtherRelationships)}:** ${otherRelDisplay}\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaCharacters)}:** ${charsDisplay}\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaMainRelationship)}:** ${mainPairingDisplay}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaOtherRelationships)}:** ${otherRelDisplay}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaCharacters)}:** ${charsDisplay}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaTags)}:** ${tagsDisplay}`
     ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
