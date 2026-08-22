@@ -1,5 +1,5 @@
 import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
-import { getConfigValue, formatDuration, trimTrailingEmoji } from '../utilities.js';
+import { getConfigValue, formatDuration, trimTrailingEmoji, replaceTemplateVariables } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
 import { STORY_MODE } from '../constants.js';
 
@@ -41,17 +41,22 @@ export async function getMetaCfg(connection, guildId) {
 
 /**
  * Shared panel builder for /story add and /story manage — Components V2 Container.
- * isManage: shows Join Settings cluster only when false (join settings don't apply post-join).
+ * isManage: shows Join Settings cluster only when false (join settings don't apply post-join);
+ *   also gates the Review Tags button into the Metadata tab (tag review has no meaning pre-creation).
  * activeGroup: 'settings' | 'metadata' — which tab's field clusters render.
  * namespace: 'story_add' or 'story_manage' — customId prefix for the tab-toggle and edit buttons.
+ * titleMetadata: header text to show instead of `title` while the Metadata tab is active. Add
+ *   passes none (its "Create New Story" header holds regardless of tab); Manage passes a second
+ *   title so the header itself reflects which tab you're on, not just the tab buttons' colors.
  *
  * Returns a ContainerBuilder, not a finished message payload — callers append their own
  * trailing components (e.g. manage's persistent story-action buttons, add's Create Story
  * button) before sending with `{ components: [...], flags: MessageFlags.IsComponentsV2 }`.
  */
-export function buildStoryPanel(cfg, state, title, { isManage = false, activeGroup = 'settings', namespace = 'story_add' } = {}) {
+export function buildStoryPanel(cfg, state, title, { isManage = false, activeGroup = 'settings', namespace = 'story_add', titleMetadata = null } = {}) {
   title = title ?? cfg.txtCreateStoryTitle;
   const ns = namespace;
+  const headerText = (activeGroup === 'metadata' && titleMetadata) ? titleMetadata : title;
 
   const modeEmojis = { 0: '🟢', 1: '🟣', 2: '🔵' };
   const modeLabels = { 0: cfg.txtNormalUC, 1: cfg.txtQuickUC, 2: cfg.txtSlowTC };
@@ -93,20 +98,24 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
   const turnLengthDisplay = isSlowMode ? cfg.txtNA : formatDuration(state.turnLength);
 
   const container = new ContainerBuilder()
-    .setAccentColor(state.storyMode === STORY_MODE.QUICK ? 0xE040FB : state.storyMode === STORY_MODE.SLOW ? 0x5865F2 : 0x57F287)
-    .addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${title}`));
+    .setAccentColor(state.storyMode === STORY_MODE.QUICK ? 0xE040FB : state.storyMode === STORY_MODE.SLOW ? 0x5865F2 : 0x57F287);
 
-  if (cfg.txtStoryAddIntro && !isManage) {
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryAddIntro));
-  }
-
-  // Tab toggle — active tab styled Success, inactive Secondary, so "you are here" is unambiguous.
+  // Tab toggle sits above the header now — the header text changes with it (Manage only; Add's
+  // header is tab-independent), so the buttons need to read as "pick a view" before that view's
+  // label, not as an action tucked under a static title. Active tab styled Success, inactive
+  // Secondary, so "you are here" is unambiguous even without the header's help.
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId(`${ns}_tab_settings`).setLabel(cfg.btnPanelTabSettings)
       .setStyle(activeGroup === 'settings' ? ButtonStyle.Success : ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId(`${ns}_tab_metadata`).setLabel(cfg.btnPanelTabMetadata)
       .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
   ));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`## ${headerText}`));
+
+  if (cfg.txtStoryAddIntro && !isManage) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryAddIntro));
+  }
+
   container.addSeparatorComponents(new SeparatorBuilder());
 
   if (activeGroup === 'settings') {
@@ -179,6 +188,20 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`${ns}_open_tags`).setLabel(cfg.btnAddTags).setStyle(ButtonStyle.Primary)
     ));
+
+    if (isManage) {
+      // Review Tags lives here, not with the other manage actions on the Settings tab — it
+      // approves/rejects submissions that feed this Tags field directly, so it belongs with
+      // the Metadata content it affects, not the story-lifecycle buttons on Settings.
+      container.addActionRowComponents(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId('story_manage_review_tags')
+          .setLabel(replaceTemplateVariables(cfg.btnReviewTags, { count: state.pendingTagCount || 0 }))
+          .setStyle(ButtonStyle.Primary)
+          .setDisabled(!state.pendingTagCount)
+      ));
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtReviewTagsDesc));
+    }
   }
 
   return container;

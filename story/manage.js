@@ -32,57 +32,56 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     isManage: true,
     activeGroup: state.activeGroup ?? 'settings',
     namespace: 'story_manage',
+    titleMetadata: cfg.txtManageEmbedTitleMetadata,
   });
 
-  // Persistent story-action area — doesn't change with the active tab, since none of these
-  // edit a currently-shown field cluster. Labeled per the entry-point audit finding that
-  // Manage Turns (Skip/Extend/Reassign) had zero inline explanation anywhere.
+  // Story-action area — Settings tab only. These used to sit on both tabs on the theory that
+  // none of them edit a currently-shown field cluster, but Manage Entries/Turns/Users don't
+  // relate to Metadata content at all, so there's no reason to pay their component cost (or
+  // clutter the view) while metadata-editing — one click back to Settings gets them. Review
+  // Tags moved the other way, into buildStoryPanel's Metadata branch, since it feeds the Tags
+  // field shown there. Labeled per the entry-point audit finding that Manage Turns
+  // (Skip/Extend/Reassign) had zero inline explanation anywhere.
   //
-  // COMPONENT BUDGET: the Settings tab (isAdminOrCreator = true, all fields populated) recurses
-  // to exactly 40 components counting every nested node (Container, each TextDisplay, each
-  // ActionRow, and each Button inside it) — Discord's documented per-message ceiling
-  // (docs.discord.com/developers/components/reference). @discordjs/builders does not validate
-  // this client-side, and it's unconfirmed whether Discord's server-side enforcement counts
-  // nested children individually (as above) or only top-level container children — so this could
-  // already be at the limit or comfortably under it. Decision: ship as-is and confirm live, since
-  // no staging environment exists. If Discord rejects the payload, the first thing to cut is the
-  // Separator on the line directly below this comment — it's the one purely decorative node in
-  // the tree and removes 1 from the count without touching any label or button.
-  container.addSeparatorComponents(new SeparatorBuilder());
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
+  // COMPONENT BUDGET: worst case (Settings tab, isAdminOrCreator = true, all fields populated)
+  // recurses to 37 components counting every nested node (Container, each TextDisplay, each
+  // ActionRow, and each Button inside it) — under Discord's documented 40-per-message ceiling
+  // (docs.discord.com/developers/components/reference), with the Metadata tab well under that
+  // at 25. @discordjs/builders does not validate this client-side, and it's unconfirmed whether
+  // Discord's server-side enforcement counts nested children individually (as above) or only
+  // top-level container children — so treat 37 as the number to watch if more fields are added
+  // later, not as headroom already spent. If it ever needs trimming, the first cut is the
+  // Separator on the line directly below this comment — the one purely decorative node in the
+  // tree, removing 1 from the count without touching any label or button.
+  if ((state.activeGroup ?? 'settings') === 'settings') {
+    container.addSeparatorComponents(new SeparatorBuilder());
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
 
-  // One button per row, each followed by its own -# subtext caption — these four hide multiple
-  // sub-actions behind a single label (e.g. Manage Turns opens Skip/Extend/Reassign), so knowing
-  // what's inside before clicking matters, the same reasoning as the inline mode descriptions
-  // already used for Story Mode/Writer Order. Closes the entry-point audit's Manage Turns finding
-  // directly, without waiting on the help redesign's contextual-popup mechanism.
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('story_manage_entries_open').setLabel(cfg.btnManageEntries).setStyle(ButtonStyle.Primary)
-  ));
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageEntriesDesc));
-
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('story_manage_turns_open').setLabel(cfg.btnManageTurns).setStyle(ButtonStyle.Primary)
-  ));
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageTurnsDesc));
-
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('story_manage_review_tags')
-      .setLabel(replaceTemplateVariables(cfg.btnReviewTags, { count: state.pendingTagCount || 0 }))
-      .setStyle(ButtonStyle.Primary)
-      .setDisabled(!state.pendingTagCount)
-  ));
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtReviewTagsDesc));
-
-  // Gated to creator-or-admin, matching /story manage's own access level — not admin-only like
-  // the standalone /storyadmin user command. Deliberately broader here: managing writers in
-  // your own story is a natural extension of the creator controls already on this panel.
-  if (state.isAdminOrCreator) {
+    // One button per row, each followed by its own -# subtext caption — these hide multiple
+    // sub-actions behind a single label (e.g. Manage Turns opens Skip/Extend/Reassign), so
+    // knowing what's inside before clicking matters, the same reasoning as the inline mode
+    // descriptions already used for Story Mode/Writer Order. Closes the entry-point audit's
+    // Manage Turns finding directly, without waiting on the help redesign's contextual-popup
+    // mechanism.
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('story_manage_users_open').setLabel(cfg.btnManageUsers).setStyle(ButtonStyle.Primary)
+      new ButtonBuilder().setCustomId('story_manage_entries_open').setLabel(cfg.btnManageEntries).setStyle(ButtonStyle.Primary)
     ));
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageUsersDesc));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageEntriesDesc));
+
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('story_manage_turns_open').setLabel(cfg.btnManageTurns).setStyle(ButtonStyle.Primary)
+    ));
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageTurnsDesc));
+
+    // Gated to creator-or-admin, matching /story manage's own access level — not admin-only like
+    // the standalone /storyadmin user command. Deliberately broader here: managing writers in
+    // your own story is a natural extension of the creator controls already on this panel.
+    if (state.isAdminOrCreator) {
+      container.addActionRowComponents(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('story_manage_users_open').setLabel(cfg.btnManageUsers).setStyle(ButtonStyle.Primary)
+      ));
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtManageUsersDesc));
+    }
   }
 
   container.addSeparatorComponents(new SeparatorBuilder());
@@ -189,6 +188,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtManageNotAuthorized', 'txtStoryNotFound',
       'btnManageUsers', 'txtManageUsersPickModalTitle', 'lblManageUsersPickSelect', 'txtManageUsersNoWriters',
       'txtManageEntriesDesc', 'txtManageTurnsDesc', 'txtReviewTagsDesc', 'txtManageUsersDesc', 'txtChangeStoryStatusLabel',
+      'txtManageEmbedTitleMetadata',
     ], guildId);
 
     Object.assign(cfg, extraCfg);

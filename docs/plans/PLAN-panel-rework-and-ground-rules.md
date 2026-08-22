@@ -157,6 +157,29 @@ story-lifecycle actions (Manage Entries, Manage Turns, Review Tags, Joins, Pause
 Close/Reopen, Save Settings). `/story add` has no persistent row (just `[Create Story]`) and no
 Manage Entries/Turns/Joins/etc., since those only apply to an existing story.
 
+**Revised 2026-08-22:** the "persistent, both tabs" framing above turned out wrong on inspection —
+walking through mockups of both tab states surfaced two problems the original design hadn't
+caught, so the row split by relevance instead of staying uniform:
+- **Tab toggle now renders above the header line, and the header line itself switches with it**
+  (`## Story Settings` / `## Story Metadata` via `buildStoryPanel`'s new `titleMetadata` param) —
+  previously the header was a single static string shown unchanged regardless of which tab was
+  active, which read as broken once the Metadata tab existed. Tab button labels also changed from
+  "Settings"/"Metadata" to "**Display Settings**"/"**Display Metadata**" so the verb makes clear
+  they toggle the view, not act on it.
+- **Manage Entries, Manage Turns, and Manage Users are Settings-tab only now** — none of them
+  relate to Metadata content, so there's no reason to show them (or pay their component cost)
+  while metadata-editing; switching back to Settings is one click. **Review Tags moved the other
+  direction**, out of that group and onto the Metadata tab directly under `[Edit Tags]`, since
+  approving/rejecting tag submissions is what populates that field. Change Story Status and Save
+  Settings still render on both tabs — a staged edit on either tab still needs Save.
+- Every field-cluster edit button gained an explicit verb for consistency:
+  `Edit Title and Summary`, `Edit Story Info`, `Edit Story Settings`, `Edit Story Metadata`,
+  `Edit Story Tags` (Manage Entries/Turns/Users/Review Tags already had one).
+
+Diagram and "Component budget check" below are the original 2026-08-21 design as first shipped;
+see the component-budget paragraph's own 2026-08-22 update for the corrected, code-verified counts
+after this split.
+
 **Added 2026-08-21:** the persistent action-row area gets a short `TextDisplay` label above it
 (landed as "🛠️ Story Management" — "Story Actions" read as too generic, and this echoes the
 existing "Manage Entries"/"Manage Turns" button vocabulary already in the same row) — this is the
@@ -190,6 +213,18 @@ per the help-redesign plan's Open Risks): tab-toggle row (~3) + 3 field clusters
 Entries/Turns/Review Tags, Joins/Pause/Close, Save Settings — ~9) + Container wrapper (1) ≈ 28.
 Comfortable headroom under 40 even in the conservative interpretation.
 
+**Revised 2026-08-22 (code-verified, not estimated):** ran the actual `buildManageMessage()`
+against a mock config/state and counted every nested node in the real `.toJSON()` output —
+Settings tab, admin/creator, all fields populated (the actual worst case) comes to **37**, not the
+~28 estimate above; the gap is mostly the Story Management label/captions and the Change Story
+Status/Save Settings block, which the original estimate undercounted. That 37 was measured
+*before* this same day's Settings/Metadata split (see the layout note above) removed Review Tags
+from that row; post-split it's still 37 on Settings (Review Tags leaving is offset by nothing —
+Manage Entries/Turns/Users stayed put), but **Metadata drops to 25** now that it no longer carries
+the Story Management block at all. Both are under Discord's documented 40-per-message ceiling;
+`story/manage.js` carries the up-to-date inline comment and fallback plan (drop the one purely
+decorative `Separator` first) if a future field addition pushes Settings' 37 closer to the limit.
+
 ### `IsComponentsV2` is all-or-nothing per message
 
 Every caller of `buildStoryEmbed()`/`buildStoryAddMessage()`/`buildManageMessage()` needs its reply
@@ -211,10 +246,10 @@ builder function itself.
 
 ## Part 1b — Move Manage Users onto the manage panel ✅ Implemented 2026-08-21
 
-**Shipped as designed**, with the two-step flow landing as: click "Manage Users" (persistent row,
-admin-only — hidden entirely for non-admin creators, not shown-disabled, since `/storyadmin user`
-requires `checkIsAdmin` while `/story manage` itself allows creator-or-admin) → a modal with a
-`StringSelectMenu` of the story's current active/paused writers (built from `story_writer`'s
+**Shipped with one correction from the initial design:** the two-step flow landed as: click
+"Manage Users" (Settings-tab persistent row, gated to **creator-or-admin** — matching `/story
+manage`'s own access level, hidden entirely rather than shown-disabled for anyone else) → a modal
+with a `StringSelectMenu` of the story's current active/paused writers (built from `story_writer`'s
 already-stored `discord_display_name`, no extra Discord API fetch needed) → submitting it opens the
 existing Manage User panel, unchanged.
 
