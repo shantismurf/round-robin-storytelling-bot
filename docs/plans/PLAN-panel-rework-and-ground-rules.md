@@ -221,6 +221,10 @@ large headline, `##` is visibly bigger than bold body text (a genuine middle tie
 renders close to bold weight but with more line-height around it. Landed on `###` for the save
 warning — smaller than the `##` cluster headers it doesn't need to compete with, but still reads
 as its own line rather than blending into plain body text.
+
+**Also: `txtChangeStoryStatusLabel` was still plain `**bold**`**, missed during the header-hierarchy
+pass that promoted `🛠️ Story Management` — caught live (screenshot showed it not matching). Now
+`## 🚦 Change Story Status`, same level as the Story Info/Story Settings cluster headers.
 - **Manage Entries, Manage Turns, and Manage Users are Settings-tab only now** — none of them
   relate to Metadata content, so there's no reason to show them (or pay their component cost)
   while metadata-editing; switching back to Settings is one click. **Review Tags moved the other
