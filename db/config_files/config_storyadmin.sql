@@ -196,7 +196,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageEntryAlreadyDeleted', '❌ This entry is already deleted.', 'en', 1),
 ('txtManageEntryAlreadyConfirmed', '❌ This entry is not deleted.', 'en', 1),
 -- Added Silo 3: manageUser.js
-('txtManageUserPanelDesc', '-# Changes are staged — click **Save Settings** to apply notifications/privacy. Status actions (Pause/Restore/Remove) apply immediately.', 'en', 1),
+('txtManageUserPanelSaveNote', '-# Status actions (Pause/Restore/Remove) apply immediately. All other changes are staged. You must click **Save Settings** to apply edits to pen name, notifications, or turn privacy.', 'en', 1),
 ('txtNotifDM', 'DM', 'en', 1),
 ('txtNotifMention', 'Mention in channel', 'en', 1),
 ('btnManageUserSwitchMention', 'Switch to: Mention', 'en', 1),

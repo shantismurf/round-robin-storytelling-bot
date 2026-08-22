@@ -317,6 +317,18 @@ existing Manage User panel, unchanged.
 Users threw `ReferenceError: cfg is not defined` on the first bare `cfg.` reference. Fixed by
 adding the same declaration the other branches already use.
 
+**Also found while testing this flow live:** `story/_manageUser.js`'s Manage User panel (shared
+by this button and the standalone `/storyadmin user`) had Pen Name saving immediately on modal
+submit, while Notifications and Turn Privacy were staged behind a Save Settings button — a
+three-way split the panel's own note text never actually described (it claimed only
+notifications/privacy were staged, silent on pen name). Moved Pen Name into the staged group:
+`handleManageUserModalSubmit` now only updates `pending.penName` in memory, and
+`storyadmin_mu_save`'s `UPDATE` now includes `pen_name` alongside `notification_prefs`/
+`turn_privacy`. The note itself moved from `.setDescription()` (top of the embed) to a trailing
+zero-width-name field (bottom of the embed, same convention already used there for the
+active-turn/last-writer warnings) and now correctly lists all three staged fields — key renamed
+`txtManageUserPanelDesc` → `txtManageUserPanelSaveNote` to match its new role and position.
+
 **Refactor to enable reuse:** extracted `handleManageUser`'s body (from the story lookup onward)
 into `openManageUserPanel(connection, interaction, storyId, targetUserId, guildId,
 writerDisplayName?)` in `story/_manageUser.js` — called by both the original `/storyadmin user`
