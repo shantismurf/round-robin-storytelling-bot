@@ -138,7 +138,7 @@ async function processJob(connection, client, job) {
     }
     await connection.execute(`UPDATE job SET job_status = ? WHERE job_id = ?`, [JOB_STATUS.COMPLETED, job.job_id]);
   } catch (err) {
-    if (err?.code === 10004 && payload.guildId) {
+    if ((err?.code === 10004 || err?.code === 50278) && payload.guildId) {
       log(`Job ${job.job_id} (${job.job_type}): guild ${payload.guildId} no longer has the bot installed; closing its stories`, { show: true, hub: true });
       await closeOrphanedGuildStories(connection, payload.guildId);
       await connection.execute(`UPDATE job SET job_status = ? WHERE job_id = ?`, [JOB_STATUS.CANCELLED, job.job_id]);
@@ -536,8 +536,8 @@ async function handleOnboardingReminder(connection, client, payload, jobType) {
     log(`${jobType}: guild ${guildId} has since completed setup — skipping reminder`, { show: false });
     return;
   }
-  const guild = await client.guilds.fetch(guildId);
-  const owner = await guild.fetchOwner();
+  const guild = await client.guilds.fetch({ guild: guildId, force: true });
+  const owner = await guild.fetchOwner({ force: true });
   const configKey = { onboardingDay1: 'txtOnboardingDay1', onboardingDay7: 'txtOnboardingDay7', onboardingDay14: 'txtOnboardingDay14' }[jobType];
   const [message, hubInviteUrl] = await Promise.all([
     getConfigValue(connection, configKey),
@@ -553,8 +553,8 @@ async function handleOnboardingRemoval(connection, client, payload) {
     log(`onboardingDay30: guild ${guildId} has since completed setup — skipping removal`, { show: false });
     return;
   }
-  const guild = await client.guilds.fetch(guildId);
-  const owner = await guild.fetchOwner();
+  const guild = await client.guilds.fetch({ guild: guildId, force: true });
+  const owner = await guild.fetchOwner({ force: true });
   const [message, hubInviteUrl] = await Promise.all([
     getConfigValue(connection, 'txtOnboardingDay30Removal'),
     getConfigValue(connection, 'cfgHubInviteUrl'),
