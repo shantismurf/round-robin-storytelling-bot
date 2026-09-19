@@ -263,7 +263,7 @@ export async function handleWeeklyRoundup(connection, client, payload) {
   try {
     const stats = await generateRoundupStats(connection, guildId);
     const embed = await buildRoundupEmbed(connection, client, guildId, stats);
-    const guild = await client.guilds.fetch(guildId);
+    const guild = await client.guilds.fetch({ guild: guildId, force: true });
     const channel = await guild.channels.fetch(targetChannelId);
     await channel.send({ embeds: [embed] });
     log(`Weekly roundup posted for guild ${guild.name}`, { show: true, guildName: guild.name });

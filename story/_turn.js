@@ -569,7 +569,7 @@ export async function departWriter(connection, ctx, storyId, writerId, discordUs
  * Shared by job-runner.js and any other non-interaction-driven caller.
  */
 export async function buildSyntheticContext(client, guildId) {
-  const guild = await client.guilds.fetch(guildId);
+  const guild = await client.guilds.fetch({ guild: guildId, force: true });
   await guild.roles.fetch(); // populate roles cache for thread membership checks
   return { guild, client };
 }
