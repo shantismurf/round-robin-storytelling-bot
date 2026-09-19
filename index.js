@@ -54,7 +54,7 @@ async function refreshAllStatusMessages(connection, client) {
     for (const story of stories) {
       if (orphanedGuildIds.has(story.guild_id)) continue;
       try {
-        const guild = await client.guilds.fetch(story.guild_id);
+        const guild = await client.guilds.fetch({ guild: story.guild_id, force: true });
         await updateStoryStatusMessage(connection, guild, story.story_id);
       } catch (err) {
         if (err?.code === 10004) {

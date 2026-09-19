@@ -171,7 +171,7 @@ Unique constraint on `(job_type, guild_id, window_key)` — duplicate insert fai
 | `sanitize(input, maxLength)` | Escapes HTML entities and Discord markdown for embed fields |
 | `sanitizeModalInput(input, maxLength, multiline)` | Normalizes whitespace from modal text inputs |
 | `splitAtParagraphs(text, maxLen)` | Splits embed text at paragraph boundaries |
-| `closeOrphanedGuildStories(conn, guildId)` | Bulk-closes a guild's stories on lost bot access (Discord `10004`): ends any active turns, closes stories, cancels pending jobs |
+| `closeOrphanedGuildStories(conn, guildId)` | Bulk-closes a guild's stories on lost bot access (Discord `10004` Unknown Guild, or `50278` no mutual guilds surfaced via a forced re-fetch): ends any active turns, closes stories, cancels pending jobs |
 
 ---
 
