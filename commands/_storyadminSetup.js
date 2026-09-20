@@ -31,15 +31,15 @@ export function buildSetupPanel(state, cfg) {
     .setTitle(cfg.txtSetupPanelTitle)
     .setColor(0x5865f2)
     .addFields(
-      { name: cfg.txtSetupModalTitleFeed,           value: desc('txtSetupEmbedDescFeed')            + fieldVal(state.feedChannelId),                   inline: true },
-      { name: cfg.txtSetupModalTitleMedia,          value: desc('txtSetupEmbedDescMedia')           + fieldVal(state.mediaChannelId),                  inline: true },
-      { name: cfg.txtSetupModalTitleRole,           value: desc('txtSetupEmbedDescAdminRole')       + strVal(state.adminRoleName),                     inline: false },
-      { name: cfg.txtSetupModalTitleRestrictedFeed, value: desc('txtSetupEmbedDescRestrictedFeed')  + fieldVal(state.restrictedFeedChannelId),         inline: true },
-      { name: cfg.txtSetupModalTitleRestrictedMedia,value: desc('txtSetupEmbedDescRestrictedMedia') + fieldVal(state.restrictedMediaChannelId),        inline: true },
-      { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + (state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``), inline: false },
-      { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + strVal(state.roundupDay),                        inline: true  },
-      { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + strVal(state.roundupHour),                       inline: true  },
-      { name: cfg.lblSetupChangelog,                value: desc('txtSetupEmbedDescChangelog')       + (state.changelogEnabled ? cfg.txtOn : cfg.txtOff), inline: false },
+      { name: cfg.txtSetupModalTitleFeed,           value: desc('txtSetupEmbedDescFeed')            + '## ' + fieldVal(state.feedChannelId),                   inline: true },
+      { name: cfg.txtSetupModalTitleMedia,          value: desc('txtSetupEmbedDescMedia')           + '## ' + fieldVal(state.mediaChannelId),                  inline: true },
+      { name: cfg.txtSetupModalTitleRole,           value: desc('txtSetupEmbedDescAdminRole')       + '## ' + strVal(state.adminRoleName),                     inline: false },
+      { name: cfg.txtSetupModalTitleRestrictedFeed, value: desc('txtSetupEmbedDescRestrictedFeed')  + '## ' + fieldVal(state.restrictedFeedChannelId),         inline: true },
+      { name: cfg.txtSetupModalTitleRestrictedMedia,value: desc('txtSetupEmbedDescRestrictedMedia') + '## ' + fieldVal(state.restrictedMediaChannelId),        inline: true },
+      { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + '## ' + (state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``), inline: false },
+      { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + '## ' + strVal(state.roundupDay),                        inline: true  },
+      { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + '## ' + strVal(state.roundupHour),                       inline: true  },
+      { name: cfg.lblSetupChangelog,                value: desc('txtSetupEmbedDescChangelog')       + '## ' + (state.changelogEnabled ? cfg.txtOn : cfg.txtOff), inline: false }
     );
 
   // Dirty-state-only warning — same pattern/reasoning as story/manage.js's Part 1c indicator
