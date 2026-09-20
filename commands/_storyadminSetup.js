@@ -28,15 +28,15 @@ export function buildSetupPanel(state, cfg) {
   const desc     = (key) => `*${cfg[key]}*`;
 
   const items = [
-    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `\n## ${fieldVal(state.feedChannelId)}`,
-    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `\n## ${fieldVal(state.mediaChannelId)}`,
-    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `\n## ${strVal(state.adminRoleName)}`,
-    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `\n## ${fieldVal(state.restrictedFeedChannelId)}`,
-    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `\n## ${fieldVal(state.restrictedMediaChannelId)}`,
-    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `\n## ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}`,
-    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `\n## ${strVal(state.roundupDay)}`,
-    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `\n## ${strVal(state.roundupHour)}`,
-    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `\n## ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`,
+    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `## ${fieldVal(state.feedChannelId)}\n`,
+    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `## ${fieldVal(state.mediaChannelId)}\n`,
+    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `## ${strVal(state.adminRoleName)}\n`,
+    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `## ${fieldVal(state.restrictedFeedChannelId)}\n`,
+    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `## ${fieldVal(state.restrictedMediaChannelId)}\n`,
+    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `## ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}\n`,
+    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `## ${strVal(state.roundupDay)}\n`,
+    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `## ${strVal(state.roundupHour)}\n`,
+    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `## ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}\n`,
   ];
   const panelBody = items.join('\n\n');
 
