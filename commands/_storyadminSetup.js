@@ -25,34 +25,35 @@ export function buildSetupPanel(state, cfg) {
   log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: 'system' });
   const fieldVal = (id) => id ? `<#${id}>` : `\`${cfg.txtNotSet}\``;
   const strVal   = (v)  => v  ? `\`${v}\``  : `\`${cfg.txtNotSet}\``;
-  const desc     = (key) => `*${cfg[key]}*\n`;
+  const desc     = (key) => `*${cfg[key]}*`;
+
+  const items = [
+    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `\n## ${fieldVal(state.feedChannelId)}`,
+    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `\n## ${fieldVal(state.mediaChannelId)}`,
+    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `\n## ${strVal(state.adminRoleName)}`,
+    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `\n## ${fieldVal(state.restrictedFeedChannelId)}`,
+    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `\n## ${fieldVal(state.restrictedMediaChannelId)}`,
+    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `\n## ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}`,
+    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `\n## ${strVal(state.roundupDay)}`,
+    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `\n## ${strVal(state.roundupHour)}`,
+    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `\n## ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`,
+  ];
+  const panelBody = items.join('\n\n');
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtSetupPanelTitle)
     .setColor(0x5865f2)
-    .addFields(
-      { name: cfg.txtSetupModalTitleFeed,           value: desc('txtSetupEmbedDescFeed')            + '## ' + fieldVal(state.feedChannelId),                   inline: true },
-      { name: cfg.txtSetupModalTitleMedia,          value: desc('txtSetupEmbedDescMedia')           + '## ' + fieldVal(state.mediaChannelId),                  inline: true },
-      { name: cfg.txtSetupModalTitleRole,           value: desc('txtSetupEmbedDescAdminRole')       + '## ' + strVal(state.adminRoleName),                     inline: false },
-      { name: cfg.txtSetupModalTitleRestrictedFeed, value: desc('txtSetupEmbedDescRestrictedFeed')  + '## ' + fieldVal(state.restrictedFeedChannelId),         inline: true },
-      { name: cfg.txtSetupModalTitleRestrictedMedia,value: desc('txtSetupEmbedDescRestrictedMedia') + '## ' + fieldVal(state.restrictedMediaChannelId),        inline: true },
-      { name: cfg.txtSetupModalTitleRoundupChannel, value: desc('txtSetupEmbedDescRoundupChannel')  + '## ' + (state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``), inline: false },
-      { name: cfg.txtSetupModalTitleRoundupDay,     value: desc('txtSetupEmbedDescRoundupDay')      + '## ' + strVal(state.roundupDay),                        inline: true  },
-      { name: cfg.txtSetupModalTitleRoundupHour,    value: desc('txtSetupEmbedDescRoundupHour')     + '## ' + strVal(state.roundupHour),                       inline: true  },
-      { name: cfg.lblSetupChangelog,                value: desc('txtSetupEmbedDescChangelog')       + '## ' + (state.changelogEnabled ? cfg.txtOn : cfg.txtOff), inline: false }
+    .setDescription(
+      isSetupDirty(state)
+        ? `**${cfg.lblUnsavedChangesTitle}**\n${replaceTemplateVariables(cfg.txtUnsavedChangesBody, { save_label: cfg.btnSetupSave })}\n\n${panelBody}`
+        : panelBody
     );
 
-  // Dirty-state-only warning — same pattern/reasoning as story/manage.js's Part 1c indicator
-  // (see isSetupDirty above and that file's comment). Previously an always-on
-  // txtSetupModalSaveWarning description+footer; replaced 2026-08-26 after a real incident where
-  // an admin missed it, tried /story add before saving, and uninstalled shortly after. Still
-  // fires the moment any field is first touched, so the "this panel stages, remember to save"
-  // education isn't lost — it just stops nagging once there's nothing unsaved.
   if (isSetupDirty(state)) {
-    embed
-      .setDescription(`**${cfg.lblUnsavedChangesTitle}**\n${replaceTemplateVariables(cfg.txtUnsavedChangesBody, { save_label: cfg.btnSetupSave })}`)
-      .setFooter({ text: cfg.lblUnsavedChangesTitle });
+    embed.setFooter({ text: cfg.lblUnsavedChangesTitle });
   }
+  // Dirty-state-only warning — same pattern/reasoning as story/manage.js's Part 1c indicator
+
 
   const row1 = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
