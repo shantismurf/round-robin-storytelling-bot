@@ -87,7 +87,10 @@ DELAYED forever. The job runner can carry it. Nothing beyond that 24-hour nudge 
   role** field in `/storyadmin setup` for this. Open questions she has named and not yet
   answered: who may send an invitation, how often, and whether it is opt-in per server.
 
-**Note — this field does not exist yet, and shipped copy already refers to it.** See Open
+**Shelved with this item, 2026-09-22.** LeeAnn's decision: the Story Writer role field stays
+part of item 4 rather than being built ahead of it, since its only purpose is to give the
+community invitation somebody to notify. It is not built and nothing else depends on it. The
+`txtSetupRequiredAdmin` bullet advertising it comes back out of the copy — see Open
 Dependencies below.
 
 ## 5. Guided tutorial
@@ -126,11 +129,13 @@ have rendered literally.
 
 ## Open dependencies
 
-**`txtSetupRequiredAdmin` names a "Story Writer role" that does not exist.** It is item 4's
-notify-role field, designed on 2026-09-22 and not built. The copy is committed on the working
-branch, which is not deployed, so nothing is live yet — but **this must be resolved before the
-branch reaches main**, either by shipping the field or by removing that bullet. Raised twice in
-conversation and not yet decided.
+**`txtSetupRequiredAdmin` names a "Story Writer role" that does not exist. — Resolved
+2026-09-22, pending a copy edit.** It is item 4's notify-role field, designed on 2026-09-22 and
+not built. LeeAnn's decision is to shelve the field with item 4 and take the bullet out of the
+copy, leaving the Media/Image channel and Story Admin role as the two prerequisites. The copy is
+committed on the working branch, which is not deployed, so nothing is live yet, but **the branch
+must not reach main with that bullet still in it.** Awaiting her sign-off on the reworded
+paragraph, since it is user-facing text.
 
 ## Sequencing
 

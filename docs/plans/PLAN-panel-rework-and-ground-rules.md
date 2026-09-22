@@ -537,6 +537,11 @@ Two consequences for this design:
 
    Neither is in scope for this part. Both should be decided before the install goes live,
    because LeeAnn is the only moderator and the arrangement is explicitly that she handles it.
+   Her posture on the response half is recorded with the block/ban item in `TODO.md` — the bot
+   does not punish, and timeouts and blocks are admin-operated tools rather than automatic
+   consequences. On the reporting half, see the 2026-09-22 section of
+   [PLAN-reactions-kudos.md](PLAN-reactions-kudos.md): reporting should not ride on the
+   reaction system.
 
 ### Concept
 Per-story, zero-to-many tags directing writer *tone/intent* — not overlapping with existing
