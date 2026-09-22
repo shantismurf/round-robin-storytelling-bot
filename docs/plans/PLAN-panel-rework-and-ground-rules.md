@@ -499,6 +499,45 @@ either committing to a 3-tab redesign prematurely or losing the thread:
 - Two ideas to weigh once the split is actually assessed: a **field-completion summary** (which tabs still have unset/default fields worth a look — more useful than a bare "unsaved changes" flag once fields are spread across more tabs; note Part 1c's `isManageDirty` dirty-check is Manage-only and `/story add` has no equivalent today, so this would need its own design, not a reuse) and **duplicating the tab-button row at the bottom of the panel**, not just the top.
 - **Mobile scroll-jump note:** switching tabs edits the whole message, and on mobile this can scroll the view back to the top, away from where the user was reading/interacting. No bot-side control over Discord's client-side scroll position on a message edit — not fixable in code. Shorter tabs and bottom tab buttons (both above) would mitigate the severity without eliminating it.
 
+### Stakeholder requirement — Dwarrow Scholar, 2026-09-22
+
+This part stopped being speculative on 2026-09-22. Ground Rules was named to Roy
+(`dwarrowscholar`) as the answer to his stated concern when he agreed to the bot being
+installed on his ~700-member community server, so it now has a real requirement and a real
+audience behind it.
+
+**His concern is specific and historical.** That server previously ran a collaborative writing
+channel. It ended in drama — one member escalated into sustained hate content in-story, and it
+finished with a ban. His words: *"not jumping at the chance to do that again obviously, but if
+properly managed, it's possible."*
+
+**The rules he named:** no NSFW, no killing another writer's character without consent, "the
+usual collaborative stuff."
+
+**The operating model he agreed to:** *"here are the keys to the car, please no scratches."* He
+will not intervene until the server is close to blowing up. Moderation is LeeAnn's, alone.
+
+Two consequences for this design:
+
+1. **The default vocabulary does not cover what he asked for.** The four example rules below are
+   *creative* norms — tone, lore, rating. Roy's are *conduct* norms. "No killing another
+   writer's character without consent" is a genuine and widely-used collaborative-fiction rule
+   and should be in the shipped defaults; so should something covering harassment, which nothing
+   currently does. "Keep It Clean" addresses rating, not behaviour.
+
+2. **Ground Rules publishes expectations; it does not enforce them.** As designed below, the
+   feature authors a vocabulary, lets a creator pick a subset, and displays the result. That is
+   worth having, but it is not what Roy is afraid of. Publishing a rule would not have stopped
+   the member who ended up banned. The moment he cares about is the one *after* a rule is
+   broken, and the bot's answer to that is currently: remove the writer from the story
+   (`/storyadmin user`), delete entries (Manage Entries), skip the turn. There is **no way for a
+   writer to report anything**, and **no way to stop a removed person rejoining** — see the
+   block/ban item in `TODO.md`, which this install promotes from a someday idea to something
+   close to a prerequisite.
+
+   Neither is in scope for this part. Both should be decided before the install goes live,
+   because LeeAnn is the only moderator and the arrangement is explicitly that she handles it.
+
 ### Concept
 Per-story, zero-to-many tags directing writer *tone/intent* — not overlapping with existing
 free-text `tags`. Vocabulary (the option set) is server-defined; each story picks any subset.
