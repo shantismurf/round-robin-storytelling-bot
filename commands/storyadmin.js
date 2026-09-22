@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, InteractionContextType } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
 import { STORY_STATUS, JOB_STATUS, WRITER_STATUS } from '../constants.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
@@ -21,6 +21,11 @@ async function logAdminAction(connection, adminUserId, actionType, storyId, targ
 const data = new SlashCommandBuilder()
   .setName('storyadmin')
   .setDescription('Admin tools for story management')
+  // Guild only. Commands registered globally default to being offered in DMs with the bot as
+  // well, where every one of them dead-ends on the guild guard below — the bot's whole model is
+  // per-server stories, config and roles. Hiding them there is honest about what works.
+  // setDMPermission is deprecated in discord.js 14.26.4 and setContexts replaces it.
+  .setContexts(InteractionContextType.Guild)
   .addSubcommand(s =>
     s.setName('user')
       .setDescription('Manage a writer\'s participation in a story')

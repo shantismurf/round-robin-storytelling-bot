@@ -1,4 +1,4 @@
-import { SlashCommandBuilder, MessageFlags } from 'discord.js';
+import { SlashCommandBuilder, MessageFlags, InteractionContextType } from 'discord.js';
 import { log, storyLastActivitySQL } from '../utilities.js';
 import { handleWriterHelp } from '../faq.js';
 import { handleList, handleListNavigation, handleViewToggle, handleCatchUp, handleCatchUpNavigation } from './_myStoryList.js';
@@ -8,6 +8,11 @@ import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS } from '../constants.js';
 const data = new SlashCommandBuilder()
   .setName('mystory')
   .setDescription('Your personal story dashboard')
+  // Guild only. Commands registered globally default to being offered in DMs with the bot as
+  // well, where every one of them dead-ends on the guild guard below — the bot's whole model is
+  // per-server stories, config and roles. Hiding them there is honest about what works.
+  // setDMPermission is deprecated in discord.js 14.26.4 and setContexts replaces it.
+  .setContexts(InteractionContextType.Guild)
   .addSubcommand(s =>
     s.setName('list')
       .setDescription('See all your stories — active, paused, delayed, and closed')

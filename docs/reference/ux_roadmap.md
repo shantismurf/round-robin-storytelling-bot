@@ -111,6 +111,11 @@ Any command on a server with no cfgStoryFeedChannelId
   the bot is and that an admin has to finish setup.
 ```
 
+Commands are registered globally in production and are **guild-only** — all three builders set
+`setContexts(InteractionContextType.Guild)`, so they are not offered in DMs with the bot, where
+nothing the bot does would work. Before 3.5.5 they were offered there and dead-ended on the
+guild guard. See `docs/plans/PLAN-dm-support.md`.
+
 ### `/storyadmin` Command Flows
 
 ```
@@ -190,12 +195,13 @@ turnSlowReminder job (slow mode only)
 
 ### Hardcoded Text (to be resolved in per-silo audits)
 - `ratingBadgeKey`, `modeText`, `orderText` — referenced in `../TODO.md` as hardcoded; not yet migrated to config keys.
-- **Guild-context guard, three copies** — `commands/story.js:155`, `commands/mystory.js:47` and
-  `commands/storyadmin.js:61` each reply with the same hardcoded "This command can only be used in a
-  server." Found 2026-09-22. Reachable in production: commands register globally
-  (`deploy-commands.js:38`) and nothing sets `contexts` or `dm_permission`, so Discord's default
-  for a guild-install app includes Bot DM — a user who DMs the bot and runs a command lands here.
-  One config key serves all three.
+- **Guild-context guard, three copies** — `commands/story.js`, `commands/mystory.js` and
+  `commands/storyadmin.js` each reply with the same hardcoded "This command can only be used in a
+  server." Found 2026-09-22, when the commands were still offered in DMs and every one of them
+  landed here. As of 3.5.5 the commands are guild-only, so this is defensive code rather than a
+  path users reach — it was kept, not deleted, because a client with the old command list cached
+  can still fire a DM interaction during the propagation window. Low priority now, but still
+  hardcoded: one config key serves all three.
 - Additional items to be identified in Silos 3–5.
 
 ### Deferred Tier B — Story Management (Silo 2)

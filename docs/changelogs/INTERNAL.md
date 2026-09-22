@@ -19,6 +19,40 @@ the thing you will search for later is the old name.
 
 ---
 
+## 3.5.5 — 2026-09-22
+
+Provenance: git-derived.
+
+### Added
+- `getSetupRequiredMessage()` in `utilities.js` — one helper owning the "this server isn't set
+  up yet" decision: configured check, Manage Server split, guild-1 read, `[hubInviteUrl]`
+  substitution. Returns the string or null.
+- The setup-required message now also appears on `/story help`, `/mystory help`,
+  `/storyadmin help` and the `/storyadmin setup` panel. Those four are exempt from the command
+  gate, so an admin who went straight to setup or help previously never saw the welcome at all.
+- `test/commandContexts.test.js` — asserts the serialized command payload stays guild-only.
+
+### Changed
+- Slash commands are guild-only (`setContexts(InteractionContextType.Guild)` on `/story`,
+  `/mystory`, `/storyadmin`). They were being offered in DMs with the bot, where every one of
+  them dead-ended on the guild guard.
+- `txtSetupRequiredAdmin` rewritten as a welcome with one requirement and a prerequisites list,
+  `txtSetupRequiredUser` now states what the bot is rather than reading as an error the member
+  caused, and `txtStoryAddIntro` says only a title is required.
+
+### Removed
+- The unconfigured-guild check in `commands/story.js`. **Why:** unreachable — the gate in
+  `index.js` catches every `/story` subcommand except `help`, and this check exempted `help`
+  too — and it read `txtNotConfigured`, which migration 010 deletes as unused.
+- The "Story Writer role" bullet from `txtSetupRequiredAdmin`. **Why:** it advertised a
+  `/storyadmin setup` field that does not exist. The field is shelved with the community
+  invitation work in `docs/plans/PLAN-first-run-experience.md`.
+
+### Fixed
+- The setup-required reply never called `replaceTemplateVariables`, so the new `[hubInviteUrl]`
+  token would have rendered literally.
+
+
 ## Unreleased
 
 Changes on `main` since the v3.5.4 bump, not yet carrying a version number.

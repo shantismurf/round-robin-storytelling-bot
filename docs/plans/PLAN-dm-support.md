@@ -2,9 +2,28 @@
 
 Status: Deferred indefinitely 2026-09-22 — will not be built unless someone asks
 Created: 2026-07-01
-Last Updated: 2026-07-01
+Last Updated: 2026-09-22
 
 Extracted from TODO.md, where this lived as a fully detailed inline implementation plan.
+
+## Why this idea existed — established 2026-09-22
+
+The commands were already showing up in DMs, which is what had LeeAnn thinking about DM support
+in the first place. It was not a missing feature so much as a promise the bot was making and
+breaking: `deploy-commands.js` registers globally in production, nothing set `contexts`,
+`setDMPermission` or `integration_types`, and Discord's default for a guild-install app offers
+the commands in DMs with the bot. Every one of them then dead-ended on the guild guard.
+
+Fixed in 3.5.5 by hiding them instead: `setContexts(InteractionContextType.Guild)` on all three
+command builders, so the DM picker no longer offers something that cannot work.
+`test/commandContexts.test.js` asserts the serialized payload stays guild-only.
+
+That closes the bug. **This plan stays deferred on its own merits** — building real DM support
+means resolving which guild a DM refers to, which is step 2 below and the genuinely hard part.
+
+Note that step 1 below is now partly wrong: it says to add `setContexts([0, 1, 2])`. That was
+written before the commands were guild-scoped, so building this would mean widening the contexts
+again rather than adding them from nothing, and updating the test above.
 
 ---
 
