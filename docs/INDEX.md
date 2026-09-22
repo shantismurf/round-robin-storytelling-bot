@@ -15,6 +15,18 @@ else lives under `docs/`.
 
 ---
 
+## changelogs/ — release history
+
+[`changelogs/`](changelogs/) — two tiers, explained in its own
+[README](changelogs/README.md).
+
+| File | Summary |
+|---|---|
+| [INTERNAL.md](changelogs/INTERNAL.md) | Comprehensive backend record, newest first. Removed entries carry the reason. Provenance marked per era — git-derived from v3.2.1, Hub-post-derived before that, nothing before v2.0 |
+| [public/](changelogs/public/) | Each Hub announcement verbatim as sent, one file per post, 2026-04-30 onward. Primary sources; corrections go in `INTERNAL.md` |
+
+---
+
 ## plans/ — proposed or in-progress features
 
 Every file has a `Status` / `Created` / `Last Updated` (/ `Implemented`) header.
