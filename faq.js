@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log } from './utilities.js';
+import { getConfigValue, getSetupRequiredMessage, log } from './utilities.js';
 
 const EMBED_COLOR = 0x5865f2;
 
@@ -169,7 +169,16 @@ async function buildTocEmbed(connection, guildId) {
 export async function handleHelp(connection, interaction) {
   log(`handleHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   try {
-    await interaction.reply({ ...await buildTocEmbed(connection, interaction.guild.id), flags: MessageFlags.Ephemeral });
+    // `help` is exempt from the setup gate in index.js, so an unconfigured server needs the
+    // "set me up first" message carried here instead — otherwise the reader gets documentation
+    // for commands that will not run, with nothing saying why. Not repeated on page selection,
+    // which would put it above every page the reader opens.
+    const setupMessage = await getSetupRequiredMessage(connection, interaction);
+    await interaction.reply({
+      ...(setupMessage ? { content: setupMessage } : {}),
+      ...await buildTocEmbed(connection, interaction.guild.id),
+      flags: MessageFlags.Ephemeral,
+    });
   } catch (err) {
     log(`handleHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
@@ -206,12 +215,13 @@ export async function handleWriterHelp(connection, interaction) {
   try {
     const pageDef = PAGE_DEFS[6]; // page 7: MyStory Commands
     const { content, cfg } = await buildPage(connection, interaction.guild.id, pageDef);
+    const setupMessage = await getSetupRequiredMessage(connection, interaction);
     const embed = new EmbedBuilder()
       .setTitle(cfg[pageDef.titleKey])
       .setColor(EMBED_COLOR)
       .setDescription(content)
       .setFooter({ text: cfg[pageDef.footerKey] });
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ ...(setupMessage ? { content: setupMessage } : {}), embeds: [embed] });
   } catch (err) {
     log(`handleWriterHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
@@ -226,12 +236,17 @@ export async function handleAdminHelp(connection, interaction, guildId) {
   try {
     const pageDef = PAGE_DEFS[7]; // page 8: StoryAdmin Commands
     const { content, cfg } = await buildPage(connection, guildId, pageDef);
+    const setupMessage = await getSetupRequiredMessage(connection, interaction);
     const embed = new EmbedBuilder()
       .setTitle(cfg[pageDef.titleKey])
       .setColor(EMBED_COLOR)
       .setDescription(content)
       .setFooter({ text: cfg[pageDef.footerKey] });
-    await interaction.reply({ embeds: [embed], flags: MessageFlags.Ephemeral });
+    await interaction.reply({
+      ...(setupMessage ? { content: setupMessage } : {}),
+      embeds: [embed],
+      flags: MessageFlags.Ephemeral,
+    });
   } catch (err) {
     log(`handleAdminHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }

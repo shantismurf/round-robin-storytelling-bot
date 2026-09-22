@@ -9,7 +9,9 @@ import {
   chunkEntryContent,
   createFailureThrottle,
   getConfigValue,
+  getSetupRequiredMessage,
 } from '../utilities.js';
+import { makeFakeConnection } from './_fakeConnection.js';
 
 describe('splitAtParagraphs', () => {
   test('returns the text unchanged as a single chunk when under maxLen', () => {
@@ -199,5 +201,83 @@ describe('getConfigValue', () => {
     const values = await getConfigValue(connection, ['cfgAdminRoleName', 'cfgStoryFeedChannelId'], 1509192156491940011);
     assert.equal(values.cfgAdminRoleName, '');
     assert.equal(values.cfgStoryFeedChannelId, '123');
+  });
+});
+
+describe('getSetupRequiredMessage', () => {
+  // getSetupRequiredMessage issues two queries in order: isGuildConfigured's single-key
+  // lookup, then getConfigValue's array form. makeFakeConnection has no query matching,
+  // so the queue below must stay in that order.
+  const GUILD_ID = 1509192156491940011;
+
+  function makeInteraction({ hasManageGuild = false, guild = { id: GUILD_ID, name: 'Test Guild' } } = {}) {
+    return {
+      guild,
+      user: { username: 'tester' },
+      member: { permissions: { has: (flag) => flag === 'ManageGuild' && hasManageGuild } },
+    };
+  }
+
+  function configRows(rows) {
+    return rows.map(([config_key, config_value]) => ({ config_key, config_value, guild_id: 1 }));
+  }
+
+  test('returns null when the guild is already configured', async () => {
+    const connection = makeFakeConnection([[{ config_value: '99887766' }]]);
+    assert.equal(await getSetupRequiredMessage(connection, makeInteraction()), null);
+    assert.equal(connection.calls.length, 1, 'should not look up copy for a configured guild');
+  });
+
+  test('returns null outside guild context', async () => {
+    const connection = makeFakeConnection([]);
+    assert.equal(await getSetupRequiredMessage(connection, makeInteraction({ guild: null })), null);
+    assert.equal(connection.calls.length, 0);
+  });
+
+  test('returns the admin copy for a user with Manage Server', async () => {
+    const connection = makeFakeConnection([
+      [],
+      configRows([['txtSetupRequiredAdmin', 'Admin copy'], ['cfgHubInviteUrl', 'https://hub.example']]),
+    ]);
+    const message = await getSetupRequiredMessage(connection, makeInteraction({ hasManageGuild: true }));
+    assert.equal(message, 'Admin copy');
+  });
+
+  test('returns the member copy for a user without Manage Server', async () => {
+    const connection = makeFakeConnection([
+      [],
+      configRows([['txtSetupRequiredUser', 'Member copy'], ['cfgHubInviteUrl', 'https://hub.example']]),
+    ]);
+    const message = await getSetupRequiredMessage(connection, makeInteraction({ hasManageGuild: false }));
+    assert.equal(message, 'Member copy');
+  });
+
+  test('substitutes the hub invite token rather than sending it raw', async () => {
+    const connection = makeFakeConnection([
+      [],
+      configRows([
+        ['txtSetupRequiredAdmin', 'Join the [Hub]([hubInviteUrl]) if you get stuck.'],
+        ['cfgHubInviteUrl', 'https://hub.example'],
+      ]),
+    ]);
+    const message = await getSetupRequiredMessage(connection, makeInteraction({ hasManageGuild: true }));
+    assert.equal(message, 'Join the [Hub](https://hub.example) if you get stuck.');
+  });
+
+  test('reads copy from guild 1, since an unconfigured guild has no overrides', async () => {
+    const connection = makeFakeConnection([
+      [],
+      configRows([['txtSetupRequiredAdmin', 'Admin copy'], ['cfgHubInviteUrl', 'https://hub.example']]),
+    ]);
+    await getSetupRequiredMessage(connection, makeInteraction({ hasManageGuild: true }));
+    assert.equal(connection.calls[1].params.at(-1), 1);
+  });
+
+  test('treats a blank feed channel as unconfigured', async () => {
+    const connection = makeFakeConnection([
+      [{ config_value: '' }],
+      configRows([['txtSetupRequiredUser', 'Member copy'], ['cfgHubInviteUrl', 'https://hub.example']]),
+    ]);
+    assert.equal(await getSetupRequiredMessage(connection, makeInteraction()), 'Member copy');
   });
 });

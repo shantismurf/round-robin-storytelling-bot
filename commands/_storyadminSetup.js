@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, LabelBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ChannelType } from 'discord.js';
-import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, getSetupRequiredMessage, sanitizeModalInput, log, replaceTemplateVariables } from '../utilities.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 
 export const pendingSetupData = new Map();
@@ -140,8 +140,16 @@ export async function handleSetup(connection, interaction) {
 
   pendingSetupData.set(interaction.user.id, state);
   log(`handleSetup: opening panel for ${interaction.user.tag} in guild ${guildId}`, { show: false, guildName: interaction.guild.name });
+  // `setup` is exempt from the gate in index.js, so an admin who installs the bot and comes
+  // straight here would otherwise never see the welcome or its prerequisites list — and this
+  // is the moment they most need it, since creating a channel or a role means leaving the panel.
+  const setupMessage = await getSetupRequiredMessage(connection, interaction);
   const panel = buildSetupPanel(state, cfg);
-  await interaction.reply({ ...panel, flags: MessageFlags.Ephemeral });
+  await interaction.reply({
+    ...(setupMessage ? { content: setupMessage } : {}),
+    ...panel,
+    flags: MessageFlags.Ephemeral,
+  });
 }
 
 function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {

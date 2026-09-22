@@ -1,5 +1,5 @@
 import { SlashCommandBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, log, isGuildConfigured, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
+import { getConfigValue, log, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
 import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, ENTRY_STATUS } from '../constants.js';
 
 // Sub-command handlers
@@ -159,16 +159,6 @@ async function execute(connection, interaction) {
 
   const subcommand = interaction.options.getSubcommand();
   log(`execute() called with subcommand '${subcommand}'`, { show: false, guildName: interaction?.guild?.name });
-
-  // `help` bypasses this same-command redundant check for the same reason it bypasses the
-  // router-level gate in index.js — a stuck admin needs a working escape hatch to docs.
-  if (subcommand !== 'help' && !await isGuildConfigured(connection, interaction.guild.id)) {
-    await interaction.reply({
-      content: await getConfigValue(connection, 'txtNotConfigured', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-    return;
-  }
 
   if (subcommand === 'add') {
     await handleAddStory(connection, interaction);

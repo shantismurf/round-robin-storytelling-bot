@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Collection, Events, MessageFlags } from 'discord.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
-import { loadConfig, DB, getConfigValue, isGuildConfigured, setTestMode, log, setHubLogClient, closeOrphanedGuildStories, createFailureThrottle, replaceTemplateVariables } from './utilities.js';
+import { loadConfig, DB, getConfigValue, getSetupRequiredMessage, setTestMode, log, setHubLogClient, closeOrphanedGuildStories, createFailureThrottle } from './utilities.js';
 import { STORY_STATUS } from './constants.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner, scheduleOnboardingReminders } from './job-runner.js';
@@ -209,19 +209,10 @@ async function main() {
           const isSetupCommand = interaction.commandName === 'storyadmin' && subcommand === 'setup';
           const isHelpCommand = subcommand === 'help';
           if (!isSetupCommand && !isHelpCommand && interaction.guild) {
-            const configured = await isGuildConfigured(connection, interaction.guild.id);
-            if (!configured) {
+            const setupMessage = await getSetupRequiredMessage(connection, interaction);
+            if (setupMessage) {
               log(`Setup required: blocked /${interaction.commandName}${subcommand ? ` ${subcommand}` : ''}`, { show: true, guildName: interaction.guild.name });
-              const isAdmin = interaction.member?.permissions?.has('ManageGuild');
-              const msgKey = isAdmin ? 'txtSetupRequiredAdmin' : 'txtSetupRequiredUser';
-              // Guild 1 (defaults) on purpose: an unconfigured guild has no overrides of its own.
-              // These strings carry [hubInviteUrl], so they must go through replaceTemplateVariables
-              // rather than being replied with raw.
-              const setupCfg = await getConfigValue(connection, [msgKey, 'cfgHubInviteUrl'], 1);
-              await interaction.reply({
-                content: replaceTemplateVariables(setupCfg[msgKey], { hubInviteUrl: setupCfg.cfgHubInviteUrl }),
-                flags: MessageFlags.Ephemeral
-              });
+              await interaction.reply({ content: setupMessage, flags: MessageFlags.Ephemeral });
               return;
             }
           }

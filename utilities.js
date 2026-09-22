@@ -304,6 +304,40 @@ export async function isGuildConfigured(connection, guildId) {
 }
 
 /**
+ * The "this server isn't set up yet" message, or null if the guild is already configured.
+ *
+ * One string, several places: the command gate in index.js, every `help` entry point, and the
+ * `/storyadmin setup` panel itself. The gate exempts setup and help so a stuck admin always has
+ * a way forward, which means an admin who goes straight to either one would otherwise never see
+ * the welcome at all. Callers prepend the result to whatever they were already sending.
+ *
+ * Splits on Manage Server, because the admin string lists prerequisites only an admin can act on
+ * and a member reading it would just be told to go do something they cannot do.
+ *
+ * Reads from guild 1 on purpose: an unconfigured guild has no overrides of its own. The strings
+ * carry [hubInviteUrl], so they must go through replaceTemplateVariables rather than being sent raw.
+ *
+ * @param {object} connection
+ * @param {import('discord.js').Interaction} interaction - must be in guild context
+ * @returns {Promise<string|null>}
+ */
+export async function getSetupRequiredMessage(connection, interaction) {
+  if (!interaction.guild) return null;
+  log(`getSetupRequiredMessage entry for user ${interaction.user?.username}`, { show: false, guildName: interaction.guild.name });
+
+  if (await isGuildConfigured(connection, interaction.guild.id)) {
+    log(`getSetupRequiredMessage: guild is configured, nothing to prepend`, { show: false, guildName: interaction.guild.name });
+    return null;
+  }
+
+  const isAdmin = interaction.member?.permissions?.has('ManageGuild');
+  const msgKey = isAdmin ? 'txtSetupRequiredAdmin' : 'txtSetupRequiredUser';
+  const cfg = await getConfigValue(connection, [msgKey, 'cfgHubInviteUrl'], 1);
+  log(`getSetupRequiredMessage: returning ${msgKey} for user ${interaction.user?.username}`, { show: false, guildName: interaction.guild.name });
+  return replaceTemplateVariables(cfg[msgKey], { hubInviteUrl: cfg.cfgHubInviteUrl });
+}
+
+/**
  * Mark every active/paused story in a guild as closed and cancel its pending jobs.
  * Used when the bot discovers a guild no longer has it installed (DiscordAPIError
  * 10004 "Unknown Guild"), whether via the GuildDelete event, a failed status refresh,

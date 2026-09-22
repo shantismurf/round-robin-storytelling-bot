@@ -108,6 +108,25 @@ throughout.
 Supersedes the two weaker variants floated in the `TODO.md` entry of 2026-08-22. Needs its own
 plan file if picked up. **Build item 2 first** and find out whether this is still needed.
 
+## 7. Setup-required message reaches every entry point — shipped 2026-09-22
+
+The gate in `index.js` exempts `/storyadmin setup` and every `help` subcommand, so an admin who
+installs the bot and goes straight to either one never saw the welcome at all — and going
+straight to setup is the tidiest path through the product. LeeAnn spotted this while working out
+which message was which.
+
+`getSetupRequiredMessage(connection, interaction)` in `utilities.js` now owns the whole
+decision: configured check, Manage Server split, guild-1 read, `[hubInviteUrl]` substitution.
+Returns the string or null; callers prepend it to whatever they were already sending. Wired into
+the `index.js` gate, `handleHelp`, `handleWriterHelp`, `handleAdminHelp` and `handleSetup`.
+
+Deliberately **not** wired into `handleHelpSelect`, which would put the message above every help
+page the reader opens.
+
+Removed alongside: `commands/story.js` had its own unconfigured check replying with
+`txtNotConfigured`. It was unreachable (the gate catches every `/story` subcommand except
+`help`, and the check exempted `help` too) and the key it read was deleted by migration 010.
+
 ## 6. Copy fixes — shipped 2026-09-22
 
 Three strings rewritten and approved. The setup-required strings now lead with what the bot is,
@@ -129,13 +148,12 @@ have rendered literally.
 
 ## Open dependencies
 
-**`txtSetupRequiredAdmin` names a "Story Writer role" that does not exist. — Resolved
-2026-09-22, pending a copy edit.** It is item 4's notify-role field, designed on 2026-09-22 and
+**`txtSetupRequiredAdmin` names a "Story Writer role" that does not exist. — Closed
+2026-09-22; bullet removed.** It is item 4's notify-role field, designed on 2026-09-22 and
 not built. LeeAnn's decision is to shelve the field with item 4 and take the bullet out of the
 copy, leaving the Media/Image channel and Story Admin role as the two prerequisites. The copy is
-committed on the working branch, which is not deployed, so nothing is live yet, but **the branch
-must not reach main with that bullet still in it.** Awaiting her sign-off on the reworded
-paragraph, since it is user-facing text.
+committed on the working branch, which is not deployed, so nothing was ever live. She approved
+the reworded paragraph and the bullet is gone.
 
 ## Sequencing
 

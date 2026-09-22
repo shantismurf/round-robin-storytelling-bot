@@ -95,6 +95,22 @@ Tag Submission Thread Post (in story thread)
   → Ephemeral replies only; no follow-up interactions
 ```
 
+### Unconfigured-server gate
+
+```
+Any command on a server with no cfgStoryFeedChannelId
+  → index.js blocks it and replies with getSetupRequiredMessage()
+
+  Two exemptions, so a stuck admin always has a way forward:
+    /storyadmin setup    → handleSetup prepends the same message above the panel
+    any `help` subcommand → handleHelp / handleWriterHelp / handleAdminHelp prepend it
+                            above the embed (not repeated on help page selection)
+
+  The message splits on Manage Server: txtSetupRequiredAdmin lists the prerequisites an
+  admin has to create before opening the panel, txtSetupRequiredUser just explains what
+  the bot is and that an admin has to finish setup.
+```
+
 ### `/storyadmin` Command Flows
 
 ```
@@ -174,6 +190,7 @@ turnSlowReminder job (slow mode only)
 
 ### Hardcoded Text (to be resolved in per-silo audits)
 - `ratingBadgeKey`, `modeText`, `orderText` — referenced in `../TODO.md` as hardcoded; not yet migrated to config keys.
+- `commands/story.js` — the guild-context guard replies with a hardcoded "This command can only be used in a server." Found 2026-09-22; needs a config key.
 - Additional items to be identified in Silos 3–5.
 
 ### Deferred Tier B — Story Management (Silo 2)

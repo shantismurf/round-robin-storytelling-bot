@@ -10,7 +10,7 @@ For config string keys, see `config_roadmap.md`.
 | File | Purpose | Lines |
 |------|---------|-------|
 | `index.js` | Entry point, Discord client, interaction router. Waits for DB reachability (`waitForDatabase()`) before running `deploy.js`, so a DB outage at boot retries with throttled logging instead of crash-looping | ~280 |
-| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration, `createFailureThrottle()` (burst-then-summary logging for a repeating failure/recovery cycle, e.g. DB connectivity) | ~720 |
+| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration, `createFailureThrottle()` (burst-then-summary logging for a repeating failure/recovery cycle, e.g. DB connectivity), `getSetupRequiredMessage()` | ~755 |
 | `storybot.js` | Core story engine: CreateStory, NextTurn, PickNextWriter | — |
 | `job-runner.js` | Background job polling and execution | ~250 |
 | `deploy.js` | CLI deploy, run on every bot start: migrations, config sync, command registration, hub post sync (FAQ + privacy policy + gated broadcast) | ~125 |
@@ -161,6 +161,8 @@ Unique constraint on `(job_type, guild_id, window_key)` — duplicate insert fai
 | `validateStoryAccess(conn, storyId, guildId)` | Checks story exists, belongs to guild, is active |
 | `validateActiveWriter(conn, userId, storyId)` | Checks user holds the current turn |
 | `checkIsAdmin(conn, interaction, guildId)` | Administrator permission or configured admin role |
+| `isGuildConfigured(conn, guildId)` | True once `cfgStoryFeedChannelId` holds a non-empty value |
+| `getSetupRequiredMessage(conn, interaction)` | The "server isn't set up yet" copy, or null if it is. Splits on Manage Server (`txtSetupRequiredAdmin` / `txtSetupRequiredUser`), reads from guild 1, substitutes `[hubInviteUrl]`. Called by the `index.js` gate, all three `help` handlers and `handleSetup` |
 | `createThread(interaction, guildId, keyValueMap)` | Creates public or private Discord thread with permissions |
 | `resolveStoryId(conn, guildId, guildStoryId)` | Resolves guild-local story number to internal PK |
 | `getTurnNumber(conn, storyId)` | Next confirmed turn number for display |
