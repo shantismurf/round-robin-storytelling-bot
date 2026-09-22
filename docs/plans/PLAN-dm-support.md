@@ -1,6 +1,6 @@
 # DM Support
 
-Status: Pending
+Status: Deferred indefinitely 2026-09-22 — will not be built unless someone asks
 Created: 2026-07-01
 Last Updated: 2026-07-01
 

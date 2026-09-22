@@ -129,25 +129,35 @@ This is the one place the existing docs already specify an order, and it should 
 Stage 4 also earns its place on Funnel B: the create panel's fifteen-decision problem is a
 panel problem, and the help system is what a stuck admin reaches for.
 
-### Stage 5 — Audit, don't build
+### Stage 5 — Deferred by owner decision, 2026-09-22
 
-`PLAN-hub-sharing.md` needs someone to establish what is actually implemented before anything
-else is added to it. Its own header says per-guild opt-in, per-story opt-out and writer consent
-were not found in the code despite the hub infrastructure being live. Reconcile
-`hub-brainstorming.md` into it at the same time. This is a reading task, not a building task,
-and it closes an open question rather than opening a new one.
+Reviewed with LeeAnn. The reasoning is recorded because the *why* is the part that gets lost
+and re-litigated — the same lesson the changelog directory exists for.
 
-### Stage 6 — Depth, once the funnel works
+- **`PLAN-hub-sharing.md` — deferred.** The Hub server has nine members: three bots, two of
+  them LeeAnn, one the top.gg admin, and three people who may or may not have the bot
+  installed. There is no audience for story sharing yet. The audit of what is actually built
+  (per-guild opt-in, per-story opt-out, writer consent — none found in the code despite the
+  hub infrastructure being live) still needs doing, but only when this is picked back up.
+  Reconcile `hub-brainstorming.md` into it at that point.
+- **`PLAN-story-privacy.md` — shelved, probably not wanted.** The feature originated from
+  LeeAnn needing a clean export of a story that was not ready to be public. She solved it by
+  creating the story on the Hub server and deleting it afterwards. No one else has asked for
+  it. Fully designed and ready if demand ever appears, but do not build it on spec.
+- **`PLAN-dm-support.md` — deferred indefinitely.** Will not be implemented unless someone
+  asks for it. Related observation: the turn-notification rewording seems to have reduced
+  confusion, though it is unclear whether that is the copy or simply that the existing writers
+  have learned the system. Installing into a new community will distinguish the two.
 
-In rough order of how much they would matter *if* there were servers to matter to:
+### Stage 6 — Worth revisiting
 
-- `PLAN-story-list-overhaul.md` — modest Funnel B relevance, since the quick-join menu lives on
-  `/story list` and that is one of the three join routes.
-- `PLAN-story-privacy.md` — fully designed, genuinely wanted, and depth for an audience that
-  does not exist yet.
-- `PLAN-dm-support.md` — needs a dev-portal scope change; large.
-- `PLAN-reactions-kudos.md`, `PLAN-series-system.md` — brainstorms, not designs. Leave as ideas
-  until something forces the question.
+- **`PLAN-reactions-kudos.md` and `PLAN-series-system.md`** — both flagged by LeeAnn on
+  2026-09-22 as having real value, against their "Idea" status. Series/chapters is under
+  active discussion in the story-editing thread as of that date, so **that discussion owns the
+  design** — do not write a competing one here. Both still need a resolved design before they
+  are buildable.
+- **`PLAN-story-list-overhaul.md`** — modest Funnel B relevance, since the quick-join menu
+  lives on `/story list` and that is one of the three join routes. Unchanged by this review.
 
 ---
 

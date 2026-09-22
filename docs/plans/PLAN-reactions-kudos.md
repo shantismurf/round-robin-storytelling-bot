@@ -1,6 +1,6 @@
 # Reactions Kudos
 
-Status: Idea
+Status: Idea — flagged 2026-09-22 as worth revisiting; still needs a resolved design
 Created: 2026-07-01
 Last Updated: 2026-07-01
 

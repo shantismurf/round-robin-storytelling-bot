@@ -1,6 +1,10 @@
 # Plan: Hub Server Sharing + Consent + Announcement System
 
-Status: Partially Implemented — needs review
+Status: Deferred 2026-09-22 — partially implemented, needs an audit when revisited
+
+Deferred by owner decision: the Hub server has nine members (three bots, two LeeAnn, one the
+top.gg admin), so there is no audience for story sharing yet. The audit note below still
+applies whenever this is picked back up.
 Created: 2026-07-01
 Last Updated: 2026-07-01
 

@@ -1,6 +1,11 @@
 # Story Privacy (Writer-Only Stories)
 
-Status: Pending
+Status: Shelved 2026-09-22 — designed, probably not wanted
+
+The feature came from LeeAnn wanting a clean export of a story that was not ready to be
+public. She solved that by creating the story on the Hub server and deleting it afterwards,
+and no one else has asked for it. The design below is complete and stands if demand appears;
+do not build it on spec.
 Created: 2026-07-21
 Last Updated: 2026-07-21
 
