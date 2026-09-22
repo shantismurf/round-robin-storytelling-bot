@@ -190,7 +190,12 @@ turnSlowReminder job (slow mode only)
 
 ### Hardcoded Text (to be resolved in per-silo audits)
 - `ratingBadgeKey`, `modeText`, `orderText` — referenced in `../TODO.md` as hardcoded; not yet migrated to config keys.
-- `commands/story.js` — the guild-context guard replies with a hardcoded "This command can only be used in a server." Found 2026-09-22; needs a config key.
+- **Guild-context guard, three copies** — `commands/story.js:155`, `commands/mystory.js:47` and
+  `commands/storyadmin.js:61` each reply with the same hardcoded "This command can only be used in a
+  server." Found 2026-09-22. Reachable in production: commands register globally
+  (`deploy-commands.js:38`) and nothing sets `contexts` or `dm_permission`, so Discord's default
+  for a guild-install app includes Bot DM — a user who DMs the bot and runs a command lands here.
+  One config key serves all three.
 - Additional items to be identified in Silos 3–5.
 
 ### Deferred Tier B — Story Management (Silo 2)
