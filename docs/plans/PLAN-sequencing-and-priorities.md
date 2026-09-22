@@ -174,11 +174,12 @@ The TODO items that are not plan-sized sort into three groups.
 
 **Genuine debt, schedule deliberately:**
 
-- **`/storyadmin skip`/`close`/`pause` have no confirmation step.** An admin can destroy a story
-  with one mis-click and no undo prompt, while every comparable action has a confirm. This is
-  the highest-severity item in the whole backlog and it is small. It does not serve either
-  funnel, which is exactly why it will keep getting skipped — do it anyway, in whichever stage
-  next touches `commands/storyadmin.js`.
+- **~~Missing confirmation on `/storyadmin skip`/`close`/`pause`~~ — withdrawn 2026-09-22.**
+  Checked against the code: those subcommands do not exist, skip and reassign already confirm
+  on the `/story manage` panel, `/story close` confirms, and pause/resume are immediate by
+  design and fully reversible. The item came from a stale `ux_roadmap.md` entry. Both are now
+  corrected. Kept here as a note because it is a useful caution: `reference/` docs are
+  load-bearing, and an audit that reads them instead of the code inherits their errors.
 - Layer-2 integration test suite — real value (it would have caught the `JSON_EXTRACT` class of
   bug that silently broke five call sites for months), real cost. Its own session.
 - `style_roadmap.md` — cheap, and it settles recurring questions. Write it the next time a

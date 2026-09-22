@@ -108,8 +108,12 @@ Tag Submission Thread Post (in story thread)
 /storyadmin faqsync
   → syncFaqPosts: fetches each cfgFaqThread* thread, edits bot's first post or posts new one
 
-/storyadmin skip / close / pause
-  → Immediate actions; no confirm panel
+(There are no /storyadmin skip, close or pause subcommands, and there never have been.
+ Those actions live on the /story manage panel: skip and reassign go through
+ story/_manageTurnActions.js and DO show a confirm panel (story_manage_ta_confirm /
+ story_manage_ta_confirmcancel); pause and resume go through story/_managePauseResume.js
+ and are deliberately immediate, since resume restores the thread and grants a fresh full
+ turn length. Close/reopen are documented under /story manage above.)
 ```
 
 ### `/mystory` Command Flows
