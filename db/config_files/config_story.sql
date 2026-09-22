@@ -52,7 +52,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtJoinNotificationPlaceholder', 'Enter: dm or mention', 'en', 1),
 ('txtJoinPenNamePlaceholder', 'Leave blank to use Discord display name', 'en', 1),
 ('txtCreateStoryTitle', 'Create New Story', 'en', 1),
-('txtStoryAddIntro', 'Configure your story settings with the buttons below, then click Create Story when ready.', 'en', 1),
+('txtStoryAddIntro', 'Your story starts here! Only a title is required. Everything else has a sensible default and can be changed later with `/story manage` — set what you like, then click Create Story.', 'en', 1),
 ('txtStoryTitlePrompt', '⚠️ *Required — click below to set Story Title*', 'en', 1),
 ('txtTurnPrivacyPublicDesc', 'Turn threads are public.', 'en', 1),
 ('txtTurnPrivacyPrivateDesc', 'Turn threads are private.', 'en', 1),

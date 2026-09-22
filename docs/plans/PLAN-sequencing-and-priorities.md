@@ -86,6 +86,9 @@ No plan file exists for it; it is small enough that this section is the plan.
 
 ### Stage 2 — The first-run fixes
 
+**Now planned in detail in [PLAN-first-run-experience.md](PLAN-first-run-experience.md);
+the copy fixes below shipped 2026-09-22.**
+
 The Funnel B items from the onboarding review, in its own suggested order. All are small, none
 has a plan file, and together they are the difference between a solo notepad and a group
 activity:
