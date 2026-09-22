@@ -3,6 +3,9 @@
 Sorted quick wins to biggest lifts within each group — small, no-plan-needed items first,
 tapering up to the fully-scoped efforts at the end of each section.
 
+For the order these should actually happen in — and which of them fold into a larger piece of
+work — see [plans/PLAN-sequencing-and-priorities.md](plans/PLAN-sequencing-and-priorities.md).
+
 ---
 
 # Pending

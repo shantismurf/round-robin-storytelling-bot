@@ -27,7 +27,9 @@ Every file has a `Status` / `Created` / `Last Updated` (/ `Implemented`) header.
 | [PLAN-hub-sharing.md](plans/PLAN-hub-sharing.md) | Partially Implemented — needs review | Hub server story mirroring, consent, broadcast system |
 | [hub-brainstorming.md](plans/hub-brainstorming.md) | — (companion notes) | Open questions/decisions feeding into PLAN-hub-sharing.md |
 | [PLAN-panel-rework-and-ground-rules.md](plans/PLAN-panel-rework-and-ground-rules.md) | Partially Implemented (Parts 1/1b/1c/3 shipped 2026-08-21/22, v3.5.0; Ground Rules/Part 2 still pending) | Add/Manage panel Settings/Metadata split, Move Manage Users onto the panel, Ground Rules feature, Warnings checkbox conversion |
-| [PLAN-mention-display-text.md](plans/PLAN-mention-display-text.md) | Pending | Resolve `@user`/`#channel`/`@role` mentions in story entries to plain display text at write time — never a functional link or raw ID, anywhere they're shown |
+| [PLAN-sequencing-and-priorities.md](plans/PLAN-sequencing-and-priorities.md) | Draft — awaiting review | Read across every plan and the TODO backlog: real status per plan, and a directed order of work built around the acquisition/activation funnels |
+| [PLAN-help-system-redesign.md](plans/PLAN-help-system-redesign.md) | Draft — awaiting review | Help system rebuilt on Components V2, unified wiki/in-Discord architecture; its Phase 3 waits on the panel rework |
+| [PLAN-marketing-and-listing.md](plans/PLAN-marketing-and-listing.md) | Draft — not approved | The pre-install funnel: listing, channels, admin-facing install doc, and the instrumentation needed to judge any of it |
 | [PLAN-dm-support.md](plans/PLAN-dm-support.md) | Pending | Full DM-based story participation |
 | [PLAN-series-system.md](plans/PLAN-series-system.md) | Idea | Group stories into a series with chapters |
 | [PLAN-reactions-kudos.md](plans/PLAN-reactions-kudos.md) | Idea | Reaction-based kudos reposted to the story feed |
@@ -37,6 +39,7 @@ Every file has a `Status` / `Created` / `Last Updated` (/ `Implemented`) header.
 | File | Implemented | Summary |
 |---|---|---|
 | [PLAN-ao3-to-pen-name-rename.md](plans/completed/PLAN-ao3-to-pen-name-rename.md) | 2026-07-01 | `AO3_name` column/field renamed to `pen_name` throughout |
+| [PLAN-mention-display-text.md](plans/completed/PLAN-mention-display-text.md) | 2026-08-26 | `@user`/`#channel`/`@role` mentions in story entries resolved to plain display text at write time; covers Discord's channel-obfuscation change |
 | [PLAN-rating-barrier-migration.md](plans/completed/PLAN-rating-barrier-migration.md) | 2026-07-10 | Story thread migration when rating crosses the NR/M barrier |
 | [PLAN-help-faq-hub-sync.md](plans/completed/PLAN-help-faq-hub-sync.md) | 2026-07-01 | Help content synced to Hub FAQ forum posts |
 
@@ -55,6 +58,7 @@ Every file has a `Status` / `Created` / `Last Updated` (/ `Implemented`) header.
 | [Audit_Final_Report.md](audits/Audit_Final_Report.md) | Completion summary of Silos 1–5 |
 | [Fable_Audit_2026-07.md](audits/Fable_Audit_2026-07.md) | Audit of code changed since Silo 5; supersedes archive/LOGIC_ERRORS_REPORT.md |
 | [Fable_Audit_Fix_Progress.md](audits/Fable_Audit_Fix_Progress.md) | Progress log fixing Fable Audit findings — status per TODO.md |
+| [Onboarding_Review_2026-09.md](audits/Onboarding_Review_2026-09.md) | New-admin onboarding review: the path from install to a multi-writer story, and where it loses people |
 
 ---
 
