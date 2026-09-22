@@ -175,11 +175,14 @@ The TODO items that are not plan-sized sort into three groups.
 **Genuine debt, schedule deliberately:**
 
 - **~~Missing confirmation on `/storyadmin skip`/`close`/`pause`~~ — withdrawn 2026-09-22.**
-  Checked against the code: those subcommands do not exist, skip and reassign already confirm
-  on the `/story manage` panel, `/story close` confirms, and pause/resume are immediate by
-  design and fully reversible. The item came from a stale `ux_roadmap.md` entry. Both are now
-  corrected. Kept here as a note because it is a useful caution: `reference/` docs are
-  load-bearing, and an audit that reads them instead of the code inherits their errors.
+  Checked against the code: those subcommands no longer exist, skip and reassign already
+  confirm on the `/story manage` panel, `/story close` confirms, and pause/resume are immediate
+  by design and fully reversible. They were real once and were consolidated into `/story manage`
+  before the visible git history begins. The item came from a stale `ux_roadmap.md` entry left
+  behind by that consolidation. Both are now corrected. Kept here as a note because it is a
+  useful caution twice over: `reference/` docs are load-bearing, and an audit that reads them
+  instead of the code inherits their errors — and **`git log` only reaches back to 2026-07-16**,
+  so absence of history is not evidence that something never existed.
 - Layer-2 integration test suite — real value (it would have caught the `JSON_EXTRACT` class of
   bug that silently broke five call sites for months), real cost. Its own session.
 - `style_roadmap.md` — cheap, and it settles recurring questions. Write it the next time a
