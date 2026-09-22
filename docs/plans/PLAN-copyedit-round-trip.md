@@ -1,6 +1,6 @@
 # Copyedit Round Trip (Export → Edit → Import)
 
-Status: Draft — design under discussion, not approved
+Status: Draft — direction agreed, details open
 Created: 2026-09-22
 Last Updated: 2026-09-22
 
@@ -75,31 +75,42 @@ left as one 40k-word story to be divided by hand later.
 
 ## Proposed direction
 
-### Format: plain text with visible per-entry delimiters
+### Format: plain text with markdown (decided)
 
 The editing surface is Google Docs, largely on a phone. That rules out raw HTML
 (escape characters and tags) and markdown-in-a-text-editor (no good phone
-editor). Plain text opens cleanly in Docs on mobile.
+editor). Plain text opens cleanly in Docs on mobile and is the most faithful
+representation of what is actually stored in `story_entry.content`.
 
-Delimiters must be visible and human-meaningful so they survive editing, and
-distinctive enough not to collide with prose. Carrying `story_entry_id` lets the
-importer detect a moved or missing block instead of silently misassigning text:
+Inline markdown (`*italic*`, `||spoiler||`, `[[break]]`) appears literally. For
+tense/continuity work that is an advantage — what you see is what is stored —
+and it round-trips losslessly. `.docx` was considered and rejected: it renders
+real formatting in Docs but makes the return trip lossy and adds a dependency.
 
-```
-━━━ TURN 12 · Maria · #4417 ━━━
-```
-
-Trade-off: inline markdown (`*italic*`, `||spoiler||`, `[[break]]`) appears
-literally. For tense/continuity work that is arguably an advantage — what you
-see is what is stored — and it is unambiguously round-trippable. A `.docx`
-export would render real formatting in Docs but makes the return trip lossy and
-adds a dependency. Recommended only if the literal markup proves intolerable.
+Where a delimiter is needed (whole-story file only, see phase 2), it should
+follow the existing `[[...]]` bot-tag convention rather than inventing a new
+one. Verified safe: `applyEntryMarkup` only transforms `[[break]]` and
+`[[text|translation]]`, so an unrecognised `[[...]]` passes through untouched.
 
 ### Import flow
 
-1. `/story import` with a file attachment (admin/creator gated).
+Phase 1 is a **single-entry** round trip on the existing edit interface: download
+this entry as text, fix it wholesale with no page boundaries, upload it back.
+This is the smallest change that removes the page problem entirely, its diff
+fits Discord's limits comfortably, its permission model is already solved by the
+edit panel's existing author/admin/creator gate, and it needs no delimiters at
+all — the file is just that one entry. It also builds every piece the
+whole-story version needs, so it is a stepping stone rather than throwaway work.
+
+Phase 2 generalises the same machinery to a whole-story file.
+
+1. Attachment upload (admin/creator gated; single-entry reuses the edit gate).
 2. Parse, match blocks by entry ID, compute a per-entry diff.
 3. Preview: entries changed / unchanged / missing markers. Nothing commits yet.
+   Embed descriptions cap at 4096 characters (verified in the installed
+   builders), so a full inline diff is not viable for anything large — the diff
+   should be posted as an **attached file**, reusing the mechanism `export.js`
+   already uses to attach HTML, with only a compact summary in the message.
 4. On confirm, one transaction — per changed entry, `INSERT` the old content
    into `story_entry_edit` (preserving existing history semantics) then `UPDATE`
    `story_entry.content`.
@@ -109,30 +120,50 @@ adds a dependency. Recommended only if the literal markup proves intolerable.
 Because edits stay within entry boundaries, every block maps 1:1 and the
 authorship ambiguity that would make this risky does not arise.
 
-### Chapters via the import file
+### Chapters: a real UI, not file markers (revised)
 
-Chapter boundaries are an editorial decision made *during* the copyedit pass,
-which is exactly when the editor is in the file. A `═══ CHAPTER: Title ═══`
-marker in the imported text is therefore a natural place to define them, and
-lets per-chapter export follow without a separate authoring UI.
+An earlier draft proposed defining chapters with markers inside the imported
+file. **Rejected** — a text file gives no validation, no preview and no undo
+affordance for a change to story-level structure, and an import should not be
+able to silently rewrite story-level DB values as a side effect of a copyedit.
+
+Preferred shape instead: an explicit chapter interface, along the lines of a
+print-range dialog — "add a chapter", then a comma-delimited list or range of
+turns (`1-4, 7`), plus optional title and summary, since AO3 chapters carry
+both. Compact enough for a Discord modal and no file parsing involved.
+
+Needs a `chapter` table (story_id, position, title, summary) and a turn
+association. Design consideration: ranges are positional, so if turn reordering
+(below) ever lands, chapter ranges need to move with it or be stored as
+explicit turn references rather than numeric ranges.
 
 ## Build order
 
-1. **Small** — make growing an entry discoverable. `LabelBuilder.setDescription()`
-   (present in the installed builders) renders persistently, unlike a
-   placeholder; optionally an explicit "Add a page" button.
-2. **Medium** — plain-text export + `/story import` with diff preview. No
-   reordering, no chapters. Addresses most of the backlog pain on its own.
-3. **Medium/large** — chapter markers in the import format + per-chapter export.
-   Coordinate with `PLAN-series-system.md`.
-4. **Large, deferred** — turn reordering (sort column + every ORDER BY).
+1. **Small** — an explicit "Add a page" button on the edit panel, plus
+   `LabelBuilder.setDescription()` (present in the installed builders) to make
+   the save-and-reopen behaviour visible, since it renders persistently where a
+   placeholder does not.
+2. **Small/medium** — single-entry export + import on the edit interface. The
+   real fix for cross-page editing. Main open question is how to present it:
+   framing it as one round trip ("edit as file") likely reads more clearly than
+   two separate download/upload buttons.
+3. **Medium** — whole-story export + import with an attached diff. Generalises
+   phase 2's machinery; needs the `[[...]]` delimiter.
+4. **Medium/large** — chapter interface + per-chapter export. Coordinate with
+   `PLAN-series-system.md`.
+5. **Large, deferred** — turn reordering (sort column + every ORDER BY).
 
 ## Open decisions
 
-- Plain text vs `.docx`.
-- Whether import replaces the current multi-page editor for whole-entry
-  replacement, or sits alongside it.
-- Whether chapters belong here or in the series plan.
+- How to present the single-entry round trip so it is obvious to a non-developer.
+- Whether chapters belong in this plan or in `PLAN-series-system.md`.
+- Whether the whole-story import (phase 3) is needed at all once phase 2 exists.
+
+## Settled
+
+- Plain text with markdown, not `.docx`.
+- Chapters get a real interface; import files do not change story-level values.
+- Turn reordering is not done by moving blocks in a file.
 
 ## Related
 
