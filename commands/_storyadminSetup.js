@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder, LabelBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ChannelType } from 'discord.js';
-import { getConfigValue, getSetupRequiredMessage, sanitizeModalInput, log, replaceTemplateVariables, logGuildEvent } from '../utilities.js';
+import { getConfigValue, getSetupRequiredMessage, sanitizeModalInput, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin } from '../utilities.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 import { finalMessage } from '../story/_metadataModals.js';
 import { handleSetupSave } from './_storyadminSetupSave.js';
@@ -39,19 +39,28 @@ export function isSetupDirty(state) {
  *   "setup required" onboarding message getSetupRequiredMessage returns). V2 forbids `content`
  *   alongside `components`, so this has to be a component in the same container rather than a
  *   sibling `content` field the way handleSetup's very first reply used to send it.
+ * @param {boolean} [opts.tier1Visible=true] - whether to show the Manage-Server-only fields
+ * (feed/media/restricted channels, admin role name) and their edit buttons. false renders only
+ * the tier-2 fields (roundup, changelog) a story admin without Manage Server can reach — same
+ * command, same panel, just fewer rows (docs/TODO.md's "two panels within /storyadmin setup
+ * itself" design). This is presentation only; every handler that acts on a tier-1 customId
+ * re-checks hasTier1Access() live before doing anything, since hiding a button doesn't stop a
+ * replayed customId from someone who saw the tier-1 panel.
  */
-export function buildSetupPanel(state, cfg, { interactive = true, prependMessage = null } = {}) {
+export function buildSetupPanel(state, cfg, { interactive = true, prependMessage = null, tier1Visible = true } = {}) {
   log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: 'system' });
   const fieldVal = (id) => id ? `<#${id}>` : `\`${cfg.txtNotSet}\``;
   const strVal   = (v)  => v  ? `\`${v}\``  : `\`${cfg.txtNotSet}\``;
   const desc     = (key) => `*${cfg[key]}*`;
 
-  const items = [
+  const tier1Items = [
     `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
     `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
     `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `-> ${strVal(state.adminRoleName)}`,
     `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
     `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `-> ${fieldVal(state.restrictedMediaChannelId)}`,
+  ];
+  const tier2Items = [
     `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `-> ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}`,
     `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `-> ${strVal(state.roundupDay)}`,
     `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `-> ${strVal(state.roundupHour)}`,
@@ -75,14 +84,20 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   }
   container.addSeparatorComponents(new SeparatorBuilder());
 
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(items.join('\n\n')));
+  if (tier1Visible) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(tier1Items.join('\n\n')));
+    if (interactive) {
+      container.addActionRowComponents(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
+      ));
+    }
+    container.addSeparatorComponents(new SeparatorBuilder());
+  }
+
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(tier2Items.join('\n\n')));
 
   if (interactive) {
-    container.addSeparatorComponents(new SeparatorBuilder());
-    container.addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
-      new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
-    ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('storyadmin_setup_roundup').setLabel(cfg.btnSetupRoundup).setStyle(ButtonStyle.Primary),
       new ButtonBuilder()
@@ -90,6 +105,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
         .setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`)
         .setStyle(ButtonStyle.Secondary),
     ));
+    container.addSeparatorComponents(new SeparatorBuilder());
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId('storyadmin_setup_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary),
@@ -99,19 +115,37 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
+// Tier-1 fields (escalation-capable: feed/media/restricted channels, admin role name — editing
+// cfgAdminRoleName lets whoever holds it repoint the admin role at one they control, so it stays
+// Manage Server only) are gated to Manage Server. Tier-2 (roundup, changelog, and — per
+// docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2 — Ground Rules and the Teen or Lower
+// Only toggle) is reachable by Manage Server OR the story admin role (checkIsAdmin). Hiding a
+// tier from the rendered panel is presentation, not enforcement — every handler that actually
+// writes a tier-1 field or opens a tier-1 modal re-checks this live against the interaction that
+// triggered it, not a cached flag on state, since a tier-1 customId can be replayed by anyone
+// who has seen the panel (docs/TODO.md, "Split /storyadmin setup into two permission tiers").
+export function hasTier1Access(interaction) {
+  return interaction.member.permissions.has('ManageGuild');
+}
+
 export async function handleSetup(connection, interaction) {
   log(`storyadmin setup: handleSetup started`, { show: false, guildName: interaction.guild.name });
-  if (!interaction.member.permissions.has('ManageGuild')) {
-    log(`storyadmin setup: handleSetup error, user does not have Manage Guild`, { show: false, guildName: interaction.guild.name });
+  const guildId = interaction.guild.id;
+  const hasManageGuild = hasTier1Access(interaction);
+  // `handleSetup`'s early return used to be a flat refusal for anyone without Manage Server — it
+  // now renders the tier-2 panel instead, for any story admin (checkIsAdmin: Administrator, or
+  // holding cfgAdminRoleName) who isn't also a Manage Server holder.
+  const isStoryAdmin = hasManageGuild || await checkIsAdmin(connection, interaction, guildId);
+  if (!isStoryAdmin) {
+    log(`storyadmin setup: handleSetup error, user has neither Manage Guild nor the story admin role`, { show: false, guildName: interaction.guild.name });
     return await interaction.reply({
-      content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+      content: await getConfigValue(connection, 'txtSetupNoPermission', guildId),
       flags: MessageFlags.Ephemeral
     });
   }
 
-  const guildId = interaction.guild.id;
   const isOwner = interaction.user.id === interaction.guild.ownerId;
-  await logGuildEvent(connection, guildId, 'setup_opened', { isOwner });
+  await logGuildEvent(connection, guildId, 'setup_opened', { isOwner, hasManageGuild });
   const cfg = await getConfigValue(connection, [
     'txtSetupPanelTitle',
     'txtSetupModalTitleFeed', 'txtSetupModalTitleMedia', 'txtSetupModalTitleRole',
@@ -158,6 +192,7 @@ export async function handleSetup(connection, interaction) {
     roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '1',
     roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '9',
     changelogEnabled:         guildCfg.cfgChangelogEnabled !== '0',
+    hasManageGuild,
     originalInteraction: interaction,
     cfg,
   };
@@ -171,7 +206,7 @@ export async function handleSetup(connection, interaction) {
   // straight here would otherwise never see the welcome or its prerequisites list — and this
   // is the moment they most need it, since creating a channel or a role means leaving the panel.
   const setupMessage = await getSetupRequiredMessage(connection, interaction);
-  const panel = buildSetupPanel(state, cfg, { prependMessage: setupMessage });
+  const panel = buildSetupPanel(state, cfg, { prependMessage: setupMessage, tier1Visible: hasManageGuild });
   await interaction.reply({
     ...panel,
     flags: panel.flags | MessageFlags.Ephemeral,
@@ -294,10 +329,25 @@ export async function handleSetupButton(connection, interaction) {
   const id = interaction.customId;
   log(`handleSetupButton: ${id} by ${interaction.user.tag} in guild ${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
+  // Tier-1 customIds only render on the tier-1 panel, but that's presentation, not enforcement —
+  // a story admin who saw the tier-1 panel once (e.g. as a former Manage Server holder, or by
+  // inspecting the message) could replay these. Re-check live rather than trust state.
   if (id === 'storyadmin_setup_channels') {
+    if (!hasTier1Access(interaction)) {
+      return await interaction.reply({
+        content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+        flags: MessageFlags.Ephemeral
+      });
+    }
     return await interaction.showModal(buildChannelsModal(cfg, state));
   }
   if (id === 'storyadmin_setup_role') {
+    if (!hasTier1Access(interaction)) {
+      return await interaction.reply({
+        content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+        flags: MessageFlags.Ephemeral
+      });
+    }
     return await interaction.showModal(buildSetupFieldModal(
       'storyadmin_setup_role_modal', cfg.txtSetupModalTitleRole,
       cfg.lblSetupModalFieldRole, cfg.txtSetupModalPlaceholderRole, state.adminRoleName
@@ -309,7 +359,7 @@ export async function handleSetupButton(connection, interaction) {
   if (id === 'storyadmin_setup_toggle_changelog') {
     state.changelogEnabled = !state.changelogEnabled;
     await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg));
+    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction) }));
   }
   if (id === 'storyadmin_setup_save') return await handleSetupSave(connection, interaction);
   if (id === 'storyadmin_setup_cancel') return await handleSetupCancel(connection, interaction);
@@ -321,6 +371,15 @@ export async function handleSetupChannelsModal(connection, interaction) {
   if (!state) {
     return await interaction.reply({
       content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  // Tier-1 fields — this modal can only be reached via handleSetupButton's own gate above, but
+  // re-checked here too, at the point the fields actually get written into state, rather than
+  // trusting that gate alone.
+  if (!hasTier1Access(interaction)) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
       flags: MessageFlags.Ephemeral
     });
   }
@@ -340,7 +399,7 @@ export async function handleSetupChannelsModal(connection, interaction) {
 
   log(`handleSetupChannelsModal: feed=${state.feedChannelId} media=${state.mediaChannelId} restrictedFeed=${state.restrictedFeedChannelId} restrictedMedia=${state.restrictedMediaChannelId} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true }));
   await interaction.deleteReply();
 }
 
@@ -376,7 +435,7 @@ export async function handleSetupRoundupModal(connection, interaction) {
 
   log(`handleSetupRoundupModal: channel=${state.roundupChannelId} day=${state.roundupDay} hour=${state.roundupHour} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction) }));
   await interaction.deleteReply();
 }
 
@@ -389,9 +448,16 @@ export async function handleSetupRoleModal(connection, interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
+  // Tier-1 field (cfgAdminRoleName) — same re-check as handleSetupChannelsModal above.
+  if (!hasTier1Access(interaction)) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   state.adminRoleName = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 100);
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true }));
   await interaction.deleteReply();
 }
 

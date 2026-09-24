@@ -9,7 +9,7 @@
 import { MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, logGuildEvent } from '../utilities.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
-import { pendingSetupData, buildSetupPanel, STAGED_FIELDS } from './_storyadminSetup.js';
+import { pendingSetupData, buildSetupPanel, STAGED_FIELDS, hasTier1Access } from './_storyadminSetup.js';
 
 export async function handleSetupSave(connection, interaction) {
   const state = pendingSetupData.get(interaction.user.id);
@@ -39,8 +39,10 @@ export async function handleSetupSave(connection, interaction) {
   // `components` (see buildSetupPanel's doc comment), so a validation failure re-renders the
   // unchanged panel and reports the error as a separate ephemeral follow-up rather than the old
   // "spread the panel, then override content" shape.
+  const canEditTier1 = hasTier1Access(interaction);
+
   const reportValidationError = async (key) => {
-    await interaction.editReply(buildSetupPanel(state, state.cfg));
+    await interaction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: canEditTier1 }));
     await interaction.followUp({
       content: await getConfigValue(connection, key, guildId),
       flags: MessageFlags.Ephemeral
@@ -77,11 +79,20 @@ export async function handleSetupSave(connection, interaction) {
     [key, value, guildId]
   );
 
-  await upsert('cfgStoryFeedChannelId', state.feedChannelId);
-  await upsert('cfgMediaChannelId', state.mediaChannelId || '');
-  await upsert('cfgRestrictedFeedChannelId', state.restrictedFeedChannelId || '');
-  await upsert('cfgRestrictedMediaChannelId', state.restrictedMediaChannelId || '');
-  await upsert('cfgAdminRoleName', state.adminRoleName || '');
+  // Tier-1 fields — re-checked live here rather than trusted from state, since a customId from
+  // the tier-1 panel (and cfgAdminRoleName specifically — see hasTier1Access's doc comment) can
+  // be replayed by anyone who has seen it. A legitimate tier-2 save never changed these values in
+  // the first place (no tier-2 button reaches them), so skipping is a safe no-op for the honest
+  // case and the actual protection for a tampered one.
+  if (canEditTier1) {
+    await upsert('cfgStoryFeedChannelId', state.feedChannelId);
+    await upsert('cfgMediaChannelId', state.mediaChannelId || '');
+    await upsert('cfgRestrictedFeedChannelId', state.restrictedFeedChannelId || '');
+    await upsert('cfgRestrictedMediaChannelId', state.restrictedMediaChannelId || '');
+    await upsert('cfgAdminRoleName', state.adminRoleName || '');
+  } else {
+    log(`handleSetupSave: tier-1 fields not written for guild ${guildId} — ${interaction.user.tag} lacks Manage Server`, { show: true, guildName: interaction.guild.name });
+  }
 
   const isOwner = interaction.user.id === interaction.guild.ownerId;
   await logGuildEvent(connection, guildId, 'setup_saved', { isFirstSetup, isOwner });
@@ -254,6 +265,6 @@ export async function handleSetupSave(connection, interaction) {
   // live in its saved, read-only state (interactive: false — pendingSetupData is gone above, so
   // buttons would dead-end into txtActionSessionExpired) and post the detailed summary as a
   // separate ephemeral follow-up rather than overwriting the panel with it.
-  await interaction.editReply(buildSetupPanel(state, state.cfg, { interactive: false }));
+  await interaction.editReply(buildSetupPanel(state, state.cfg, { interactive: false, tier1Visible: canEditTier1 }));
   await interaction.followUp({ content: saved.join('\n'), flags: MessageFlags.Ephemeral });
 }
