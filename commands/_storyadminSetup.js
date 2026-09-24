@@ -6,7 +6,7 @@ import { handleSetupSave } from './_storyadminSetupSave.js';
 import { buildChannelsModal, buildRoundupModal, buildSetupFieldModal, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';
 import {
   buildGroundRulesModal, handleSetupGroundRulesModal,
-  handleSetupGroundRulesConfirm, handleSetupGroundRulesCancel,
+  handleSetupGroundRulesConfirm, handleSetupGroundRulesCancel, handleSetupGroundRulesRetry,
 } from './_storyadminSetupGroundRules.js';
 
 export const pendingSetupData = new Map();
@@ -84,6 +84,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   const fieldGroups = {
     channels: {
       text: [
+        desc('txtSetupChannelsPermissionNote'),
         `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
         `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
         `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
@@ -219,6 +220,7 @@ export async function handleSetup(connection, interaction) {
     'txtSetupModalTitleRestrictedFeed', 'txtSetupModalTitleRestrictedMedia',
     'txtSetupModalTitleRoundupChannel', 'txtSetupModalTitleRoundupDay', 'txtSetupModalTitleRoundupHour',
     'lblUnsavedChangesTitle', 'txtUnsavedChangesBody',
+    'txtSetupChannelsPermissionNote',
     'txtSetupEmbedDescFeed', 'txtSetupEmbedDescMedia', 'txtSetupEmbedDescAdminRole',
     'txtSetupEmbedDescRestrictedFeed', 'txtSetupEmbedDescRestrictedMedia',
     'txtSetupEmbedDescRoundupChannel', 'txtSetupEmbedDescRoundupDay', 'txtSetupEmbedDescRoundupHour',
@@ -241,7 +243,7 @@ export async function handleSetup(connection, interaction) {
     'txtGroundRulesConfirmTitle', 'txtGroundRulesConfirmBody',
     'lblGroundRulesAdded', 'lblGroundRulesRemoved', 'lblGroundRulesRenamed',
     'txtGroundRulesRemovedUsageNote', 'txtGroundRulesRenamedNote',
-    'btnGroundRulesConfirm', 'btnGroundRulesCancel',
+    'btnGroundRulesConfirm', 'btnGroundRulesCancel', 'btnGroundRulesTryAgain',
     'lblSetupTeenOrLowerOnly', 'txtSetupEmbedDescTeenOrLowerOnly',
     'btnSetupTabServer', 'btnSetupTabStory',
   ], guildId);
@@ -362,6 +364,7 @@ export async function handleSetupButton(connection, interaction) {
   }
   if (id === 'storyadmin_setup_groundrules_confirm') return await handleSetupGroundRulesConfirm(connection, interaction);
   if (id === 'storyadmin_setup_groundrules_cancel') return await handleSetupGroundRulesCancel(connection, interaction);
+  if (id === 'storyadmin_setup_groundrules_retry') return await handleSetupGroundRulesRetry(connection, interaction);
   if (id === 'storyadmin_setup_save') return await handleSetupSave(connection, interaction);
   if (id === 'storyadmin_setup_cancel') return await handleSetupCancel(connection, interaction);
 }

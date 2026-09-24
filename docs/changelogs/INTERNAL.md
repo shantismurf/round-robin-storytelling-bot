@@ -96,6 +96,28 @@ under Unreleased in the meantime per the changelog contract.
   the privacy policy's enumerated data categories. See
   `docs/plans/completed/PLAN-guild-event-funnel.md`.
 
+### Fixed
+- `handleSetupGroundRulesModal`'s validation-failure branch called `interaction.showModal(...)`
+  directly on a modal-submit interaction, which has no such method
+  (`docs/reference/discordjs_reference.md` — "A modal-submit interaction cannot show a modal";
+  an earlier version of that doc claimed the opposite, also corrected). Submitting the Ground
+  Rules modal with invalid text (more than 10 rules, a label over 40 characters, or a
+  description over 100) would throw `TypeError: interaction.showModal is not a function`.
+  Fixed by replying ephemerally with the error and a new "Try Again" button
+  (`btnGroundRulesTryAgain`); that button click is a `MessageComponentInteraction`, which does
+  support `showModal()`, and re-opens the form pre-filled with the rejected submission. New
+  `handleSetupGroundRulesRetry` handler in `commands/_storyadminSetupGroundRules.js`.
+
+### Changed
+- Setup panel channel-field copy, LeeAnn 2026-09-24: `txtSetupModalTitleMedia` ("Media/Image
+  Channel" → "Story Media Channel"), `txtSetupModalTitleRestrictedFeed` ("Restricted Feed
+  Channel" → "Restricted Story Feed Channel"), `txtSetupModalTitleRestrictedMedia` ("Restricted
+  Media Channel" → "Restricted Story Media Channel") for consistency with the "Story Admin"
+  naming convention. Per-field bot-permission wording on `txtSetupEmbedDescMedia`/
+  `txtSetupEmbedDescRestrictedMedia` replaced with one shared `txtSetupChannelsPermissionNote`
+  header above all four channel fields. `txtSetupEmbedDescRestrictedMedia` now also states its
+  fallback (unset → Story Media Channel), matching what `resolveMediaChannelId()` already does.
+
 
 ## 3.5.6 — 2026-09-24
 

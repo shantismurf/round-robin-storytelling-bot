@@ -151,6 +151,7 @@ This story''s rating will stay in the Teen or lower range.', 'en', 1),
 ('txtGroundRulesConfirmBody', 'This change will **NOT** take effect until you click Confirm below. You can cancel and edit your submission first.', 'en', 1),
 ('btnGroundRulesConfirm', '✅ Confirm', 'en', 1),
 ('btnGroundRulesCancel', '↩️ Cancel', 'en', 1),
+('btnGroundRulesTryAgain', 'Try Again', 'en', 1),
 ('txtGroundRulesNoneConfigured', 'No Ground Rules Configured.', 'en', 1),
 ('txtGroundRulesChangedNotice', '🤝 **Ground Rules updated for this story:** [ground_rules]', 'en', 1),
 ('txtGroundRulesChangedNoticeNone', '🤝 **Ground Rules updated for this story:** none selected', 'en', 1);
