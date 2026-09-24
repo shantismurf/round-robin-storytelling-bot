@@ -123,7 +123,7 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   // scrolling back to the top of a long panel — with its own line break separating it from the
   // Change Story Status buttons right after, per her explicit call on the spacing here.
   container.addSeparatorComponents(new SeparatorBuilder());
-  container.addActionRowComponents(buildPanelTabRow(cfg, 'story_manage', activeGroup));
+  container.addActionRowComponents(buildPanelTabRow(cfg, 'story_manage', activeGroup, 'bottom'));
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtChangeStoryStatusLabel));
 
@@ -331,10 +331,12 @@ async function handleManageButton(connection, interaction) {
   const customId = interaction.customId;
 
   try {
-    if (customId === 'story_manage_tab_storyinfo' || customId === 'story_manage_tab_settings' || customId === 'story_manage_tab_metadata') {
-      state.activeGroup = customId === 'story_manage_tab_storyinfo' ? 'storyinfo' : customId === 'story_manage_tab_settings' ? 'settings' : 'metadata';
-      await interaction.deferUpdate();
-      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+    if (customId.startsWith('story_manage_tab_storyinfo') || customId.startsWith('story_manage_tab_settings') || customId.startsWith('story_manage_tab_metadata')) {
+      state.activeGroup = customId.startsWith('story_manage_tab_storyinfo') ? 'storyinfo' : customId.startsWith('story_manage_tab_settings') ? 'settings' : 'metadata';
+      // interaction.update(), not deferUpdate() + state.originalInteraction.editReply() — the
+      // latter edits via the ORIGINAL /story manage command's webhook token, which goes stale 15
+      // minutes after that command ran. See docs/reference/discordjs_reference.md.
+      await interaction.update(buildManageMessage(state.cfg, state, state.activeTurn));
 
     } else if (customId === 'story_manage_open_storyinfo') {
       await interaction.showModal(buildStoryInfoModal(state.cfg, state, 'story_manage'));

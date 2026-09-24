@@ -68,14 +68,21 @@ export async function getMetaCfg(connection, guildId) {
  * (active = Success/green, inactive = Secondary/gray) read as tabs on their own, and "Display"
  * in the old per-tab labels ("Display Settings"/"Display Metadata") read as a visibility toggle
  * rather than navigation, which was the actual complaint.
+ *
+ * position ('top' | 'bottom') is folded into each button's customId. Discord rejects a message
+ * whose custom_id repeats ANYWHERE in its component tree, not just within one row — rendering
+ * this row twice with identical IDs threw DiscordAPIError 50035
+ * (COMPONENT_CUSTOM_ID_DUPLICATED) in production the moment both rows appeared on the same
+ * message. Callers match on customId.startsWith(`${ns}_tab_storyinfo`) etc. rather than an exact
+ * string so either position's click still routes correctly.
  */
-export function buildPanelTabRow(cfg, ns, activeGroup) {
+export function buildPanelTabRow(cfg, ns, activeGroup, position) {
   return new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`${ns}_tab_storyinfo`).setLabel(cfg.btnPanelTabStoryInfo)
+    new ButtonBuilder().setCustomId(`${ns}_tab_storyinfo_${position}`).setLabel(cfg.btnPanelTabStoryInfo)
       .setStyle(activeGroup === 'storyinfo' ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${ns}_tab_settings`).setLabel(cfg.btnPanelTabSettings)
+    new ButtonBuilder().setCustomId(`${ns}_tab_settings_${position}`).setLabel(cfg.btnPanelTabSettings)
       .setStyle(activeGroup === 'settings' ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${ns}_tab_metadata`).setLabel(cfg.btnPanelTabMetadata)
+    new ButtonBuilder().setCustomId(`${ns}_tab_metadata_${position}`).setLabel(cfg.btnPanelTabMetadata)
       .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
   );
 }
@@ -155,7 +162,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
   // label. Active tab styled Success, inactive Secondary, so "you are here" is unambiguous.
   // No caption line above them (dropped 2026-09-24, was "Click to Display:") — three
   // color-coded buttons read as tabs on their own; see buildPanelTabRow's own doc comment.
-  container.addActionRowComponents(buildPanelTabRow(cfg, ns, activeGroup));
+  container.addActionRowComponents(buildPanelTabRow(cfg, ns, activeGroup, 'top'));
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${headerText}`));
 
   if (cfg.txtStoryAddIntro && !isManage) {

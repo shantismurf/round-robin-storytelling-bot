@@ -117,6 +117,17 @@ under Unreleased in the meantime per the changelog contract.
   every modal here opens from a button click) — both use the current interaction's own token.
   10 call sites across `commands/_storyadminSetup.js`, `_storyadminSetupFieldModals.js`, and
   `_storyadminSetupGroundRules.js`.
+- **Live production crash**: `/story manage` threw `DiscordAPIError[50035]` /
+  `COMPONENT_CUSTOM_ID_DUPLICATED` on every open (shantismurf, live). Root cause:
+  `buildPanelTabRow()`'s Story Info/Settings/Metadata tab row is rendered twice per panel (top
+  and bottom, LeeAnn 2026-09-24), and both calls used identical customIds (`story_manage_tab_*`/
+  `story_add_tab_*`) — Discord rejects a duplicate custom_id anywhere in a message's component
+  tree, not just within one row. `buildPanelTabRow()` now takes a `position` ('top'/'bottom')
+  folded into each customId; the two tab-click dispatch sites (`story/manage.js`,
+  `story/add.js`) match with `customId.startsWith(...)` instead of an exact string so either
+  position still routes. While in that code: also replaced its
+  `state.originalInteraction.editReply(...)` with `interaction.update(...)`, the same stale-token
+  bug just fixed on the setup panel (see above) — this dispatch had the identical pattern.
 
 ### Changed
 - Setup panel channel-field copy, LeeAnn 2026-09-24: `txtSetupModalTitleMedia` ("Media/Image

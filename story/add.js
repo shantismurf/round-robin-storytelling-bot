@@ -114,7 +114,7 @@ export function buildStoryAddMessage(cfg, state) {
   // Tab row repeated at the bottom (LeeAnn, 2026-09-24) so switching tabs never requires
   // scrolling back to the top of a long panel.
   container.addSeparatorComponents(new SeparatorBuilder());
-  container.addActionRowComponents(buildPanelTabRow(cfg, 'story_add', activeGroup));
+  container.addActionRowComponents(buildPanelTabRow(cfg, 'story_add', activeGroup, 'bottom'));
   container.addSeparatorComponents(new SeparatorBuilder());
 
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -303,10 +303,12 @@ export async function handleAddStoryButton(connection, interaction) {
   log(`handleAddStoryButton: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
-    if (customId === 'story_add_tab_storyinfo' || customId === 'story_add_tab_settings' || customId === 'story_add_tab_metadata') {
-      state.activeGroup = customId === 'story_add_tab_storyinfo' ? 'storyinfo' : customId === 'story_add_tab_settings' ? 'settings' : 'metadata';
-      await interaction.deferUpdate();
-      await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
+    if (customId.startsWith('story_add_tab_storyinfo') || customId.startsWith('story_add_tab_settings') || customId.startsWith('story_add_tab_metadata')) {
+      state.activeGroup = customId.startsWith('story_add_tab_storyinfo') ? 'storyinfo' : customId.startsWith('story_add_tab_settings') ? 'settings' : 'metadata';
+      // interaction.update(), not deferUpdate() + state.originalInteraction.editReply() — the
+      // latter edits via the ORIGINAL /story add command's webhook token, which goes stale 15
+      // minutes after that command ran. See docs/reference/discordjs_reference.md.
+      await interaction.update(buildStoryAddMessage(state.cfg, state));
 
     } else if (customId === 'story_add_open_storyinfo') {
       await interaction.showModal(buildStoryInfoModal(state.cfg, state, 'story_add'));
