@@ -51,7 +51,7 @@ export async function getMetaCfg(connection, guildId) {
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
     'btnSaveSettings', 'btnCreateStory', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtPanelTabHelper', 'txtStoryManagementLabel',
     'lblUnsavedChangesTitle', 'txtUnsavedChangesBody',
-    'optWarnAllClear', 'lblMetaGroundRules', 'txtGroundRulesNoneConfigured', 'txtGroundRulesDefaultVocabulary',
+    'optWarnAllClear', 'lblMetaGroundRules', 'txtGroundRulesNoneConfigured', 'txtGroundRulesDefaultVocabulary', 'txtGroundRulesDesc',
     'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
     'btnRatingChangeConfirm', 'btnRatingChangeRevert', 'txtMetaApplied',
     ...ratingCodes.map(ratingLabelKey),
@@ -210,7 +210,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
       `**${trimTrailingEmoji(cfg.lblMetaRating)}:** ${ratingLabel}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaDynamic)}:** ${dynamicDisplay}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaWarnings)}:** ${warningsDisplay}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaGroundRules)}:** ${groundRulesDisplay}`
+      `**${trimTrailingEmoji(cfg.lblMetaGroundRules)}:** ${groundRulesDisplay}\n-# ${cfg.txtGroundRulesDesc}`
     ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`${ns}_open_metadata`).setLabel(cfg.btnAddMetadata).setStyle(ButtonStyle.Primary)
@@ -335,7 +335,7 @@ export function buildMetadataModal(cfg, state, namespace) {
       new LabelBuilder().setLabel(cfg.lblMetaDynamic).setStringSelectMenuComponent(dynamicSelect),
       new LabelBuilder().setLabel(cfg.lblMetaRating).setStringSelectMenuComponent(ratingSelect),
       new LabelBuilder().setLabel(cfg.lblMetaWarnings).setCheckboxGroupComponent(warningsGroup),
-      ...(groundRulesGroup ? [new LabelBuilder().setLabel(cfg.lblMetaGroundRules).setCheckboxGroupComponent(groundRulesGroup)] : []),
+      ...(groundRulesGroup ? [new LabelBuilder().setLabel(cfg.lblMetaGroundRules).setDescription(cfg.txtGroundRulesDesc).setCheckboxGroupComponent(groundRulesGroup)] : []),
     );
 }
 
