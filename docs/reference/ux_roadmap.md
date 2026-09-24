@@ -139,7 +139,18 @@ guild guard. See `docs/plans/PLAN-dm-support.md`.
 
 ```
 /storyadmin setup
+  → two-tier panel (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2 / docs/TODO.md):
+    Manage Server holders see both tiers; a story admin (checkIsAdmin) without Manage Server
+    sees only the tier-2 fields. Same command, same panel — hiding a tier is presentation only,
+    every write re-checks Manage Server live.
+      Tier 1 (Manage Server only): feed/media/restricted channels, admin role name
+      Tier 2 (any story admin): roundup channel/day/hour, changelog toggle,
+        Ground Rules (own authoring flow, writes immediately — see below),
+        Teen or Lower Only toggle (staged behind Save Settings like changelog)
   → storyadmin_setup_* modal → guild config saved
+  → storyadmin_setup_groundrules → paragraph-text modal, pre-filled with the approved defaults
+    on an unconfigured guild → validate → pure addition saves immediately, anything else shows
+    an Added/Removed/Renamed confirmation screen before writing cfgGroundRules
 
 /storyadmin user [story_id] [user]
   → ManageUser panel (pause, remove, pen name, notif prefs, turn privacy)
