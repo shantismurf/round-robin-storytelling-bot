@@ -1,5 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, trimTrailingEmoji, logGuildEvent } from '../utilities.js';
+import { resolveGroundRuleLabels, parseGroundRulesText } from './_groundRules.js';
 import { StoryJoin, getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { postStoryThreadActivity } from './_turn.js';
@@ -72,10 +73,11 @@ export async function validateJoinEligibility(connection, storyId, guildId, user
 }
 
 export async function buildJoinEmbed(connection, state) {
-  const { storyId, guildId, storyTitle, privacy, notificationPrefs, penName, displayName } = state;
+  const { storyId, guildId, storyTitle, groundRules, privacy, notificationPrefs, penName, displayName } = state;
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacy', 'lblJoinNotifications',
-    'lblJoinPenName', 'txtJoinPenNameNotSet', 'btnJoinSetPenName', 'btnJoinConfirm', 'btnCancel'
+    'lblJoinPenName', 'txtJoinPenNameNotSet', 'btnJoinSetPenName', 'btnJoinConfirm', 'btnCancel',
+    'lblMetaGroundRules', 'cfgGroundRules',
   ], guildId);
 
   const embed = new EmbedBuilder()
@@ -86,6 +88,12 @@ export async function buildJoinEmbed(connection, state) {
       { name: trimTrailingEmoji(cfg.lblJoinNotifications), value: notificationPrefs === 'dm' ? '💬 DM' : '📢 Mention in channel', inline: true },
       { name: trimTrailingEmoji(cfg.lblJoinPenName), value: penName || (displayName ? `${displayName} (Discord display name)` : cfg.txtJoinPenNameNotSet), inline: false }
     );
+
+  // Read-only — writers see this before committing to join, not a field they set here.
+  const groundRulesLabels = resolveGroundRuleLabels(groundRules, parseGroundRulesText(cfg.cfgGroundRules));
+  if (groundRulesLabels.length) {
+    embed.addFields({ name: trimTrailingEmoji(cfg.lblMetaGroundRules), value: groundRulesLabels.join(', '), inline: false });
+  }
 
   const privacyRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -150,7 +158,7 @@ export async function handleJoin(connection, interaction, buttonStoryId = null) 
     log(`handleJoin: building embed`, { show: false, guildName: interaction?.guild?.name });
     const existingPenName = await getPreviousPenName(connection, interaction.user.id);
     const displayName = interaction.member?.displayName || interaction.user.displayName || interaction.user.username;
-    const state = { storyId, guildId, storyTitle: joinInfo.story.title, privacy: 'public', notificationPrefs: 'dm', penName: existingPenName, displayName };
+    const state = { storyId, guildId, storyTitle: joinInfo.story.title, groundRules: joinInfo.story.ground_rules, privacy: 'public', notificationPrefs: 'dm', penName: existingPenName, displayName };
     pendingJoinData.set(interaction.user.id, state);
 
     const embedData = await buildJoinEmbed(connection, state);
