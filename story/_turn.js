@@ -1,4 +1,4 @@
-import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
+import { ChannelType, MessageType, ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getConfigValue, getTurnNumber, log, replaceTemplateVariables, discordTimestamp } from '../utilities.js';
 import { resolveFeedChannelId } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
@@ -697,17 +697,17 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
   const welcomeMsg = welcomeKey.map(key => cfg[key]).join('\n\n');
 
   const storyThreadLink = `https://discord.com/channels/${guild_id}/${getActiveThreadId(writer)}`;
-  let welcomeContent = welcomeMsg
-    .replace('[story_title]', writer.title)
-    .replace('[story_id]', writer.guild_story_id)
-    .replace('[story_thread_link]', storyThreadLink);
-
+  const welcomeTokens = {
+    story_title: writer.title,
+    story_id: writer.guild_story_id,
+    story_thread_link: storyThreadLink,
+  };
   if (!isSlowMode && turnEndTime) {
     const unixTs = Math.floor(turnEndTime.getTime() / 1000);
-    welcomeContent = welcomeContent
-      .replace('[turn_end_full]', `<t:${unixTs}:F>`)
-      .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
+    welcomeTokens.turn_end_full = `<t:${unixTs}:F>`;
+    welcomeTokens.turn_end_relative = `<t:${unixTs}:R>`;
   }
+  const welcomeContent = replaceTemplateVariables(welcomeMsg, welcomeTokens);
 
   // Check whether there is a previous confirmed entry to offer
   const [lastEntryRows] = await connection.execute(
@@ -743,8 +743,19 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
 
   const row = new ActionRowBuilder().addComponents(buttons);
 
+  // Embed, not plain content (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2, "Welcome-
+  // message embed conversion comes first") — plain `content` parses @everyone/role/user mentions
+  // live, and this is the one place admin-authored freeform text (Ground Rules, once wired in
+  // below) would flow into a message a writer can't opt out of seeing. Embeds never parse
+  // mentions regardless of what ends up in them. Accent color matches the mode colors already
+  // used for the story panel container (story/_metadataModals.js's buildStoryPanel).
+  const modeColors = { [STORY_MODE.QUICK]: 0xE040FB, [STORY_MODE.SLOW]: 0x5865F2 };
+  const welcomeEmbed = new EmbedBuilder()
+    .setDescription(welcomeContent)
+    .setColor(modeColors[writer.mode] ?? 0x57F287);
+
   await thread.send({
-    content: welcomeContent,
+    embeds: [welcomeEmbed],
     components: [row]
   });
 }
