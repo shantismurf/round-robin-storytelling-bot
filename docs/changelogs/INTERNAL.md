@@ -24,7 +24,18 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
-*Nothing pending.*
+### Added
+- `guild_event` table (`db/migrations/023_guild_event.sql`) and `logGuildEvent()` helper
+  (`utilities.js`) — funnel instrumentation for the install-through-activation path, per
+  `docs/plans/PLAN-sequencing-and-priorities.md` Stage 1 and finding 7 of
+  `docs/audits/Onboarding_Review_2026-09.md`. There was previously no way to measure where
+  servers drop off between adding the bot and reaching an active multi-writer story. Records
+  `guild_joined`, `guild_left`, `setup_opened`, `setup_saved`, `story_created`, `writer_joined`
+  (standalone join path only, not the creator's own auto-join), and `turn_finalized` — six
+  non-fatal insert calls at points that already existed in code. Deliberately no `user_id`
+  column: every funnel question is a per-guild count over time, and it keeps this table outside
+  the privacy policy's enumerated data categories. See
+  `docs/plans/completed/PLAN-guild-event-funnel.md`.
 
 
 ## 3.5.6 — 2026-09-24

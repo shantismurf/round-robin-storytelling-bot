@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, LabelBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ChannelType } from 'discord.js';
-import { getConfigValue, getSetupRequiredMessage, sanitizeModalInput, log, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, getSetupRequiredMessage, sanitizeModalInput, log, replaceTemplateVariables, logGuildEvent } from '../utilities.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
 
 export const pendingSetupData = new Map();
@@ -85,6 +85,8 @@ export async function handleSetup(connection, interaction) {
   }
 
   const guildId = interaction.guild.id;
+  const isOwner = interaction.user.id === interaction.guild.ownerId;
+  await logGuildEvent(connection, guildId, 'setup_opened', { isOwner });
   const cfg = await getConfigValue(connection, [
     'txtSetupPanelTitle',
     'txtSetupModalTitleFeed', 'txtSetupModalTitleMedia', 'txtSetupModalTitleRole',
@@ -449,6 +451,9 @@ export async function handleSetupSave(connection, interaction) {
   await upsert('cfgRestrictedFeedChannelId', state.restrictedFeedChannelId || '');
   await upsert('cfgRestrictedMediaChannelId', state.restrictedMediaChannelId || '');
   await upsert('cfgAdminRoleName', state.adminRoleName || '');
+
+  const isOwner = interaction.user.id === interaction.guild.ownerId;
+  await logGuildEvent(connection, guildId, 'setup_saved', { isFirstSetup, isOwner });
 
   // Roundup config
   if (state.roundupChannelId) {

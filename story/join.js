@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, trimTrailingEmoji } from '../utilities.js';
+import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, trimTrailingEmoji, logGuildEvent } from '../utilities.js';
 import { StoryJoin, getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { postStoryThreadActivity } from './_turn.js';
@@ -278,6 +278,7 @@ export async function handleJoinConfirm(connection, interaction) {
   // each step is independent so one failing must not skip the others.
   pendingJoinData.delete(interaction.user.id);
   log(`handleJoinConfirm: join committed for storyId=${storyId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+  await logGuildEvent(connection, guildId, 'writer_joined');
 
   const [[writerCount], [storyInfo]] = await Promise.all([
     connection.execute(`SELECT COUNT(*) as count FROM story_writer WHERE story_id = ? AND sw_status = ?`, [storyId, WRITER_STATUS.ACTIVE]),

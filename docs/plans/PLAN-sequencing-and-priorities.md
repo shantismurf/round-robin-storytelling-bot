@@ -75,14 +75,16 @@ for an audience that has not arrived.
 
 ## The sequence
 
-### Stage 1 — Make it measurable (do this first, it gates everything else)
+### Stage 1 — Make it measurable (do this first, it gates everything else) — Implemented 2026-09-24
 
-The `guild_event` table from the onboarding review, finding 7: one small table and roughly
-seven insert calls at points that already exist in code — `guild_joined`, `setup_opened`,
-`setup_saved`, `story_created`, `writer_joined`, `turn_finalized`, `guild_left`.
+The `guild_event` table from the onboarding review, finding 7: one small table and six insert
+calls at points that already exist in code — `guild_joined`, `guild_left`, `setup_opened`,
+`setup_saved`, `story_created`, `writer_joined`, `turn_finalized`. (`writer_joined` only fires
+for the standalone join path, not the creator's own auto-join, so it's six call sites rather
+than the seven originally estimated.) See
+[PLAN-guild-event-funnel.md](completed/PLAN-guild-event-funnel.md) for the implementation.
 
-Nothing else in this document can be judged without it. It is also the smallest item here.
-No plan file exists for it; it is small enough that this section is the plan.
+Nothing else in this document can be judged without it. It was also the smallest item here.
 
 ### Stage 2 — The first-run fixes
 

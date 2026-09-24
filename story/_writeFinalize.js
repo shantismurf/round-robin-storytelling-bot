@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables, checkIsAdmin } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, checkIsAdmin, logGuildEvent } from '../utilities.js';
 import { PickNextWriter, NextTurn, deleteThreadAndAnnouncement, endTurnGuarded } from './_turn.js';
 import { getActiveThreadId } from '../storybot.js';
 import { buildEntryPages, buildEntryEmbed, postThreadEntry } from './_entryRenderer.js';
@@ -354,6 +354,8 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
     } finally {
       txn.release();
     }
+
+    await logGuildEvent(connection, interaction.guild.id, 'turn_finalized');
 
     if (!nextTurnResult?.success) {
       log(`doFinalizeEntry: NextTurn failed for story ${storyId} after turn ${turn.turn_id} was finalized — story has no active turn: ${nextTurnResult?.error}`, { show: true, guildName: interaction?.guild?.name, hub: true });

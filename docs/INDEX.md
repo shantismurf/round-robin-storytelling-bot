@@ -56,6 +56,7 @@ Every file has a `Status` / `Created` / `Last Updated` (/ `Implemented`) header.
 | [PLAN-mention-display-text.md](plans/completed/PLAN-mention-display-text.md) | 2026-08-26 | `@user`/`#channel`/`@role` mentions in story entries resolved to plain display text at write time; covers Discord's channel-obfuscation change |
 | [PLAN-rating-barrier-migration.md](plans/completed/PLAN-rating-barrier-migration.md) | 2026-07-10 | Story thread migration when rating crosses the NR/M barrier |
 | [PLAN-help-faq-hub-sync.md](plans/completed/PLAN-help-faq-hub-sync.md) | 2026-07-01 | Help content synced to Hub FAQ forum posts |
+| [PLAN-guild-event-funnel.md](plans/completed/PLAN-guild-event-funnel.md) | 2026-09-24 | `guild_event` funnel table + `logGuildEvent()` helper for install-to-activation instrumentation |
 
 ---
 
