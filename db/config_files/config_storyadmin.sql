@@ -240,7 +240,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtSetupEmbedDescGroundRules', '-# Set the rules that story creators can choose from to guide story tone and writer conduct.', 'en', 1),
 ('txtSetupGroundRulesModalDesc', 'Max 10 rules: label on the first line (max 40 characters), description below it (max 100), blank line between rules.', 'en', 1),
 ('lblSetupTeenOrLowerOnly', 'Teen or Lower Only', 'en', 1),
-('txtSetupEmbedDescTeenOrLowerOnly', '-# Don''t display the option to rate stories as Mature or Explicit.', 'en', 1),
+('txtSetupEmbedDescTeenOrLowerOnly', '-# Enable to remove Mature and Explicit as Rating options in story metadata.', 'en', 1),
 ('cfgTeenOrLowerOnly', '0', 'en', 1),
 ('cfgGroundRules', '', 'en', 1),
 -- Setup panel tab labels — LeeAnn, 2026-09-24: a Manage Server holder should default to the

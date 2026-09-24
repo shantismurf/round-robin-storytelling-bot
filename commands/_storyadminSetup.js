@@ -134,14 +134,17 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   }
   container.addSeparatorComponents(new SeparatorBuilder());
 
-  // Tab toggle — only when this user actually has two tabs to switch between.
+  // Tab toggle — only when this user actually has two tabs to switch between. Shown at the top
+  // and, per LeeAnn 2026-09-24 (matching the same request already applied to /story add and
+  // /story manage), repeated at the bottom too, so switching tabs never needs a scroll back up.
+  const buildTabRow = () => new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier1').setLabel(cfg.btnSetupTabServer)
+      .setStyle(effectiveTab === 'tier1' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier2').setLabel(cfg.btnSetupTabStory)
+      .setStyle(effectiveTab === 'tier2' ? ButtonStyle.Success : ButtonStyle.Secondary),
+  );
   if (tier1Visible && interactive) {
-    container.addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier1').setLabel(cfg.btnSetupTabServer)
-        .setStyle(effectiveTab === 'tier1' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier2').setLabel(cfg.btnSetupTabStory)
-        .setStyle(effectiveTab === 'tier2' ? ButtonStyle.Success : ButtonStyle.Secondary),
-    ));
+    container.addActionRowComponents(buildTabRow());
     container.addSeparatorComponents(new SeparatorBuilder());
   }
 
@@ -165,6 +168,10 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   });
 
   if (interactive) {
+    if (tier1Visible) {
+      container.addSeparatorComponents(new SeparatorBuilder());
+      container.addActionRowComponents(buildTabRow());
+    }
     container.addSeparatorComponents(new SeparatorBuilder());
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
