@@ -107,6 +107,16 @@ under Unreleased in the meantime per the changelog contract.
   (`btnGroundRulesTryAgain`); that button click is a `MessageComponentInteraction`, which does
   support `showModal()`, and re-opens the form pre-filled with the rejected submission. New
   `handleSetupGroundRulesRetry` handler in `commands/_storyadminSetupGroundRules.js`.
+- "Invalid Webhook Token" on setup-panel toggle/tab buttons and field modals after ~15 minutes
+  of an open `/storyadmin setup` session (LeeAnn, live testing). Root cause: every one of these
+  handlers edited the panel via `state.originalInteraction.editReply(...)` — the *original*
+  `/storyadmin setup` command's own webhook token, which expires 15 minutes after that command
+  ran, no matter how fresh the triggering button/modal-submit's own token was. Replaced with
+  `interaction.update(...)` (buttons) or `interaction.deferUpdate()` + `interaction.editReply(...)`
+  (modal submits, which Discord lets acknowledge/edit the originating message directly since
+  every modal here opens from a button click) — both use the current interaction's own token.
+  10 call sites across `commands/_storyadminSetup.js`, `_storyadminSetupFieldModals.js`, and
+  `_storyadminSetupGroundRules.js`.
 
 ### Changed
 - Setup panel channel-field copy, LeeAnn 2026-09-24: `txtSetupModalTitleMedia` ("Media/Image

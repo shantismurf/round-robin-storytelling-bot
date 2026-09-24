@@ -344,20 +344,22 @@ export async function handleSetupButton(connection, interaction) {
   if (id === 'storyadmin_setup_roundup') {
     return await interaction.showModal(buildRoundupModal(cfg, state));
   }
+  // interaction.update() (not deferUpdate() + state.originalInteraction.editReply()) — the
+  // latter edits via the ORIGINAL /storyadmin setup command's webhook token, which expires 15
+  // minutes after that command ran regardless of how fresh this button click's own token is.
+  // update() posts through this click's own token instead. See
+  // docs/reference/discordjs_reference.md.
   if (id === 'storyadmin_setup_toggle_changelog') {
     state.changelogEnabled = !state.changelogEnabled;
-    await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+    return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_toggle_teenorlower') {
     state.teenOrLowerOnly = !state.teenOrLowerOnly;
-    await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+    return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_tab_tier1' || id === 'storyadmin_setup_tab_tier2') {
     state.activeSetupTab = id === 'storyadmin_setup_tab_tier1' ? 'tier1' : 'tier2';
-    await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+    return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_groundrules') {
     return await interaction.showModal(buildGroundRulesModal(cfg, state));

@@ -125,7 +125,11 @@ export async function handleSetupGroundRulesModal(connection, interaction) {
     });
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // deferUpdate() + interaction.editReply() (not deferReply()/deleteReply() around a stale
+  // state.originalInteraction.editReply()) — this modal was opened from a button click, so
+  // Discord lets a modal submission acknowledge and edit that same originating message directly,
+  // through this submission's own fresh token. See docs/reference/discordjs_reference.md.
+  await interaction.deferUpdate();
 
   const diff = diffGroundRules(state.originalGroundRulesRules ?? [], rules);
   const tier1Visible = hasTier1Access(interaction);
@@ -134,8 +138,7 @@ export async function handleSetupGroundRulesModal(connection, interaction) {
     // Nothing existing can break from an addition alone — save immediately, no confirm screen.
     await applyGroundRulesSave(connection, state, rules, diff);
     log(`handleSetupGroundRulesModal: pure-addition save guild=${state.guildId} rules=${rules.length}`, { show: true, guildName: interaction.guild.name });
-    await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible, activeTab: state.activeSetupTab }));
-    await interaction.deleteReply();
+    await interaction.editReply(buildSetupPanel(state, cfg, { tier1Visible, activeTab: state.activeSetupTab }));
     return;
   }
 
@@ -147,8 +150,7 @@ export async function handleSetupGroundRulesModal(connection, interaction) {
   }
   state.pendingGroundRules = { rawText, rules, diff };
   log(`handleSetupGroundRulesModal: confirmation required guild=${state.guildId} added=${diff.added.length} removed=${diff.removed.length} renamed=${diff.renamed ? 1 : 0}`, { show: false, guildName: interaction.guild.name });
-  await state.originalInteraction.editReply(buildGroundRulesConfirmPanel(cfg, diff));
-  await interaction.deleteReply();
+  await interaction.editReply(buildGroundRulesConfirmPanel(cfg, diff));
 }
 
 export async function handleSetupGroundRulesConfirm(connection, interaction) {
@@ -164,7 +166,9 @@ export async function handleSetupGroundRulesConfirm(connection, interaction) {
   await applyGroundRulesSave(connection, state, rules, diff);
   log(`handleSetupGroundRulesConfirm: applied guild=${state.guildId} added=${diff.added.length} removed=${diff.removed.length} renamed=${diff.renamed ? 1 : 0}`, { show: true, guildName: interaction.guild.name });
   delete state.pendingGroundRules;
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+  // interaction.editReply() (not state.originalInteraction's) — see handleSetupGroundRulesModal
+  // above.
+  await interaction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
 }
 
 export async function handleSetupGroundRulesRetry(connection, interaction) {

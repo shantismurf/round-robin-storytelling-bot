@@ -129,8 +129,6 @@ export async function handleSetupChannelsModal(connection, interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
   const readChannelId = (customId) => {
     try {
       const field = interaction.fields.getField(customId);
@@ -145,8 +143,11 @@ export async function handleSetupChannelsModal(connection, interaction) {
 
   log(`handleSetupChannelsModal: feed=${state.feedChannelId} media=${state.mediaChannelId} restrictedFeed=${state.restrictedFeedChannelId} restrictedMedia=${state.restrictedMediaChannelId} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true, activeTab: state.activeSetupTab }));
-  await interaction.deleteReply();
+  // interaction.update() edits the panel message this modal was launched from (the button click
+  // that called showModal()), using this submission's own fresh token — not
+  // state.originalInteraction's, which goes stale 15 minutes after /storyadmin setup first ran.
+  // See docs/reference/discordjs_reference.md.
+  await interaction.update(buildSetupPanel(state, state.cfg, { tier1Visible: true, activeTab: state.activeSetupTab }));
 }
 
 export async function handleSetupRoundupModal(connection, interaction) {
@@ -158,8 +159,6 @@ export async function handleSetupRoundupModal(connection, interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
   try {
     const field = interaction.fields.getField('roundupChannelId');
     state.roundupChannelId = field?.channels?.first()?.id ?? field?.values?.[0] ?? '';
@@ -181,8 +180,9 @@ export async function handleSetupRoundupModal(connection, interaction) {
 
   log(`handleSetupRoundupModal: channel=${state.roundupChannelId} day=${state.roundupDay} hour=${state.roundupHour} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
-  await interaction.deleteReply();
+  // See handleSetupChannelsModal above — interaction.update() over the stale
+  // state.originalInteraction.editReply() pattern.
+  await interaction.update(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
 }
 
 export async function handleSetupRoleModal(connection, interaction) {
@@ -201,8 +201,8 @@ export async function handleSetupRoleModal(connection, interaction) {
       flags: MessageFlags.Ephemeral
     });
   }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   state.adminRoleName = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 100);
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true, activeTab: state.activeSetupTab }));
-  await interaction.deleteReply();
+  // See handleSetupChannelsModal above — interaction.update() over the stale
+  // state.originalInteraction.editReply() pattern.
+  await interaction.update(buildSetupPanel(state, state.cfg, { tier1Visible: true, activeTab: state.activeSetupTab }));
 }
