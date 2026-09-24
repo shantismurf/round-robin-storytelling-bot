@@ -1,6 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, trimTrailingEmoji } from '../utilities.js';
 import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings, isStoryJoinable } from './_metadata.js';
+import { resolveGroundRuleLabels, parseGroundRulesText } from './_groundRules.js';
 import { getActiveThreadId } from '../storybot.js';
 import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, STORY_MODE, ENTRY_STATUS } from '../constants.js';
 
@@ -36,7 +37,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
               reminder_timing, max_writers, allow_joins, show_authors,
               story_order_type, summary, tags, story_thread_id, restricted_thread_id, status_message_id, guild_id,
               next_writer_id, closed_at, rating, warnings, main_pairing,
-              other_relationships, characters, dynamic
+              other_relationships, characters, dynamic, ground_rules
        FROM story WHERE story_id = ?`,
       [storyId]
     );
@@ -94,11 +95,12 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusInactiveHeading', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
-      'lblMetaDynamic',
+      'lblMetaDynamic', 'lblMetaGroundRules', 'cfgGroundRules',
       ratingBadgeCfgKey,
       ...warningOptions,
       ...dynamicOptions,
     ], story.guild_id);
+    const groundRulesDisplay = resolveGroundRuleLabels(story.ground_rules, parseGroundRulesText(cfg.cfgGroundRules)).join(', ');
     const txtActive = cfg.txtActive;
     const txtPaused = cfg.txtPaused;
     const txtClosed = cfg.txtClosed;
@@ -202,6 +204,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     if (story.main_pairing)       metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaMainRelationship), value: story.main_pairing, inline: true });
     if (story.other_relationships) metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaOtherRelationships), value: story.other_relationships, inline: true });
     if (warningsDisplay)          metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaWarnings), value: warningsDisplay, inline: false });
+    if (groundRulesDisplay)       metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaGroundRules), value: groundRulesDisplay, inline: false });
     if (story.characters)    metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaCharacters), value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
     if (story.tags) metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaTags), value: story.tags.length > 500 ? story.tags.slice(0, 497) + '...' : story.tags, inline: false });
 

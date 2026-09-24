@@ -2,6 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBu
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, parseDuration, formatDuration } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
 import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
+import { parseGroundRulesText } from './_groundRules.js';
 import { STORY_MODE } from '../constants.js';
 
 // Temporary storage for story add session state
@@ -47,8 +48,16 @@ export async function handleAddStory(connection, interaction) {
 
     Object.assign(cfg, extraCfg);
 
+    const [groundRulesText, teenOrLowerOnly] = await Promise.all([
+      getConfigValue(connection, 'cfgGroundRules', interaction.guild.id),
+      getConfigValue(connection, 'cfgTeenOrLowerOnly', interaction.guild.id),
+    ]);
+
     const state = {
       cfg,
+      groundRulesVocabulary: parseGroundRulesText(groundRulesText),
+      groundRules: [],
+      teenOrLowerOnly: teenOrLowerOnly === '1',
       storyTitle: null,
       storyMode: 0,
       storyTurnPrivacy: 0,
@@ -224,6 +233,12 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       if (dynamic) state.dynamic = dynamic;
       if (rating) state.rating = rating;
       state.warnings = warningsRaw ?? [];
+      // Ground Rules checkbox group is omitted from the modal entirely when the guild has no
+      // vocabulary configured (buildMetadataModal) — reading a customId Discord never sent back
+      // throws, so this field is optional to read, not just optional to fill in.
+      try {
+        state.groundRules = interaction.fields.getCheckboxGroup('story_add_metadata_groundrules') ?? [];
+      } catch { /* group wasn't in this submission — vocabulary is empty, leave state.groundRules as-is */ }
 
     } else if (customId === 'story_add_storyinfo_modal') {
       const modeVal = interaction.fields.getRadioGroup('story_add_storyinfo_mode');
@@ -483,7 +498,8 @@ export async function handleCreateStorySubmit(connection, interaction, state) {
       dynamic: state.dynamic || null,
       tags: state.tags || null,
       summary: state.summary || null,
-      sceneBreakDivider: state.sceneBreakDivider || null
+      sceneBreakDivider: state.sceneBreakDivider || null,
+      groundRules: state.groundRules?.length ? state.groundRules.join(',') : null
     };
 
     const result = await CreateStory(connection, interaction, storyInput);

@@ -22,9 +22,15 @@ For config string keys, see `config_roadmap.md`.
 | `broadcast.js` | `sendBroadcast()` — sends the `ANNOUNCEMENT` text to the hub announcements channel and every configured guild's story feed channel (opt-out via `cfgChangelogEnabled`). Gated by hardcoded `BROADCAST_ARMED` (must be manually flipped to `true`, then back to `false` after sending) since it's a one-shot send, not an idempotent sync; checked by `deploy.js`'s hub post sync step on every deploy | — |
 | `commands/story.js` | `/story` command handler (delegates to `story/` subcommands) | — |
 | `commands/storyadmin.js` | `/storyadmin` command handler | — |
+| `commands/_storyadminSetup.js` | `/storyadmin setup` panel: `buildSetupPanel()` (Components V2 `ContainerBuilder`, two permission tiers — `tier1Visible` gates the Manage-Server-only field cluster), `handleSetup`, `handleSetupButton`, `handleSetupCancel`, `hasTier1Access()` (live per-action Manage Server re-check, exported for the split-out modules below) | ~470 |
+| `commands/_storyadminSetupSave.js` | The setup panel's Save Settings handler — re-validates every channel, writes config, re-checks `hasTier1Access()` before writing any tier-1 field | ~270 |
+| `commands/_storyadminSetupFieldModals.js` | The channels/roundup/role field-editing modals (pure rendering + state staging, no enforcement of its own) | ~210 |
+| `commands/_storyadminSetupGroundRules.js` | Ground Rules server-vocabulary authoring flow — modal, validation-and-reshow, confirmation screen, writes `cfgGroundRules` directly (bypasses the panel's Save Settings staging) | ~180 |
 | `commands/mystory.js` | `/mystory` command handler | — |
 | `story/` | Per-subcommand modules: add, close, edit, help, join, list, manage, ping, read, timeleft, write, roundup | — |
-| `story/_metadataModals.js` | Shared embed/modal builders for /story add and /story manage: getMetaCfg, buildStoryEmbed, buildMetadataModal, buildTagsModal | ~255 |
+| `story/_metadataModals.js` | Shared Components V2/modal builders for /story add and /story manage: getMetaCfg, buildStoryPanel, buildMetadataModal (Dynamic/Rating/Warnings/Ground Rules — rating options filter to NR/G/T when `state.teenOrLowerOnly`), buildTagsModal, finalMessage | ~455 |
+| `story/_groundRules.js` | Ground Rules parse/format/validate/slugify/diff logic, shared by the setup authoring flow and story-level display: `parseGroundRulesText`, `formatGroundRulesText`, `validateGroundRules`, `slugifyGroundRuleLabel`, `diffGroundRules`, `renameGroundRuleSlug`, `resolveGroundRuleLabels` | ~190 |
+| `story/_manageSave.js` | `/story manage`'s Save Settings handler — writes every staged field, the rating-barrier thread migration, and the Ground Rules change notification | ~95 |
 | `story/_turn.js` | The turn engine core: `PickNextWriter`, `NextTurn`, `endTurnGuarded` (atomic guarded turn-end), `endTurnThread`/`deleteThreadAndAnnouncement` (draft preservation), `closeStoryInternals`, `departWriter` (shared writer-exit logic) | ~700 |
 | `story/_delay.js` | `checkStoryDelay()` — evaluates a delayed story's writer-count/hour-based activation conditions | — |
 | `story/_storyStatus.js` | `buildThreadTitle()`, `updateStoryStatusMessage()` — persistent status-embed maintenance | — |
@@ -191,7 +197,7 @@ story-scoped question. Written via `logGuildEvent()` (above), never inline.
 |---|---|
 | `guild_joined` | `index.js` — `Events.GuildCreate` |
 | `guild_left` | `index.js` — `Events.GuildDelete` |
-| `setup_opened` | `commands/_storyadminSetup.js` — `handleSetup`; `detail: { isOwner }` |
+| `setup_opened` | `commands/_storyadminSetup.js` — `handleSetup`; `detail: { isOwner, hasManageGuild }` |
 | `setup_saved` | `commands/_storyadminSetup.js` — `handleSetupSave`, after config is persisted; `detail: { isFirstSetup, isOwner }` |
 | `story_created` | `storybot.js` — `CreateStory`, after its transaction commits |
 | `writer_joined` | `story/join.js` — `handleJoinConfirm`, after its transaction commits. Only fires for the standalone join flow, not the creator's own auto-join inside `CreateStory` — the funnel question is "did a second person join," which `story_created` doesn't already answer |

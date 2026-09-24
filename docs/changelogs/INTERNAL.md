@@ -23,8 +23,67 @@ the thing you will search for later is the old name.
 
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+**Version number and bump level not yet proposed to LeeAnn for the items below** — this batch
+touches a real amount of user-facing surface (a new setup panel tier, Ground Rules, a new
+toggle) and almost certainly warrants at least a MINOR bump once she signs off; recorded here
+under Unreleased in the meantime per the changelog contract.
 
 ### Added
+- `/storyadmin setup` split into two permission tiers, per `docs/TODO.md`'s design (LeeAnn,
+  2026-09-22): escalation-capable fields (feed/media/restricted channels, admin role name) stay
+  Manage-Server-only; roundup, changelog, and the two items below are reachable by any story
+  admin. Same command, one panel — `handleSetup`'s flat refusal for non-Manage-Server users
+  became "render the tier-2 panel" instead. Every tier-1 action re-checks live
+  (`hasTier1Access()`), not just hides the button, since a customId can be replayed by anyone
+  who saw the tier-1 panel.
+- Ground Rules — per-story tone/conduct tags, server-defined vocabulary
+  (`docs/plans/PLAN-panel-rework-and-ground-rules.md` Part 2). Authored as a paragraph-text field
+  on the (now tier-2) setup panel, pre-filled with six approved defaults on an unconfigured
+  guild; validated against the real 10-rule/40-label/100-description limits; a confirmation
+  screen (Added/Removed-with-story-count/Renamed) gates any change that isn't a pure addition,
+  and a detected rename migrates existing stories' selections rather than silently dropping them.
+  Selected per story via a checkbox group on the shared Metadata modal (`/story add` and
+  `/story manage`); displayed on the story status post, the join panel, and the Manage/Add
+  panel's Metadata tab; a story-thread notice posts when a story's own selection changes (never
+  on the server vocabulary edit). New `story.ground_rules` column
+  (`db/migrations/024_story_ground_rules.sql`) and `cfgGroundRules` config key. Parsing/
+  validation/diffing logic in new `story/_groundRules.js`, covered by
+  `test/groundRules.test.js` (23 tests).
+- Teen or Lower Only toggle (tier-2 setup panel, `cfgTeenOrLowerOnly`) — when on, the rating
+  picker in `/story add`/`/story manage` offers only NR, G, and T. An M/E story's rating resets
+  to NR the moment its metadata is next submitted after the toggle is turned on (M/E is no
+  longer selectable to reaffirm it), routed through the restored rating-change confirmation
+  below so that reset isn't silent. Supersedes the TODO.md item "Suppress rating display when no
+  restricted channel is configured" — closed as superseded, see that file.
+- Restored the rating-change confirmation flow. Built 2026-05-06 (`e281761`), deleted
+  2026-07-01 (`eefc881`, "UX v3 — replace individual setting buttons with grouped modal panels")
+  when that commit rebuilt the metadata UI and didn't carry the confirm/revert branches across.
+  The approved copy (`txtRatingChangeConfirmTitle`/`Body`, `btnRatingChangeConfirm`/`Revert`) sat
+  unused in `config_metadata.sql` the whole time. Restored in `story/manage.js`, adapted for
+  Components V2 (the revert branch's old shape edited a message back to plain
+  content/embeds/components, which is invalid once a message carries `IsComponentsV2`) and to
+  fire for the Teen or Lower Only reset above, not just a manual barrier crossing. Manage-only,
+  matching the original's `metaEntry.onSave` gate.
+
+### Changed
+- `commands/_storyadminSetup.js` converted from a classic embed panel to Components V2
+  (`ContainerBuilder`), matching the pattern already used by `story/_metadataModals.js`'s
+  `buildStoryPanel()`. `handleSetupSave` and `handleSetupCancel`'s terminal states now post a
+  follow-up message rather than overwriting the panel with plain content, since V2's flag can
+  never be removed once a message carries it.
+- Turn thread welcome message (`story/_turn.js`'s `postWelcomeMessage()`) converted from plain
+  `content` to an embed — plain content parses `@everyone`/role/user mentions live, and this was
+  the one place admin-adjacent freeform text could reach a message a writer can't opt out of
+  seeing. Prerequisite for Ground Rules' welcome-message wiring (not currently used there, but
+  closes the risk before anything does flow through it).
+- `commands/_storyadminSetup.js` split into four files (`_storyadminSetupSave.js`,
+  `_storyadminSetupFieldModals.js`, `_storyadminSetupGroundRules.js`, plus the original) and
+  `story/manage.js`'s save handler extracted to `story/_manageSave.js` — both were pushed over
+  the 500-line CLAUDE.md standard by the work above. `story/manage.js` remains over budget
+  (755 lines, was 690) — the fuller settings/turns/save split `docs/TODO.md`'s file-size entry
+  already describes is still open.
+
+### Added (earlier, pre-existing entry)
 - `guild_event` table (`db/migrations/023_guild_event.sql`) and `logGuildEvent()` helper
   (`utilities.js`) — funnel instrumentation for the install-through-activation path, per
   `docs/plans/PLAN-sequencing-and-priorities.md` Stage 1 and finding 7 of

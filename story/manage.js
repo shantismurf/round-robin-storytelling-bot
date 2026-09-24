@@ -1,8 +1,8 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
-import { migrateStoryThread } from './_migration.js';
-import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
+import { parseGroundRulesText } from './_groundRules.js';
 import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal, finalMessage } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
@@ -10,6 +10,7 @@ import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './
 import { handleTogglePauseResume, handleReopenStory } from './_managePauseResume.js';
 import { openManageUserPanel } from './_manageUser.js';
 import { handleManageCloseConfirm } from './_manageClose.js';
+import { handleManageSave } from './_manageSave.js';
 import { STORY_STATUS, TURN_STATUS, STORY_MODE, WRITER_STATUS } from '../constants.js';
 
 const pendingManageData = new Map();
@@ -37,6 +38,7 @@ const STAGED_FIELDS = [
   'title', 'summary', 'storyMode', 'orderType', 'showAuthors', 'storyTurnPrivacy',
   'sceneBreakDivider', 'turnLength', 'timeoutReminder', 'maxWriters',
   'dynamic', 'rating', 'warnings', 'mainPairing', 'otherRelationships', 'characters', 'tags',
+  'groundRules',
 ];
 
 function isManageDirty(state) {
@@ -172,7 +174,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     const [storyRows] = await connection.execute(
       `SELECT story_id, guild_story_id, title, story_status, mode, turn_length_hours, reminder_timing,
               max_writers, allow_joins, show_authors, story_order_type, summary, tags, story_turn_privacy,
-              rating, warnings, main_pairing, other_relationships, characters, dynamic,
+              rating, warnings, main_pairing, other_relationships, characters, dynamic, ground_rules,
               story_thread_id, scene_break_divider
        FROM story WHERE story_id = ? AND guild_id = ?`,
       [storyId, guildId]
@@ -224,6 +226,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'btnManageUsers', 'txtManageUsersPickModalTitle', 'lblManageUsersPickSelect', 'txtManageUsersNoWriters',
       'txtManageEntriesDesc', 'txtManageTurnsDesc', 'txtReviewTagsDesc', 'txtManageUsersDesc', 'txtChangeStoryStatusLabel',
       'txtManageEmbedTitleMetadata',
+      'txtGroundRulesChangedNotice', 'txtGroundRulesChangedNoticeNone',
     ], guildId);
 
     Object.assign(cfg, extraCfg);
@@ -244,6 +247,11 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     );
     const activeTurn = activeTurnRows.length > 0 ? activeTurnRows[0] : null;
     log(`handleManage: activeTurn=${activeTurn ? activeTurn.turn_id : 'none'} isCreator=${isCreator} isAdmin=${isAdmin}`, { show: false, guildName: interaction?.guild?.name });
+
+    const [groundRulesText, teenOrLowerOnly] = await Promise.all([
+      getConfigValue(connection, 'cfgGroundRules', guildId),
+      getConfigValue(connection, 'cfgTeenOrLowerOnly', guildId),
+    ]);
 
     const state = {
       cfg,
@@ -272,6 +280,9 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       otherRelationships: story.other_relationships ?? '',
       characters: story.characters ?? '',
       dynamic: story.dynamic ?? '',
+      groundRules: story.ground_rules ? story.ground_rules.split(',').map(s => s.trim()).filter(Boolean) : [],
+      groundRulesVocabulary: parseGroundRulesText(groundRulesText),
+      teenOrLowerOnly: teenOrLowerOnly === '1',
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
@@ -542,6 +553,21 @@ async function handleManageButton(connection, interaction) {
       await handleTurnActionButton(connection, interaction, state);
       return;
 
+    } else if (customId === 'story_manage_rating_confirm') {
+      // This button's own message is a classic (non-V2) reply from handleManageModalSubmit's
+      // rating-confirm prompt, so interaction.update() with plain content/embeds is still valid
+      // here — only the persistent panel message (state.originalInteraction) is V2-locked.
+      state.rating = state.pendingRatingChange;
+      delete state.pendingRatingChange;
+      log(`handleManageButton: rating change confirmed, storyId=${state.storyId} rating=${state.rating} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+      await interaction.update({ content: state.cfg.txtMetaApplied, embeds: [], components: [] });
+      await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
+
+    } else if (customId === 'story_manage_rating_revert') {
+      delete state.pendingRatingChange;
+      log(`handleManageButton: rating change reverted, storyId=${state.storyId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
+      await interaction.update({ content: state.cfg.btnRatingChangeRevert, embeds: [], components: [] });
+
     } else if (customId === 'story_manage_save') {
       await interaction.deferUpdate();
       await handleManageSave(connection, interaction, state);
@@ -552,70 +578,6 @@ async function handleManageButton(connection, interaction) {
     if (!interaction.replied && !interaction.deferred) {
       await interaction.reply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), flags: MessageFlags.Ephemeral });
     }
-  }
-}
-
-async function handleManageSave(connection, interaction, state) {
-  const guildId = interaction.guild.id;
-  try {
-    const warningsStr = Array.isArray(state.warnings) ? state.warnings.join(', ') : (state.warnings || null);
-    log(`handleManageSave: storyId=${state.storyId} title=${state.title} mode=${state.storyMode} rating=${state.rating} originalRating=${state.originalRating}`, { show: false, guildName: state.guildName });
-
-    // allow_joins is deliberately not written here — Close/Open Joins applies immediately from
-    // its toggle button (story_manage_toggle_latejoins), same as Pause/Resume/Close/Reopen, not
-    // staged behind this Save. See STAGED_FIELDS's comment above for why.
-    await connection.execute(
-      `UPDATE story SET
-         title = ?, mode = ?, turn_length_hours = ?, reminder_timing = ?, max_writers = ?,
-         show_authors = ?, story_order_type = ?, story_turn_privacy = ?,
-         rating = ?, warnings = ?, main_pairing = ?, other_relationships = ?,
-         characters = ?, dynamic = ?, tags = ?, summary = ?, scene_break_divider = ?
-       WHERE story_id = ?`,
-      [
-        state.title,
-        state.storyMode, state.turnLength, state.timeoutReminder, state.maxWriters ?? null,
-        state.showAuthors, state.orderType, state.storyTurnPrivacy,
-        state.rating, warningsStr || null,
-        state.mainPairing || null, state.otherRelationships || null,
-        state.characters || null, state.dynamic || null, state.tags || null,
-        state.summary || null, state.sceneBreakDivider || null,
-        state.storyId
-      ]
-    );
-    log(`handleManageSave: story fields written for storyId=${state.storyId}`, { show: true, guildName: state.guildName });
-
-    // story_status is deliberately not written here — Pause/Resume applies immediately from the
-    // toggle button (story_manage_toggle_pauseresume → handleTogglePauseResume), same as Close and
-    // Reopen, not staged behind this Save. See STAGED_FIELDS's comment above for why.
-
-    // Skip migration only when moving INTO restricted with no restricted channel configured
-    // (policy: story stays in the main feed, rating is informational-only). Moving back OUT
-    // of restricted should always proceed normally — that direction can't create a redundant
-    // thread since it's returning to the story's existing main-feed thread.
-    const skipMigration = isRestricted(state.rating) && !(await isRestrictedChannelConfigured(connection, guildId));
-    if (crossesBarrier(state.originalRating, state.rating) && !skipMigration) {
-      log(`handleManageSave: rating barrier crossed ${state.originalRating}→${state.rating} for storyId=${state.storyId}`, { show: true, guildName: state.guildName });
-      const migResult = await migrateStoryThread(connection, interaction.guild, state.storyId, state.rating, state.originalRating);
-      if (!migResult.success) {
-        log(`handleManageSave: thread migration failed for storyId=${state.storyId}: ${migResult.error}`, { show: true, guildName: state.guildName });
-      } else {
-        await updateStoryStatusMessage(connection, interaction.guild, state.storyId);
-        const migratedThread = await interaction.guild.channels.fetch(migResult.newThreadId).catch(() => null);
-        if (migratedThread) await migratedThread.send({ embeds: [migResult.migratedInEmbed] }).catch(() => {});
-      }
-    } else {
-      if (crossesBarrier(state.originalRating, state.rating)) {
-        log(`handleManageSave: rating barrier crossed ${state.originalRating}→${state.rating} for storyId=${state.storyId} but no restricted channel configured — staying in current thread per policy`, { show: false, guildName: state.guildName });
-      }
-      updateStoryStatusMessage(connection, interaction.guild, state.storyId).catch(() => {});
-    }
-
-    pendingManageData.delete(interaction.user.id);
-
-    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'txtAdminConfigSaved', guildId)));
-  } catch (error) {
-    log(`handleManageSave failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
-    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
@@ -698,12 +660,47 @@ async function handleManageModalSubmit(connection, interaction) {
 
     } else if (customId === 'story_manage_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_manage_metadata_dynamic')?.[0];
-      const rating = interaction.fields.getStringSelectValues('story_manage_metadata_rating')?.[0];
+      const selectedRating = interaction.fields.getStringSelectValues('story_manage_metadata_rating')?.[0];
       const warningsRaw = interaction.fields.getCheckboxGroup('story_manage_metadata_warnings') ?? [];
 
       if (dynamic) state.dynamic = dynamic;
-      if (rating) state.rating = rating;
       state.warnings = warningsRaw ?? [];
+      try {
+        state.groundRules = interaction.fields.getCheckboxGroup('story_manage_metadata_groundrules') ?? [];
+      } catch { /* group wasn't in this submission — vocabulary is empty */ }
+
+      // Teen or Lower Only reset (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2): once
+      // the toggle is on, M/E is no longer offered in the rating select at all (buildMetadataModal),
+      // so a story that's currently M/E resets to NR the moment its metadata is next submitted —
+      // there's no way for the admin to reaffirm M/E through this modal to avoid it.
+      const forcedRating = (state.teenOrLowerOnly && isRestricted(state.rating)) ? 'NR' : null;
+      const newRating = forcedRating ?? selectedRating ?? state.rating;
+
+      // Restored rating-change confirmation flow — deleted in eefc881 (2026-07-01, "UX v3"),
+      // approved copy (txtRatingChangeConfirmTitle/Body, btnRatingChangeConfirm/Revert) never
+      // removed from config_metadata.sql. Manage-only (crossesBarrier moves a story's thread
+      // between feed channels, a consequence /story add can't have before the story even exists).
+      if (crossesBarrier(state.originalRating, newRating)) {
+        log(`handleManageModalSubmit: rating change ${state.originalRating}→${newRating} requires confirmation, storyId=${state.storyId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
+        state.pendingRatingChange = newRating;
+        const oldLabel = cfg[ratingLabelKey(state.originalRating)] ?? state.originalRating;
+        const newLabel = cfg[ratingLabelKey(newRating)] ?? newRating;
+        const body = replaceTemplateVariables(cfg.txtRatingChangeConfirmBody, { old_rating: oldLabel, new_rating: newLabel });
+        const confirmEmbed = new EmbedBuilder()
+          .setTitle(cfg.txtRatingChangeConfirmTitle)
+          .setDescription(body)
+          .setColor(0xffa500);
+        const confirmRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId('story_manage_rating_confirm').setLabel(cfg.btnRatingChangeConfirm).setStyle(ButtonStyle.Danger),
+          new ButtonBuilder().setCustomId('story_manage_rating_revert').setLabel(cfg.btnRatingChangeRevert).setStyle(ButtonStyle.Secondary),
+        );
+        // A new ephemeral message, not an edit of the V2 panel — a classic embed is still valid
+        // here (see docs/reference/discordjs_reference.md's Components V2 section).
+        await interaction.reply({ embeds: [confirmEmbed], components: [confirmRow], flags: MessageFlags.Ephemeral });
+        return;
+      }
+
+      state.rating = newRating;
       log(`handleManageModalSubmit: metadata staged dynamic=${state.dynamic} rating=${state.rating} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
     } else if (customId === 'story_manage_tags_modal') {

@@ -1,6 +1,13 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, LabelBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ChannelType } from 'discord.js';
-import { getConfigValue, getSetupRequiredMessage, sanitizeModalInput, log, replaceTemplateVariables, logGuildEvent } from '../utilities.js';
-import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder } from 'discord.js';
+import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin } from '../utilities.js';
+import { finalMessage } from '../story/_metadataModals.js';
+import { parseGroundRulesText } from '../story/_groundRules.js';
+import { handleSetupSave } from './_storyadminSetupSave.js';
+import { buildChannelsModal, buildRoundupModal, buildSetupFieldModal, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';
+import {
+  buildGroundRulesModal, handleSetupGroundRulesModal,
+  handleSetupGroundRulesConfirm, handleSetupGroundRulesCancel,
+} from './_storyadminSetupGroundRules.js';
 
 export const pendingSetupData = new Map();
 
@@ -10,10 +17,13 @@ export const pendingSetupData = new Map();
 // handleSetup() snapshots them into state.originalFields at panel open (when current ===
 // original for all of them by construction), and buildSetupPanel() diffs current state against
 // that snapshot on every render.
+// groundRulesText is deliberately NOT staged here — it writes to cfgGroundRules directly via its
+// own authoring flow (commands/_storyadminSetupGroundRules.js), not this panel's Save Settings.
+// See that file's header comment for why.
 export const STAGED_FIELDS = [
   'feedChannelId', 'mediaChannelId', 'adminRoleName',
   'restrictedFeedChannelId', 'restrictedMediaChannelId',
-  'roundupChannelId', 'roundupDay', 'roundupHour', 'changelogEnabled',
+  'roundupChannelId', 'roundupDay', 'roundupHour', 'changelogEnabled', 'teenOrLowerOnly',
 ];
 
 export function isSetupDirty(state) {
@@ -21,72 +31,143 @@ export function isSetupDirty(state) {
   return STAGED_FIELDS.some((key) => state[key] !== state.originalFields[key]);
 }
 
-export function buildSetupPanel(state, cfg) {
+/**
+ * Components V2 conversion (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2, step 2 of
+ * the build order) — was a classic EmbedBuilder, now a ContainerBuilder, matching
+ * buildStoryPanel() in story/_metadataModals.js. IsComponentsV2 is per-message and can never be
+ * removed once a message carries it (verified against node_modules/discord.js/src/structures/
+ * interfaces/TextBasedChannel.js), so every caller that edits this same panel message needs a
+ * components-only payload from here on — no `content`, `embeds`, `stickers`, or `poll`.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.interactive=true] - false renders the read-only, saved terminal state
+ *   (no action rows). Used once, by handleSetupSave after a successful save: pendingSetupData is
+ *   gone by then, so live buttons would just dead-end into txtActionSessionExpired.
+ * @param {string|null} [opts.prependMessage=null] - plain text shown above the panel body (the
+ *   "setup required" onboarding message getSetupRequiredMessage returns). V2 forbids `content`
+ *   alongside `components`, so this has to be a component in the same container rather than a
+ *   sibling `content` field the way handleSetup's very first reply used to send it.
+ * @param {boolean} [opts.tier1Visible=true] - whether to show the Manage-Server-only fields
+ * (feed/media/restricted channels, admin role name) and their edit buttons. false renders only
+ * the tier-2 fields (roundup, changelog) a story admin without Manage Server can reach — same
+ * command, same panel, just fewer rows (docs/TODO.md's "two panels within /storyadmin setup
+ * itself" design). This is presentation only; every handler that acts on a tier-1 customId
+ * re-checks hasTier1Access() live before doing anything, since hiding a button doesn't stop a
+ * replayed customId from someone who saw the tier-1 panel.
+ */
+export function buildSetupPanel(state, cfg, { interactive = true, prependMessage = null, tier1Visible = true } = {}) {
   log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: 'system' });
   const fieldVal = (id) => id ? `<#${id}>` : `\`${cfg.txtNotSet}\``;
   const strVal   = (v)  => v  ? `\`${v}\``  : `\`${cfg.txtNotSet}\``;
   const desc     = (key) => `*${cfg[key]}*`;
 
-  const items = [
-    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `-> ${strVal(state.adminRoleName)}\n`,
-    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `-> ${fieldVal(state.restrictedMediaChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `-> ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}\n`,
-    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `-> ${strVal(state.roundupDay)}\n`,
-    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `-> ${strVal(state.roundupHour)}\n`,
-    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `-> ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}\n`,
+  const tier1Items = [
+    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
+    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
+    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `-> ${strVal(state.adminRoleName)}`,
+    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
+    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `-> ${fieldVal(state.restrictedMediaChannelId)}`,
   ];
-  const panelBody = items.join('\n\n');
+  const groundRulesLabels = parseGroundRulesText(state.groundRulesText).map((r) => r.label);
+  const groundRulesDisplay = groundRulesLabels.length
+    ? `✅ ${groundRulesLabels.join(', ')}`
+    : `❌ ${cfg.txtGroundRulesNoneConfigured}`;
 
-  const embed = new EmbedBuilder()
-    .setTitle(cfg.txtSetupPanelTitle)
-    .setColor(0x5865f2)
-    .setDescription(
-      isSetupDirty(state)
-        ? `**${cfg.lblUnsavedChangesTitle}**\n${replaceTemplateVariables(cfg.txtUnsavedChangesBody, { save_label: cfg.btnSetupSave })}\n\n${panelBody}`
-        : panelBody
-    );
+  const tier2Items = [
+    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `-> ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}`,
+    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `-> ${strVal(state.roundupDay)}`,
+    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `-> ${strVal(state.roundupHour)}`,
+    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `-> ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`,
+    `**${cfg.txtSetupModalTitleGroundRules}**\n` + desc('txtSetupEmbedDescGroundRules') + `-> ${groundRulesDisplay}`,
+    `**${cfg.lblSetupTeenOrLowerOnly}**\n` + desc('txtSetupEmbedDescTeenOrLowerOnly') + `-> ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`,
+  ];
 
-  if (isSetupDirty(state)) {
-    embed.setFooter({ text: cfg.lblUnsavedChangesTitle });
+  const container = new ContainerBuilder().setAccentColor(0x5865f2);
+
+  if (prependMessage) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(prependMessage));
+    container.addSeparatorComponents(new SeparatorBuilder());
   }
-  // Dirty-state-only warning — same pattern/reasoning as story/manage.js's Part 1c indicator
 
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${cfg.txtSetupPanelTitle}`));
 
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
-  );
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_setup_roundup').setLabel(cfg.btnSetupRoundup).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('storyadmin_setup_toggle_changelog')
-      .setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`)
-      .setStyle(ButtonStyle.Secondary),
-  );
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('storyadmin_setup_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary),
-  );
+  // Dirty-state-only warning — same pattern/reasoning as story/manage.js's Part 1c indicator.
+  if (isSetupDirty(state)) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${cfg.lblUnsavedChangesTitle}**\n${replaceTemplateVariables(cfg.txtUnsavedChangesBody, { save_label: cfg.btnSetupSave })}`
+    ));
+  }
+  container.addSeparatorComponents(new SeparatorBuilder());
 
-  return { embeds: [embed], components: [row1, row2, row3] };
+  if (tier1Visible) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(tier1Items.join('\n\n')));
+    if (interactive) {
+      container.addActionRowComponents(new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
+        new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
+      ));
+    }
+    container.addSeparatorComponents(new SeparatorBuilder());
+  }
+
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(tier2Items.join('\n\n')));
+
+  if (interactive) {
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storyadmin_setup_roundup').setLabel(cfg.btnSetupRoundup).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('storyadmin_setup_toggle_changelog')
+        .setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`)
+        .setStyle(ButtonStyle.Secondary),
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storyadmin_setup_groundrules').setLabel(cfg.btnSetupGroundRules).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('storyadmin_setup_toggle_teenorlower')
+        .setLabel(`${cfg.lblSetupTeenOrLowerOnly}: ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`)
+        .setStyle(ButtonStyle.Secondary),
+    ));
+    container.addSeparatorComponents(new SeparatorBuilder());
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('storyadmin_setup_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary),
+    ));
+  }
+
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
+}
+
+// Tier-1 fields (escalation-capable: feed/media/restricted channels, admin role name — editing
+// cfgAdminRoleName lets whoever holds it repoint the admin role at one they control, so it stays
+// Manage Server only) are gated to Manage Server. Tier-2 (roundup, changelog, and — per
+// docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2 — Ground Rules and the Teen or Lower
+// Only toggle) is reachable by Manage Server OR the story admin role (checkIsAdmin). Hiding a
+// tier from the rendered panel is presentation, not enforcement — every handler that actually
+// writes a tier-1 field or opens a tier-1 modal re-checks this live against the interaction that
+// triggered it, not a cached flag on state, since a tier-1 customId can be replayed by anyone
+// who has seen the panel (docs/TODO.md, "Split /storyadmin setup into two permission tiers").
+export function hasTier1Access(interaction) {
+  return interaction.member.permissions.has('ManageGuild');
 }
 
 export async function handleSetup(connection, interaction) {
   log(`storyadmin setup: handleSetup started`, { show: false, guildName: interaction.guild.name });
-  if (!interaction.member.permissions.has('ManageGuild')) {
-    log(`storyadmin setup: handleSetup error, user does not have Manage Guild`, { show: false, guildName: interaction.guild.name });
+  const guildId = interaction.guild.id;
+  const hasManageGuild = hasTier1Access(interaction);
+  // `handleSetup`'s early return used to be a flat refusal for anyone without Manage Server — it
+  // now renders the tier-2 panel instead, for any story admin (checkIsAdmin: Administrator, or
+  // holding cfgAdminRoleName) who isn't also a Manage Server holder.
+  const isStoryAdmin = hasManageGuild || await checkIsAdmin(connection, interaction, guildId);
+  if (!isStoryAdmin) {
+    log(`storyadmin setup: handleSetup error, user has neither Manage Guild nor the story admin role`, { show: false, guildName: interaction.guild.name });
     return await interaction.reply({
-      content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+      content: await getConfigValue(connection, 'txtSetupNoPermission', guildId),
       flags: MessageFlags.Ephemeral
     });
   }
 
-  const guildId = interaction.guild.id;
   const isOwner = interaction.user.id === interaction.guild.ownerId;
-  await logGuildEvent(connection, guildId, 'setup_opened', { isOwner });
+  await logGuildEvent(connection, guildId, 'setup_opened', { isOwner, hasManageGuild });
   const cfg = await getConfigValue(connection, [
     'txtSetupPanelTitle',
     'txtSetupModalTitleFeed', 'txtSetupModalTitleMedia', 'txtSetupModalTitleRole',
@@ -107,6 +188,16 @@ export async function handleSetup(connection, interaction) {
     'txtSetupAgeRestrictNote', 'txtSetupNoMediaNote', 'txtSetupNoRoleNote', 'txtSetupRoundupDisabledNote',
     'txtSetupSupportInvite', 'cfgHubInviteUrl', 'lblSetupChangelog',
     'lblSetupModalFieldRole', 'txtSetupModalPlaceholderRole',
+    'btnSetupGroundRules', 'txtSetupModalTitleGroundRules', 'txtSetupEmbedDescGroundRules',
+    'txtSetupGroundRulesModalDesc', 'txtGroundRulesNoneConfigured',
+    'txtGroundRulesDefaultVocabulary',
+    'txtGroundRulesErrCount', 'txtGroundRulesErrRule', 'txtGroundRulesReasonLabelMissing',
+    'txtGroundRulesReasonLabelTooLong', 'txtGroundRulesReasonDescTooLong',
+    'txtGroundRulesConfirmTitle', 'txtGroundRulesConfirmBody',
+    'lblGroundRulesAdded', 'lblGroundRulesRemoved', 'lblGroundRulesRenamed',
+    'txtGroundRulesRemovedUsageNote', 'txtGroundRulesRenamedNote',
+    'btnGroundRulesConfirm', 'btnGroundRulesCancel',
+    'lblSetupTeenOrLowerOnly', 'txtSetupEmbedDescTeenOrLowerOnly',
   ], guildId);
 
   // Load current guild-specific config values without falling back to guild_id=1
@@ -116,7 +207,7 @@ export async function handleSetup(connection, interaction) {
        'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
        'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
        'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
-       'cfgChangelogEnabled'
+       'cfgChangelogEnabled', 'cfgGroundRules', 'cfgTeenOrLowerOnly'
      )`,
     [guildId]
   );
@@ -133,9 +224,16 @@ export async function handleSetup(connection, interaction) {
     roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '1',
     roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '9',
     changelogEnabled:         guildCfg.cfgChangelogEnabled !== '0',
+    teenOrLowerOnly:          guildCfg.cfgTeenOrLowerOnly === '1',
+    groundRulesText:          guildCfg.cfgGroundRules || '',
+    hasManageGuild,
     originalInteraction: interaction,
     cfg,
   };
+  // Baseline for diffGroundRules() on the next authoring-flow submit — see
+  // commands/_storyadminSetupGroundRules.js. Not part of STAGED_FIELDS/originalFields below;
+  // Ground Rules writes independently of this panel's Save Settings.
+  state.originalGroundRulesRules = parseGroundRulesText(state.groundRulesText);
   // Snapshot for isSetupDirty — current === original for every STAGED_FIELDS entry right now,
   // by construction, since state was just built from the DB above.
   state.originalFields = Object.fromEntries(STAGED_FIELDS.map((key) => [key, state[key]]));
@@ -146,114 +244,11 @@ export async function handleSetup(connection, interaction) {
   // straight here would otherwise never see the welcome or its prerequisites list — and this
   // is the moment they most need it, since creating a channel or a role means leaving the panel.
   const setupMessage = await getSetupRequiredMessage(connection, interaction);
-  const panel = buildSetupPanel(state, cfg);
+  const panel = buildSetupPanel(state, cfg, { prependMessage: setupMessage, tier1Visible: hasManageGuild });
   await interaction.reply({
-    ...(setupMessage ? { content: setupMessage } : {}),
     ...panel,
-    flags: MessageFlags.Ephemeral,
+    flags: panel.flags | MessageFlags.Ephemeral,
   });
-}
-
-function buildSetupFieldModal(customId, title, fieldLabel, placeholder, currentValue) {
-  // Guard against key-name fallbacks reaching Discord's string validators
-  log(`storyadmin setup: buildSetupFieldModal`, { show: false, guildName: 'system' });
-  const safeTitle = (title && !title.startsWith('txt')) ? title : 'Setup';
-  const safeLabel = (fieldLabel && !fieldLabel.startsWith('lbl')) ? fieldLabel : 'Value';
-  const safePlaceholder = (placeholder && !placeholder.startsWith('txt') && placeholder.length <= 100) ? placeholder : '';
-  const modal = new ModalBuilder().setCustomId(customId).setTitle(safeTitle);
-  const textInput = new TextInputBuilder()
-    .setCustomId('value')
-    .setLabel(safeLabel)
-    .setStyle(TextInputStyle.Short)
-    .setPlaceholder(safePlaceholder)
-    .setRequired(false);
-  if (currentValue) textInput.setValue(currentValue);
-  modal.addComponents(new ActionRowBuilder().addComponents(textInput));
-  return modal;
-}
-
-function buildChannelsModal(cfg, state) {
-  log(`storyadmin setup: buildChannelsModal`, { show: false, guildName: 'system' });
-  const modal = new ModalBuilder()
-    .setCustomId('storyadmin_setup_channels_modal')
-    .setTitle(cfg.txtSetupModalTitleChannels);
-
-  modal.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(cfg.txtSetupChannelsModalDesc)
-  );
-
-  const channelFields = [
-    { customId: 'feedChannelId',            labelKey: 'txtSetupModalTitleFeed',            required: true,  currentId: state.feedChannelId },
-    { customId: 'mediaChannelId',           labelKey: 'txtSetupModalTitleMedia',           required: false, currentId: state.mediaChannelId },
-    { customId: 'restrictedFeedChannelId',  labelKey: 'txtSetupModalTitleRestrictedFeed',  required: false, currentId: state.restrictedFeedChannelId },
-    { customId: 'restrictedMediaChannelId', labelKey: 'txtSetupModalTitleRestrictedMedia', required: false, currentId: state.restrictedMediaChannelId },
-  ];
-
-  for (const { customId, labelKey, required, currentId } of channelFields) {
-    const select = new ChannelSelectMenuBuilder()
-      .setCustomId(customId)
-      .addChannelTypes(ChannelType.GuildText)
-      .setMaxValues(1)
-      .setRequired(required);
-    if (!required) select.setMinValues(0);
-    if (currentId) select.setDefaultChannels([currentId]);
-    modal.addLabelComponents(
-      new LabelBuilder().setLabel(cfg[labelKey]).setChannelSelectMenuComponent(select)
-    );
-  }
-
-  return modal;
-}
-
-function buildRoundupModal(cfg, state) {
-  log(`storyadmin setup: buildRoundupModal`, { show: false, guildName: 'system' });
-  const modal = new ModalBuilder()
-    .setCustomId('storyadmin_setup_roundup_modal')
-    .setTitle(cfg.txtSetupModalTitleRoundup);
-
-  modal.addTextDisplayComponents(
-    new TextDisplayBuilder().setContent(cfg.txtSetupRoundupModalDesc)
-  );
-
-  const channelSelect = new ChannelSelectMenuBuilder()
-    .setCustomId('roundupChannelId')
-    .addChannelTypes(ChannelType.GuildText)
-    .setMaxValues(1)
-    .setRequired(false)
-    .setMinValues(0);
-  if (state.roundupChannelId) channelSelect.setDefaultChannels([state.roundupChannelId]);
-  modal.addLabelComponents(
-    new LabelBuilder().setLabel(cfg.txtSetupModalTitleRoundupChannel).setChannelSelectMenuComponent(channelSelect)
-  );
-
-  const dayOptions = [0, 1, 2, 3, 4, 5, 6].map(d => ({
-    label: cfg[`txtRoundupDay${d}`],
-    value: String(d),
-    default: state.roundupDay === String(d),
-  }));
-  modal.addLabelComponents(
-    new LabelBuilder().setLabel(cfg.txtSetupModalTitleRoundupDay).setStringSelectMenuComponent(
-      new StringSelectMenuBuilder().setCustomId('roundupDay').addOptions(dayOptions)
-    )
-  );
-
-  const hourLabel = (h) => {
-    if (h === 0)  return '12:00 AM (Midnight) UTC';
-    if (h === 12) return '12:00 PM (Noon) UTC';
-    return h < 12 ? `${h}:00 AM UTC` : `${h - 12}:00 PM UTC`;
-  };
-  const hourOptions = Array.from({ length: 24 }, (_, h) => ({
-    label: hourLabel(h),
-    value: String(h),
-    default: state.roundupHour === String(h),
-  }));
-  modal.addLabelComponents(
-    new LabelBuilder().setLabel(cfg.txtSetupModalTitleRoundupHour).setStringSelectMenuComponent(
-      new StringSelectMenuBuilder().setCustomId('roundupHour').addOptions(hourOptions)
-    )
-  );
-
-  return modal;
 }
 
 export async function handleSetupButton(connection, interaction) {
@@ -270,10 +265,25 @@ export async function handleSetupButton(connection, interaction) {
   const id = interaction.customId;
   log(`handleSetupButton: ${id} by ${interaction.user.tag} in guild ${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
+  // Tier-1 customIds only render on the tier-1 panel, but that's presentation, not enforcement —
+  // a story admin who saw the tier-1 panel once (e.g. as a former Manage Server holder, or by
+  // inspecting the message) could replay these. Re-check live rather than trust state.
   if (id === 'storyadmin_setup_channels') {
+    if (!hasTier1Access(interaction)) {
+      return await interaction.reply({
+        content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+        flags: MessageFlags.Ephemeral
+      });
+    }
     return await interaction.showModal(buildChannelsModal(cfg, state));
   }
   if (id === 'storyadmin_setup_role') {
+    if (!hasTier1Access(interaction)) {
+      return await interaction.reply({
+        content: await getConfigValue(connection, 'txtSetupNoPermission', interaction.guild.id),
+        flags: MessageFlags.Ephemeral
+      });
+    }
     return await interaction.showModal(buildSetupFieldModal(
       'storyadmin_setup_role_modal', cfg.txtSetupModalTitleRole,
       cfg.lblSetupModalFieldRole, cfg.txtSetupModalPlaceholderRole, state.adminRoleName
@@ -285,344 +295,27 @@ export async function handleSetupButton(connection, interaction) {
   if (id === 'storyadmin_setup_toggle_changelog') {
     state.changelogEnabled = !state.changelogEnabled;
     await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg));
+    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction) }));
   }
+  if (id === 'storyadmin_setup_toggle_teenorlower') {
+    state.teenOrLowerOnly = !state.teenOrLowerOnly;
+    await interaction.deferUpdate();
+    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction) }));
+  }
+  if (id === 'storyadmin_setup_groundrules') {
+    return await interaction.showModal(buildGroundRulesModal(cfg, state));
+  }
+  if (id === 'storyadmin_setup_groundrules_confirm') return await handleSetupGroundRulesConfirm(connection, interaction);
+  if (id === 'storyadmin_setup_groundrules_cancel') return await handleSetupGroundRulesCancel(connection, interaction);
   if (id === 'storyadmin_setup_save') return await handleSetupSave(connection, interaction);
   if (id === 'storyadmin_setup_cancel') return await handleSetupCancel(connection, interaction);
-}
-
-export async function handleSetupChannelsModal(connection, interaction) {
-  const adminId = interaction.user.id;
-  const state = pendingSetupData.get(adminId);
-  if (!state) {
-    return await interaction.reply({
-      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-  }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  const readChannelId = (customId) => {
-    try {
-      const field = interaction.fields.getField(customId);
-      return field?.channels?.first()?.id ?? field?.values?.[0] ?? '';
-    } catch { return ''; }
-  };
-
-  state.feedChannelId            = readChannelId('feedChannelId');
-  state.mediaChannelId           = readChannelId('mediaChannelId');
-  state.restrictedFeedChannelId  = readChannelId('restrictedFeedChannelId');
-  state.restrictedMediaChannelId = readChannelId('restrictedMediaChannelId');
-
-  log(`handleSetupChannelsModal: feed=${state.feedChannelId} media=${state.mediaChannelId} restrictedFeed=${state.restrictedFeedChannelId} restrictedMedia=${state.restrictedMediaChannelId} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
-
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
-  await interaction.deleteReply();
-}
-
-export async function handleSetupRoundupModal(connection, interaction) {
-  const adminId = interaction.user.id;
-  const state = pendingSetupData.get(adminId);
-  if (!state) {
-    return await interaction.reply({
-      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-  }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-
-  try {
-    const field = interaction.fields.getField('roundupChannelId');
-    state.roundupChannelId = field?.channels?.first()?.id ?? field?.values?.[0] ?? '';
-  } catch { state.roundupChannelId = ''; }
-
-  try {
-    const dayValues = interaction.fields.getStringSelectValues('roundupDay');
-    if (dayValues?.[0] !== undefined) state.roundupDay = dayValues[0];
-  } catch (err) {
-    log(`handleSetupRoundupModal: day read failed: ${err}`, { show: true, guildName: interaction.guild.name });
-  }
-
-  try {
-    const hourValues = interaction.fields.getStringSelectValues('roundupHour');
-    if (hourValues?.[0] !== undefined) state.roundupHour = hourValues[0];
-  } catch (err) {
-    log(`handleSetupRoundupModal: hour read failed: ${err}`, { show: true, guildName: interaction.guild.name });
-  }
-
-  log(`handleSetupRoundupModal: channel=${state.roundupChannelId} day=${state.roundupDay} hour=${state.roundupHour} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
-
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
-  await interaction.deleteReply();
-}
-
-export async function handleSetupRoleModal(connection, interaction) {
-  const adminId = interaction.user.id;
-  const state = pendingSetupData.get(adminId);
-  if (!state) {
-    return await interaction.reply({
-      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-  }
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  state.adminRoleName = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 100);
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg));
-  await interaction.deleteReply();
-}
-
-export async function handleSetupSave(connection, interaction) {
-  const state = pendingSetupData.get(interaction.user.id);
-  if (!state) {
-    return await interaction.reply({
-      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
-      flags: MessageFlags.Ephemeral
-    });
-  }
-
-  await interaction.deferUpdate();
-  const { guildId } = state;
-
-  const [[{ priorSetupCount }]] = await connection.execute(
-    `SELECT COUNT(*) as priorSetupCount FROM config WHERE config_key = 'cfgStoryFeedChannelId' AND guild_id = ?`,
-    [guildId]
-  );
-  const isFirstSetup = Number(priorSetupCount) === 0;
-  log(`handleSetupSave: isFirstSetup=${isFirstSetup} for guild ${guildId}`, { show: false, guildName: interaction.guild.name });
-
-  const dayNames = await getConfigValue(connection, [
-    'txtRoundupDay0', 'txtRoundupDay1', 'txtRoundupDay2', 'txtRoundupDay3',
-    'txtRoundupDay4', 'txtRoundupDay5', 'txtRoundupDay6'
-  ], guildId);
-
-  // Re-validate all set channel IDs
-  const feedChannel = state.feedChannelId
-    ? await interaction.guild.channels.fetch(state.feedChannelId).catch(() => null)
-    : null;
-  if (!feedChannel) {
-    return await interaction.editReply({
-      ...buildSetupPanel(state, state.cfg),
-      content: await getConfigValue(connection, 'txtSetupFeedChannelInvalid', guildId)
-    });
-  }
-
-  let mediaChannel = null;
-  if (state.mediaChannelId) {
-    mediaChannel = await interaction.guild.channels.fetch(state.mediaChannelId).catch(() => null);
-    if (!mediaChannel) {
-      return await interaction.editReply({
-        ...buildSetupPanel(state, state.cfg),
-        content: await getConfigValue(connection, 'txtSetupMediaChannelInvalid', guildId)
-      });
-    }
-  }
-
-  let restrictedFeedChannel = null;
-  if (state.restrictedFeedChannelId) {
-    restrictedFeedChannel = await interaction.guild.channels.fetch(state.restrictedFeedChannelId).catch(() => null);
-    if (!restrictedFeedChannel) {
-      return await interaction.editReply({
-        ...buildSetupPanel(state, state.cfg),
-        content: await getConfigValue(connection, 'txtSetupRestrictedChannelInvalid', guildId)
-      });
-    }
-  }
-
-  let restrictedMediaChannel = null;
-  if (state.restrictedMediaChannelId) {
-    restrictedMediaChannel = await interaction.guild.channels.fetch(state.restrictedMediaChannelId).catch(() => null);
-    if (!restrictedMediaChannel) {
-      return await interaction.editReply({
-        ...buildSetupPanel(state, state.cfg),
-        content: await getConfigValue(connection, 'txtSetupRestrictedMediaInvalid', guildId)
-      });
-    }
-  }
-
-  // Write config values
-  const upsert = (key, value) => connection.execute(
-    `INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES (?, ?, 'en', ?)
-     ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
-    [key, value, guildId]
-  );
-
-  await upsert('cfgStoryFeedChannelId', state.feedChannelId);
-  await upsert('cfgMediaChannelId', state.mediaChannelId || '');
-  await upsert('cfgRestrictedFeedChannelId', state.restrictedFeedChannelId || '');
-  await upsert('cfgRestrictedMediaChannelId', state.restrictedMediaChannelId || '');
-  await upsert('cfgAdminRoleName', state.adminRoleName || '');
-
-  const isOwner = interaction.user.id === interaction.guild.ownerId;
-  await logGuildEvent(connection, guildId, 'setup_saved', { isFirstSetup, isOwner });
-
-  // Roundup config
-  if (state.roundupChannelId) {
-    await upsert('cfgWeeklyRoundupChannelId', state.roundupChannelId);
-    await upsert('cfgWeeklyRoundupEnabled', '1');
-    await upsert('cfgWeeklyRoundupDay',  state.roundupDay  || '1');
-    await upsert('cfgWeeklyRoundupHour', state.roundupHour || '9');
-    await cancelPendingRoundupJobs(connection, guildId);
-    await scheduleNextRoundup(connection, guildId);
-  } else {
-    await upsert('cfgWeeklyRoundupEnabled', '0');
-    await cancelPendingRoundupJobs(connection, guildId);
-  }
-
-  // Changelog / hub announcement opt-out
-  await upsert('cfgChangelogEnabled', state.changelogEnabled ? '1' : '0');
-
-  const botMember = interaction.guild.members.me;
-  // Use the bot's managed integration role for permission overwrites — role-level overrides
-  // work on private channels where user/member-level overrides fail due to Discord's restriction
-  // that member overrides can only grant permissions already in the caller's effective channel perms.
-  const botRole = botMember?.roles.cache.find(r => r.managed) ?? null;
-
-  // Attempt to set bot permissions on the feed channel automatically.
-  // Note: As of January 12, 2026, PinMessages is a separate permission from ManageMessages.
-  // This may silently fail on private channels — the effective permission check below is the
-  // authoritative source of truth, so we don't surface whether this attempt succeeded.
-  if (botRole) {
-    await feedChannel.permissionOverwrites.edit(botRole, {
-      ViewChannel: true,
-      SendMessages: true,
-      EmbedLinks: true,
-      AttachFiles: true,
-      ReadMessageHistory: true,
-      ManageMessages: true,
-      PinMessages: true,
-      CreatePublicThreads: true,
-      CreatePrivateThreads: true,
-      ManageThreads: true,
-    }).catch(() => {});
-  }
-
-  // Attempt to set bot permissions on the media channel automatically.
-  if (mediaChannel && botRole) {
-    await mediaChannel.permissionOverwrites.edit(botRole, {
-      ViewChannel: true,
-      SendMessages: true,
-      EmbedLinks: true,
-      AttachFiles: true,
-    }).catch(() => {});
-  }
-
-  // Grant admin role Manage Threads on the story feed channel so they can
-  // see private turn threads without being explicitly added to each one.
-  let threadPermissionNote = '';
-  if (state.adminRoleName) {
-    const adminRole = interaction.guild.roles.cache.find(r => r.name === state.adminRoleName)
-      ?? await interaction.guild.roles.fetch().then(roles => roles.find(r => r.name === state.adminRoleName)).catch(() => null);
-    if (adminRole) {
-      await feedChannel.permissionOverwrites.edit(adminRole, {
-        ViewChannel: true,
-        ManageThreads: true
-      }).catch(() => {});
-      threadPermissionNote = ` *(Manage Threads granted on feed channel)*`;
-    } else {
-      // adminRoleName is free text, matched by exact string (checkIsAdmin does the same) — a
-      // typo or case mismatch silently fails to grant anything, with no error shown to the
-      // admin. Not fixed here (that's a separate field-type change), but logged so a future
-      // "admin role isn't working" report is traceable instead of a guess.
-      log(`handleSetupSave: adminRoleName "${state.adminRoleName}" did not match any role in guild ${guildId}`, { show: true, guildName: interaction.guild.name });
-    }
-  }
-
-  // Check effective bot permissions and warn about any gaps.
-  // Re-fetch channels so permission overwrite changes above are reflected.
-  const feedChannelFresh = await interaction.guild.channels.fetch(state.feedChannelId).catch(() => feedChannel);
-  const mediaChannelFresh = mediaChannel
-    ? await interaction.guild.channels.fetch(state.mediaChannelId).catch(() => mediaChannel)
-    : null;
-
-  const permWarnings = [];
-  if (botMember) {
-    const feedPerms = feedChannelFresh.permissionsFor(botMember);
-    const feedRequired = [
-      ['ViewChannel', 'View Channel'],
-      ['SendMessages', 'Send Messages'],
-      ['EmbedLinks', 'Embed Links'],
-      ['AttachFiles', 'Attach Files'],
-      ['ReadMessageHistory', 'Read Message History'],
-      ['ManageMessages', 'Manage Messages'],
-      ['PinMessages', 'Pin Messages'],
-      ['CreatePublicThreads', 'Create Public Threads'],
-      ['CreatePrivateThreads', 'Create Private Threads'],
-      ['ManageThreads', 'Manage Threads'],
-    ];
-    const missingFeed = feedRequired.filter(([flag]) => !feedPerms.has(flag)).map(([, label]) => label);
-    if (missingFeed.length) {
-      permWarnings.push(`⚠️ Bot is missing permissions on <#${state.feedChannelId}>: **${missingFeed.join(', ')}**`);
-    }
-
-    if (mediaChannelFresh) {
-      const mediaPerms = mediaChannelFresh.permissionsFor(botMember);
-      const mediaRequired = [
-        ['ViewChannel', 'View Channel'],
-        ['SendMessages', 'Send Messages'],
-        ['EmbedLinks', 'Embed Links'],
-        ['AttachFiles', 'Attach Files'],
-      ];
-      const missingMedia = mediaRequired.filter(([flag]) => !mediaPerms.has(flag)).map(([, label]) => label);
-      if (missingMedia.length) {
-        permWarnings.push(`⚠️ Bot is missing permissions on <#${state.mediaChannelId}>: **${missingMedia.join(', ')}**`);
-      }
-    }
-  }
-
-  // Logged so a future "setup finished but something still looked broken" report can check what
-  // the admin actually saw, instead of guessing from downstream behavior (e.g. an uninstall).
-  // The reply content itself isn't captured anywhere else.
-  if (permWarnings.length) {
-    log(`handleSetupSave: guild ${guildId} saved with permission warnings: ${permWarnings.map(w => w.replace(/\*\*|⚠️ /g, '')).join(' | ')}`, { show: true, guildName: interaction.guild.name });
-  }
-
-  const feedPermsOk = !permWarnings.some(w => w.includes(`<#${state.feedChannelId}>`));
-  const mediaPermsOk = !state.mediaChannelId || !permWarnings.some(w => w.includes(`<#${state.mediaChannelId}>`));
-
-  const saved = [`${feedPermsOk ? '✅' : '⚠️'} Story feed channel: <#${state.feedChannelId}>`];
-  if (state.mediaChannelId)           saved.push(`${mediaPermsOk ? '✅' : '⚠️'} Media channel: <#${state.mediaChannelId}>`);
-  if (state.restrictedFeedChannelId) {
-    const rfNote = restrictedFeedChannel?.nsfw ? '' : ' ' + state.cfg.txtSetupAgeRestrictNote;
-    saved.push(`✅ Restricted feed channel: <#${state.restrictedFeedChannelId}>${rfNote}`);
-  }
-  if (state.restrictedMediaChannelId) saved.push(`✅ Restricted media channel: <#${state.restrictedMediaChannelId}>`);
-  if (state.adminRoleName)            saved.push(`✅ Admin role: **${state.adminRoleName}**${threadPermissionNote}`);
-  if (!state.mediaChannelId)          saved.push(state.cfg.txtSetupNoMediaNote);
-  if (!state.adminRoleName)           saved.push(state.cfg.txtSetupNoRoleNote);
-  if (state.roundupChannelId)         saved.push(`✅ Weekly roundup: <#${state.roundupChannelId}>, ${dayNames[`txtRoundupDay${state.roundupDay ?? 1}`]}s at ${state.roundupHour ?? 9}:00 UTC`);
-  else                                saved.push(state.cfg.txtSetupRoundupDisabledNote);
-  saved.push(`${state.changelogEnabled ? '✅' : '🔕'} Hub announcements: ${state.changelogEnabled ? state.cfg.txtOn : state.cfg.txtOff}`);
-  if (permWarnings.length) {
-    const botRoleName = botRole?.name ?? botMember?.displayName ?? 'the bot role';
-    const fixMsg = replaceTemplateVariables(
-      await getConfigValue(connection, 'txtSetupBotPermsFix', guildId),
-      { feed_channel: `<#${state.feedChannelId}>`, bot_role_name: botRoleName }
-    );
-    saved.push('', ...permWarnings, '', fixMsg);
-  }
-
-  saved.push('', replaceTemplateVariables(state.cfg.txtSetupSupportInvite, { hubInviteUrl: state.cfg.cfgHubInviteUrl }));
-
-  pendingSetupData.delete(interaction.user.id);
-  log(`handleSetupSave: complete for guild ${guildId} by ${interaction.user.tag}`, { show: true, guildName: interaction.guild.name });
-
-  if (isFirstSetup) {
-    await connection.execute(
-      `INSERT IGNORE INTO config (config_key, config_value, language_code, guild_id) VALUES ('cfgGuildRegisteredAt', ?, 'en', ?)`,
-      [new Date().toISOString(), guildId]
-    );
-    log(`🆕 New server setup: **${interaction.guild.name}** (${guildId}) by ${interaction.user.tag}`, { show: true, hub: true });
-  }
-
-  await interaction.editReply({ content: saved.join('\n'), embeds: [], components: [] });
 }
 
 export async function handleSetupCancel(connection, interaction) {
   pendingSetupData.delete(interaction.user.id);
   await interaction.deferUpdate();
-  await interaction.editReply({
-    content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
-    embeds: [],
-    components: []
-  });
+  // finalMessage() (story/_metadataModals.js) wraps plain text as a one-block V2 Container —
+  // {content, embeds: [], components: []} is the pre-V2 shape and is no longer valid once this
+  // message carries IsComponentsV2 (see buildSetupPanel's doc comment).
+  await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id)));
 }

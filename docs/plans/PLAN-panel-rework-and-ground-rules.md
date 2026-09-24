@@ -581,7 +581,11 @@ in `commands/_storyadminSetup.js`.
 - **Validation — reject the whole submission on any error, no partial saves:**
   - More than 10 blocks
   - Any label missing or >40 chars
-  - Any description >150 chars
+  - Any description >100 chars — this is Discord's own platform limit for a checkbox-group
+    option description (`checkboxGroupOptionPredicate` in the installed
+    `@discordjs/builders`: `description: s.string().lengthLessThanOrEqual(100).optional()`), not
+    a house rule like the 40-char label cap is. A validator built to 150 would accept text
+    Discord then refuses to render at the point each rule becomes a checkbox option.
   - Error message must name the specific offending rule (by its label or position), e.g.
     *"Rule 3 ('Keep It Clean and Don't Raise the Rating!!!') — label exceeds 40 characters."*
 - **On validation failure:** re-show the paragraph field pre-filled with exactly what the admin
@@ -737,7 +741,7 @@ need to trim.
 
 ---
 
-## Suggested build order
+## Suggested build order — superseded 2026-09-24, see below
 
 1. ✅ Warnings → Checkbox Group conversion (small, proves the pattern, no schema changes) — done 2026-08-21
 2. ✅ Panel display rework (Settings/Metadata split, Components V2) — done 2026-08-21, unblocks everything else
@@ -749,6 +753,34 @@ need to trim.
 8. Turn thread welcome message → embed conversion (bundle with scene-break/translation
    instructions rework)
 9. Ground Rules: change-notification post to story thread on save
+
+**Superseded 2026-09-24.** This list put Ground Rules (steps 4-9 above) directly after Part 1,
+and never anticipated the `/storyadmin setup` panel itself changing shape underneath it. It
+wasn't stale by accident — the tier-split design (`docs/TODO.md`, "Split `/storyadmin setup`
+into two permission tiers") was raised 2026-09-22, after this list was written, and the two
+were never reconciled: the tier split lived only in TODO.md and Ground Rules lived only in this
+plan, connected by nothing but a one-line cross-reference in each direction. That gap caused two
+separate rediscoveries of the same missing connection. The real order, reasoning recorded here so
+it doesn't happen a third time:
+
+1. **Split `handleSetupSave` out of `commands/_storyadminSetup.js`.** The file is over the
+   500-line standard on its own, before either of the other two changes below add to it — do
+   this first so there's room for what follows instead of splitting under pressure later.
+2. **Convert the setup panel to Components V2.** This rewrites the panel surface — `buildSetupPanel()`
+   becomes a `ContainerBuilder` instead of an `EmbedBuilder` — so it has to happen before anything
+   else is built onto that surface, not after.
+3. **Split the panel into two permission tiers** (the TODO.md design: same command, one panel
+   shown only to Manage Server holders, the other reachable by any story admin).
+4. **Ground Rules**, built onto the tier-2 panel. Ground Rules is a tier-2 setting by its own
+   analysis in TODO.md's split design — server vocabulary, no privilege-escalation path,
+   reasonable for a story admin to edit. Building it before the split exists means it lands on
+   the Manage-Server-only panel by default (there's only one panel to put it on) and has to be
+   moved once the split finally happens — which is exactly the redundant work this reordering
+   avoids.
+5. **The Teen or Lower Only toggle**, same tier-2 panel, same reasoning as Ground Rules.
+6. **Restore the rating-change confirmation flow**, a regression from `eefc881` (2026-07-01)
+   unrelated to any of the above but needed by step 5 (the Teen-or-Lower reset also needs to warn
+   before an M/E story's metadata edit resets it to NR and moves its thread).
 
 ---
 

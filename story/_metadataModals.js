@@ -1,6 +1,7 @@
 import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, formatDuration, trimTrailingEmoji, replaceTemplateVariables } from '../utilities.js';
-import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions } from './_metadata.js';
+import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions, isRestricted } from './_metadata.js';
+import { slugifyGroundRuleLabel, resolveGroundRuleLabels } from './_groundRules.js';
 import { STORY_MODE } from '../constants.js';
 
 // Wraps a plain text message (optionally with trailing components, e.g. a confirm row or an
@@ -50,7 +51,9 @@ export async function getMetaCfg(connection, guildId) {
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
     'btnSaveSettings', 'btnCreateStory', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtPanelTabHelper', 'txtStoryManagementLabel',
     'lblUnsavedChangesTitle', 'txtUnsavedChangesBody',
-    'optWarnAllClear',
+    'optWarnAllClear', 'lblMetaGroundRules', 'txtGroundRulesNoneConfigured',
+    'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
+    'btnRatingChangeConfirm', 'btnRatingChangeRevert', 'txtMetaApplied',
     ...ratingCodes.map(ratingLabelKey),
     ...dynamicOptions,
     ...warningOptions,
@@ -97,6 +100,11 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
         .map(k => cfg[k] ?? k).join(', ')
     : cfg.optWarnAllClear ?? cfg.txtNone;
   const dynamicDisplay = state.dynamic ? (cfg[state.dynamic] ?? state.dynamic) : cfg.txtNotSet;
+  const groundRulesLabels = resolveGroundRuleLabels(
+    Array.isArray(state.groundRules) ? state.groundRules.join(',') : (state.groundRules ?? ''),
+    state.groundRulesVocabulary ?? []
+  );
+  const groundRulesDisplay = groundRulesLabels.length ? groundRulesLabels.join(', ') : cfg.txtGroundRulesNoneConfigured;
 
   const titleDisplay = state.storyTitle || cfg.txtStoryTitlePrompt;
   const summaryDisplay = state.summary || cfg.txtNotSet;
@@ -201,7 +209,8 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
       `${cfg.txtStoryAddSectionBreakMeta}\n` +
       `**${trimTrailingEmoji(cfg.lblMetaRating)}:** ${ratingLabel}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaDynamic)}:** ${dynamicDisplay}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaWarnings)}:** ${warningsDisplay}`
+      `**${trimTrailingEmoji(cfg.lblMetaWarnings)}:** ${warningsDisplay}\n\n` +
+      `**${trimTrailingEmoji(cfg.lblMetaGroundRules)}:** ${groundRulesDisplay}`
     ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`${ns}_open_metadata`).setLabel(cfg.btnAddMetadata).setStyle(ButtonStyle.Primary)
@@ -241,8 +250,18 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
 }
 
 /**
- * Builds the Story Metadata modal (Dynamic, Rating, Warnings selects).
+ * Builds the Story Metadata modal (Dynamic, Rating, Warnings, Ground Rules).
  * namespace: 'story_add' or 'story_manage'
+ * state.teenOrLowerOnly: when true, the rating select offers only the ratings below the
+ *   restricted-content barrier (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2's Teen or
+ *   Lower Only toggle) — ratingCodes itself is never filtered (story/list.js, _myStoryList.js,
+ *   export.js, _storyStatus.js all iterate the full list for already-existing stories), only the
+ *   options offered here.
+ * state.groundRulesVocabulary: the guild's parsed Ground Rules vocabulary ([{label,
+ *   description}], from story/_groundRules.js's parseGroundRulesText) — options are built from it
+ *   dynamically rather than a hardcoded array like warningOptions/dynamicOptions, since it's
+ *   server-defined. Omitted entirely (no checkbox group) when the guild has none configured.
+ * state.groundRules: the story's current selection, as slugs (array or comma-delimited string).
  */
 export function buildMetadataModal(cfg, state, namespace) {
   const ns = namespace ?? 'story_add';
@@ -259,13 +278,14 @@ export function buildMetadataModal(cfg, state, namespace) {
       default: state.dynamic === k,
     })));
 
+  const availableRatingCodes = state.teenOrLowerOnly ? ratingCodes.filter(code => !isRestricted(code)) : ratingCodes;
   const ratingSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_rating`)
     .setPlaceholder(cfg.lblMetaRating)
     .setRequired(false)
     .setMinValues(0)
     .setMaxValues(1)
-    .addOptions(ratingCodes.map(code => ({
+    .addOptions(availableRatingCodes.map(code => ({
       label: cfg[ratingLabelKey(code)] ?? code,
       value: code,
       default: (state.rating ?? 'NR') === code,
@@ -285,6 +305,29 @@ export function buildMetadataModal(cfg, state, namespace) {
       .setDefault((Array.isArray(state.warnings) ? state.warnings : (state.warnings ?? '').split(',').map(w => w.trim())).includes(k))
     ));
 
+  const groundRulesVocabulary = state.groundRulesVocabulary ?? [];
+  let groundRulesGroup = null;
+  if (groundRulesVocabulary.length) {
+    const currentSlugs = Array.isArray(state.groundRules)
+      ? state.groundRules
+      : (state.groundRules ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+    groundRulesGroup = new CheckboxGroupBuilder()
+      .setCustomId(`${ns}_metadata_groundrules`)
+      .setRequired(false)
+      .setMinValues(0)
+      .setMaxValues(groundRulesVocabulary.length)
+      .addOptions(groundRulesVocabulary.map((rule) => {
+        const option = new CheckboxGroupOptionBuilder()
+          .setLabel(rule.label)
+          .setValue(slugifyGroundRuleLabel(rule.label))
+          .setDefault(currentSlugs.includes(slugifyGroundRuleLabel(rule.label)));
+        // CheckboxGroupOptionBuilder's description is optional and can't be an empty string —
+        // a label-only rule (no description block) must omit the call entirely.
+        if (rule.description) option.setDescription(rule.description);
+        return option;
+      }));
+  }
+
   return new ModalBuilder()
     .setCustomId(`${ns}_metadata_modal`)
     .setTitle(cfg.btnAddMetadata)
@@ -292,6 +335,7 @@ export function buildMetadataModal(cfg, state, namespace) {
       new LabelBuilder().setLabel(cfg.lblMetaDynamic).setStringSelectMenuComponent(dynamicSelect),
       new LabelBuilder().setLabel(cfg.lblMetaRating).setStringSelectMenuComponent(ratingSelect),
       new LabelBuilder().setLabel(cfg.lblMetaWarnings).setCheckboxGroupComponent(warningsGroup),
+      ...(groundRulesGroup ? [new LabelBuilder().setLabel(cfg.lblMetaGroundRules).setCheckboxGroupComponent(groundRulesGroup)] : []),
     );
 }
 
