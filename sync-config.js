@@ -52,12 +52,24 @@ export async function syncConfig(connection) {
     console.log(`${formattedDate()}: Parsed ${fileEntries.length} total entries from ${files.length} context files`);
 
     // Keys written by /storyadmin setup — vary per server, never touched by sync.
+    //
+    // This list only ever protects a key's guild_id=1 row (the one literally declared in a
+    // config_files/*.sql file) from being resynced — it can't protect a specific guild's own
+    // saved row, because that row never appears in any file at all, so the comparison loop below
+    // never sees it regardless of this list. cfgWeeklyRoundup*/cfgChangelogEnabled being in this
+    // list and still having a working guild_id=1 default only works because that default row was
+    // synced once, before they were added here — added 2026-09-24: cfgTeenOrLowerOnly and
+    // cfgGroundRules were mistakenly added to this list in the same commit that first declared
+    // their guild_id=1 default rows in config_storyadmin.sql, which meant those defaults were
+    // never actually inserted — every getConfigValue() call for a guild with no row of its own
+    // logged "Config key not found" and fell back to the literal key name. Removed; their
+    // guild_id=1 defaults need the normal sync path like everything else's.
     const setupOnlyKeys = [
       'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
       'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
       'cfgWeeklyRoundupEnabled', 'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
       'cfgGuildRegisteredAt', 'cfgChangelogEnabled', 'cfgHubAnnouncementsChannelId',
-      'cfgPrivacyPolicyMessageId', 'cfgTeenOrLowerOnly', 'cfgGroundRules',
+      'cfgPrivacyPolicyMessageId',
     ];
     const placeholders = setupOnlyKeys.map(() => '?').join(',');
     const [dbRows] = await connection.execute(

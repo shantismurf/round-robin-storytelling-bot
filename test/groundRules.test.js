@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseGroundRulesText, formatGroundRulesText, validateGroundRules,
   slugifyGroundRuleLabel, diffGroundRules, isPureAddition, resolveGroundRuleLabels,
+  effectiveGroundRulesText,
   GROUND_RULES_MAX_RULES, GROUND_RULES_LABEL_MAX, GROUND_RULES_DESC_MAX,
 } from '../story/_groundRules.js';
 
@@ -179,6 +180,23 @@ describe('approved default vocabulary text', () => {
       assert.ok(rule.description.length <= GROUND_RULES_DESC_MAX, `"${rule.label}"'s description (${rule.description.length}) exceeds ${GROUND_RULES_DESC_MAX}`);
     }
     assert.equal(validateGroundRules(rules, cfg).valid, true);
+  });
+});
+
+describe('effectiveGroundRulesText', () => {
+  test('an unconfigured guild (empty/null stored text) runs the default vocabulary', () => {
+    assert.equal(effectiveGroundRulesText('', 'Default Rule\nDesc'), 'Default Rule\nDesc');
+    assert.equal(effectiveGroundRulesText(null, 'Default Rule\nDesc'), 'Default Rule\nDesc');
+    assert.equal(effectiveGroundRulesText('   ', 'Default Rule\nDesc'), 'Default Rule\nDesc');
+  });
+
+  test('a guild with its own saved vocabulary (even after deleting all defaults) is never overridden', () => {
+    assert.equal(effectiveGroundRulesText('Custom Rule\nDesc', 'Default Rule\nDesc'), 'Custom Rule\nDesc');
+  });
+
+  test('no default text configured resolves to empty rather than throwing', () => {
+    assert.equal(effectiveGroundRulesText('', undefined), '');
+    assert.equal(effectiveGroundRulesText(null, null), '');
   });
 });
 

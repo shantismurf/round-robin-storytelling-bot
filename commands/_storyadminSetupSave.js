@@ -42,7 +42,7 @@ export async function handleSetupSave(connection, interaction) {
   const canEditTier1 = hasTier1Access(interaction);
 
   const reportValidationError = async (key) => {
-    await interaction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: canEditTier1 }));
+    await interaction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: canEditTier1, activeTab: state.activeSetupTab }));
     await interaction.followUp({
       content: await getConfigValue(connection, key, guildId),
       flags: MessageFlags.Ephemeral
@@ -269,6 +269,6 @@ export async function handleSetupSave(connection, interaction) {
   // live in its saved, read-only state (interactive: false — pendingSetupData is gone above, so
   // buttons would dead-end into txtActionSessionExpired) and post the detailed summary as a
   // separate ephemeral follow-up rather than overwriting the panel with it.
-  await interaction.editReply(buildSetupPanel(state, state.cfg, { interactive: false, tier1Visible: canEditTier1 }));
+  await interaction.editReply(buildSetupPanel(state, state.cfg, { interactive: false, tier1Visible: canEditTier1, activeTab: state.activeSetupTab }));
   await interaction.followUp({ content: saved.join('\n'), flags: MessageFlags.Ephemeral });
 }

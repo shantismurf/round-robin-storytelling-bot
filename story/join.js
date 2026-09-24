@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, trimTrailingEmoji, logGuildEvent } from '../utilities.js';
-import { resolveGroundRuleLabels, parseGroundRulesText } from './_groundRules.js';
+import { resolveGroundRuleLabels, parseGroundRulesText, effectiveGroundRulesText } from './_groundRules.js';
 import { StoryJoin, getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { postStoryThreadActivity } from './_turn.js';
@@ -77,7 +77,7 @@ export async function buildJoinEmbed(connection, state) {
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacy', 'lblJoinNotifications',
     'lblJoinPenName', 'txtJoinPenNameNotSet', 'btnJoinSetPenName', 'btnJoinConfirm', 'btnCancel',
-    'lblMetaGroundRules', 'cfgGroundRules',
+    'lblMetaGroundRules', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
   ], guildId);
 
   const embed = new EmbedBuilder()
@@ -90,7 +90,7 @@ export async function buildJoinEmbed(connection, state) {
     );
 
   // Read-only — writers see this before committing to join, not a field they set here.
-  const groundRulesLabels = resolveGroundRuleLabels(groundRules, parseGroundRulesText(cfg.cfgGroundRules));
+  const groundRulesLabels = resolveGroundRuleLabels(groundRules, parseGroundRulesText(effectiveGroundRulesText(cfg.cfgGroundRules, cfg.txtGroundRulesDefaultVocabulary)));
   if (groundRulesLabels.length) {
     embed.addFields({ name: trimTrailingEmoji(cfg.lblMetaGroundRules), value: groundRulesLabels.join(', '), inline: false });
   }

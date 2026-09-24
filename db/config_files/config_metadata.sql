@@ -117,6 +117,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblTagViewNameVotes', 'Votes', 'en', 1),
 -- Ground Rules (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2)
 ('lblMetaGroundRules', '🤝 Ground Rules 🤝', 'en', 1),
+('txtGroundRulesDesc', 'Select rules for story tone and writer conduct.', 'en', 1),
 -- LeeAnn's approved default vocabulary, 2026-09-24 — verbatim, do not reword. All six verified
 -- inside the real 40-label/100-description limits by test/groundRules.test.js.
 ('txtGroundRulesDefaultVocabulary', 'Anything Goes

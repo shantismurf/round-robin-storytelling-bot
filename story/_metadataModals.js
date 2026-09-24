@@ -49,9 +49,9 @@ export async function getMetaCfg(connection, guildId) {
     'txtMetaMainRelationshipPlaceholder', 'txtMetaSceneBreakDividerPlaceholder',
     'txtSceneBreakDividerDesc', 'txtRatingDesc', 'txtTimeoutReminderDesc', 'txtTimeoutReminderSlowDesc', 'txtMaxWritersDesc',
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
-    'btnSaveSettings', 'btnCreateStory', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtPanelTabHelper', 'txtStoryManagementLabel',
+    'btnSaveSettings', 'btnCreateStory', 'btnPanelTabStoryInfo', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtStoryManagementLabel',
     'lblUnsavedChangesTitle', 'txtUnsavedChangesBody',
-    'optWarnAllClear', 'lblMetaGroundRules', 'txtGroundRulesNoneConfigured',
+    'optWarnAllClear', 'lblMetaGroundRules', 'txtGroundRulesNoneConfigured', 'txtGroundRulesDefaultVocabulary', 'txtGroundRulesDesc',
     'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
     'btnRatingChangeConfirm', 'btnRatingChangeRevert', 'txtMetaApplied',
     ...ratingCodes.map(ratingLabelKey),
@@ -61,10 +61,34 @@ export async function getMetaCfg(connection, guildId) {
 }
 
 /**
+ * The Story Info / Story Settings / Metadata tab-toggle row, shared by buildStoryPanel's own
+ * top-of-panel row and by callers that also want it repeated at the bottom (LeeAnn, 2026-09-24:
+ * "we should have the tab buttons at the top and the bottom of the story add/manage panel").
+ * No caption line above it — dropped "Click to Display:" the same day: three color-coded buttons
+ * (active = Success/green, inactive = Secondary/gray) read as tabs on their own, and "Display"
+ * in the old per-tab labels ("Display Settings"/"Display Metadata") read as a visibility toggle
+ * rather than navigation, which was the actual complaint.
+ */
+export function buildPanelTabRow(cfg, ns, activeGroup) {
+  return new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`${ns}_tab_storyinfo`).setLabel(cfg.btnPanelTabStoryInfo)
+      .setStyle(activeGroup === 'storyinfo' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`${ns}_tab_settings`).setLabel(cfg.btnPanelTabSettings)
+      .setStyle(activeGroup === 'settings' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId(`${ns}_tab_metadata`).setLabel(cfg.btnPanelTabMetadata)
+      .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
+  );
+}
+
+/**
  * Shared panel builder for /story add and /story manage — Components V2 Container.
  * isManage: shows Join Settings cluster only when false (join settings don't apply post-join);
  *   also gates the Review Tags button into the Metadata tab (tag review has no meaning pre-creation).
- * activeGroup: 'settings' | 'metadata' — which tab's field clusters render.
+ * activeGroup: 'storyinfo' | 'settings' | 'metadata' — which tab's field clusters render.
+ *   storyinfo: Title/Summary + the Info cluster (mode/order/authors/privacy/scene break/rating).
+ *   settings: the Settings cluster (turn length/reminder/max writers) + Join Settings (add-only).
+ *   Split out of one combined tab 2026-09-24 (LeeAnn: "it doesn't make sense to have four
+ *   sections on one screen and two on another" — Metadata's own two clusters).
  * namespace: 'story_add' or 'story_manage' — customId prefix for the tab-toggle and edit buttons.
  * titleMetadata: header text to show instead of `title` while the Metadata tab is active. Add
  *   passes none (its "Create New Story" header holds regardless of tab); Manage passes a second
@@ -126,17 +150,12 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
   const container = new ContainerBuilder()
     .setAccentColor(state.storyMode === STORY_MODE.QUICK ? 0xE040FB : state.storyMode === STORY_MODE.SLOW ? 0x5865F2 : 0x57F287);
 
-  // Tab toggle sits above the header now — the header text changes with it (Manage only; Add's
+  // Tab toggle sits above the header — the header text changes with it (Manage only; Add's
   // header is tab-independent), so the buttons need to read as "pick a view" before that view's
-  // label, not as an action tucked under a static title. Active tab styled Success, inactive
-  // Secondary, so "you are here" is unambiguous even without the header's help.
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtPanelTabHelper));
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId(`${ns}_tab_settings`).setLabel(cfg.btnPanelTabSettings)
-      .setStyle(activeGroup === 'settings' ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId(`${ns}_tab_metadata`).setLabel(cfg.btnPanelTabMetadata)
-      .setStyle(activeGroup === 'metadata' ? ButtonStyle.Success : ButtonStyle.Secondary),
-  ));
+  // label. Active tab styled Success, inactive Secondary, so "you are here" is unambiguous.
+  // No caption line above them (dropped 2026-09-24, was "Click to Display:") — three
+  // color-coded buttons read as tabs on their own; see buildPanelTabRow's own doc comment.
+  container.addActionRowComponents(buildPanelTabRow(cfg, ns, activeGroup));
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${headerText}`));
 
   if (cfg.txtStoryAddIntro && !isManage) {
@@ -145,7 +164,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
 
   container.addSeparatorComponents(new SeparatorBuilder());
 
-  if (activeGroup === 'settings') {
+  if (activeGroup === 'storyinfo') {
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
       `**${trimTrailingEmoji(cfg.lblStoryTitle)}**\n${titleDisplay}\n\n**${trimTrailingEmoji(cfg.lblMetaSummary)}**\n${summaryDisplay}`
     ));
@@ -171,8 +190,13 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`${ns}_open_storyinfo`).setLabel(cfg.btnAddStoryInfo).setStyle(ButtonStyle.Primary)
     ));
-    container.addSeparatorComponents(new SeparatorBuilder());
-
+  } else if (activeGroup === 'settings') {
+    // Split out of the old combined "Settings" tab (Title/Summary + Info cluster + Settings
+    // cluster + Join Settings, all on one tab vs. Metadata's two clusters) — LeeAnn, 2026-09-24:
+    // "it doesn't make sense to have four sections on one screen and two on another." Settings
+    // cluster + Join Settings now get their own tab, evening out to two clusters per tab
+    // everywhere.
+    //
     // Delay Start only applies before a story's first turn starts -- Manage never loads or lets
     // you edit it (state.delayHours/delayWriters are hardcoded null there, and its Edit Story
     // Settings modal has no delay fields), so showing "0 hours / 0 writers" here was always
@@ -210,7 +234,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
       `**${trimTrailingEmoji(cfg.lblMetaRating)}:** ${ratingLabel}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaDynamic)}:** ${dynamicDisplay}\n\n` +
       `**${trimTrailingEmoji(cfg.lblMetaWarnings)}:** ${warningsDisplay}\n\n` +
-      `**${trimTrailingEmoji(cfg.lblMetaGroundRules)}:** ${groundRulesDisplay}`
+      `**${trimTrailingEmoji(cfg.lblMetaGroundRules)}:** ${groundRulesDisplay}\n-# ${cfg.txtGroundRulesDesc}`
     ));
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`${ns}_open_metadata`).setLabel(cfg.btnAddMetadata).setStyle(ButtonStyle.Primary)
@@ -335,7 +359,7 @@ export function buildMetadataModal(cfg, state, namespace) {
       new LabelBuilder().setLabel(cfg.lblMetaDynamic).setStringSelectMenuComponent(dynamicSelect),
       new LabelBuilder().setLabel(cfg.lblMetaRating).setStringSelectMenuComponent(ratingSelect),
       new LabelBuilder().setLabel(cfg.lblMetaWarnings).setCheckboxGroupComponent(warningsGroup),
-      ...(groundRulesGroup ? [new LabelBuilder().setLabel(cfg.lblMetaGroundRules).setCheckboxGroupComponent(groundRulesGroup)] : []),
+      ...(groundRulesGroup ? [new LabelBuilder().setLabel(cfg.lblMetaGroundRules).setDescription(cfg.txtGroundRulesDesc).setCheckboxGroupComponent(groundRulesGroup)] : []),
     );
 }
 

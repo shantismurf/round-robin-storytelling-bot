@@ -1,7 +1,7 @@
-import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder, SectionBuilder } from 'discord.js';
 import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin } from '../utilities.js';
 import { finalMessage } from '../story/_metadataModals.js';
-import { parseGroundRulesText } from '../story/_groundRules.js';
+import { parseGroundRulesText, effectiveGroundRulesText } from '../story/_groundRules.js';
 import { handleSetupSave } from './_storyadminSetupSave.js';
 import { buildChannelsModal, buildRoundupModal, buildSetupFieldModal, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';
 import {
@@ -47,40 +47,75 @@ export function isSetupDirty(state) {
  *   "setup required" onboarding message getSetupRequiredMessage returns). V2 forbids `content`
  *   alongside `components`, so this has to be a component in the same container rather than a
  *   sibling `content` field the way handleSetup's very first reply used to send it.
- * @param {boolean} [opts.tier1Visible=true] - whether to show the Manage-Server-only fields
- * (feed/media/restricted channels, admin role name) and their edit buttons. false renders only
- * the tier-2 fields (roundup, changelog) a story admin without Manage Server can reach — same
- * command, same panel, just fewer rows (docs/TODO.md's "two panels within /storyadmin setup
+ * @param {boolean} [opts.tier1Visible=true] - whether this user can reach the Manage-Server-only
+ * fields (feed/media/restricted channels, admin role name) at all — a story admin without
+ * Manage Server never sees a tier-1 tab (docs/TODO.md's "two panels within /storyadmin setup
  * itself" design). This is presentation only; every handler that acts on a tier-1 customId
  * re-checks hasTier1Access() live before doing anything, since hiding a button doesn't stop a
- * replayed customId from someone who saw the tier-1 panel.
+ * replayed customId from someone who saw the tier-1 tab.
+ * @param {'tier1'|'tier2'} [opts.activeTab='tier1'] - which tab is showing. Ignored (forced to
+ * 'tier2') when tier1Visible is false — a story admin has only one tab worth of fields, so no
+ * tab bar renders for them at all. A Manage Server holder defaults to tier1 (LeeAnn, 2026-09-24:
+ * "I'm a server admin so I should only see full admin options, then I should have to click to a
+ * separate tab to see the story admin options") and switches via the tab buttons.
  */
-export function buildSetupPanel(state, cfg, { interactive = true, prependMessage = null, tier1Visible = true } = {}) {
+export function buildSetupPanel(state, cfg, { interactive = true, prependMessage = null, tier1Visible = true, activeTab = 'tier1' } = {}) {
   log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: 'system' });
   const fieldVal = (id) => id ? `<#${id}>` : `\`${cfg.txtNotSet}\``;
   const strVal   = (v)  => v  ? `\`${v}\``  : `\`${cfg.txtNotSet}\``;
   const desc     = (key) => `*${cfg[key]}*`;
+  const effectiveTab = tier1Visible ? activeTab : 'tier2';
 
-  const tier1Items = [
-    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
-    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
-    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `-> ${strVal(state.adminRoleName)}`,
-    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
-    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `-> ${fieldVal(state.restrictedMediaChannelId)}`,
-  ];
-  const groundRulesLabels = parseGroundRulesText(state.groundRulesText).map((r) => r.label);
+  const groundRulesLabels = parseGroundRulesText(effectiveGroundRulesText(state.groundRulesText, cfg.txtGroundRulesDefaultVocabulary)).map((r) => r.label);
   const groundRulesDisplay = groundRulesLabels.length
     ? `✅ ${groundRulesLabels.join(', ')}`
     : `❌ ${cfg.txtGroundRulesNoneConfigured}`;
 
-  const tier2Items = [
-    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `-> ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}`,
-    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `-> ${strVal(state.roundupDay)}`,
-    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `-> ${strVal(state.roundupHour)}`,
-    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `-> ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`,
-    `**${cfg.txtSetupModalTitleGroundRules}**\n` + desc('txtSetupEmbedDescGroundRules') + `-> ${groundRulesDisplay}`,
-    `**${cfg.lblSetupTeenOrLowerOnly}**\n` + desc('txtSetupEmbedDescTeenOrLowerOnly') + `-> ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`,
-  ];
+  // One field-group per modal/toggle, each rendered as its own unit (a Components V2 Section:
+  // its text plus a single button accessory sitting directly beside it) rather than the old
+  // shape — every field's text stacked together, then a separate row of buttons below with no
+  // visual tie to which field each one edits. LeeAnn, 2026-09-24: "the grouped buttons make no
+  // sense... put the button next to the content it relates to." A Section holds 1-3 TextDisplay
+  // components plus one button/thumbnail accessory (validated in
+  // node_modules/@discordjs/builders/dist/index.js's SectionBuilder.toJSON) — the channels and
+  // roundup groups each pack their several related fields into one TextDisplay (already
+  // multi-line) rather than needing one Section per single field, since one button already edits
+  // all of them together via one modal.
+  const fieldGroups = {
+    channels: {
+      text: [
+        `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
+        `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
+        `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
+        `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `-> ${fieldVal(state.restrictedMediaChannelId)}`,
+      ].join('\n\n'),
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
+    },
+    role: {
+      text: `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `-> ${strVal(state.adminRoleName)}`,
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
+    },
+    roundup: {
+      text: [
+        `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `-> ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}`,
+        `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `-> ${strVal(state.roundupDay)}`,
+        `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `-> ${strVal(state.roundupHour)}`,
+      ].join('\n\n'),
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_roundup').setLabel(cfg.btnSetupRoundup).setStyle(ButtonStyle.Primary),
+    },
+    changelog: {
+      text: `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `-> ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`,
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_changelog').setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Secondary),
+    },
+    groundRules: {
+      text: `**${cfg.txtSetupModalTitleGroundRules}**\n` + desc('txtSetupEmbedDescGroundRules') + `-> ${groundRulesDisplay}`,
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_groundrules').setLabel(cfg.btnSetupGroundRules).setStyle(ButtonStyle.Primary),
+    },
+    teenOrLowerOnly: {
+      text: `**${cfg.lblSetupTeenOrLowerOnly}**\n` + desc('txtSetupEmbedDescTeenOrLowerOnly') + `-> ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`,
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_teenorlower').setLabel(`${cfg.lblSetupTeenOrLowerOnly}: ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Secondary),
+    },
+  };
 
   const container = new ContainerBuilder().setAccentColor(0x5865f2);
 
@@ -99,34 +134,37 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   }
   container.addSeparatorComponents(new SeparatorBuilder());
 
-  if (tier1Visible) {
-    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(tier1Items.join('\n\n')));
-    if (interactive) {
-      container.addActionRowComponents(new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
-        new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
-      ));
-    }
+  // Tab toggle — only when this user actually has two tabs to switch between.
+  if (tier1Visible && interactive) {
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier1').setLabel(cfg.btnSetupTabServer)
+        .setStyle(effectiveTab === 'tier1' ? ButtonStyle.Success : ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier2').setLabel(cfg.btnSetupTabStory)
+        .setStyle(effectiveTab === 'tier2' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    ));
     container.addSeparatorComponents(new SeparatorBuilder());
   }
 
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(tier2Items.join('\n\n')));
+  const groupsForTab = effectiveTab === 'tier1'
+    ? [fieldGroups.channels, fieldGroups.role]
+    : [fieldGroups.roundup, fieldGroups.changelog, fieldGroups.groundRules, fieldGroups.teenOrLowerOnly];
+
+  groupsForTab.forEach((group, i) => {
+    if (interactive) {
+      container.addSectionComponents(
+        new SectionBuilder()
+          .addTextDisplayComponents(new TextDisplayBuilder().setContent(group.text))
+          .setButtonAccessory(group.button())
+      );
+    } else {
+      // Terminal (non-interactive) state has no buttons at all, so no accessory to give a
+      // Section — Discord requires one. Plain text instead.
+      container.addTextDisplayComponents(new TextDisplayBuilder().setContent(group.text));
+    }
+    if (i < groupsForTab.length - 1) container.addSeparatorComponents(new SeparatorBuilder());
+  });
 
   if (interactive) {
-    container.addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('storyadmin_setup_roundup').setLabel(cfg.btnSetupRoundup).setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId('storyadmin_setup_toggle_changelog')
-        .setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`)
-        .setStyle(ButtonStyle.Secondary),
-    ));
-    container.addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('storyadmin_setup_groundrules').setLabel(cfg.btnSetupGroundRules).setStyle(ButtonStyle.Primary),
-      new ButtonBuilder()
-        .setCustomId('storyadmin_setup_toggle_teenorlower')
-        .setLabel(`${cfg.lblSetupTeenOrLowerOnly}: ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`)
-        .setStyle(ButtonStyle.Secondary),
-    ));
     container.addSeparatorComponents(new SeparatorBuilder());
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
@@ -198,6 +236,7 @@ export async function handleSetup(connection, interaction) {
     'txtGroundRulesRemovedUsageNote', 'txtGroundRulesRenamedNote',
     'btnGroundRulesConfirm', 'btnGroundRulesCancel',
     'lblSetupTeenOrLowerOnly', 'txtSetupEmbedDescTeenOrLowerOnly',
+    'btnSetupTabServer', 'btnSetupTabStory',
   ], guildId);
 
   // Load current guild-specific config values without falling back to guild_id=1
@@ -227,6 +266,10 @@ export async function handleSetup(connection, interaction) {
     teenOrLowerOnly:          guildCfg.cfgTeenOrLowerOnly === '1',
     groundRulesText:          guildCfg.cfgGroundRules || '',
     hasManageGuild,
+    // Manage Server holders default to the tier-1 tab (LeeAnn, 2026-09-24: "I'm a server admin
+    // so I should only see full admin options"). Irrelevant for a tier-2-only story admin —
+    // buildSetupPanel forces 'tier2' whenever tier1Visible is false, regardless of this value.
+    activeSetupTab: 'tier1',
     originalInteraction: interaction,
     cfg,
   };
@@ -244,7 +287,7 @@ export async function handleSetup(connection, interaction) {
   // straight here would otherwise never see the welcome or its prerequisites list — and this
   // is the moment they most need it, since creating a channel or a role means leaving the panel.
   const setupMessage = await getSetupRequiredMessage(connection, interaction);
-  const panel = buildSetupPanel(state, cfg, { prependMessage: setupMessage, tier1Visible: hasManageGuild });
+  const panel = buildSetupPanel(state, cfg, { prependMessage: setupMessage, tier1Visible: hasManageGuild, activeTab: state.activeSetupTab });
   await interaction.reply({
     ...panel,
     flags: panel.flags | MessageFlags.Ephemeral,
@@ -295,12 +338,17 @@ export async function handleSetupButton(connection, interaction) {
   if (id === 'storyadmin_setup_toggle_changelog') {
     state.changelogEnabled = !state.changelogEnabled;
     await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction) }));
+    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_toggle_teenorlower') {
     state.teenOrLowerOnly = !state.teenOrLowerOnly;
     await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction) }));
+    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+  }
+  if (id === 'storyadmin_setup_tab_tier1' || id === 'storyadmin_setup_tab_tier2') {
+    state.activeSetupTab = id === 'storyadmin_setup_tab_tier1' ? 'tier1' : 'tier2';
+    await interaction.deferUpdate();
+    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_groundrules') {
     return await interaction.showModal(buildGroundRulesModal(cfg, state));

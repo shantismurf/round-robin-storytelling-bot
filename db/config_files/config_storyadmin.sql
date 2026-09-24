@@ -242,4 +242,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblSetupTeenOrLowerOnly', 'Teen or Lower Only', 'en', 1),
 ('txtSetupEmbedDescTeenOrLowerOnly', '-# Don''t display the option to rate stories as Mature or Explicit.', 'en', 1),
 ('cfgTeenOrLowerOnly', '0', 'en', 1),
-('cfgGroundRules', '', 'en', 1);
+('cfgGroundRules', '', 'en', 1),
+-- Setup panel tab labels — LeeAnn, 2026-09-24: a Manage Server holder should default to the
+-- full admin (tier-1) options, then click over to see the story-admin (tier-2) options.
+('btnSetupTabServer', 'Server Admin', 'en', 1),
+('btnSetupTabStory', 'Story Admin', 'en', 1);

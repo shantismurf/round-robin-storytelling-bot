@@ -2,8 +2,8 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBu
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
-import { parseGroundRulesText } from './_groundRules.js';
-import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal, finalMessage } from './_metadataModals.js';
+import { parseGroundRulesText, effectiveGroundRulesText } from './_groundRules.js';
+import { getMetaCfg, buildStoryPanel, buildPanelTabRow, buildMetadataModal, buildTagsModal, buildStoryInfoModal, finalMessage } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
 import { buildTagReviewPanel, handleReviewTags, handleTagReviewButton } from './tags.js';
@@ -60,32 +60,35 @@ function buildManageMessage(cfg, state, activeTurn = null) {
   const isPaused = state.targetStatus === STORY_STATUS.PAUSED;
   const isClosed = state.targetStatus === STORY_STATUS.CLOSED;
 
+  const activeGroup = state.activeGroup ?? 'storyinfo';
   const container = buildStoryPanel(cfg, state, cfg.txtManageEmbedTitle, {
     isManage: true,
-    activeGroup: state.activeGroup ?? 'settings',
+    activeGroup,
     namespace: 'story_manage',
     titleMetadata: cfg.txtManageEmbedTitleMetadata,
   });
 
-  // Story-action area — Settings tab only. These used to sit on both tabs on the theory that
-  // none of them edit a currently-shown field cluster, but Manage Entries/Turns/Users don't
-  // relate to Metadata content at all, so there's no reason to pay their component cost (or
-  // clutter the view) while metadata-editing — one click back to Settings gets them. Review
-  // Tags moved the other way, into buildStoryPanel's Metadata branch, since it feeds the Tags
-  // field shown there. Labeled per the entry-point audit finding that Manage Turns
-  // (Skip/Extend/Reassign) had zero inline explanation anywhere.
+  // Story-action area — Story Info and Story Settings tabs, not Metadata. These used to gate on
+  // the old single "Settings" tab (before it split into Story Info / Story Settings,
+  // 2026-09-24); the reasoning still holds against Metadata specifically — Manage Entries/Turns/
+  // Users don't relate to Metadata content at all, so there's no reason to pay their component
+  // cost (or clutter the view) while metadata-editing — but doesn't pick between the other two,
+  // so both show it. Review Tags moved the other way, into buildStoryPanel's Metadata branch,
+  // since it feeds the Tags field shown there. Labeled per the entry-point audit finding that
+  // Manage Turns (Skip/Extend/Reassign) had zero inline explanation anywhere.
   //
-  // COMPONENT BUDGET: worst case (Settings tab, isAdminOrCreator = true, all fields populated)
-  // recurses to 37 components counting every nested node (Container, each TextDisplay, each
-  // ActionRow, and each Button inside it) — under Discord's documented 40-per-message ceiling
-  // (docs.discord.com/developers/components/reference), with the Metadata tab well under that
-  // at 25. @discordjs/builders does not validate this client-side, and it's unconfirmed whether
-  // Discord's server-side enforcement counts nested children individually (as above) or only
-  // top-level container children — so treat 37 as the number to watch if more fields are added
-  // later, not as headroom already spent. If it ever needs trimming, the first cut is the
-  // Separator on the line directly below this comment — the one purely decorative node in the
-  // tree, removing 1 from the count without touching any label or button.
-  if ((state.activeGroup ?? 'settings') === 'settings') {
+  // COMPONENT BUDGET: worst case (a non-Metadata tab, isAdminOrCreator = true, all fields
+  // populated) recurses to 37 components counting every nested node (Container, each
+  // TextDisplay, each ActionRow, and each Button inside it) — under Discord's documented
+  // 40-per-message ceiling (docs.discord.com/developers/components/reference), with the
+  // Metadata tab well under that at 25. @discordjs/builders does not validate this client-side,
+  // and it's unconfirmed whether Discord's server-side enforcement counts nested children
+  // individually (as above) or only top-level container children — so treat 37 as the number to
+  // watch if more fields are added later, not as headroom already spent. If it ever needs
+  // trimming, the first cut is the Separator on the line directly below this comment — the one
+  // purely decorative node in the tree, removing 1 from the count without touching any label or
+  // button.
+  if (activeGroup !== 'metadata') {
     container.addSeparatorComponents(new SeparatorBuilder());
     container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtStoryManagementLabel));
 
@@ -116,6 +119,11 @@ function buildManageMessage(cfg, state, activeTurn = null) {
     }
   }
 
+  // Tab row repeated at the bottom (LeeAnn, 2026-09-24) so switching tabs never requires
+  // scrolling back to the top of a long panel — with its own line break separating it from the
+  // Change Story Status buttons right after, per her explicit call on the spacing here.
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addActionRowComponents(buildPanelTabRow(cfg, 'story_manage', activeGroup));
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtChangeStoryStatusLabel));
 
@@ -281,7 +289,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       characters: story.characters ?? '',
       dynamic: story.dynamic ?? '',
       groundRules: story.ground_rules ? story.ground_rules.split(',').map(s => s.trim()).filter(Boolean) : [],
-      groundRulesVocabulary: parseGroundRulesText(groundRulesText),
+      groundRulesVocabulary: parseGroundRulesText(effectiveGroundRulesText(groundRulesText, cfg.txtGroundRulesDefaultVocabulary)),
       teenOrLowerOnly: teenOrLowerOnly === '1',
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,
@@ -290,7 +298,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       activeTurn,
       delayHours: null,
       delayWriters: null,
-      activeGroup: 'settings',
+      activeGroup: 'storyinfo',
     };
 
     // Snapshot after state is fully built — current === original for every staged field at this
@@ -323,8 +331,8 @@ async function handleManageButton(connection, interaction) {
   const customId = interaction.customId;
 
   try {
-    if (customId === 'story_manage_tab_settings' || customId === 'story_manage_tab_metadata') {
-      state.activeGroup = customId === 'story_manage_tab_settings' ? 'settings' : 'metadata';
+    if (customId === 'story_manage_tab_storyinfo' || customId === 'story_manage_tab_settings' || customId === 'story_manage_tab_metadata') {
+      state.activeGroup = customId === 'story_manage_tab_storyinfo' ? 'storyinfo' : customId === 'story_manage_tab_settings' ? 'settings' : 'metadata';
       await interaction.deferUpdate();
       await state.originalInteraction.editReply(buildManageMessage(state.cfg, state, state.activeTurn));
 

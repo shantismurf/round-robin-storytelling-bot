@@ -145,7 +145,7 @@ export async function handleSetupChannelsModal(connection, interaction) {
 
   log(`handleSetupChannelsModal: feed=${state.feedChannelId} media=${state.mediaChannelId} restrictedFeed=${state.restrictedFeedChannelId} restrictedMedia=${state.restrictedMediaChannelId} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true }));
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true, activeTab: state.activeSetupTab }));
   await interaction.deleteReply();
 }
 
@@ -181,7 +181,7 @@ export async function handleSetupRoundupModal(connection, interaction) {
 
   log(`handleSetupRoundupModal: channel=${state.roundupChannelId} day=${state.roundupDay} hour=${state.roundupHour} guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
 
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction) }));
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   await interaction.deleteReply();
 }
 
@@ -203,6 +203,6 @@ export async function handleSetupRoleModal(connection, interaction) {
   }
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   state.adminRoleName = sanitizeModalInput(interaction.fields.getTextInputValue('value'), 100);
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true }));
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: true, activeTab: state.activeSetupTab }));
   await interaction.deleteReply();
 }
