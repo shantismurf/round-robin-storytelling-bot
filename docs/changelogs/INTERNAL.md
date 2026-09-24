@@ -147,6 +147,11 @@ under Unreleased in the meantime per the changelog contract.
   `txtSetupEmbedDescRestrictedMedia` replaced with one shared `txtSetupChannelsPermissionNote`
   header above all four channel fields. `txtSetupEmbedDescRestrictedMedia` now also states its
   fallback (unset → Story Media Channel), matching what `resolveMediaChannelId()` already does.
+- `txtSetupChannelsPermissionNote` dropped its `-# ` subtext markdown in favor of plain text
+  (LeeAnn: the subtext styling plus the blank-line gap before the first field read as excess
+  whitespace); also now joined to the first channel field with a single line break instead of
+  the double-line gap used between field blocks, since it's a header for the group, not its own
+  field.
 
 
 ## 3.5.6 — 2026-09-24
