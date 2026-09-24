@@ -4,7 +4,9 @@ import { STORY_STATUS, JOB_STATUS, WRITER_STATUS } from '../constants.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
 import { syncFaqPosts, handleAdminHelp } from '../faq.js';
 import { deleteThreadAndAnnouncement, departWriter } from '../story/_turn.js';
-import { handleSetup, handleSetupButton, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetup.js';
+import { handleSetup, handleSetupButton } from './_storyadminSetup.js';
+import { handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';
+import { handleSetupGroundRulesModal } from './_storyadminSetupGroundRules.js';
 
 async function logAdminAction(connection, adminUserId, actionType, storyId, targetUserId = null, reason = null) {
   try {
@@ -289,6 +291,8 @@ async function handleModalSubmit(connection, interaction) {
     await handleSetupRoundupModal(connection, interaction);
   } else if (interaction.customId === 'storyadmin_setup_role_modal') {
     await handleSetupRoleModal(connection, interaction);
+  } else if (interaction.customId === 'storyadmin_setup_groundrules_modal') {
+    await handleSetupGroundRulesModal(connection, interaction);
   } else if (interaction.customId.startsWith('storyadmin_mu_')) {
     await handleManageUserModalSubmit(connection, interaction);
   }

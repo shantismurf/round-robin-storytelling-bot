@@ -113,6 +113,9 @@ export async function handleSetupSave(connection, interaction) {
   // Changelog / hub announcement opt-out
   await upsert('cfgChangelogEnabled', state.changelogEnabled ? '1' : '0');
 
+  // Teen or Lower Only — tier-2 field, no Manage Server gate needed.
+  await upsert('cfgTeenOrLowerOnly', state.teenOrLowerOnly ? '1' : '0');
+
   const botMember = interaction.guild.members.me;
   // Use the bot's managed integration role for permission overwrites — role-level overrides
   // work on private channels where user/member-level overrides fail due to Discord's restriction
@@ -234,6 +237,7 @@ export async function handleSetupSave(connection, interaction) {
   if (state.roundupChannelId)         saved.push(`✅ Weekly roundup: <#${state.roundupChannelId}>, ${dayNames[`txtRoundupDay${state.roundupDay ?? 1}`]}s at ${state.roundupHour ?? 9}:00 UTC`);
   else                                saved.push(state.cfg.txtSetupRoundupDisabledNote);
   saved.push(`${state.changelogEnabled ? '✅' : '🔕'} Hub announcements: ${state.changelogEnabled ? state.cfg.txtOn : state.cfg.txtOff}`);
+  saved.push(`${state.teenOrLowerOnly ? '✅' : '🔕'} Teen or Lower Only: ${state.teenOrLowerOnly ? state.cfg.txtOn : state.cfg.txtOff}`);
   if (permWarnings.length) {
     const botRoleName = botRole?.name ?? botMember?.displayName ?? 'the bot role';
     const fixMsg = replaceTemplateVariables(

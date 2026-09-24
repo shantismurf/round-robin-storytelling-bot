@@ -231,4 +231,16 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHubAnnouncementFooter', 'Join the Round Robin StoryBot Hub Server for more information.', 'en', 1),
 -- Reopen story
 ('txtReopenStory', 'Reopen Story', 'en', 1),
-('txtReopenSuccess', '✅ **[story_title]** has been reopened. A new turn has started and the story is [join_status] to new writers.', 'en', 1);
+('txtReopenSuccess', '✅ **[story_title]** has been reopened. A new turn has started and the story is [join_status] to new writers.', 'en', 1),
+-- Two-tier setup panel (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2 / docs/TODO.md
+-- "Split /storyadmin setup into two permission tiers") — Ground Rules and Teen or Lower Only,
+-- both tier-2 (reachable by a story admin, not just Manage Server).
+('btnSetupGroundRules', 'Configure Ground Rules', 'en', 1),
+('txtSetupModalTitleGroundRules', 'Ground Rules', 'en', 1),
+('txtSetupEmbedDescGroundRules', '-# Server-wide vocabulary story creators can pick from — edited per story.', 'en', 1),
+('lblSetupModalFieldGroundRules', 'Ground Rules Vocabulary', 'en', 1),
+('txtSetupGroundRulesModalDesc', 'Max 10 rules: label on the first line (max 40 characters), description below it (max 100), blank line between rules.', 'en', 1),
+('lblSetupTeenOrLowerOnly', 'Teen or Lower Only', 'en', 1),
+('txtSetupEmbedDescTeenOrLowerOnly', '-# Don''t display the option to rate stories as Mature or Explicit.', 'en', 1),
+('cfgTeenOrLowerOnly', '0', 'en', 1),
+('cfgGroundRules', '', 'en', 1);

@@ -114,4 +114,42 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtTagPendingTitlePublic', '🏷️ Proposed Tags for [story_title]', 'en', 1),
 ('txtTagNoPendingPublic', 'There are no pending tag suggestions for this story right now.', 'en', 1),
 ('lblTagViewNameTag', 'Tag', 'en', 1),
-('lblTagViewNameVotes', 'Votes', 'en', 1);
+('lblTagViewNameVotes', 'Votes', 'en', 1),
+-- Ground Rules (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2)
+('lblMetaGroundRules', '🤝 Ground Rules 🤝', 'en', 1),
+-- LeeAnn's approved default vocabulary, 2026-09-24 — verbatim, do not reword. All six verified
+-- inside the real 40-label/100-description limits by test/groundRules.test.js.
+('txtGroundRulesDefaultVocabulary', 'Anything Goes
+This story is open to any and all ideas. Go wild!
+
+Maintain Tonal Harmony
+Match the vibe so far. Keep humor and seriousness consistent with the entries before yours.
+
+Preserve Lore Integrity
+Stick to established setting and character facts. Check with the group before adding new ones.
+
+Respect Other Writers'' Choices
+Don''t permanently change another writer''s character or lore without checking with them first.
+
+Conflict, Not Contempt
+In-story conflict is fair game. Sustained hostility toward a person, group, or idea is not.
+
+Keep It Clean
+This story''s rating will stay in the Teen or lower range.', 'en', 1),
+('txtGroundRulesErrCount', '❌ Too many rules — the maximum is [max].', 'en', 1),
+('txtGroundRulesErrRule', '❌ Rule [rule_ref] — [reason]', 'en', 1),
+('txtGroundRulesReasonLabelMissing', 'label is missing.', 'en', 1),
+('txtGroundRulesReasonLabelTooLong', 'label exceeds [max] characters.', 'en', 1),
+('txtGroundRulesReasonDescTooLong', 'description exceeds [max] characters.', 'en', 1),
+('txtGroundRulesConfirmTitle', '⚠️ Ground Rules — Confirm Changes', 'en', 1),
+('lblGroundRulesAdded', 'Added', 'en', 1),
+('lblGroundRulesRemoved', 'Removed', 'en', 1),
+('lblGroundRulesRenamed', 'Renamed', 'en', 1),
+('txtGroundRulesRemovedUsageNote', '[label] — currently used by [count] stories', 'en', 1),
+('txtGroundRulesRenamedNote', '[old_label] → [new_label]', 'en', 1),
+('txtGroundRulesConfirmBody', 'This change will **NOT** take effect until you click Confirm below. You can cancel and edit your submission first.', 'en', 1),
+('btnGroundRulesConfirm', '✅ Confirm', 'en', 1),
+('btnGroundRulesCancel', '↩️ Cancel', 'en', 1),
+('txtGroundRulesNoneConfigured', 'No Ground Rules Configured.', 'en', 1),
+('txtGroundRulesChangedNotice', '🤝 **Ground Rules updated for this story:** [ground_rules]', 'en', 1),
+('txtGroundRulesChangedNoticeNone', '🤝 **Ground Rules updated for this story:** none selected', 'en', 1);
