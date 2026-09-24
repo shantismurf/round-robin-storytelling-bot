@@ -35,6 +35,7 @@
 
 ## Versioning Policy
 - **Approval required before bumping:** Explicit sign-off is required to bump any version level. Propose the number and the reasoning and submit for approval — don't just apply it.
+- **Changelog entry with every bump:** Propose the `docs/changelogs/INTERNAL.md` entry alongside the version number, and land both in the same commit as the change itself. A bump without an entry is incomplete. Changes made without a bump roll into the next version's entry rather than being skipped.
 - **MAJOR** — a significant change to the core identity of the application, or a major addition that substantially impacts user experience (e.g. the UX v3 modal-panel rework, shipped as 3.0.0).
 - **MINOR** — a significant amount of work that meaningfully affects experience, reliability/risk, or touches enough code that experience could be impacted even without a visible change (e.g. code changes across several files that may only manifest as a single line change to the user).
 - **PATCH** — small, contained fixes and additions: one new field, one bug fix, a cosmetic tweak, a background job for an edge case.
@@ -76,4 +77,5 @@ Review and maintain roadmaps with every implementation. `docs/INDEX.md` is the m
 - **docs/reference/ux_roadmap.md:** Application workflows and interface structure.
 - **docs/TODO.md:** Running backlog. Anything plan-sized gets its own file in `docs/plans/`, linked from here — TODO.md itself stays short bullets.
 - **docs/plans/:** Feature plans not yet (or partially) built, each with a `Status`/`Created`/`Last Updated` header. Implemented ones move to `docs/plans/completed/`.
+- **docs/changelogs/:** Two-tier changelog. `INTERNAL.md` is the comprehensive backend record, newest version first, with Added/Changed/Removed/Fixed per version — and **Removed entries must say why**, since "what happened to that command, and why?" is the question it exists to answer. `public/` archives Hub announcement posts exactly as sent. See `docs/changelogs/README.md` for the full contract and workflow.
 - **Help Sync Rule:** UX Roadmap changes must be reflected in the corresponding user help config keys (e.g., `txtHelp1FindJoin`).

@@ -19,6 +19,28 @@ the thing you will search for later is the old name.
 
 ---
 
+## 3.5.6 — 2026-09-24
+
+Provenance: git-derived.
+
+### Added
+- Join button on the story feed creation announcement. A new story was announced to the feed as
+  a plain line of text with no way to act on it — the only Join button lived on the pinned
+  status embed *inside* the story thread, so a member had to already be in the thread to find
+  the control that gets them into the thread. Reuses the existing `btnJoinStory` label and the
+  existing `story_join_<storyId>` customId, so no new config key and no new routing.
+- `isStoryJoinable()` in `story/_metadata.js` — the "is this story open for new writers"
+  predicate, extracted from `story/_storyStatus.js` and now shared with the creation
+  announcement so the two cannot drift. A third caller is planned in the roundup's open-stories
+  section (`docs/plans/PLAN-roundup-open-stories.md`).
+- `test/_metadataJoinable.test.js` — seven tests on that predicate.
+
+### Notes
+- The feed button persists after the story's state changes. That is deliberate rather than
+  overlooked: `validateJoinEligibility` (`story/join.js:22`) re-checks closed, joins-off,
+  at-capacity and already-joined at click time, each with its own config string.
+
+
 ## 3.5.5 — 2026-09-22
 
 Provenance: git-derived.
