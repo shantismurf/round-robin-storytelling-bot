@@ -237,7 +237,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- both tier-2 (reachable by a story admin, not just Manage Server).
 ('btnSetupGroundRules', 'Configure Ground Rules', 'en', 1),
 ('txtSetupModalTitleGroundRules', 'Ground Rules', 'en', 1),
-('txtSetupEmbedDescGroundRules', '-# Server-wide vocabulary story creators can pick from — edited per story.', 'en', 1),
+('txtSetupEmbedDescGroundRules', '-# Set the rules that story creators can choose from to guide story tone and writer conduct.', 'en', 1),
 ('lblSetupModalFieldGroundRules', 'Ground Rules Vocabulary', 'en', 1),
 ('txtSetupGroundRulesModalDesc', 'Max 10 rules: label on the first line (max 40 characters), description below it (max 100), blank line between rules.', 'en', 1),
 ('lblSetupTeenOrLowerOnly', 'Teen or Lower Only', 'en', 1),
