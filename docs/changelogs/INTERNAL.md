@@ -96,6 +96,49 @@ under Unreleased in the meantime per the changelog contract.
   the privacy policy's enumerated data categories. See
   `docs/plans/completed/PLAN-guild-event-funnel.md`.
 
+### Fixed
+- `handleSetupGroundRulesModal`'s validation-failure branch called `interaction.showModal(...)`
+  directly on a modal-submit interaction, which has no such method
+  (`docs/reference/discordjs_reference.md` — "A modal-submit interaction cannot show a modal";
+  an earlier version of that doc claimed the opposite, also corrected). Submitting the Ground
+  Rules modal with invalid text (more than 10 rules, a label over 40 characters, or a
+  description over 100) would throw `TypeError: interaction.showModal is not a function`.
+  Fixed by replying ephemerally with the error and a new "Try Again" button
+  (`btnGroundRulesTryAgain`); that button click is a `MessageComponentInteraction`, which does
+  support `showModal()`, and re-opens the form pre-filled with the rejected submission. New
+  `handleSetupGroundRulesRetry` handler in `commands/_storyadminSetupGroundRules.js`.
+- "Invalid Webhook Token" on setup-panel toggle/tab buttons and field modals after ~15 minutes
+  of an open `/storyadmin setup` session (LeeAnn, live testing). Root cause: every one of these
+  handlers edited the panel via `state.originalInteraction.editReply(...)` — the *original*
+  `/storyadmin setup` command's own webhook token, which expires 15 minutes after that command
+  ran, no matter how fresh the triggering button/modal-submit's own token was. Replaced with
+  `interaction.update(...)` (buttons) or `interaction.deferUpdate()` + `interaction.editReply(...)`
+  (modal submits, which Discord lets acknowledge/edit the originating message directly since
+  every modal here opens from a button click) — both use the current interaction's own token.
+  10 call sites across `commands/_storyadminSetup.js`, `_storyadminSetupFieldModals.js`, and
+  `_storyadminSetupGroundRules.js`.
+- **Live production crash**: `/story manage` threw `DiscordAPIError[50035]` /
+  `COMPONENT_CUSTOM_ID_DUPLICATED` on every open (shantismurf, live). Root cause:
+  `buildPanelTabRow()`'s Story Info/Settings/Metadata tab row is rendered twice per panel (top
+  and bottom, LeeAnn 2026-09-24), and both calls used identical customIds (`story_manage_tab_*`/
+  `story_add_tab_*`) — Discord rejects a duplicate custom_id anywhere in a message's component
+  tree, not just within one row. `buildPanelTabRow()` now takes a `position` ('top'/'bottom')
+  folded into each customId; the two tab-click dispatch sites (`story/manage.js`,
+  `story/add.js`) match with `customId.startsWith(...)` instead of an exact string so either
+  position still routes. While in that code: also replaced its
+  `state.originalInteraction.editReply(...)` with `interaction.update(...)`, the same stale-token
+  bug just fixed on the setup panel (see above) — this dispatch had the identical pattern.
+
+### Changed
+- Setup panel channel-field copy, LeeAnn 2026-09-24: `txtSetupModalTitleMedia` ("Media/Image
+  Channel" → "Story Media Channel"), `txtSetupModalTitleRestrictedFeed` ("Restricted Feed
+  Channel" → "Restricted Story Feed Channel"), `txtSetupModalTitleRestrictedMedia` ("Restricted
+  Media Channel" → "Restricted Story Media Channel") for consistency with the "Story Admin"
+  naming convention. Per-field bot-permission wording on `txtSetupEmbedDescMedia`/
+  `txtSetupEmbedDescRestrictedMedia` replaced with one shared `txtSetupChannelsPermissionNote`
+  header above all four channel fields. `txtSetupEmbedDescRestrictedMedia` now also states its
+  fallback (unset → Story Media Channel), matching what `resolveMediaChannelId()` already does.
+
 
 ## 3.5.6 — 2026-09-24
 

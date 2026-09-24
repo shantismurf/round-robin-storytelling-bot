@@ -1,12 +1,12 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder, SectionBuilder } from 'discord.js';
 import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin } from '../utilities.js';
 import { finalMessage } from '../story/_metadataModals.js';
-import { parseGroundRulesText, effectiveGroundRulesText } from '../story/_groundRules.js';
+import { parseGroundRulesText, effectiveGroundRulesText, formatGroundRuleLabelList } from '../story/_groundRules.js';
 import { handleSetupSave } from './_storyadminSetupSave.js';
 import { buildChannelsModal, buildRoundupModal, buildSetupFieldModal, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';
 import {
   buildGroundRulesModal, handleSetupGroundRulesModal,
-  handleSetupGroundRulesConfirm, handleSetupGroundRulesCancel,
+  handleSetupGroundRulesConfirm, handleSetupGroundRulesCancel, handleSetupGroundRulesRetry,
 } from './_storyadminSetupGroundRules.js';
 
 export const pendingSetupData = new Map();
@@ -68,7 +68,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
 
   const groundRulesLabels = parseGroundRulesText(effectiveGroundRulesText(state.groundRulesText, cfg.txtGroundRulesDefaultVocabulary)).map((r) => r.label);
   const groundRulesDisplay = groundRulesLabels.length
-    ? `✅ ${groundRulesLabels.join(', ')}`
+    ? `✅ ${formatGroundRuleLabelList(groundRulesLabels)}`
     : `❌ ${cfg.txtGroundRulesNoneConfigured}`;
 
   // One field-group per modal/toggle, each rendered as its own unit (a Components V2 Section:
@@ -84,6 +84,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   const fieldGroups = {
     channels: {
       text: [
+        desc('txtSetupChannelsPermissionNote'),
         `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
         `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
         `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
@@ -134,14 +135,17 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   }
   container.addSeparatorComponents(new SeparatorBuilder());
 
-  // Tab toggle — only when this user actually has two tabs to switch between.
+  // Tab toggle — only when this user actually has two tabs to switch between. Shown at the top
+  // and, per LeeAnn 2026-09-24 (matching the same request already applied to /story add and
+  // /story manage), repeated at the bottom too, so switching tabs never needs a scroll back up.
+  const buildTabRow = () => new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier1').setLabel(cfg.btnSetupTabServer)
+      .setStyle(effectiveTab === 'tier1' ? ButtonStyle.Success : ButtonStyle.Secondary),
+    new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier2').setLabel(cfg.btnSetupTabStory)
+      .setStyle(effectiveTab === 'tier2' ? ButtonStyle.Success : ButtonStyle.Secondary),
+  );
   if (tier1Visible && interactive) {
-    container.addActionRowComponents(new ActionRowBuilder().addComponents(
-      new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier1').setLabel(cfg.btnSetupTabServer)
-        .setStyle(effectiveTab === 'tier1' ? ButtonStyle.Success : ButtonStyle.Secondary),
-      new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier2').setLabel(cfg.btnSetupTabStory)
-        .setStyle(effectiveTab === 'tier2' ? ButtonStyle.Success : ButtonStyle.Secondary),
-    ));
+    container.addActionRowComponents(buildTabRow());
     container.addSeparatorComponents(new SeparatorBuilder());
   }
 
@@ -165,6 +169,10 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   });
 
   if (interactive) {
+    if (tier1Visible) {
+      container.addSeparatorComponents(new SeparatorBuilder());
+      container.addActionRowComponents(buildTabRow());
+    }
     container.addSeparatorComponents(new SeparatorBuilder());
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
@@ -212,6 +220,7 @@ export async function handleSetup(connection, interaction) {
     'txtSetupModalTitleRestrictedFeed', 'txtSetupModalTitleRestrictedMedia',
     'txtSetupModalTitleRoundupChannel', 'txtSetupModalTitleRoundupDay', 'txtSetupModalTitleRoundupHour',
     'lblUnsavedChangesTitle', 'txtUnsavedChangesBody',
+    'txtSetupChannelsPermissionNote',
     'txtSetupEmbedDescFeed', 'txtSetupEmbedDescMedia', 'txtSetupEmbedDescAdminRole',
     'txtSetupEmbedDescRestrictedFeed', 'txtSetupEmbedDescRestrictedMedia',
     'txtSetupEmbedDescRoundupChannel', 'txtSetupEmbedDescRoundupDay', 'txtSetupEmbedDescRoundupHour',
@@ -234,7 +243,7 @@ export async function handleSetup(connection, interaction) {
     'txtGroundRulesConfirmTitle', 'txtGroundRulesConfirmBody',
     'lblGroundRulesAdded', 'lblGroundRulesRemoved', 'lblGroundRulesRenamed',
     'txtGroundRulesRemovedUsageNote', 'txtGroundRulesRenamedNote',
-    'btnGroundRulesConfirm', 'btnGroundRulesCancel',
+    'btnGroundRulesConfirm', 'btnGroundRulesCancel', 'btnGroundRulesTryAgain',
     'lblSetupTeenOrLowerOnly', 'txtSetupEmbedDescTeenOrLowerOnly',
     'btnSetupTabServer', 'btnSetupTabStory',
   ], guildId);
@@ -335,26 +344,29 @@ export async function handleSetupButton(connection, interaction) {
   if (id === 'storyadmin_setup_roundup') {
     return await interaction.showModal(buildRoundupModal(cfg, state));
   }
+  // interaction.update() (not deferUpdate() + state.originalInteraction.editReply()) — the
+  // latter edits via the ORIGINAL /storyadmin setup command's webhook token, which expires 15
+  // minutes after that command ran regardless of how fresh this button click's own token is.
+  // update() posts through this click's own token instead. See
+  // docs/reference/discordjs_reference.md.
   if (id === 'storyadmin_setup_toggle_changelog') {
     state.changelogEnabled = !state.changelogEnabled;
-    await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+    return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_toggle_teenorlower') {
     state.teenOrLowerOnly = !state.teenOrLowerOnly;
-    await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+    return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_tab_tier1' || id === 'storyadmin_setup_tab_tier2') {
     state.activeSetupTab = id === 'storyadmin_setup_tab_tier1' ? 'tier1' : 'tier2';
-    await interaction.deferUpdate();
-    return await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+    return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_groundrules') {
     return await interaction.showModal(buildGroundRulesModal(cfg, state));
   }
   if (id === 'storyadmin_setup_groundrules_confirm') return await handleSetupGroundRulesConfirm(connection, interaction);
   if (id === 'storyadmin_setup_groundrules_cancel') return await handleSetupGroundRulesCancel(connection, interaction);
+  if (id === 'storyadmin_setup_groundrules_retry') return await handleSetupGroundRulesRetry(connection, interaction);
   if (id === 'storyadmin_setup_save') return await handleSetupSave(connection, interaction);
   if (id === 'storyadmin_setup_cancel') return await handleSetupCancel(connection, interaction);
 }

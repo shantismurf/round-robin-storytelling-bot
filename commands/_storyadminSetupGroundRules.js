@@ -111,14 +111,25 @@ export async function handleSetupGroundRulesModal(connection, interaction) {
 
   if (!validation.valid) {
     log(`handleSetupGroundRulesModal: validation failed guild=${state.guildId}: ${validation.error}`, { show: false, guildName: interaction.guild.name });
-    // Must showModal before deferring or replying — verified against installed discord.js source
-    // (@discordjs/builders' InteractionResponses.showModal, mixed into ModalSubmitInteraction via
-    // InteractionResponses.applyToClass) that a fresh modal-submit interaction can show a new
-    // modal directly, no intermediate "Try Again" reply needed.
-    return await interaction.showModal(buildGroundRulesModal(cfg, state, { prefillText: rawText, error: validation.error }));
+    // ModalSubmitInteraction has no showModal() (docs/reference/discordjs_reference.md — "A
+    // modal-submit interaction cannot show a modal"), so a validation failure can't re-show the
+    // modal directly from here. Stash the rejected submission on state and reply with a "Try
+    // Again" button instead — that button click IS a MessageComponentInteraction, which can.
+    state.pendingGroundRulesRetry = { rawText, error: validation.error };
+    return await interaction.reply({
+      content: `❌ ${validation.error}`,
+      flags: MessageFlags.Ephemeral,
+      components: [new ActionRowBuilder().addComponents(
+        new ButtonBuilder().setCustomId('storyadmin_setup_groundrules_retry').setLabel(cfg.btnGroundRulesTryAgain).setStyle(ButtonStyle.Primary),
+      )],
+    });
   }
 
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  // deferUpdate() + interaction.editReply() (not deferReply()/deleteReply() around a stale
+  // state.originalInteraction.editReply()) — this modal was opened from a button click, so
+  // Discord lets a modal submission acknowledge and edit that same originating message directly,
+  // through this submission's own fresh token. See docs/reference/discordjs_reference.md.
+  await interaction.deferUpdate();
 
   const diff = diffGroundRules(state.originalGroundRulesRules ?? [], rules);
   const tier1Visible = hasTier1Access(interaction);
@@ -127,8 +138,7 @@ export async function handleSetupGroundRulesModal(connection, interaction) {
     // Nothing existing can break from an addition alone — save immediately, no confirm screen.
     await applyGroundRulesSave(connection, state, rules, diff);
     log(`handleSetupGroundRulesModal: pure-addition save guild=${state.guildId} rules=${rules.length}`, { show: true, guildName: interaction.guild.name });
-    await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible, activeTab: state.activeSetupTab }));
-    await interaction.deleteReply();
+    await interaction.editReply(buildSetupPanel(state, cfg, { tier1Visible, activeTab: state.activeSetupTab }));
     return;
   }
 
@@ -140,8 +150,7 @@ export async function handleSetupGroundRulesModal(connection, interaction) {
   }
   state.pendingGroundRules = { rawText, rules, diff };
   log(`handleSetupGroundRulesModal: confirmation required guild=${state.guildId} added=${diff.added.length} removed=${diff.removed.length} renamed=${diff.renamed ? 1 : 0}`, { show: false, guildName: interaction.guild.name });
-  await state.originalInteraction.editReply(buildGroundRulesConfirmPanel(cfg, diff));
-  await interaction.deleteReply();
+  await interaction.editReply(buildGroundRulesConfirmPanel(cfg, diff));
 }
 
 export async function handleSetupGroundRulesConfirm(connection, interaction) {
@@ -157,7 +166,25 @@ export async function handleSetupGroundRulesConfirm(connection, interaction) {
   await applyGroundRulesSave(connection, state, rules, diff);
   log(`handleSetupGroundRulesConfirm: applied guild=${state.guildId} added=${diff.added.length} removed=${diff.removed.length} renamed=${diff.renamed ? 1 : 0}`, { show: true, guildName: interaction.guild.name });
   delete state.pendingGroundRules;
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+  // interaction.editReply() (not state.originalInteraction's) — see handleSetupGroundRulesModal
+  // above.
+  await interaction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
+}
+
+export async function handleSetupGroundRulesRetry(connection, interaction) {
+  const state = pendingSetupData.get(interaction.user.id);
+  if (!state?.pendingGroundRulesRetry) {
+    return await interaction.reply({
+      content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
+      flags: MessageFlags.Ephemeral
+    });
+  }
+  const { rawText, error } = state.pendingGroundRulesRetry;
+  delete state.pendingGroundRulesRetry;
+  log(`handleSetupGroundRulesRetry: guild=${state.guildId}`, { show: false, guildName: interaction.guild.name });
+  // This is a button click (MessageComponentInteraction), which does support showModal() —
+  // unlike the ModalSubmitInteraction whose validation failure sent us here.
+  await interaction.showModal(buildGroundRulesModal(state.cfg, state, { prefillText: rawText, error }));
 }
 
 export async function handleSetupGroundRulesCancel(connection, interaction) {
