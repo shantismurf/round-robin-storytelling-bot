@@ -138,14 +138,20 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   // Tab toggle — only when this user actually has two tabs to switch between. Shown at the top
   // and, per LeeAnn 2026-09-24 (matching the same request already applied to /story add and
   // /story manage), repeated at the bottom too, so switching tabs never needs a scroll back up.
-  const buildTabRow = () => new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier1').setLabel(cfg.btnSetupTabServer)
+  // position ('top'/'bottom') is folded into each button's customId — Discord rejects a message
+  // whose custom_id repeats anywhere in its component tree, not just within one row, so two
+  // identically-ID'd rows on the same panel threw DiscordAPIError 50035
+  // (COMPONENT_CUSTOM_ID_DUPLICATED) in production for any Manage Server holder (same bug class
+  // as story/manage.js and story/add.js's tab row — see docs/reference/discordjs_reference.md).
+  // handleSetupButton's dispatch matches via id.startsWith(...) so either position still routes.
+  const buildTabRow = (position) => new ActionRowBuilder().addComponents(
+    new ButtonBuilder().setCustomId(`storyadmin_setup_tab_tier1_${position}`).setLabel(cfg.btnSetupTabServer)
       .setStyle(effectiveTab === 'tier1' ? ButtonStyle.Success : ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('storyadmin_setup_tab_tier2').setLabel(cfg.btnSetupTabStory)
+    new ButtonBuilder().setCustomId(`storyadmin_setup_tab_tier2_${position}`).setLabel(cfg.btnSetupTabStory)
       .setStyle(effectiveTab === 'tier2' ? ButtonStyle.Success : ButtonStyle.Secondary),
   );
   if (tier1Visible && interactive) {
-    container.addActionRowComponents(buildTabRow());
+    container.addActionRowComponents(buildTabRow('top'));
     container.addSeparatorComponents(new SeparatorBuilder());
   }
 
@@ -171,7 +177,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   if (interactive) {
     if (tier1Visible) {
       container.addSeparatorComponents(new SeparatorBuilder());
-      container.addActionRowComponents(buildTabRow());
+      container.addActionRowComponents(buildTabRow('bottom'));
     }
     container.addSeparatorComponents(new SeparatorBuilder());
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -357,8 +363,8 @@ export async function handleSetupButton(connection, interaction) {
     state.teenOrLowerOnly = !state.teenOrLowerOnly;
     return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
-  if (id === 'storyadmin_setup_tab_tier1' || id === 'storyadmin_setup_tab_tier2') {
-    state.activeSetupTab = id === 'storyadmin_setup_tab_tier1' ? 'tier1' : 'tier2';
+  if (id.startsWith('storyadmin_setup_tab_tier1') || id.startsWith('storyadmin_setup_tab_tier2')) {
+    state.activeSetupTab = id.startsWith('storyadmin_setup_tab_tier1') ? 'tier1' : 'tier2';
     return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id === 'storyadmin_setup_groundrules') {
