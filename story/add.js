@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, parseDuration, formatDuration } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
-import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
+import { getMetaCfg, buildStoryPanel, buildPanelTabRow, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
 import { parseGroundRulesText, effectiveGroundRulesText } from './_groundRules.js';
 import { STORY_MODE } from '../constants.js';
 
@@ -81,7 +81,7 @@ export async function handleAddStory(connection, interaction) {
       tags: '',
       summary: '',
       sceneBreakDivider: '',
-      activeGroup: 'settings',
+      activeGroup: 'storyinfo',
     };
 
     pendingStoryData.set(interaction.user.id, {
@@ -104,12 +104,17 @@ export async function handleAddStory(connection, interaction) {
 }
 
 export function buildStoryAddMessage(cfg, state) {
+  const activeGroup = state.activeGroup ?? 'storyinfo';
   const container = buildStoryPanel(cfg, state, cfg.txtCreateStoryTitle, {
     isManage: false,
-    activeGroup: state.activeGroup ?? 'settings',
+    activeGroup,
     namespace: 'story_add',
   });
 
+  // Tab row repeated at the bottom (LeeAnn, 2026-09-24) so switching tabs never requires
+  // scrolling back to the top of a long panel.
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addActionRowComponents(buildPanelTabRow(cfg, 'story_add', activeGroup));
   container.addSeparatorComponents(new SeparatorBuilder());
 
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -298,8 +303,8 @@ export async function handleAddStoryButton(connection, interaction) {
   log(`handleAddStoryButton: customId=${customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
 
   try {
-    if (customId === 'story_add_tab_settings' || customId === 'story_add_tab_metadata') {
-      state.activeGroup = customId === 'story_add_tab_settings' ? 'settings' : 'metadata';
+    if (customId === 'story_add_tab_storyinfo' || customId === 'story_add_tab_settings' || customId === 'story_add_tab_metadata') {
+      state.activeGroup = customId === 'story_add_tab_storyinfo' ? 'storyinfo' : customId === 'story_add_tab_settings' ? 'settings' : 'metadata';
       await interaction.deferUpdate();
       await state.originalInteraction.editReply(buildStoryAddMessage(state.cfg, state));
 
