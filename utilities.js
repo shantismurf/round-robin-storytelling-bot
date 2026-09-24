@@ -260,6 +260,24 @@ export function log(content, { show = false, guildName = null, hub = false } = {
 }
 
 /**
+ * Records one row in guild_event for funnel instrumentation (install through activation).
+ * Always call with the plain pool connection, after any enclosing transaction has already
+ * committed — never with a transaction handle, since a failed analytics write must never
+ * roll back or block the caller's actual action. Never throws.
+ */
+export async function logGuildEvent(connection, guildId, eventType, detail = null) {
+  try {
+    await connection.execute(
+      `INSERT INTO guild_event (guild_id, event_type, detail) VALUES (?, ?, ?)`,
+      [guildId, eventType, detail ? JSON.stringify(detail) : null]
+    );
+    log(`logGuildEvent: ${eventType} for guild ${guildId}`, { show: true });
+  } catch (err) {
+    log(`logGuildEvent failed for guild ${guildId}, event ${eventType}: ${err?.stack ?? err}`, { show: true });
+  }
+}
+
+/**
  * Extract a guild-local story number from a submitted story_id option value.
  * Handles the normal case (a bare numeric string) and the case where Discord's
  * client submitted the autocomplete label instead of its value (e.g. "Title (#5)").

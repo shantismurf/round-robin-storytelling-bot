@@ -1,4 +1,4 @@
-import { getConfigValue, log } from './utilities.js';
+import { getConfigValue, log, logGuildEvent } from './utilities.js';
 import { ChannelType } from 'discord.js';
 import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, STORY_MODE } from './constants.js';
 import { postStoryFeedCreationAnnouncement, postStoryFeedActivationAnnouncement } from './announcements.js';
@@ -135,6 +135,8 @@ export async function CreateStory(connection, interaction, storyInput) {
 
     // Commit transaction
     await txn.commit();
+
+    await logGuildEvent(connection, guild_id, 'story_created');
 
     // Post story creation announcement after commit so writer count is visible
     await postStoryFeedCreationAnnouncement(connection, storyId, interaction);

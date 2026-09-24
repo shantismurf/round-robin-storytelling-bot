@@ -1,6 +1,6 @@
 import { Client, GatewayIntentBits, Collection, Events, MessageFlags } from 'discord.js';
 import { updateStoryStatusMessage } from './story/_storyStatus.js';
-import { loadConfig, DB, getConfigValue, getSetupRequiredMessage, setTestMode, log, setHubLogClient, closeOrphanedGuildStories, createFailureThrottle } from './utilities.js';
+import { loadConfig, DB, getConfigValue, getSetupRequiredMessage, setTestMode, log, setHubLogClient, closeOrphanedGuildStories, createFailureThrottle, logGuildEvent } from './utilities.js';
 import { STORY_STATUS } from './constants.js';
 import { main as deploy } from './deploy.js';
 import { startJobRunner, scheduleOnboardingReminders } from './job-runner.js';
@@ -164,12 +164,14 @@ async function main() {
   });
   client.on(Events.GuildCreate, async guild => {
     log(`Bot added to guild ${guild.name} (${guild.id})`, { show: true, hub: true });
+    await logGuildEvent(connection, guild.id, 'guild_joined');
     await scheduleOnboardingReminders(connection, guild.id, guild.joinedAt).catch(err =>
       log(`scheduleOnboardingReminders failed for guild ${guild.id}: ${err?.stack ?? err}`, { show: true })
     );
   });
   client.on(Events.GuildDelete, async guild => {
     log(`Bot removed from guild ${guild.name ?? 'unknown'} (${guild.id})`, { show: true, hub: true });
+    await logGuildEvent(connection, guild.id, 'guild_left');
     await closeOrphanedGuildStories(connection, guild.id);
   });
   function formatCommandLog(interaction) {

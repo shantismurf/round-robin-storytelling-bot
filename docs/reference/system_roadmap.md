@@ -10,7 +10,7 @@ For config string keys, see `config_roadmap.md`.
 | File | Purpose | Lines |
 |------|---------|-------|
 | `index.js` | Entry point, Discord client, interaction router. Waits for DB reachability (`waitForDatabase()`) before running `deploy.js`, so a DB outage at boot retries with throttled logging instead of crash-looping | ~280 |
-| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration, `createFailureThrottle()` (burst-then-summary logging for a repeating failure/recovery cycle, e.g. DB connectivity), `getSetupRequiredMessage()` | ~755 |
+| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration, `createFailureThrottle()` (burst-then-summary logging for a repeating failure/recovery cycle, e.g. DB connectivity), `getSetupRequiredMessage()`, `logGuildEvent()` (non-fatal insert into the `guild_event` funnel table) | ~770 |
 | `storybot.js` | Core story engine: CreateStory, NextTurn, PickNextWriter | — |
 | `job-runner.js` | Background job polling and execution | ~250 |
 | `deploy.js` | CLI deploy, run on every bot start: migrations, config sync, command registration, hub post sync (FAQ + privacy policy + gated broadcast) | ~125 |
@@ -174,6 +174,28 @@ Unique constraint on `(job_type, guild_id, window_key)` — duplicate insert fai
 | `sanitizeModalInput(input, maxLength, multiline)` | Normalizes whitespace from modal text inputs |
 | `splitAtParagraphs(text, maxLen)` | Splits embed text at paragraph boundaries |
 | `closeOrphanedGuildStories(conn, guildId)` | Bulk-closes a guild's stories on lost bot access (Discord `10004` Unknown Guild, or `50278` no mutual guilds surfaced via a forced re-fetch): ends any active turns, closes stories, cancels pending jobs |
+| `logGuildEvent(conn, guildId, eventType, detail?)` | Non-fatal insert into `guild_event` (funnel instrumentation — see below); never throws, always called with the plain pool connection after any enclosing transaction has committed |
+
+---
+
+## Funnel Instrumentation (`guild_event`)
+
+Added for `PLAN-sequencing-and-priorities.md` Stage 1 / `Onboarding_Review_2026-09.md` finding 7,
+to measure where servers drop off between install and an active multi-writer story. Schema:
+`db/migrations/023_guild_event.sql` — `guild_id`, `event_type`, optional JSON `detail`,
+`created_at`. Deliberately has no `user_id` column: every question this table answers is a
+per-guild count over time, and `story_writer` already records per-writer identity for any
+story-scoped question. Written via `logGuildEvent()` (above), never inline.
+
+| `event_type` | Fired from |
+|---|---|
+| `guild_joined` | `index.js` — `Events.GuildCreate` |
+| `guild_left` | `index.js` — `Events.GuildDelete` |
+| `setup_opened` | `commands/_storyadminSetup.js` — `handleSetup`; `detail: { isOwner }` |
+| `setup_saved` | `commands/_storyadminSetup.js` — `handleSetupSave`, after config is persisted; `detail: { isFirstSetup, isOwner }` |
+| `story_created` | `storybot.js` — `CreateStory`, after its transaction commits |
+| `writer_joined` | `story/join.js` — `handleJoinConfirm`, after its transaction commits. Only fires for the standalone join flow, not the creator's own auto-join inside `CreateStory` — the funnel question is "did a second person join," which `story_created` doesn't already answer |
+| `turn_finalized` | `story/_writeFinalize.js` — `doFinalizeEntry`, after its transaction commits (covers both call sites in `_writeFinalize.js`, since both route through this one function) |
 
 ---
 
