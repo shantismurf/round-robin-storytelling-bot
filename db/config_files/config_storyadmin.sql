@@ -19,7 +19,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtSetupModalTitleRoundup', 'Configure Weekly Roundup', 'en', 1),
 ('txtSetupChannelsModalDesc', 'Select the channels for story activity. Only Story Feed channel is required. If Media is blank, images will not be attached to stories. Restricted channels filter mature or explicit rated stories, otherwise they appear in the same channel as all others. Media channels should be set to Private.', 'en', 1),
 ('txtSetupRoundupModalDesc', 'Configure the weekly roundup digest. Select a roundup channel to enable it or leave unset to disable. Day and hour use UTC time.', 'en', 1),
-('txtSetupChannelsPermissionNote', '-# If any of these channels are set as private, the Round Robin Storybot role must be added under Advanced Permissions.', 'en', 1),
+('txtSetupChannelsPermissionNote', 'If any of these channels are set as private, the Round Robin Storybot role must be added under Advanced Permissions.', 'en', 1),
 ('txtSetupEmbedDescFeed', '-# A channel for all story threads and activity. (Required)', 'en', 1),
 ('txtSetupEmbedDescMedia', '-# A private channel for storing story images. If the channel is not set, image handling in stories is disabled. (Optional)', 'en', 1),
 ('txtSetupEmbedDescAdminRole', '-# If not set, only Discord server admins can use storyadmin commands. (Optional)', 'en', 1),

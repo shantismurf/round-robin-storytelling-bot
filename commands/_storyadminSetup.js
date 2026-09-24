@@ -83,8 +83,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   // all of them together via one modal.
   const fieldGroups = {
     channels: {
-      text: [
-        desc('txtSetupChannelsPermissionNote'),
+      text: desc('txtSetupChannelsPermissionNote') + '\n' + [
         `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
         `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
         `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
