@@ -9,7 +9,7 @@
 import { MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, logGuildEvent } from '../utilities.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
-import { pendingSetupData, buildSetupPanel } from './_storyadminSetup.js';
+import { pendingSetupData, buildSetupPanel, STAGED_FIELDS } from './_storyadminSetup.js';
 
 export async function handleSetupSave(connection, interaction) {
   const state = pendingSetupData.get(interaction.user.id);
@@ -35,48 +35,39 @@ export async function handleSetupSave(connection, interaction) {
     'txtRoundupDay4', 'txtRoundupDay5', 'txtRoundupDay6'
   ], guildId);
 
-  // Re-validate all set channel IDs
+  // Re-validate all set channel IDs. V2 forbids editing this message's `content` alongside its
+  // `components` (see buildSetupPanel's doc comment), so a validation failure re-renders the
+  // unchanged panel and reports the error as a separate ephemeral follow-up rather than the old
+  // "spread the panel, then override content" shape.
+  const reportValidationError = async (key) => {
+    await interaction.editReply(buildSetupPanel(state, state.cfg));
+    await interaction.followUp({
+      content: await getConfigValue(connection, key, guildId),
+      flags: MessageFlags.Ephemeral
+    });
+  };
+
   const feedChannel = state.feedChannelId
     ? await interaction.guild.channels.fetch(state.feedChannelId).catch(() => null)
     : null;
-  if (!feedChannel) {
-    return await interaction.editReply({
-      ...buildSetupPanel(state, state.cfg),
-      content: await getConfigValue(connection, 'txtSetupFeedChannelInvalid', guildId)
-    });
-  }
+  if (!feedChannel) return await reportValidationError('txtSetupFeedChannelInvalid');
 
   let mediaChannel = null;
   if (state.mediaChannelId) {
     mediaChannel = await interaction.guild.channels.fetch(state.mediaChannelId).catch(() => null);
-    if (!mediaChannel) {
-      return await interaction.editReply({
-        ...buildSetupPanel(state, state.cfg),
-        content: await getConfigValue(connection, 'txtSetupMediaChannelInvalid', guildId)
-      });
-    }
+    if (!mediaChannel) return await reportValidationError('txtSetupMediaChannelInvalid');
   }
 
   let restrictedFeedChannel = null;
   if (state.restrictedFeedChannelId) {
     restrictedFeedChannel = await interaction.guild.channels.fetch(state.restrictedFeedChannelId).catch(() => null);
-    if (!restrictedFeedChannel) {
-      return await interaction.editReply({
-        ...buildSetupPanel(state, state.cfg),
-        content: await getConfigValue(connection, 'txtSetupRestrictedChannelInvalid', guildId)
-      });
-    }
+    if (!restrictedFeedChannel) return await reportValidationError('txtSetupRestrictedChannelInvalid');
   }
 
   let restrictedMediaChannel = null;
   if (state.restrictedMediaChannelId) {
     restrictedMediaChannel = await interaction.guild.channels.fetch(state.restrictedMediaChannelId).catch(() => null);
-    if (!restrictedMediaChannel) {
-      return await interaction.editReply({
-        ...buildSetupPanel(state, state.cfg),
-        content: await getConfigValue(connection, 'txtSetupRestrictedMediaInvalid', guildId)
-      });
-    }
+    if (!restrictedMediaChannel) return await reportValidationError('txtSetupRestrictedMediaInvalid');
   }
 
   // Write config values
@@ -243,6 +234,10 @@ export async function handleSetupSave(connection, interaction) {
 
   saved.push('', replaceTemplateVariables(state.cfg.txtSetupSupportInvite, { hubInviteUrl: state.cfg.cfgHubInviteUrl }));
 
+  // Refresh the dirty-state baseline now that these values are actually saved, so the panel
+  // re-render below doesn't show a stale "Unsaved Changes" banner for changes that just landed.
+  state.originalFields = Object.fromEntries(STAGED_FIELDS.map((key) => [key, state[key]]));
+
   pendingSetupData.delete(interaction.user.id);
   log(`handleSetupSave: complete for guild ${guildId} by ${interaction.user.tag}`, { show: true, guildName: interaction.guild.name });
 
@@ -254,5 +249,11 @@ export async function handleSetupSave(connection, interaction) {
     log(`🆕 New server setup: **${interaction.guild.name}** (${guildId}) by ${interaction.user.tag}`, { show: true, hub: true });
   }
 
-  await interaction.editReply({ content: saved.join('\n'), embeds: [], components: [] });
+  // V2 forbids editing this message back to plain content/embeds/components: [] (the old shape
+  // here) — see buildSetupPanel's doc comment. Per the plan's chosen fix: leave the panel itself
+  // live in its saved, read-only state (interactive: false — pendingSetupData is gone above, so
+  // buttons would dead-end into txtActionSessionExpired) and post the detailed summary as a
+  // separate ephemeral follow-up rather than overwriting the panel with it.
+  await interaction.editReply(buildSetupPanel(state, state.cfg, { interactive: false }));
+  await interaction.followUp({ content: saved.join('\n'), flags: MessageFlags.Ephemeral });
 }

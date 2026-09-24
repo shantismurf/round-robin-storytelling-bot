@@ -1,6 +1,7 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, LabelBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ChannelType } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder, LabelBuilder, ChannelSelectMenuBuilder, StringSelectMenuBuilder, ChannelType } from 'discord.js';
 import { getConfigValue, getSetupRequiredMessage, sanitizeModalInput, log, replaceTemplateVariables, logGuildEvent } from '../utilities.js';
 import { cancelPendingRoundupJobs, scheduleNextRoundup } from '../story/roundup.js';
+import { finalMessage } from '../story/_metadataModals.js';
 import { handleSetupSave } from './_storyadminSetupSave.js';
 
 export const pendingSetupData = new Map();
@@ -22,57 +23,80 @@ export function isSetupDirty(state) {
   return STAGED_FIELDS.some((key) => state[key] !== state.originalFields[key]);
 }
 
-export function buildSetupPanel(state, cfg) {
+/**
+ * Components V2 conversion (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2, step 2 of
+ * the build order) — was a classic EmbedBuilder, now a ContainerBuilder, matching
+ * buildStoryPanel() in story/_metadataModals.js. IsComponentsV2 is per-message and can never be
+ * removed once a message carries it (verified against node_modules/discord.js/src/structures/
+ * interfaces/TextBasedChannel.js), so every caller that edits this same panel message needs a
+ * components-only payload from here on — no `content`, `embeds`, `stickers`, or `poll`.
+ *
+ * @param {object} [opts]
+ * @param {boolean} [opts.interactive=true] - false renders the read-only, saved terminal state
+ *   (no action rows). Used once, by handleSetupSave after a successful save: pendingSetupData is
+ *   gone by then, so live buttons would just dead-end into txtActionSessionExpired.
+ * @param {string|null} [opts.prependMessage=null] - plain text shown above the panel body (the
+ *   "setup required" onboarding message getSetupRequiredMessage returns). V2 forbids `content`
+ *   alongside `components`, so this has to be a component in the same container rather than a
+ *   sibling `content` field the way handleSetup's very first reply used to send it.
+ */
+export function buildSetupPanel(state, cfg, { interactive = true, prependMessage = null } = {}) {
   log(`storyadmin setup: buildSetupPanel started`, { show: false, guildName: 'system' });
   const fieldVal = (id) => id ? `<#${id}>` : `\`${cfg.txtNotSet}\``;
   const strVal   = (v)  => v  ? `\`${v}\``  : `\`${cfg.txtNotSet}\``;
   const desc     = (key) => `*${cfg[key]}*`;
 
   const items = [
-    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `-> ${strVal(state.adminRoleName)}\n`,
-    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `-> ${fieldVal(state.restrictedMediaChannelId)}\n`,
-    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `-> ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}\n`,
-    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `-> ${strVal(state.roundupDay)}\n`,
-    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `-> ${strVal(state.roundupHour)}\n`,
-    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `-> ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}\n`,
+    `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
+    `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
+    `**${cfg.txtSetupModalTitleRole}**\n` + desc('txtSetupEmbedDescAdminRole') + `-> ${strVal(state.adminRoleName)}`,
+    `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
+    `**${cfg.txtSetupModalTitleRestrictedMedia}**\n` + desc('txtSetupEmbedDescRestrictedMedia') + `-> ${fieldVal(state.restrictedMediaChannelId)}`,
+    `**${cfg.txtSetupModalTitleRoundupChannel}**\n` + desc('txtSetupEmbedDescRoundupChannel') + `-> ${state.roundupChannelId ? `<#${state.roundupChannelId}>` : `\`${cfg.txtOff}\``}`,
+    `**${cfg.txtSetupModalTitleRoundupDay}**\n` + desc('txtSetupEmbedDescRoundupDay') + `-> ${strVal(state.roundupDay)}`,
+    `**${cfg.txtSetupModalTitleRoundupHour}**\n` + desc('txtSetupEmbedDescRoundupHour') + `-> ${strVal(state.roundupHour)}`,
+    `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `-> ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`,
   ];
-  const panelBody = items.join('\n\n');
 
-  const embed = new EmbedBuilder()
-    .setTitle(cfg.txtSetupPanelTitle)
-    .setColor(0x5865f2)
-    .setDescription(
-      isSetupDirty(state)
-        ? `**${cfg.lblUnsavedChangesTitle}**\n${replaceTemplateVariables(cfg.txtUnsavedChangesBody, { save_label: cfg.btnSetupSave })}\n\n${panelBody}`
-        : panelBody
-    );
+  const container = new ContainerBuilder().setAccentColor(0x5865f2);
 
-  if (isSetupDirty(state)) {
-    embed.setFooter({ text: cfg.lblUnsavedChangesTitle });
+  if (prependMessage) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(prependMessage));
+    container.addSeparatorComponents(new SeparatorBuilder());
   }
-  // Dirty-state-only warning — same pattern/reasoning as story/manage.js's Part 1c indicator
 
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(`# ${cfg.txtSetupPanelTitle}`));
 
-  const row1 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
-  );
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_setup_roundup').setLabel(cfg.btnSetupRoundup).setStyle(ButtonStyle.Primary),
-    new ButtonBuilder()
-      .setCustomId('storyadmin_setup_toggle_changelog')
-      .setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`)
-      .setStyle(ButtonStyle.Secondary),
-  );
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('storyadmin_setup_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary),
-  );
+  // Dirty-state-only warning — same pattern/reasoning as story/manage.js's Part 1c indicator.
+  if (isSetupDirty(state)) {
+    container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+      `**${cfg.lblUnsavedChangesTitle}**\n${replaceTemplateVariables(cfg.txtUnsavedChangesBody, { save_label: cfg.btnSetupSave })}`
+    ));
+  }
+  container.addSeparatorComponents(new SeparatorBuilder());
 
-  return { embeds: [embed], components: [row1, row2, row3] };
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(items.join('\n\n')));
+
+  if (interactive) {
+    container.addSeparatorComponents(new SeparatorBuilder());
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storyadmin_setup_channels').setLabel(cfg.btnSetupChannels).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId('storyadmin_setup_role').setLabel(cfg.btnSetupRole).setStyle(ButtonStyle.Primary),
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storyadmin_setup_roundup').setLabel(cfg.btnSetupRoundup).setStyle(ButtonStyle.Primary),
+      new ButtonBuilder()
+        .setCustomId('storyadmin_setup_toggle_changelog')
+        .setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`)
+        .setStyle(ButtonStyle.Secondary),
+    ));
+    container.addActionRowComponents(new ActionRowBuilder().addComponents(
+      new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
+      new ButtonBuilder().setCustomId('storyadmin_setup_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary),
+    ));
+  }
+
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 export async function handleSetup(connection, interaction) {
@@ -147,11 +171,10 @@ export async function handleSetup(connection, interaction) {
   // straight here would otherwise never see the welcome or its prerequisites list — and this
   // is the moment they most need it, since creating a channel or a role means leaving the panel.
   const setupMessage = await getSetupRequiredMessage(connection, interaction);
-  const panel = buildSetupPanel(state, cfg);
+  const panel = buildSetupPanel(state, cfg, { prependMessage: setupMessage });
   await interaction.reply({
-    ...(setupMessage ? { content: setupMessage } : {}),
     ...panel,
-    flags: MessageFlags.Ephemeral,
+    flags: panel.flags | MessageFlags.Ephemeral,
   });
 }
 
@@ -375,9 +398,8 @@ export async function handleSetupRoleModal(connection, interaction) {
 export async function handleSetupCancel(connection, interaction) {
   pendingSetupData.delete(interaction.user.id);
   await interaction.deferUpdate();
-  await interaction.editReply({
-    content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id),
-    embeds: [],
-    components: []
-  });
+  // finalMessage() (story/_metadataModals.js) wraps plain text as a one-block V2 Container —
+  // {content, embeds: [], components: []} is the pre-V2 shape and is no longer valid once this
+  // message carries IsComponentsV2 (see buildSetupPanel's doc comment).
+  await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id)));
 }
