@@ -20,6 +20,20 @@ export const GROUND_RULES_LABEL_MAX = 40;
 export const GROUND_RULES_DESC_MAX = 100;
 
 /**
+ * Resolves the raw vocabulary text a guild is actually running: its own saved cfgGroundRules if
+ * it has one, otherwise the approved default vocabulary. Per the plan's own words, the defaults
+ * are "loaded for every new and existing server" — not merely a pre-fill suggestion shown once
+ * in the setup modal. Every read of the vocabulary (the setup panel's display, the story-level
+ * checkbox group, and story status/join panel resolution) needs this fallback, not just the
+ * modal's own pre-fill — otherwise a guild that predates this feature, or simply hasn't opened
+ * the setup modal yet, shows "no rules" and has no Ground Rules to pick from anywhere, when it
+ * should be running the same defaults every other unconfigured guild gets.
+ */
+export function effectiveGroundRulesText(storedText, defaultText) {
+  return (storedText && storedText.trim()) ? storedText : (defaultText ?? '');
+}
+
+/**
  * Parses the blank-line-delimited vocabulary format into [{ label, description }]. Tolerant of
  * doubled blank lines between blocks (splits on one-or-more consecutive blank lines). Line 1 of
  * each block is the label; remaining line(s) are the description. Blocks with no label (e.g. from

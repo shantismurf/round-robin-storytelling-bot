@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, trimTrailingEmoji } from '../utilities.js';
 import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings, isStoryJoinable } from './_metadata.js';
-import { resolveGroundRuleLabels, parseGroundRulesText } from './_groundRules.js';
+import { resolveGroundRuleLabels, parseGroundRulesText, effectiveGroundRulesText } from './_groundRules.js';
 import { getActiveThreadId } from '../storybot.js';
 import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, STORY_MODE, ENTRY_STATUS } from '../constants.js';
 
@@ -95,12 +95,12 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusInactiveHeading', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
-      'lblMetaDynamic', 'lblMetaGroundRules', 'cfgGroundRules',
+      'lblMetaDynamic', 'lblMetaGroundRules', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
       ratingBadgeCfgKey,
       ...warningOptions,
       ...dynamicOptions,
     ], story.guild_id);
-    const groundRulesDisplay = resolveGroundRuleLabels(story.ground_rules, parseGroundRulesText(cfg.cfgGroundRules)).join(', ');
+    const groundRulesDisplay = resolveGroundRuleLabels(story.ground_rules, parseGroundRulesText(effectiveGroundRulesText(cfg.cfgGroundRules, cfg.txtGroundRulesDefaultVocabulary))).join(', ');
     const txtActive = cfg.txtActive;
     const txtPaused = cfg.txtPaused;
     const txtClosed = cfg.txtClosed;

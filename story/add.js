@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBu
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, parseDuration, formatDuration } from '../utilities.js';
 import { CreateStory } from '../storybot.js';
 import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal } from './_metadataModals.js';
-import { parseGroundRulesText } from './_groundRules.js';
+import { parseGroundRulesText, effectiveGroundRulesText } from './_groundRules.js';
 import { STORY_MODE } from '../constants.js';
 
 // Temporary storage for story add session state
@@ -55,7 +55,7 @@ export async function handleAddStory(connection, interaction) {
 
     const state = {
       cfg,
-      groundRulesVocabulary: parseGroundRulesText(groundRulesText),
+      groundRulesVocabulary: parseGroundRulesText(effectiveGroundRulesText(groundRulesText, cfg.txtGroundRulesDefaultVocabulary)),
       groundRules: [],
       teenOrLowerOnly: teenOrLowerOnly === '1',
       storyTitle: null,

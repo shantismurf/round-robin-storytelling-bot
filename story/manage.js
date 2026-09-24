@@ -2,7 +2,7 @@ import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBu
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
-import { parseGroundRulesText } from './_groundRules.js';
+import { parseGroundRulesText, effectiveGroundRulesText } from './_groundRules.js';
 import { getMetaCfg, buildStoryPanel, buildMetadataModal, buildTagsModal, buildStoryInfoModal, finalMessage } from './_metadataModals.js';
 import { buildTurnActionsPanel, handleTurnActionButton, handleTurnActionConfirm, handleTurnActionCancel, handleTurnActionSelectMenu, handleTurnActionModal } from './_manageTurnActions.js';
 import { handleManageEntriesButton, handleManageEntriesSelectMenu } from './_manageEntries.js';
@@ -281,7 +281,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       characters: story.characters ?? '',
       dynamic: story.dynamic ?? '',
       groundRules: story.ground_rules ? story.ground_rules.split(',').map(s => s.trim()).filter(Boolean) : [],
-      groundRulesVocabulary: parseGroundRulesText(groundRulesText),
+      groundRulesVocabulary: parseGroundRulesText(effectiveGroundRulesText(groundRulesText, cfg.txtGroundRulesDefaultVocabulary)),
       teenOrLowerOnly: teenOrLowerOnly === '1',
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,

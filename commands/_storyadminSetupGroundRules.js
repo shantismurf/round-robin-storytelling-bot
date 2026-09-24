@@ -127,7 +127,7 @@ export async function handleSetupGroundRulesModal(connection, interaction) {
     // Nothing existing can break from an addition alone — save immediately, no confirm screen.
     await applyGroundRulesSave(connection, state, rules, diff);
     log(`handleSetupGroundRulesModal: pure-addition save guild=${state.guildId} rules=${rules.length}`, { show: true, guildName: interaction.guild.name });
-    await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible }));
+    await state.originalInteraction.editReply(buildSetupPanel(state, cfg, { tier1Visible, activeTab: state.activeSetupTab }));
     await interaction.deleteReply();
     return;
   }
@@ -157,7 +157,7 @@ export async function handleSetupGroundRulesConfirm(connection, interaction) {
   await applyGroundRulesSave(connection, state, rules, diff);
   log(`handleSetupGroundRulesConfirm: applied guild=${state.guildId} added=${diff.added.length} removed=${diff.removed.length} renamed=${diff.renamed ? 1 : 0}`, { show: true, guildName: interaction.guild.name });
   delete state.pendingGroundRules;
-  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction) }));
+  await state.originalInteraction.editReply(buildSetupPanel(state, state.cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
 }
 
 export async function handleSetupGroundRulesCancel(connection, interaction) {
