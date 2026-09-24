@@ -7,7 +7,7 @@ function makeState(overrides = {}) {
     title: 'A Story', summary: 'A summary', storyMode: 1, orderType: 1, showAuthors: 1,
     storyTurnPrivacy: 0, sceneBreakDivider: '', turnLength: 24, timeoutReminder: 50,
     maxWriters: null, dynamic: 'general', rating: 'NR', warnings: ['allclear'],
-    mainPairing: '', otherRelationships: '', characters: '', tags: '',
+    mainPairing: '', otherRelationships: '', characters: '', tags: '', groundRules: [],
     allowJoins: 1, targetStatus: 'active',
   };
   const state = { ...base, ...overrides };
@@ -81,5 +81,21 @@ describe('isManageDirty', () => {
     state.allowJoins = 0; // simulates the toggle button mutating it directly
     assert.equal(isManageDirty(state), false);
     assert.equal(STAGED_FIELDS.includes('allowJoins'), false);
+  });
+
+  test('groundRules IS tracked and staged behind Save Settings, same shape as warnings', () => {
+    assert.equal(STAGED_FIELDS.includes('groundRules'), true);
+    const state = makeState({ groundRules: ['keep-it-clean'] });
+    state.originalFields.groundRules = ['keep-it-clean'];
+    assert.equal(isManageDirty(state), false);
+    state.groundRules = ['keep-it-clean', 'anything-goes'];
+    assert.equal(isManageDirty(state), true);
+  });
+
+  test('groundRules re-selected in a different order is not dirty', () => {
+    const state = makeState({ groundRules: ['a', 'b'] });
+    state.originalFields.groundRules = ['a', 'b'];
+    state.groundRules = ['b', 'a'];
+    assert.equal(isManageDirty(state), false);
   });
 });
