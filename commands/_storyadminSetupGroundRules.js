@@ -42,7 +42,7 @@ export function buildGroundRulesModal(cfg, state, { prefillText = null, error = 
   const defaultValue = prefillText ?? (state.groundRulesText || cfg.txtGroundRulesDefaultVocabulary);
   const textInput = new TextInputBuilder()
     .setCustomId('groundRulesText')
-    .setLabel(cfg.lblSetupModalFieldGroundRules)
+    .setLabel(cfg.txtSetupModalTitleGroundRules)
     .setStyle(TextInputStyle.Paragraph)
     .setRequired(false)
     .setMaxLength(GROUND_RULES_TEXT_MAX)

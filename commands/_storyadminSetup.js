@@ -189,7 +189,7 @@ export async function handleSetup(connection, interaction) {
     'txtSetupSupportInvite', 'cfgHubInviteUrl', 'lblSetupChangelog',
     'lblSetupModalFieldRole', 'txtSetupModalPlaceholderRole',
     'btnSetupGroundRules', 'txtSetupModalTitleGroundRules', 'txtSetupEmbedDescGroundRules',
-    'lblSetupModalFieldGroundRules', 'txtSetupGroundRulesModalDesc', 'txtGroundRulesNoneConfigured',
+    'txtSetupGroundRulesModalDesc', 'txtGroundRulesNoneConfigured',
     'txtGroundRulesDefaultVocabulary',
     'txtGroundRulesErrCount', 'txtGroundRulesErrRule', 'txtGroundRulesReasonLabelMissing',
     'txtGroundRulesReasonLabelTooLong', 'txtGroundRulesReasonDescTooLong',
