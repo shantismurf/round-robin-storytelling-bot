@@ -128,6 +128,15 @@ under Unreleased in the meantime per the changelog contract.
   position still routes. While in that code: also replaced its
   `state.originalInteraction.editReply(...)` with `interaction.update(...)`, the same stale-token
   bug just fixed on the setup panel (see above) — this dispatch had the identical pattern.
+- Same `COMPONENT_CUSTOM_ID_DUPLICATED` bug, missed in the fix above: `commands/_storyadminSetup.js`
+  has the identical "tab row repeated top and bottom" pattern for its own Server/Story tab toggle
+  (`buildTabRow()`, called once at the top of the panel and again at the bottom with the same
+  hardcoded `storyadmin_setup_tab_tier1`/`tier2` customIds) — would throw the same crash for any
+  Manage Server holder opening the interactive setup panel. Same fix: `buildTabRow(position)` now
+  folds `'top'`/`'bottom'` into each customId; `handleSetupButton`'s dispatch matches via
+  `id.startsWith(...)`. Verified with a runtime smoke test against the real `buildSetupPanel`
+  export (no duplicate customIds in either tab's rendered tree) and a repo-wide grep confirming no
+  other "same row built twice on one message" pattern exists outside these three.
 
 ### Changed
 - Setup panel channel-field copy, LeeAnn 2026-09-24: `txtSetupModalTitleMedia` ("Media/Image
