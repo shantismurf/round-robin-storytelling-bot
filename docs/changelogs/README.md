@@ -48,4 +48,14 @@ moment rather than treating it as separate work:
 Step 3 is the one that used to stall, because it meant reconstructing months of work from
 memory. With `INTERNAL.md` maintained, it is an editing job rather than an archaeology job.
 
+## Changes that do not bump
+
+Not every change bumps the version — the version tracks what users experience, so a purely
+internal change does not move it. Those still get an entry, under **Unreleased** at the top of
+`INTERNAL.md`, landing in the same commit as the change. The next version's entry absorbs that
+section.
+
+Without this, internal work would be invisible in the record, which is the exact failure this
+directory exists to prevent.
+
 A version does not need a Hub post. Most will not get one.

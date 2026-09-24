@@ -35,7 +35,7 @@
 
 ## Versioning Policy
 - **Approval required before bumping:** Explicit sign-off is required to bump any version level. Propose the number and the reasoning and submit for approval — don't just apply it.
-- **Changelog entry with every bump:** Propose the `docs/changelogs/INTERNAL.md` entry alongside the version number, and land both in the same commit as the change itself. A bump without an entry is incomplete. Changes made without a bump roll into the next version's entry rather than being skipped.
+- **Changelog entry with every change:** Every change gets a `docs/changelogs/INTERNAL.md` entry, whether or not it bumps the version — the version number tracks what users experience, the changelog tracks what happened. A change that bumps proposes its entry alongside the version number and lands both in the same commit as the change itself; a bump without an entry is incomplete. A change that does not bump lands its entry under **Unreleased** at the top of the file, which the next version's entry absorbs.
 - **MAJOR** — a significant change to the core identity of the application, or a major addition that substantially impacts user experience (e.g. the UX v3 modal-panel rework, shipped as 3.0.0).
 - **MINOR** — a significant amount of work that meaningfully affects experience, reliability/risk, or touches enough code that experience could be impacted even without a visible change (e.g. code changes across several files that may only manifest as a single line change to the user).
 - **PATCH** — small, contained fixes and additions: one new field, one bug fix, a cosmetic tweak, a background job for an edge case.

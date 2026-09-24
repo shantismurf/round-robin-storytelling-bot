@@ -19,6 +19,14 @@ the thing you will search for later is the old name.
 
 ---
 
+## Unreleased
+
+Work that did not bump the version, because it changed nothing about what users experience.
+The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+
+*Nothing pending.*
+
+
 ## 3.5.6 — 2026-09-24
 
 Provenance: git-derived.
