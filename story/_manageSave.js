@@ -9,7 +9,7 @@ import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
 import { crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
-import { resolveGroundRuleLabels } from './_groundRules.js';
+import { resolveGroundRuleLabels, formatGroundRuleLabelList } from './_groundRules.js';
 import { postStoryThreadActivity } from './_turn.js';
 import { finalMessage } from './_metadataModals.js';
 import { pendingManageData } from './manage.js';
@@ -53,7 +53,7 @@ export async function handleManageSave(connection, interaction, state) {
     if (groundRulesChanged) {
       const currentLabels = resolveGroundRuleLabels(groundRulesStr, state.groundRulesVocabulary ?? []);
       const notice = currentLabels.length
-        ? replaceTemplateVariables(state.cfg.txtGroundRulesChangedNotice, { ground_rules: currentLabels.join(', ') })
+        ? replaceTemplateVariables(state.cfg.txtGroundRulesChangedNotice, { ground_rules: formatGroundRuleLabelList(currentLabels) })
         : state.cfg.txtGroundRulesChangedNoticeNone;
       postStoryThreadActivity(connection, interaction.guild, state.storyId, { embeds: [new EmbedBuilder().setDescription(notice).setColor(0x57F287)] }).catch(() => {});
     }

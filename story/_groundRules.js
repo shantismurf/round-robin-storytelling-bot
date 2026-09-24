@@ -188,3 +188,16 @@ export function resolveGroundRuleLabels(storedSlugsCsv, currentRules) {
   const labelBySlug = new Map(currentRules.map((r) => [slugifyGroundRuleLabel(r.label), r.label]));
   return storedSlugs.map((slug) => labelBySlug.get(slug)).filter(Boolean);
 }
+
+/**
+ * Joins rule labels into one comma-separated display string, each wrapped in double quotes.
+ * LeeAnn, 2026-09-24: a label that itself contains a comma (e.g. "Conflict, Not Contempt") reads
+ * as two separate items once it's strung together with the others the same way — "Anything
+ * Goes, Conflict, Not Contempt" looks like three rules, not two. Quoting only at this join point
+ * (not in the stored vocabulary text itself) keeps the checkbox group's own option list — where
+ * each label is already its own line, not comma-joined — free of stray quote marks it doesn't
+ * need.
+ */
+export function formatGroundRuleLabelList(labels) {
+  return labels.map((label) => `"${label}"`).join(', ');
+}

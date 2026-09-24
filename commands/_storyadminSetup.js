@@ -1,7 +1,7 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder, SectionBuilder } from 'discord.js';
 import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin } from '../utilities.js';
 import { finalMessage } from '../story/_metadataModals.js';
-import { parseGroundRulesText, effectiveGroundRulesText } from '../story/_groundRules.js';
+import { parseGroundRulesText, effectiveGroundRulesText, formatGroundRuleLabelList } from '../story/_groundRules.js';
 import { handleSetupSave } from './_storyadminSetupSave.js';
 import { buildChannelsModal, buildRoundupModal, buildSetupFieldModal, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';
 import {
@@ -68,7 +68,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
 
   const groundRulesLabels = parseGroundRulesText(effectiveGroundRulesText(state.groundRulesText, cfg.txtGroundRulesDefaultVocabulary)).map((r) => r.label);
   const groundRulesDisplay = groundRulesLabels.length
-    ? `✅ ${groundRulesLabels.join(', ')}`
+    ? `✅ ${formatGroundRuleLabelList(groundRulesLabels)}`
     : `❌ ${cfg.txtGroundRulesNoneConfigured}`;
 
   // One field-group per modal/toggle, each rendered as its own unit (a Components V2 Section:

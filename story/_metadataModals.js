@@ -1,7 +1,7 @@
 import { EmbedBuilder, ModalBuilder, ActionRowBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, RadioGroupBuilder, RadioGroupOptionBuilder, CheckboxGroupBuilder, CheckboxGroupOptionBuilder, ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ButtonBuilder, ButtonStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, formatDuration, trimTrailingEmoji, replaceTemplateVariables } from '../utilities.js';
 import { ratingCodes, ratingLabelKey, dynamicOptions, warningOptions, isRestricted } from './_metadata.js';
-import { slugifyGroundRuleLabel, resolveGroundRuleLabels } from './_groundRules.js';
+import { slugifyGroundRuleLabel, resolveGroundRuleLabels, formatGroundRuleLabelList } from './_groundRules.js';
 import { STORY_MODE } from '../constants.js';
 
 // Wraps a plain text message (optionally with trailing components, e.g. a confirm row or an
@@ -128,7 +128,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
     Array.isArray(state.groundRules) ? state.groundRules.join(',') : (state.groundRules ?? ''),
     state.groundRulesVocabulary ?? []
   );
-  const groundRulesDisplay = groundRulesLabels.length ? groundRulesLabels.join(', ') : cfg.txtGroundRulesNoneConfigured;
+  const groundRulesDisplay = groundRulesLabels.length ? formatGroundRuleLabelList(groundRulesLabels) : cfg.txtGroundRulesNoneConfigured;
 
   const titleDisplay = state.storyTitle || cfg.txtStoryTitlePrompt;
   const summaryDisplay = state.summary || cfg.txtNotSet;

@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import {
   parseGroundRulesText, formatGroundRulesText, validateGroundRules,
   slugifyGroundRuleLabel, diffGroundRules, isPureAddition, resolveGroundRuleLabels,
-  effectiveGroundRulesText,
+  effectiveGroundRulesText, formatGroundRuleLabelList,
   GROUND_RULES_MAX_RULES, GROUND_RULES_LABEL_MAX, GROUND_RULES_DESC_MAX,
 } from '../story/_groundRules.js';
 
@@ -197,6 +197,27 @@ describe('effectiveGroundRulesText', () => {
   test('no default text configured resolves to empty rather than throwing', () => {
     assert.equal(effectiveGroundRulesText('', undefined), '');
     assert.equal(effectiveGroundRulesText(null, null), '');
+  });
+});
+
+describe('formatGroundRuleLabelList', () => {
+  test('wraps each label in double quotes when joining', () => {
+    assert.equal(formatGroundRuleLabelList(['Anything Goes', 'Keep It Clean']), '"Anything Goes", "Keep It Clean"');
+  });
+
+  test('a label containing a comma no longer reads as two separate items once joined', () => {
+    const result = formatGroundRuleLabelList(['Anything Goes', 'Conflict, Not Contempt']);
+    assert.equal(result, '"Anything Goes", "Conflict, Not Contempt"');
+    // The whole second title is inside one quoted span, not split across two.
+    assert.match(result, /"Conflict, Not Contempt"/);
+  });
+
+  test('a single label is still quoted', () => {
+    assert.equal(formatGroundRuleLabelList(['Keep It Clean']), '"Keep It Clean"');
+  });
+
+  test('an empty list formats to an empty string', () => {
+    assert.equal(formatGroundRuleLabelList([]), '');
   });
 });
 
