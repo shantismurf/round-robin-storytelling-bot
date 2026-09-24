@@ -1,6 +1,6 @@
 # Plan: First-Run Experience
 
-Status: Partially Implemented — copy changes shipped 2026-09-22; the rest designed, not built
+Status: Partially Implemented — copy shipped 2026-09-22, Join button shipped 2026-09-24; the rest designed, not built
 Created: 2026-09-22
 Last Updated: 2026-09-22
 
@@ -16,9 +16,17 @@ fix that matters when the admin is LeeAnn herself.
 
 ---
 
-## 1. Join button on the story creation announcement — highest priority
+## 1. Join button on the story creation announcement — shipped 2026-09-24
 
-**Ship before the Dwarrow Scholar install.**
+The button now goes out with `postStoryFeedCreationAnnouncement`, reusing the existing
+`btnJoinStory` label and the existing `story_join_<storyId>` customId, so no new config key and
+no new routing. Whether to show it comes from `isStoryJoinable()`, extracted to
+`story/_metadata.js` and now shared with the pinned status embed so the two cannot drift.
+`validateJoinEligibility` already re-checks closed, joins-off, at-capacity and already-joined at
+click time, so a button left sitting in the feed degrades with a proper message rather than
+failing.
+
+The original finding follows.
 
 `announcements.js:128` posts the creation announcement to the feed channel as a plain line of
 text. The Join button exists only on the pinned status embed *inside* the story thread

@@ -1,5 +1,6 @@
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
-import { resolveFeedChannelId, ratingBadgeKey } from './story/_metadata.js';
+import { resolveFeedChannelId, ratingBadgeKey, isStoryJoinable } from './story/_metadata.js';
 import { STORY_MODE, WRITER_STATUS, TURN_STATUS } from './constants.js';
 /**
  * All announcements sent to story feed channel are handled here
@@ -85,7 +86,7 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
 
     const [storyRows] = await connection.execute(
       `SELECT s.title, s.mode, s.story_order_type, s.turn_length_hours,
-              s.max_writers, s.allow_joins, s.story_delay_hours, s.story_delay_users,
+              s.max_writers, s.allow_joins, s.story_status, s.story_delay_hours, s.story_delay_users,
               s.created_at, s.rating, COUNT(sw.story_writer_id) as writer_count
        FROM story s
        LEFT JOIN story_writer sw ON sw.story_id = s.story_id AND sw.sw_status = ?
@@ -127,11 +128,27 @@ export async function postStoryFeedCreationAnnouncement(connection, storyId, int
     const ratingBadgeDisplay = await getConfigValue(connection, ratingBadgeKey(story.rating ?? 'NR'), guildId);
     const message = `# 📚 New Story Created by ${creatorName}: "${story.title}" ${ratingBadgeDisplay}\n-# ${metaParts.join(' · ')}`;
 
+    // A new story used to be announced to the feed with no way to act on it — the only Join
+    // button lived on the pinned status embed inside the story thread, which nobody reading the
+    // feed has opened yet. Same customId as that one, so it routes to the same handler.
+    // validateJoinEligibility re-checks everything at click time, so the button degrades with a
+    // proper message if joins close or the story fills after this is posted.
+    const components = [];
+    if (isStoryJoinable(story, story.writer_count)) {
+      const btnJoinStory = await getConfigValue(connection, 'btnJoinStory', guildId);
+      components.push(new ActionRowBuilder().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`story_join_${storyId}`)
+          .setLabel(btnJoinStory)
+          .setStyle(ButtonStyle.Primary)
+      ));
+    }
+
     const targetChannelId = await resolveFeedChannelId(connection, guildId, story.rating ?? 'NR');
     const feedChannel = await interaction.guild.channels.fetch(targetChannelId);
-    if (feedChannel) await feedChannel.send(message);
+    if (feedChannel) await feedChannel.send({ content: message, components });
 
-    log(`Story feed creation announcement sent for story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
+    log(`Story feed creation announcement sent for story ${storyId} (join button: ${components.length > 0})`, { show: true, guildName: interaction?.guild?.name });
   } catch (error) {
     log(`Error in postStoryFeedCreationAnnouncement: ${error}`, { show: true, guildName: interaction?.guild?.name });
   }

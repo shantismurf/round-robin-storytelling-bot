@@ -95,6 +95,25 @@ Tag Submission Thread Post (in story thread)
   → Ephemeral replies only; no follow-up interactions
 ```
 
+### Story feed announcements
+
+```
+Story created
+  → postStoryFeedCreationAnnouncement posts to the feed channel (restricted feed for M/E)
+  → carries a Join button (btnJoinStory, customId story_join_<id>) when the story is open,
+    per isStoryJoinable() in story/_metadata.js — the same predicate the pinned in-thread
+    status embed uses, so the two cannot disagree
+  → validateJoinEligibility re-checks at click time, so the button degrades with a proper
+    message if joins close or the story fills after the announcement is posted
+
+Someone joins       → postStoryFeedJoinAnnouncement
+Delayed story wakes → postStoryFeedActivationAnnouncement
+Story closes        → postStoryFeedClosedAnnouncement
+Quick mode turn     → txtQuickModeTurnStart, posted per turn
+Normal/slow turn    → no bot feed post; the turn thread is created on the feed channel, so
+                      what appears there is Discord's own thread-created system message
+```
+
 ### Unconfigured-server gate
 
 ```

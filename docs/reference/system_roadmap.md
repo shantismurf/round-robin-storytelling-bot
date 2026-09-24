@@ -28,7 +28,7 @@ For config string keys, see `config_roadmap.md`.
 | `story/_turn.js` | The turn engine core: `PickNextWriter`, `NextTurn`, `endTurnGuarded` (atomic guarded turn-end), `endTurnThread`/`deleteThreadAndAnnouncement` (draft preservation), `closeStoryInternals`, `departWriter` (shared writer-exit logic) | ~700 |
 | `story/_delay.js` | `checkStoryDelay()` — evaluates a delayed story's writer-count/hour-based activation conditions | — |
 | `story/_storyStatus.js` | `buildThreadTitle()`, `updateStoryStatusMessage()` — persistent status-embed maintenance | — |
-| `story/_metadata.js` | Rating/warnings/dynamic constants and helpers: `isRestricted`, `crossesBarrier`, `ratingCodes`, `warningOptions`, `dynamicOptions`, feed/media channel + restricted-channel-configured resolution | — |
+| `story/_metadata.js` | Rating/warnings/dynamic constants and helpers: `isRestricted`, `crossesBarrier`, `ratingCodes`, `warningOptions`, `dynamicOptions`, `isStoryJoinable`, feed/media channel + restricted-channel-configured resolution | — |
 | `story/_migration.js` | `migrateStoryThread()` — moves a story's active thread between unrestricted/restricted channels on a rating change | — |
 | `story/_managePauseResume.js` | `applyPauseActions`, `applyResumeActions`, `handleTogglePauseResume`, `handleReopenStory` — pause/resume/reopen state transitions and thread retitling | — |
 | `story/_manageTurnActions.js` | Admin turn actions panel: skip/reassign/extend the active turn | ~500 |

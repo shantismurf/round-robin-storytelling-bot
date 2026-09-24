@@ -1,6 +1,6 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, trimTrailingEmoji } from '../utilities.js';
-import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings } from './_metadata.js';
+import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings, isStoryJoinable } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
 import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, STORY_MODE, ENTRY_STATUS } from '../constants.js';
 
@@ -248,10 +248,9 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       }
     } catch {}
 
-    // Add Join button if story is open for new writers
-    const isJoinable = story.story_status !== STORY_STATUS.CLOSED
-      && story.allow_joins
-      && (!story.max_writers || activeWriters.length < story.max_writers);
+    // Add Join button if story is open for new writers. Shared with the feed creation
+    // announcement so the two cannot drift on what "open" means.
+    const isJoinable = isStoryJoinable(story, activeWriters.length);
 
     const components = [];
     const actionRow = new ActionRowBuilder();

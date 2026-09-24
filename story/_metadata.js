@@ -4,6 +4,8 @@
  * Ratings that require a restricted feed channel (M and E).
  */
 
+import { STORY_STATUS } from '../constants.js';
+
 export const restrictedRatings = new Set(['M', 'E']);
 
 export const ratingCodes = ['NR', 'G', 'T', 'M', 'E'];
@@ -29,6 +31,25 @@ export const dynamicOptions = [
   'optDynamicPoly',
   'optDynamicOther',
 ];
+
+/**
+ * Whether a story is open for new writers.
+ *
+ * Three places ask this question — the pinned in-thread status embed, the feed creation
+ * announcement, and (planned) the weekly roundup's open-stories section. Keeping the predicate
+ * here stops them drifting apart on what "open" means.
+ *
+ * @param {{ story_status?: number, allow_joins?: number|boolean, max_writers?: number|null }} story
+ * @param {number} activeWriterCount - writers with sw_status = WRITER_STATUS.ACTIVE
+ * @returns {boolean}
+ */
+export function isStoryJoinable(story, activeWriterCount) {
+  if (!story) return false;
+  if (story.story_status === STORY_STATUS.CLOSED) return false;
+  if (!story.allow_joins) return false;
+  if (story.max_writers && activeWriterCount >= story.max_writers) return false;
+  return true;
+}
 
 export function isRestricted(rating) {
   return restrictedRatings.has(rating);
