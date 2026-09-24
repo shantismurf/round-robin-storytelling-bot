@@ -154,18 +154,31 @@ Mixing `addTextDisplayComponents` (instructions text) with `addComponents`/`addL
 (the actual fields) in one modal is normal and already used throughout (`buildChannelsModal()`,
 `commands/_storyadminSetupGroundRules.js`'s `buildGroundRulesModal()`).
 
-### Showing a modal directly from a modal-submit interaction
+### A modal-submit interaction cannot show a modal
 
-Verified in `node_modules/discord.js/src/structures/ModalSubmitInteraction.js`:
-`InteractionResponses.applyToClass(ModalSubmitInteraction, 'showModal')` — a
-`ModalSubmitInteraction` supports `showModal()` exactly like a button interaction does, with the
-one constraint `showModal()`'s own implementation enforces (`InteractionResponses.js`):
-`if (this.deferred || this.replied) throw ...`. So a modal-submit handler can re-show a modal
-directly — pre-filled with what the user just submitted, plus a validation error — **as long as
-it hasn't called `deferReply`/`reply` first**. No intermediate "Try Again" button or ephemeral
-reply is needed. `commands/_storyadminSetupGroundRules.js`'s `handleSetupGroundRulesModal()` is
-the worked example: on a validation failure it calls `interaction.showModal(...)` as its very
-first response to that interaction, before anything else.
+`ModalSubmitInteraction` does **not** support `showModal()` — corrected 2026-09-24 after an
+earlier version of this doc claimed the opposite. Verified in
+`node_modules/discord.js/src/structures/ModalSubmitInteraction.js`:
+
+```js
+InteractionResponses.applyToClass(ModalSubmitInteraction, 'showModal');
+```
+
+`applyToClass(structure, ignore = [])` treats its second argument as the *ignore* list, and tests
+membership with `ignore.includes(prop)`. Passing the bare string `'showModal'` (not an array)
+means that check runs as `'showModal'.includes(prop)` — a **substring test on the string
+itself** — which is only `true` when `prop === 'showModal'`. So `showModal` is the one method
+this call explicitly *excludes* from `ModalSubmitInteraction`, not the one it grants. Calling
+`interaction.showModal(...)` on a modal-submit interaction throws `TypeError: interaction.showModal
+is not a function` at runtime.
+
+A `MessageComponentInteraction` (a button click) has no such exclusion —
+`MessageComponentInteraction.applyToClass(MessageComponentInteraction)` is called with no ignore
+list, so it gets the full `InteractionResponses` set including `showModal()`. That means a
+modal-submit handler that needs to re-show a modal on validation failure (pre-filled with what
+the user just submitted, plus an error) cannot do it directly — it has to reply with an
+intermediate ephemeral message carrying a "try again" button, and let that button's own
+`MessageComponentInteraction` call `showModal()`.
 
 ---
 
