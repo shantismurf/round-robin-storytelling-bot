@@ -11,7 +11,7 @@ const EMBED_COLOR = 0x5865f2;
 // - lbl + txt + children: section with value, then children blockquoted below
 // ---------------------------------------------------------------------------
 
-const PAGE_DEFS = [
+export const PAGE_DEFS = [
   {
     titleKey: 'txtHelp1Title',
     entries: [
@@ -59,6 +59,7 @@ const PAGE_DEFS = [
         { lbl: 'lblHelp4Notifications', txt: 'txtHelp4Notifications' },
       ]},
       { lbl: 'lblHelp4Metadata', txt: 'txtHelp4Metadata' },
+      { lbl: 'lblHelp4GroundRules', txt: 'txtHelp4GroundRules' },
     ],
   },
   {
@@ -94,7 +95,10 @@ const PAGE_DEFS = [
       { lbl: 'lblHelp8Setup', txt: 'txtHelp8Setup', children: [
         { lbl: 'lblHelp8SetupChannels',    txt: 'txtHelp8SetupChannels' },
         { lbl: 'lblHelp8SetupPermissions', txt: 'txtHelp8SetupPermissions' },
+        { lbl: 'lblHelp8GroundRules',      txt: 'txtHelp8GroundRules' },
+        { lbl: 'lblHelp8TeenOrLower',      txt: 'txtHelp8TeenOrLower' },
         { lbl: 'lblHelp8SetupRoundup',     txt: 'txtHelp8SetupRoundup' },
+        { lbl: 'lblHelp8HubAnnouncements', txt: 'txtHelp8HubAnnouncements' },
       ]},
       { lbl: 'lblHelp8ManageStory', txt: 'txtHelp8ManageStory' },
       { lbl: 'lblHelp8ManageUser',  txt: 'txtHelp8ManageUser' },
@@ -108,7 +112,7 @@ const PAGE_DEFS = [
 // Renderer
 // ---------------------------------------------------------------------------
 
-function collectKeys(entries) {
+export function collectKeys(entries) {
   const keys = [];
   for (const entry of entries) {
     keys.push(entry.lbl);
@@ -118,7 +122,7 @@ function collectKeys(entries) {
   return keys;
 }
 
-function renderEntries(entries, cfg, depth = 0) {
+export function renderEntries(entries, cfg, depth = 0) {
   return entries.map(entry => {
     const label = cfg[entry.lbl];
     const value = entry.txt ? cfg[entry.txt] : null;
