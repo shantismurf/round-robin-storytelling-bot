@@ -14,19 +14,25 @@ the thing you will search for later is the old name.
 - **v2.0 through v3.1.2** — reconstructed 2026-09-22 from the Hub posts in `public/`, which
   were edited for readability and length. **Not comprehensive.** Treat as the announced
   highlights, not the full record.
-- **Before v2.0** — no record exists. Git history begins 2026-07-16; nothing earlier survives
-  outside the Hub posts.
+- **Before v2.0** — no entry has been written yet, but the source material does exist. Git
+  history reaches back to 2025-10-28 ("Initial commit"), roughly 600 commits. **Corrected
+  2026-09-25:** this section previously said history began 2026-07-16. It does not — cloud
+  sessions clone this repo shallow, which truncates `git log` at about 144 commits without
+  warning, and that artifact was mistaken for the repo's real history. Run
+  `git fetch --unshallow` before any archaeology here, and check
+  `git rev-parse --is-shallow-repository` before concluding anything is absent.
 
 ---
 
-## Unreleased
+## 3.6.0 — 2026-09-25
 
-Work that did not bump the version, because it changed nothing about what users experience.
-The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
-**Version number and bump level not yet proposed to LeeAnn for the items below** — this batch
-touches a real amount of user-facing surface (a new setup panel tier, Ground Rules, a new
-toggle) and almost certainly warrants at least a MINOR bump once she signs off; recorded here
-under Unreleased in the meantime per the changelog contract.
+Provenance: written alongside the work.
+
+MINOR. Ground Rules is a new user-facing feature, the `/storyadmin setup` panel was reworked
+into two permission tiers and rebuilt on Components V2, and the story panel gained a third tab.
+Not MAJOR: 3.0.0 was the introduction of the modal-panel paradigm, and this extends that
+paradigm rather than replacing it. Proposed and signed off by LeeAnn 2026-09-25. Absorbs the
+`guild_event` instrumentation below, which was itself no-bump work.
 
 ### Added
 - `/storyadmin setup` split into two permission tiers, per `docs/TODO.md`'s design (LeeAnn,
@@ -83,7 +89,7 @@ under Unreleased in the meantime per the changelog contract.
   (755 lines, was 690) — the fuller settings/turns/save split `docs/TODO.md`'s file-size entry
   already describes is still open.
 
-### Added (earlier, pre-existing entry)
+### Added — internal only, absorbed from Unreleased
 - `guild_event` table (`db/migrations/023_guild_event.sql`) and `logGuildEvent()` helper
   (`utilities.js`) — funnel instrumentation for the install-through-activation path, per
   `docs/plans/PLAN-sequencing-and-priorities.md` Stage 1 and finding 7 of
@@ -196,6 +202,16 @@ Provenance: git-derived.
 - `txtSetupRequiredAdmin` rewritten as a welcome with one requirement and a prerequisites list,
   `txtSetupRequiredUser` now states what the bot is rather than reading as an error the member
   caused, and `txtStoryAddIntro` says only a title is required.
+- Setup panel rebuilt from embed fields into a single embed description, so the field list and
+  the unsaved-changes warning render as one body (`commands/_storyadminSetup.js`). Committed
+  2026-09-20 across four commits messaged only `Update _storyadminSetup.js`. **Recorded here
+  2026-09-25** — it had been left behind in a stale Unreleased section below this entry.
+
+### Docs only, no version impact
+- New-admin onboarding review (`audits/Onboarding_Review_2026-09.md`), marketing and listing
+  plan, roadmap sequencing plan, and this changelog directory. 2026-09-22.
+- Corrected `reference/ux_roadmap.md`, which documented three `/storyadmin` subcommands that no
+  longer exist and had caused a false backlog item. 2026-09-22.
 
 ### Removed
 - The unconfigured-guild check in `commands/story.js`. **Why:** unreachable — the gate in
@@ -209,26 +225,6 @@ Provenance: git-derived.
 - The setup-required reply never called `replaceTemplateVariables`, so the new `[hubInviteUrl]`
   token would have rendered literally.
 
-
-## Unreleased
-
-Changes on `main` since the v3.5.4 bump, not yet carrying a version number.
-
-### Changed
-- Setup panel rebuilt from embed fields into a single embed description, so the field list and
-  the unsaved-changes warning render as one body (`commands/_storyadminSetup.js`). Committed
-  2026-09-20 across four commits messaged only `Update _storyadminSetup.js`.
-
-**Proposed version: 3.5.5** (PATCH — cosmetic, one panel). Awaiting sign-off per `CLAUDE.md`'s
-versioning policy; `package.json` still reads 3.5.4.
-
-### Docs only, no version impact
-- New-admin onboarding review (`audits/Onboarding_Review_2026-09.md`), marketing and listing
-  plan, roadmap sequencing plan, and this changelog directory. 2026-09-22.
-- Corrected `reference/ux_roadmap.md`, which documented three `/storyadmin` subcommands that no
-  longer exist and had caused a false backlog item. 2026-09-22.
-
----
 
 ## 3.5.4 — 2026-09-19
 
