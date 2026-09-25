@@ -136,6 +136,17 @@ export function renderEntries(entries, cfg, depth = 0) {
   }).join('\n\n');
 }
 
+// One page, one embed. Used by all three interactive help paths and by the Hub FAQ sync, so
+// the forum copy and the in-Discord copy cannot drift apart.
+export function buildPageEmbed(pageDef, cfg, content) {
+  const embed = new EmbedBuilder()
+    .setTitle(cfg[pageDef.titleKey])
+    .setColor(EMBED_COLOR)
+    .setDescription(content);
+  if (pageDef.footerKey) embed.setFooter({ text: cfg[pageDef.footerKey] });
+  return embed;
+}
+
 async function buildPage(connection, guildId, pageDef) {
   const keys = [pageDef.titleKey, ...collectKeys(pageDef.entries)];
   if (pageDef.footerKey) keys.push(pageDef.footerKey);
@@ -197,13 +208,7 @@ export async function handleHelpSelect(connection, interaction) {
     const guildId = interaction.guild.id;
     const { content, cfg } = await buildPage(connection, guildId, pageDef);
 
-    const embed = new EmbedBuilder()
-      .setTitle(cfg[pageDef.titleKey])
-      .setColor(EMBED_COLOR)
-      .setDescription(content);
-    if (pageDef.footerKey) embed.setFooter({ text: cfg[pageDef.footerKey] });
-
-    await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [buildPageEmbed(pageDef, cfg, content)] });
   } catch (err) {
     log(`handleHelpSelect failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
@@ -220,12 +225,10 @@ export async function handleWriterHelp(connection, interaction) {
     const pageDef = PAGE_DEFS[6]; // page 7: MyStory Commands
     const { content, cfg } = await buildPage(connection, interaction.guild.id, pageDef);
     const setupMessage = await getSetupRequiredMessage(connection, interaction);
-    const embed = new EmbedBuilder()
-      .setTitle(cfg[pageDef.titleKey])
-      .setColor(EMBED_COLOR)
-      .setDescription(content)
-      .setFooter({ text: cfg[pageDef.footerKey] });
-    await interaction.editReply({ ...(setupMessage ? { content: setupMessage } : {}), embeds: [embed] });
+    await interaction.editReply({
+      ...(setupMessage ? { content: setupMessage } : {}),
+      embeds: [buildPageEmbed(pageDef, cfg, content)],
+    });
   } catch (err) {
     log(`handleWriterHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
   }
@@ -241,14 +244,9 @@ export async function handleAdminHelp(connection, interaction, guildId) {
     const pageDef = PAGE_DEFS[7]; // page 8: StoryAdmin Commands
     const { content, cfg } = await buildPage(connection, guildId, pageDef);
     const setupMessage = await getSetupRequiredMessage(connection, interaction);
-    const embed = new EmbedBuilder()
-      .setTitle(cfg[pageDef.titleKey])
-      .setColor(EMBED_COLOR)
-      .setDescription(content)
-      .setFooter({ text: cfg[pageDef.footerKey] });
     await interaction.reply({
       ...(setupMessage ? { content: setupMessage } : {}),
-      embeds: [embed],
+      embeds: [buildPageEmbed(pageDef, cfg, content)],
       flags: MessageFlags.Ephemeral,
     });
   } catch (err) {
@@ -306,7 +304,10 @@ export async function syncFaqPosts(client, connection, guildId) {
 
       const { content, cfg } = await buildPage(connection, guildId, pageDef);
       const title = cfg[pageDef.titleKey].replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}️\s]+/gu, '').trim();
-      const thread = await faqChannel.threads.create({ name: title, message: { content } });
+      const thread = await faqChannel.threads.create({
+        name: title,
+        message: { embeds: [buildPageEmbed(pageDef, cfg, content)] },
+      });
       newIds[i] = thread.id;
       log(`syncFaqPosts: posted page ${i + 1} "${title}" (thread ${thread.id})`, { show: true });
     } catch (err) {

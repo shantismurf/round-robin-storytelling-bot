@@ -16,7 +16,7 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PAGE_DEFS, collectKeys, renderEntries } from '../faq.js';
+import { PAGE_DEFS, collectKeys, renderEntries, buildPageEmbed } from '../faq.js';
 
 const EMBED_DESCRIPTION_LIMIT = 4096;
 
@@ -120,5 +120,28 @@ describe('3.6.0 features are documented', () => {
   test('the permissions section explains both setup tabs', () => {
     assert.match(cfg.txtHelp8SetupPermissions, /Server Admin/);
     assert.match(cfg.txtHelp8SetupPermissions, /Story Admin/);
+  });
+});
+
+describe('buildPageEmbed', () => {
+  // The Hub FAQ forum and the three interactive paths all render through this one function, so
+  // the forum copy cannot drift from what people see in Discord. The forum previously posted
+  // plain message content, which caps at 2000 rather than 4096 -- page 8 was already past that
+  // and had been silently failing to post.
+  test('every page produces an embed Discord will accept', () => {
+    for (const page of PAGE_DEFS) {
+      const json = buildPageEmbed(page, cfg, renderEntries(page.entries, cfg)).toJSON();
+      assert.equal(json.title, cfg[page.titleKey]);
+      assert.ok(json.description.length > 0, `${page.titleKey} has an empty description`);
+      assert.ok(json.description.length <= EMBED_DESCRIPTION_LIMIT);
+    }
+  });
+
+  test('the footer is set only for pages that declare one', () => {
+    for (const page of PAGE_DEFS) {
+      const json = buildPageEmbed(page, cfg, 'body').toJSON();
+      if (page.footerKey) assert.equal(json.footer?.text, cfg[page.footerKey]);
+      else assert.equal(json.footer, undefined, `${page.titleKey} got a footer it does not declare`);
+    }
   });
 });
