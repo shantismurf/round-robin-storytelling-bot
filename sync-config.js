@@ -70,6 +70,14 @@ export async function syncConfig(connection) {
       'cfgWeeklyRoundupEnabled', 'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
       'cfgGuildRegisteredAt', 'cfgChangelogEnabled', 'cfgHubAnnouncementsChannelId',
       'cfgPrivacyPolicyMessageId',
+      // Added 2026-09-25. Not a setup key -- runtime state that syncFaqPosts writes after
+      // creating the Hub FAQ threads. It was declared in config_system.sql with eight literal
+      // thread ids, so every deploy resynced the real ids away and the next FAQ sync tried to
+      // delete threads that no longer existed, silently leaving the previous posts up and adding
+      // a duplicate set. The trap described above does not apply: the literal row has been
+      // removed from config_system.sql entirely, and a guild with no row is exactly the state
+      // that makes syncFaqPosts correctly attempt no deletions.
+      'cfgFaqPostIds',
     ];
     const placeholders = setupOnlyKeys.map(() => '?').join(',');
     const [dbRows] = await connection.execute(

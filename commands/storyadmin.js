@@ -143,7 +143,13 @@ async function handleFaqSync(connection, interaction) {
   log(`handleFaqSync entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const guildId = interaction.guild.id;
 
-  const { errors, total } = await syncFaqPosts(interaction.client, connection, guildId);
+  // Guild 1, not the invoking guild. The Hub FAQ forum is one shared set of posts built from the
+  // guild_id=1 defaults, and deploy.js syncs it that way. Passing the caller's guild rendered
+  // that server's own customised help text into the Hub's public forum, and tracked the new
+  // thread ids against their guild row instead of the one the deploy path reads -- so the next
+  // deploy could not find the threads to replace and duplicated them. guildId below is still the
+  // caller's, for their own reply text.
+  const { errors, total } = await syncFaqPosts(interaction.client, connection, 1);
 
   if (errors === 0) {
     const msg = await getConfigValue(connection, 'txtHelpFaqSyncSuccess', guildId);

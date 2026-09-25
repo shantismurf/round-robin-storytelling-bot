@@ -86,7 +86,11 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('cfgHubAnnouncementsChannelId', '1498673028203286681', 'en', 1),
 ('cfgHubRulesChannelId', '1499435586740682772', 'en', 1),
 ('cfgPrivacyPolicyMessageId', '1528880125498626179', 'en', 1),
-('cfgFaqPostIds', '1503509386520166450|1503509384439926844|1503509381939986463|1503509380056748193|1503509377535971329|1503509375493345451|1503509373161439286|1503509370435276950', 'en', 1),
+-- cfgFaqPostIds is deliberately NOT declared here. It is runtime state that syncFaqPosts
+-- writes after creating the Hub FAQ threads, so a literal value in this file gets resynced
+-- over the real thread ids on the next deploy. That is what it used to do, and the FAQ sync
+-- then tried to delete threads that no longer existed, silently left the previous posts in
+-- place and created a duplicate set. Also added to setupOnlyKeys in sync-config.js.
 ('txtSectionBreakLine', '══════', 'en', 1),
 -- Shared page-jump select menu (story/read.js, story/edit.js)
 ('lblPageJumpPlaceholder', 'Page [page] of [total]', 'en', 1),

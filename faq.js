@@ -266,19 +266,19 @@ export async function syncFaqPosts(client, connection, guildId) {
 
   if (!hubServerId || !faqChannelId) {
     log(`syncFaqPosts: cfgHubServerId or cfgHubFaqChannelId not set for guild=${guildId}`, { show: true });
-    return { errors: PAGE_DEFS.length };
+    return { errors: PAGE_DEFS.length, orphaned: 0, total: PAGE_DEFS.length };
   }
 
   const hubGuild = await client.guilds.fetch(hubServerId).catch(() => null);
   if (!hubGuild) {
     log(`syncFaqPosts: could not fetch hub guild ${hubServerId}`, { show: true });
-    return { errors: PAGE_DEFS.length };
+    return { errors: PAGE_DEFS.length, orphaned: 0, total: PAGE_DEFS.length };
   }
 
   const faqChannel = await hubGuild.channels.fetch(faqChannelId).catch(() => null);
   if (!faqChannel) {
     log(`syncFaqPosts: could not fetch FAQ channel ${faqChannelId}`, { show: true });
-    return { errors: PAGE_DEFS.length };
+    return { errors: PAGE_DEFS.length, orphaned: 0, total: PAGE_DEFS.length };
   }
 
   // Load existing post (thread) IDs — stored as pipe-delimited string, one per page
@@ -290,16 +290,34 @@ export async function syncFaqPosts(client, connection, guildId) {
 
   const newIds = new Array(PAGE_DEFS.length).fill('');
   let errors = 0;
+  // Counted separately from `errors`, which means "this page failed to post". An orphan is the
+  // opposite problem: the new page posted fine but the old one is still sitting in the forum.
+  let orphaned = 0;
 
   // Post in reverse order so page 1 (Overview) sorts to top of forum
   for (let i = PAGE_DEFS.length - 1; i >= 0; i--) {
     const pageDef = PAGE_DEFS[i];
     try {
-      // Delete existing forum post (thread) if we have a valid ID for it
+      // Delete the existing forum post if we have a valid ID for it. Every branch here logs:
+      // both the fetch and the delete used to end in `.catch(() => null)`, so a thread that had
+      // vanished, or a delete the bot lacked permission for, produced a duplicate post and no
+      // trace of why.
       const existingId = existingIds[i];
-      if (existingId && isSnowflake(existingId)) {
+      if (!existingId || !isSnowflake(existingId)) {
+        log(`syncFaqPosts: page ${i + 1} has no tracked thread id — posting a new thread without replacing anything`, { show: false });
+      } else {
         const existingThread = await faqChannel.threads.fetch(existingId).catch(() => null);
-        if (existingThread) await existingThread.delete().catch(() => null);
+        if (!existingThread) {
+          log(`syncFaqPosts: page ${i + 1} tracked thread ${existingId} not found in the FAQ channel — it was either already removed by hand, or the old post is still in the forum untracked and needs deleting`, { show: true });
+          orphaned++;
+        } else {
+          try {
+            await existingThread.delete();
+          } catch (err) {
+            log(`syncFaqPosts: page ${i + 1} failed to delete old thread ${existingId}: ${err?.stack ?? err}`, { show: true });
+            orphaned++;
+          }
+        }
       }
 
       const { content, cfg } = await buildPage(connection, guildId, pageDef);
@@ -323,6 +341,9 @@ export async function syncFaqPosts(client, connection, guildId) {
     [newIds.join('|'), guildId]
   );
 
-  log(`syncFaqPosts: complete for guild=${guildId} errors=${errors}`, { show: true });
-  return { errors, total: PAGE_DEFS.length };
+  if (orphaned > 0) {
+    log(`syncFaqPosts: ${orphaned} of ${PAGE_DEFS.length} old FAQ posts could not be deleted — check the forum for leftovers and remove any by hand. The ids just recorded are correct, so later syncs will replace cleanly`, { show: true, hub: true });
+  }
+  log(`syncFaqPosts: complete for guild=${guildId} errors=${errors} orphaned=${orphaned}`, { show: true });
+  return { errors, orphaned, total: PAGE_DEFS.length };
 }
