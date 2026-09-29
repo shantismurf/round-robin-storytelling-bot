@@ -152,6 +152,13 @@ under Unreleased in the meantime per the changelog contract.
   whitespace); also now joined to the first channel field with a single line break instead of
   the double-line gap used between field blocks, since it's a header for the group, not its own
   field.
+- LeeAnn 2026-09-29, setup panel minor tweaks: one more line break added after
+  `txtSetupChannelsPermissionNote` at the top of the Server Admin tab; "Storybot Hub
+  Announcements" and "Teen or Lower Only" toggle buttons changed from gray (`Secondary`) to blue
+  (`Primary`); `txtSetupEmbedDescAdminRole` reworded ("only Discord server admins" → "only users
+  with Manage Server permissions", matching what `hasTier1Access()` actually checks);
+  `txtSetupEmbedDescRestrictedMedia`'s second sentence trimmed ("If the channel is not set" →
+  "If not set").
 
 
 ## 3.5.6 — 2026-09-24
