@@ -184,3 +184,65 @@ describe('buildPageEmbed', () => {
     }
   });
 });
+
+describe('the 3.7.0 help restructure', () => {
+  // The order below is LeeAnn's, agreed 2026-10-01: what the bot is, how to start a story, how
+  // to join one, how to write a turn, then your own stories, running one, reading, reference and
+  // admin. It is asserted in full because the order is a decision, not an implementation detail
+  // -- an accidental reorder should fail here rather than quietly reshuffle the contents menu.
+  test('the pages are in the agreed reading order', () => {
+    assert.deepEqual(PAGE_DEFS.map(p => p.id), [
+      'overview',
+      'create-general',
+      'create-join-metadata',
+      'find-join',
+      'writing-your-entry',
+      'your-stories',
+      'managing-a-story',
+      'reading-editing',
+      'writer-commands',
+      'admin-server-setup',
+      'admin-story-setup',
+      'admin-commands',
+    ]);
+  });
+
+  test('the overview page carries no headings', () => {
+    // Deliberate: it is a conversational introduction, not the topical reference every other
+    // page is. Adding a lbl to any of its entries would turn it back into a sectioned page.
+    const headed = pageById('overview').entries.filter(e => e.lbl);
+    assert.deepEqual(headed, [], 'the overview page gained a section heading');
+  });
+
+  test('find-join and writing-your-entry have title keys of their own', () => {
+    // Both were section headings inside other pages before the split. Pointing either titleKey
+    // back at a lblHelp2* key would make the page title and its first heading identical.
+    assert.equal(pageById('find-join').titleKey, 'txtHelpFindJoinTitle');
+    assert.equal(pageById('writing-your-entry').titleKey, 'txtHelpWritingTitle');
+  });
+
+  test('no two pages share a title', () => {
+    // The contents menu labels every option from its page title, so a duplicate is unpickable.
+    const titles = PAGE_DEFS.map(p => cfg[p.titleKey]);
+    assert.equal(new Set(titles).size, titles.length, `duplicate page title: ${titles.join(' | ')}`);
+  });
+
+  test('the contents menu intro exists and links the Hub', () => {
+    assert.ok((cfg.txtHelpTocIntro ?? '').trim(), 'txtHelpTocIntro has no value');
+    assert.match(cfg.txtHelpTocIntro, /\[hubInviteUrl\]/,
+      'the intro must carry the token, since buildTocEmbed substitutes it');
+  });
+
+  test('a label-less entry renders its body with no heading', () => {
+    const out = renderEntries([{ txt: 'k' }], { k: 'lead paragraph' });
+    assert.equal(out, 'lead paragraph');
+    assert.ok(!out.includes('#'), 'a label-less entry rendered a heading');
+  });
+
+  test('collectKeys skips a label-less entry rather than emitting undefined', () => {
+    // It used to push entry.lbl unconditionally, so a label-less entry put `undefined` into the
+    // key list handed to getConfigValue.
+    assert.deepEqual(collectKeys([{ txt: 'k' }]), ['k']);
+    assert.ok(!collectKeys(PAGE_DEFS.flatMap(p => p.entries)).includes(undefined));
+  });
+});

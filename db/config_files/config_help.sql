@@ -5,14 +5,26 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- /story help — Table of Contents
 -- ---------------------------------------------------------------------------
 ('txtHelpTocTitle', '📖 Round Robin StoryBot Help', 'en', 1),
+('txtHelpTocIntro', 'Welcome to Round Robin Storybot, a collaborative storywriting system. If you ever have any questions these help files don''t cover, you can ask them in the [Storybot Hub Server]([hubInviteUrl]).', 'en', 1),
 ('txtHelpPageGone', 'That help topic has moved. Use `/story help` to open the menu again.', 'en', 1),
 ('txtHelpTocFooter', 'Select a topic from the menu below.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 1: Round Robin StoryBot Overview
+-- Overview page body, plus the two page titles added when Find & Join and
+-- Writing Your Entry became pages of their own. A key's Help<N> prefix is the
+-- page it was created for, not the page it renders on, so keys added from here
+-- on are named for their page instead. PAGE_DEFS in faq.js owns the order.
+-- ---------------------------------------------------------------------------
+('txtHelpOverviewHowItWorks', 'Any user can create a new story, and any user can join, depending on the story settings. Stories can be customized with turn and reminder length, privacy options, restrictions on when the story starts or how many can join, and a number of metadata fields, including story ground rules to guide writer conduct. Users take turns submitting entries via a text input popup (modal) or a thread created for their turn.', 'en', 1),
+('txtHelpOverviewWriting', 'All entries support Discord markdown for formatting, and storybot-specific commands for inserting a custom scene break divider or adding a translation to text in other languages. If images are supported in your server, they can be added to Normal or Slow mode turn threads. Writers can collaborate on suggesting freeform tags for a story, and submitted entries can be edited by their writer or by story admins.', 'en', 1),
+('txtHelpOverviewReading', 'At any point, stories can be read in a paged Discord interface, or exported as an html file that''s ready for pasting into sites like AO3, along with information on creating an AO3 work skin to support the inline formatting. Stories have no max length, and you can run as many stories as you like at the same time. You''re only limited by your imagination!', 'en', 1),
+('txtHelpFindJoinTitle', '📚 Find & Join a Story', 'en', 1),
+('txtHelpWritingTitle', '✍️ Writing Your Entry', 'en', 1),
+
+-- ---------------------------------------------------------------------------
+-- Help1 keys: the Overview page title, and the Find & Join page
 -- ---------------------------------------------------------------------------
 ('txtHelp1Title', '📖 Round Robin StoryBot Overview', 'en', 1),
-('lblHelp1FindJoin', '📚 Find & Join a Story', 'en', 1),
 ('txtHelp1FindJoin', 'Use `/story list` to browse all stories, past or present. Dedicated story threads can be found by clicking the 🧵 icon in the Round Robin feed channel. To check who has the current turn and how much time is left, use `/story timeleft [id]`.\n\nWhen you''re ready, you can join a story in several ways:\n- Use the quick join menu on `/story list`\n- Type `/story join [id]`\n- Pinned in each story thread is an info post with a "✍️ Join This Story" button.', 'en', 1),
 ('lblHelp1JoiningOptions', '⚙️ Joining Options', 'en', 1),
 ('lblHelp1TurnThreadPrivacy', '🔒 Turn Thread Privacy', 'en', 1),
@@ -23,27 +35,26 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp1PenName', 'If the story is configured to display names, your pen name will show on entries and in the exported story. Defaults to your Discord display name.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 2: Your Stories & Turns
+-- Help2 keys: the Your Stories page, and the Writing Your Entry page
 -- ---------------------------------------------------------------------------
-('txtHelp2Title', '🗂️ Your Stories & Turns', 'en', 1),
+('txtHelp2Title', '🗂️ Your Stories', 'en', 1),
 ('lblHelp2Dashboard', '📅 Your Dashboard', 'en', 1),
 ('txtHelp2Dashboard', '- `/mystory list` — See all your stories — active, paused, delayed, and closed.\n- `/mystory catchup [id]` — Read your last entry and any written since your last turn.', 'en', 1),
 ('lblHelp2ManageParticipation', '🤝 Managing Your Participation', 'en', 1),
 ('txtHelp2ManageParticipation', 'Use `/mystory manage` to take action on a specific story:\n- Pass your current turn\n- Pause or resume your participation\n- Leave the story', 'en', 1),
-('lblHelp2WritingYourTurn', '✍️ Writing Your Entry', 'en', 1),
 ('lblHelp2WriteNormal', '📜 Normal Mode', 'en', 1),
-('txtHelp2WriteNormal', 'When it''s your turn, you''ll be notified with a link to your turn thread. Make as many posts as you like, add images in their own posts with display (alt) text (if images are enabled), and format your posts using Discord markdown for bold, italics, etc.\n\nYour entry won''t be saved until you click Finalize. If your turn times out, all posts will be lost. Anything you post in the turn thread will be compiled for your entry. Posts from the bot or other users will not be included. If you need more time, click the button at the top of the thread to request an extension from the story creator.', 'en', 1),
+('txtHelp2WriteNormal', 'When it''s your turn, you''ll be notified with a link to your turn thread. Make as many posts as you like, add images in their own posts with display (alt) text (if images are enabled), and format your posts using Discord markdown for bold, italics, etc.\n\nYour entry won''t be saved until you click Finalize. Anything you post in the turn thread will be compiled for your entry. Posts from the bot or other users will not be included.\n\nIf you need more time, click the button at the top of the thread to request an extension from the story creator. If your turn ends before you finalize, anything you''d posted stays in the thread for 24 hours so you can copy it out, and a button there lets you delete it sooner.', 'en', 1),
 ('lblHelp2WriteQuick', '⚡ Quick Mode', 'en', 1),
 ('txtHelp2WriteQuick', 'If a story is in Quick Mode, you won''t get a thread for your turn. Post an entry by typing `/story write`. Entries are limited to 4,000 characters, and images are not supported. Your entry is posted immediately when you submit — there''s no draft or finalize step.', 'en', 1),
 ('lblHelp2WriteSlow', '🐢 Slow Mode', 'en', 1),
-('txtHelp2WriteSlow', 'Slow Mode is just like Normal mode, with individual turn threads and the ability to upload images, if enabled. The difference is, there is no timer. Turns only end when skipped or finalized, so you can take your time and write as you are able without feeling pressured. Reminders can be configured to send every X hours, so you don''t forget about the story entirely!', 'en', 1),
+('txtHelp2WriteSlow', 'Slow Mode is just like Normal mode, with individual turn threads and the ability to upload images, if enabled. The difference is, there is no timer. Turns only end when passed or finalized, so you can take your time and write as you are able without feeling pressured. Reminders can be configured to send every X hours, so you don''t forget about the story entirely!', 'en', 1),
 ('lblHelp2WriteTranslations', '🌐 Inline Translations', 'en', 1),
 ('lblHelp2SectionBreak', '⁘ Section Break', 'en', 1),
 ('txtHelp2SectionBreak', 'Each story can define a custom scene break divider, a group of characters displayed on its own line and centered in the html export.  Use `[[break]]` in your entry to insert it automatically,  so you''ll never have to worry about it being consistent throughout your story!', 'en', 1),
 ('txtHelp2WriteTranslations', '**Inline Translations**: Type `[[original text|translation]]` to add a hover tooltip. In Discord, it shows as `original text *(translation)*`. When exported, it becomes a hover-over tooltip.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 3: Create a New Story — General Options
+-- Help3 keys: Creating a Story — general options
 -- ---------------------------------------------------------------------------
 ('txtHelp3Title', '📝 Create a New Story — General Options', 'en', 1),
 ('lblHelp3StoryTitle', '⚠️ Story Title', 'en', 1),
@@ -66,7 +77,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp3DelayStart', '- *Optional.* Leave blank to start immediately. Set a number of hours, a minimum writer count, or both — the story activates when all conditions are met.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 4: Create a New Story — Join Options & Metadata
+-- Help4 keys: Creating a Story — join options and metadata
 -- ---------------------------------------------------------------------------
 ('txtHelp4Title', '📝 Create a New Story — Join Options & Metadata', 'en', 1),
 ('lblHelp4CreatorOptions', 'Story Creator''s Join Options', 'en', 1),
@@ -82,7 +93,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp4Metadata', 'Optional story info set via the **Metadata** sub-panel.\n- 🛡️ **Rating** — Global, Teen, Mature, Explicit, or Not Rated. M and E works may be posted to an age-restricted feed channel, or those ratings may be disabled for your server.\n- ⚠️ **Warnings** — Select all that apply: All Clear: No Content Warnings, Extreme or Visceral Violence, Main Character Fatality, Other: See Tags, Rape/Lack of Sexual Consent, Sex Involving a Minor, Unspecified: Warnings May Apply\n- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other\n- 💞 **Main Relationship** — Primary pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags, or tags submitted by story authors (e.g. slow burn, hurt/comfort, modern AU).\n- 📝 **Summary** — A brief teaser for your story.\n- ⁘ **Scene Break Divider**: A custom line of text (like `⁘ ⁘ ⁘` or `* * *`) used for scene breaks. Type `[[break]]` on its own line anywhere in your entry, and it''ll be replaced with this divider wherever your story is shown. If it''s not set yet, `[[break]]` will display as a reminder to set it up. It will be replaced or updated automatically when the change is saved.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 5: Managing a Story 
+-- Help5 keys: Managing a Story
 -- ---------------------------------------------------------------------------
 ('txtHelp5Title', '⚙️ Managing a Story', 'en', 1),
 ('lblHelp5WhoCanUse', '👤 Who can use `/story manage`?', 'en', 1),
@@ -95,7 +106,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp5AdminControls', '**Manage Turns** (via the Manage Turns button in `/story manage`):\n- Skip the current turn\n- Extend the current turn deadline\n- Designate the next writer\n- Reassign the turn to the previous writer (e.g. if they missed their turn and still want to write) and set the current writer to go after them\n\n**Manage Users** (via `/storyadmin user [id] [user]`):\n- Pause or unpause a writer\n- Remove a writer from a story\n- Update a writer''s pen name\n\n**Other admin actions** (via `/storyadmin`):\n- Permanently delete a story: `/storyadmin delete`', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 6: Reading & Editing
+-- Help6 keys: Reading and Editing
 -- ---------------------------------------------------------------------------
 ('txtHelp6Title', '📖 Reading & Editing', 'en', 1),
 ('lblHelp6Read', '📖 Reading a Story', 'en', 1),
@@ -106,7 +117,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp6EditPages', 'Entries longer than 3,800 characters are split into pages. Each page is edited separately — changes on one page do not affect the others. You can add up to 200 characters to a page before saving; if you need more space, save and the pages will reload with the updated content.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 7: MyStory Commands
+-- Help7 keys: the Writer Command Reference
 -- ---------------------------------------------------------------------------
 ('txtHelp7Title', '📋 Writer Command Reference', 'en', 1),
 ('txtHelp7Footer', 'Use /story help for detailed explanations of story modes, writer order, metadata, and more.', 'en', 1),
@@ -118,7 +129,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp7CreatorCommands', '- `/story manage [id]` — Edit story settings and metadata, manage turns and entries, pause or close', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Pages 8-10: admin setup and commands. Split out of a single page that had reached
+-- Help8 keys: the three admin pages. Split out of a single page that had reached
 -- 4095 of the 4096-character embed cap. Section keys keep their original Help8 names.
 -- ---------------------------------------------------------------------------
 ('txtHelp8Title', '🔧 Server Admin Options', 'en', 1),

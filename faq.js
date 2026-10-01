@@ -1,5 +1,5 @@
 import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, getSetupRequiredMessage, log } from './utilities.js';
+import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables } from './utilities.js';
 
 const EMBED_COLOR = 0x5865f2;
 
@@ -13,30 +13,14 @@ const EMBED_COLOR = 0x5865f2;
 
 export const PAGE_DEFS = [
   {
-    id: 'find-join',
+    id: 'overview',
     titleKey: 'txtHelp1Title',
     entries: [
-      { lbl: 'lblHelp1FindJoin', txt: 'txtHelp1FindJoin' },
-      { lbl: 'lblHelp1JoiningOptions', children: [
-        { lbl: 'lblHelp1TurnThreadPrivacy', txt: 'txtHelp1TurnThreadPrivacy' },
-        { lbl: 'lblHelp1Notifications',     txt: 'txtHelp1Notifications' },
-        { lbl: 'lblHelp1PenName',           txt: 'txtHelp1PenName' },
-      ]},
-    ],
-  },
-  {
-    id: 'your-stories',
-    titleKey: 'txtHelp2Title',
-    entries: [
-      { lbl: 'lblHelp2Dashboard',           txt: 'txtHelp2Dashboard' },
-      { lbl: 'lblHelp2ManageParticipation', txt: 'txtHelp2ManageParticipation' },
-      { lbl: 'lblHelp2WritingYourTurn', children: [
-        { lbl: 'lblHelp2WriteNormal', txt: 'txtHelp2WriteNormal' },
-        { lbl: 'lblHelp2WriteQuick',  txt: 'txtHelp2WriteQuick' },
-        { lbl: 'lblHelp2WriteSlow',   txt: 'txtHelp2WriteSlow' },
-        { lbl: 'lblHelp2WriteTranslations', txt: 'txtHelp2WriteTranslations' },
-        { lbl: 'lblHelp2SectionBreak',      txt: 'txtHelp2SectionBreak' },
-      ]},
+      // No headings here on purpose: the overview is a conversational introduction, not the
+      // topical reference the other pages are. Three label-less paragraphs, in order.
+      { txt: 'txtHelpOverviewHowItWorks' },
+      { txt: 'txtHelpOverviewWriting' },
+      { txt: 'txtHelpOverviewReading' },
     ],
   },
   {
@@ -65,6 +49,39 @@ export const PAGE_DEFS = [
       ]},
       { lbl: 'lblHelp4Metadata', txt: 'txtHelp4Metadata' },
       { lbl: 'lblHelp4GroundRules', txt: 'txtHelp4GroundRules' },
+    ],
+  },
+  {
+    id: 'find-join',
+    titleKey: 'txtHelpFindJoinTitle',
+    // Lead paragraph, no heading of its own: the page title already says "Find & Join a Story",
+    // so a first section repeating it read as a duplicate.
+    entries: [
+      { txt: 'txtHelp1FindJoin' },
+      { lbl: 'lblHelp1JoiningOptions', children: [
+        { lbl: 'lblHelp1TurnThreadPrivacy', txt: 'txtHelp1TurnThreadPrivacy' },
+        { lbl: 'lblHelp1Notifications',     txt: 'txtHelp1Notifications' },
+        { lbl: 'lblHelp1PenName',           txt: 'txtHelp1PenName' },
+      ]},
+    ],
+  },
+  {
+    id: 'writing-your-entry',
+    titleKey: 'txtHelpWritingTitle',
+    entries: [
+      { lbl: 'lblHelp2WriteNormal',       txt: 'txtHelp2WriteNormal' },
+      { lbl: 'lblHelp2WriteQuick',        txt: 'txtHelp2WriteQuick' },
+      { lbl: 'lblHelp2WriteSlow',         txt: 'txtHelp2WriteSlow' },
+      { lbl: 'lblHelp2WriteTranslations', txt: 'txtHelp2WriteTranslations' },
+      { lbl: 'lblHelp2SectionBreak',      txt: 'txtHelp2SectionBreak' },
+    ],
+  },
+  {
+    id: 'your-stories',
+    titleKey: 'txtHelp2Title',
+    entries: [
+      { lbl: 'lblHelp2Dashboard',           txt: 'txtHelp2Dashboard' },
+      { lbl: 'lblHelp2ManageParticipation', txt: 'txtHelp2ManageParticipation' },
     ],
   },
   {
@@ -131,9 +148,11 @@ export const PAGE_DEFS = [
   },
 ];
 
-// The config keys above keep the Help8 prefix they were created with even though four of them
-// now render on other pages. The prefix is part of the key's identity, not a statement about
-// where it appears -- renaming them would orphan any guild's overriding row for no gain.
+// A config key's numeric prefix is the page it was created for, not the page it renders on. After
+// the admin split and this reorder most of them no longer agree: Help1 content sits on pages 1 and
+// 4, Help2 on pages 5 and 6, Help8 on pages 10, 11 and 12. The prefix is part of the key's
+// identity -- renaming them would orphan any guild's overriding row for no gain -- so keys added
+// from here on are named for their page instead (txtHelpOverview*, txtHelpFindJoinTitle).
 
 // Pages are addressed by id, never by position. /mystory help and /storyadmin help jump straight
 // to one, the contents menu carries one as each option's value, and the Hub FAQ sync keys each
@@ -153,21 +172,24 @@ export function pageById(id) {
 export function collectKeys(entries) {
   const keys = [];
   for (const entry of entries) {
-    keys.push(entry.lbl);
+    if (entry.lbl) keys.push(entry.lbl);
     if (entry.txt) keys.push(entry.txt);
     if (entry.children) keys.push(...collectKeys(entry.children));
   }
   return keys;
 }
 
+// An entry with `txt` and no `lbl` renders as a lead paragraph above the page's first heading.
+// Find & Join needs one: its opening text used to carry a heading identical to the page title.
 export function renderEntries(entries, cfg, depth = 0) {
   return entries.map(entry => {
-    const label = cfg[entry.lbl];
+    const label = entry.lbl ? cfg[entry.lbl] : null;
     const value = entry.txt ? cfg[entry.txt] : null;
     const heading = depth === 0 ? '##' : '###';
 
     const childBlock = entry.children ? renderEntries(entry.children, cfg, depth + 1) : null;
-    const parts = [`${heading} ${label}`];
+    const parts = [];
+    if (label) parts.push(`${heading} ${label}`);
     if (value) parts.push(value);
     if (childBlock) parts.push(childBlock);
     return parts.join('\n');
@@ -198,7 +220,11 @@ async function buildPage(connection, guildId, pageDef) {
 
 async function buildTocEmbed(connection, guildId) {
   const titleKeys = PAGE_DEFS.map(p => p.titleKey);
-  const cfg = await getConfigValue(connection, ['txtHelpTocTitle', 'txtHelpTocFooter', ...titleKeys], guildId);
+  const cfg = await getConfigValue(
+    connection,
+    ['txtHelpTocTitle', 'txtHelpTocIntro', 'txtHelpTocFooter', 'cfgHubInviteUrl', ...titleKeys],
+    guildId
+  );
 
   const select = new StringSelectMenuBuilder()
     .setCustomId('story_help_toc')
@@ -211,6 +237,7 @@ async function buildTocEmbed(connection, guildId) {
 
   const embed = new EmbedBuilder()
     .setTitle(cfg.txtHelpTocTitle)
+    .setDescription(replaceTemplateVariables(cfg.txtHelpTocIntro, { hubInviteUrl: cfg.cfgHubInviteUrl }))
     .setColor(EMBED_COLOR);
 
   return {

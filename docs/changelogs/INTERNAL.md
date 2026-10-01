@@ -36,11 +36,12 @@ _Nothing pending._
 
 Provenance: written alongside the work.
 
-MINOR. Readers get two new help pages and a new Section Break section, corrected copy on every
-page, and admin access widened to Manage Server holders. Not MAJOR: nothing changes about what
-the bot does or how it is operated, and the modal-panel paradigm 3.0.0 introduced is untouched.
-Proposed and signed off by LeeAnn 2026-10-01. Absorbs the setup-panel tweaks that were sitting
-in Unreleased.
+MINOR. The help system went from seven pages to twelve, reordered into the sequence a reader
+actually follows, with a written overview at the front. Copy on every page is corrected, "Pass"
+and "Skip" now mean one thing each throughout the bot, and admin access is widened to Manage
+Server holders. Not MAJOR: nothing changes about what the bot does or how it is operated, and
+the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off by LeeAnn
+2026-10-01. Absorbs the setup-panel tweaks that were sitting in Unreleased.
 
 ### Changed
 - LeeAnn 2026-09-29, setup panel minor tweaks: one more line break added after
@@ -71,6 +72,25 @@ in Unreleased.
 - `txtHelpPageGone`, shown when a reader opens a page from a contents menu built by an older
   deploy. **Wording not yet approved by LeeAnn.**
 - `txtHelp9Title`, `txtHelp10Title` for the two pages split out of the admin page.
+- **An Overview page**, first in the contents menu, from copy LeeAnn drafted during the review:
+  what the bot does, what a turn looks like, and how a finished story is read or exported. It is
+  three paragraphs of prose with **no section headings**, deliberately — her instruction was that
+  it is a conversational introduction rather than the topical reference every other page is
+  (`txtHelpOverviewHowItWorks`, `txtHelpOverviewWriting`, `txtHelpOverviewReading`).
+- **Find & Join a Story is its own page** (`find-join`, `txtHelpFindJoinTitle`). It used to be the
+  body of the page titled "Round Robin StoryBot Overview", which is how a page called Overview
+  came to contain nothing but joining instructions.
+- **Writing Your Entry is its own page** (`writing-your-entry`, `txtHelpWritingTitle`) — Normal,
+  Quick and Slow modes, inline translations and section breaks. It was a *subsection* of Your
+  Stories & Turns, which meant the thing a writer with an open turn is hunting for never appeared
+  in the contents menu at all. It was also 1,777 of that page's 2,129 characters.
+- `txtHelpTocIntro`, a short welcome on the contents menu itself, which previously showed a bare
+  title and a dropdown. LeeAnn's wording, and it links the Hub server through the existing
+  `[hubInviteUrl]` token.
+- `renderEntries` now accepts an entry with `txt` and no `lbl`, rendering it as a lead paragraph
+  above the page's first heading. Find & Join needs one: its opening text had carried a heading
+  identical to the page title. `collectKeys` was pushing `entry.lbl` unconditionally, so such an
+  entry would have put `undefined` into the key list handed to `getConfigValue`.
 
 ### Changed
 - **The admin help page was split three ways**, following the setup panel's own permission
@@ -103,6 +123,54 @@ in Unreleased.
   (`txtEditMyEntriesSelect`, `txtManageEntriesSelectEntry`). `/story edit` shows only your own
   entries and `/story manage` → Manage Entries shows an admin all of them; the pickers looked
   identical, which read as a bug.
+- **The help pages are reordered**, which is what the stable ids above were a prerequisite for.
+  The order is now overview, creating a story, story options and metadata, find and join, writing
+  your entry, your stories, managing a story, reading and editing, the command reference, then the
+  three admin pages. LeeAnn's reasoning, from the review: the old order opened with finding and
+  joining, which assumes a reader who has walked into an already-active server, when the only
+  person guaranteed to be reading on day one is whoever installed the bot. The order is asserted
+  in full in `test/faqPages.test.js` — it is a decision, not an implementation detail.
+- **"Pass" and "Skip" now mean one thing each.** LeeAnn's rule, 2026-10-01: *Pass* is what a
+  writer does to their own turn, *Skip* is what an admin does to someone else's. Nineteen config
+  strings changed across `config_turn.sql`, `config_mystory.sql`, `config_system.sql` and
+  `config_storyadmin.sql`. The writer's own flow became Pass throughout (`btnSkipTurn`,
+  `btnSkipConfirm`, `btnSkipDelete`, `btnSkipKeep`, `txtSkipConfirm*`, `txtSkipSuccess`,
+  `txtStoryThreadTurnSkip`, the four turn-thread welcome bodies and more — keys keep their
+  `Skip` names, since the name identifies the key). `txtMyPassConfirm` said "Pass your turn?…
+  This will skip" in one sentence and now says pass twice. The admin-facing strings
+  (`btnTurnSkip`, `txtTurnSkipConfirm`, `txtAdminSkipSuccess`, `txtManageTurnsDesc`) were already
+  correct and are untouched. Two were judgement calls LeeAnn ruled on: a turn timeout and an
+  admin confirming an action on another writer are both things done *to* a writer rather than
+  *by* them, so both say Skip — which made `txtAdminMUActiveTurnWarning` change from "auto-pass"
+  to "auto-skip", the one string that moved toward Skip rather than away from it.
+- `txtHelp2WriteSlow` says turns end when "passed or finalized" rather than "skipped or
+  finalized", matching the renamed button the writer is looking at.
+- `txtHelp2WriteNormal` rewritten. It claimed "If your turn times out, all posts will be lost",
+  which has never been true: `endTurnThread` (`story/_turn.js:347`) keeps a thread the writer
+  posted in for 24 hours, renames it with a pending-deletion marker and offers a **Delete Now**
+  button, and only deletes an untouched thread immediately. Draft thread preservation shipped
+  2026-05-09 in `af7f7c5`; the sentence was written 2026-05-11 in `df44e84`, so it described the
+  old behaviour from the day it was added and survived two years of edits. It was also wedged
+  between the two halves of the sentence about how entries are compiled, and has moved to sit
+  with the extension sentence, both being about running out of time.
+- `txtHelp2Title` trimmed from "Your Stories & Turns" to "Your Stories", since taking a turn is
+  now its own page.
+- The section comments in `config_help.sql` no longer give page numbers. A key's `Help<N>` prefix
+  is the page it was created for, not the page it renders on, and after this reorder most of them
+  disagree — `Help1` content sits on pages 1 and 4, `Help2` on pages 5 and 6, `Help8` on 10, 11
+  and 12. The comments name the key group instead, and keys added from here on are named for
+  their page (`txtHelpOverview*`, `txtHelpFindJoinTitle`). Stale numbered comments are exactly how
+  `ux_roadmap.md` came to document three commands that no longer existed.
+
+### Removed
+- `lblHelp1FindJoin` and `lblHelp2WritingYourTurn`. Both were section headings whose text became
+  the title of the page split out around them, so keeping them would have rendered the page title
+  twice — once as the embed title and again as its first heading. Their wording survives verbatim
+  as `txtHelpFindJoinTitle` and `txtHelpWritingTitle`. Note that `sync-config.js` only inserts and
+  updates, never deletes, so the rows stay in the `config` table of an already-deployed guild and
+  are simply never read again.
+- `txtPassSuccess`, a dead key. No `.js` file anywhere read it, and it duplicated
+  `txtMyPassSuccess` word for word. Found during the Pass/Skip sweep.
 
 
 ## 3.6.0 — 2026-09-25
