@@ -129,7 +129,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- and the "Back to entries list" button shared by both the admin and author pickers
 ('btnEditBackToList', '← Back to List', 'en', 1),
 ('lblEditMyEntryOption', 'Turn [turn_number] — [word_count] words — [preview]', 'en', 1),
-('txtEditMyEntriesSelect', 'Select an entry to edit:', 'en', 1),
+('txtEditMyEntriesSelect', 'Edit Your Entry (Admins, use `/story manage` for more options):', 'en', 1),
 ('txtEditMyEntriesNone', 'You have no editable entries in this story yet.', 'en', 1),
 -- Moved from config_other: story join/manage display keys
 ('lblKeepYourPrivate', 'Keep your turn threads private?:', 'en', 1),

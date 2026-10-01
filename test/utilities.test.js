@@ -10,6 +10,8 @@ import {
   createFailureThrottle,
   getConfigValue,
   getSetupRequiredMessage,
+  hasManageServer,
+  checkIsAdmin,
 } from '../utilities.js';
 import { makeFakeConnection } from './_fakeConnection.js';
 
@@ -279,5 +281,59 @@ describe('getSetupRequiredMessage', () => {
       configRows([['txtSetupRequiredUser', 'Member copy'], ['cfgHubInviteUrl', 'https://hub.example']]),
     ]);
     assert.equal(await getSetupRequiredMessage(connection, makeInteraction()), 'Member copy');
+  });
+});
+
+
+// ---------------------------------------------------------------------------
+// The bot's two permission levels
+// ---------------------------------------------------------------------------
+//
+// checkIsAdmin used to test Administrator while the setup panel's tier-1 gate tested Manage
+// Server, so a member with Manage Server but not Administrator could configure the server's
+// channels yet could not run /storyadmin user, delete or sweep. Both now resolve through
+// hasManageServer. The widening is deliberate -- these pin it so it is not reverted by accident.
+
+// discord.js lets Administrator satisfy any permission check (checkAdmin defaults true), so the
+// fake mirrors that rather than doing a flat set membership test.
+const member = (perms, roles = []) => ({
+  permissions: { has: p => perms.includes('Administrator') || perms.includes(p) },
+  roles: { cache: { some: fn => roles.map(name => ({ name })).some(fn) } },
+});
+const interactionFor = m => ({ member: m, user: { username: 'tester' } });
+
+describe('permission levels', () => {
+  test('Manage Server is the Server Admin level', () => {
+    assert.equal(hasManageServer(interactionFor(member(['ManageGuild']))), true);
+  });
+
+  test('an Administrator still satisfies it', () => {
+    // The whole reason the switch is safe: nobody who had access loses it.
+    assert.equal(hasManageServer(interactionFor(member(['Administrator']))), true);
+  });
+
+  test('an ordinary member does not', () => {
+    assert.equal(hasManageServer(interactionFor(member(['SendMessages']))), false);
+  });
+
+  test('Manage Server alone now reaches the admin commands', async () => {
+    // This is the case that was broken: true here is the behaviour change LeeAnn asked for.
+    const connection = makeFakeConnection([[{ config_value: 'Story Admin' }]]);
+    assert.ok(await checkIsAdmin(connection, interactionFor(member(['ManageGuild'])), '1'));
+  });
+
+  test('the configured role reaches them without any server permission', async () => {
+    const connection = makeFakeConnection([[{ config_value: 'Story Admin' }]]);
+    assert.ok(await checkIsAdmin(connection, interactionFor(member([], ['Story Admin'])), '1'));
+  });
+
+  test('a member with neither is refused', async () => {
+    const connection = makeFakeConnection([[{ config_value: 'Story Admin' }]]);
+    assert.ok(!await checkIsAdmin(connection, interactionFor(member([], ['Writer'])), '1'));
+  });
+
+  test('with no role configured, the server permission is the only way in', async () => {
+    const connection = makeFakeConnection([[{ config_value: null }]]);
+    assert.ok(!await checkIsAdmin(connection, interactionFor(member([], ['Story Admin'])), '1'));
   });
 });

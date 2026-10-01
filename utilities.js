@@ -551,13 +551,31 @@ export function replaceTemplateVariables(template, keyValueMap) {
 }
 
 /**
- * Returns true if the interaction user is a server Administrator or has the configured admin role.
- * Requires interaction.member (guild context).
+ * Server Admin, the higher of the bot's two permission levels: whoever may configure the server
+ * itself. This is the single definition of that level -- commands/_storyadminSetup.js's
+ * hasTier1Access delegates here, so the setup panel's escalation-capable tier and the admin
+ * commands cannot drift apart again.
+ *
+ * Manage Server rather than Administrator: discord.js's PermissionsBitField.has() defaults
+ * checkAdmin=true (node_modules/discord.js/src/util/PermissionsBitField.js), so an Administrator
+ * satisfies this too and nobody who had access loses it.
+ */
+export function hasManageServer(interaction) {
+  return interaction.member.permissions.has('ManageGuild');
+}
+
+/**
+ * Story Admin, the lower level: Server Admins, plus anyone holding the role named by
+ * cfgAdminRoleName. Requires interaction.member (guild context).
+ *
+ * This used to test Administrator while the setup panel's tier-1 gate tested Manage Server, so a
+ * member with Manage Server but not Administrator could configure the server's channels and yet
+ * could not run /storyadmin user, delete or sweep. The two levels are now one definition each.
  */
 export async function checkIsAdmin(connection, interaction, guildId) {
   log(`checkIsAdmin entry for user ${interaction.user?.username} guild ${guildId}`, { show: false });
   const adminRoleName = await getConfigValue(connection, 'cfgAdminRoleName', guildId);
-  const result = interaction.member.permissions.has('Administrator') ||
+  const result = hasManageServer(interaction) ||
     (adminRoleName && interaction.member.roles.cache.some(r => r.name === adminRoleName));
   log(`checkIsAdmin result: ${result} for user ${interaction.user?.username}`, { show: false });
   return result;
