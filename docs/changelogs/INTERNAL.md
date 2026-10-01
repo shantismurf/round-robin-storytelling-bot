@@ -155,6 +155,28 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   with the extension sentence, both being about running out of time.
 - `txtHelp2Title` trimmed from "Your Stories & Turns" to "Your Stories", since taking a turn is
   now its own page.
+- **`/mystory manage` rebuilt on Components V2**, matching the `/story add` and `/story manage`
+  panels. It was the last panel still built as a classic `EmbedBuilder` and was simply missed when
+  the others were converted — LeeAnn's words, 2026-10-01: "it got lost in the component upgrade
+  the other panels got." The visible symptom was that its four `addFields` entries, all marked
+  `inline: true`, rendered as eight stacked lines of label over value on her phone, with a fold
+  screen opened — so not a width fallback, since `inline` is a hint a client may ignore outright.
+  That is the general argument for the conversion: a `TextDisplayBuilder`'s layout is what you
+  wrote, on every client. The four settings are now four lines of one text display.
+  Converting the builder forced every later edit of that message to become V2 too, since the flag
+  is per-message and one-way — the same chain that `handleSetupSave`/`handleSetupCancel` had to
+  follow. Twenty-one `editReply` sites across seven handlers now go through `finalMessage()`,
+  including the pass, pause and leave confirm prompts, which pass their button row as
+  `finalMessage(text, [row])`. Three early returns in `handleMyStoryManage` stay plain content
+  deliberately: they answer before the panel is built, so that message is still a bare deferred
+  reply. The `catch` in the same function does not, because if the panel send itself threw the
+  message may already carry the flag. Worst case is 18 components of Discord's 40, counted per
+  nested node. New `test/myStoryManagePanel.test.js` covers the flag, the ceiling, the absence of
+  `undefined`, the one-line-per-setting shape and the two state-dependent buttons, across every
+  combination of writer status, active turn, pen name, privacy and notification preference.
+  **No version bump for this** (LeeAnn, 2026-10-01): it is an oversight being corrected rather
+  than new work, and 3.7.0 has not been deployed, so it is part of what users first experience
+  as 3.7.0.
 - The section comments in `config_help.sql` no longer give page numbers. A key's `Help<N>` prefix
   is the page it was created for, not the page it renders on, and after this reorder most of them
   disagree — `Help1` content sits on pages 1 and 4, `Help2` on pages 5 and 6, `Help8` on 10, 11

@@ -248,3 +248,27 @@ Working reference implementation: [story/_metadataModals.js](../story/_metadataM
   (not V2) — intentional, since the standalone `/story close` command's own message never
   carries the flag. `story/_manageClose.js` is a deliberate temporary fork, not a bug; see
   "`/story close` — the worked example of getting it wrong" above.
+
+### `/mystory manage` — converted 2026-10-01
+
+It was the last panel still built as a classic `EmbedBuilder`, missed when the add/manage and
+setup panels were converted. The visible symptom was that its four `addFields` entries, all
+marked `inline: true`, rendered as eight stacked lines of label-over-value on LeeAnn's phone —
+`inline` is a hint a client is free to ignore, which is the general argument for V2 here: a
+`TextDisplayBuilder`'s layout is what you wrote, on every client.
+
+Converting `buildMyStoryManagePanel()` meant every later edit of that message had to become V2
+too, the same chain of consequences `handleSetupSave`/`handleSetupCancel` had. Twenty-one
+`editReply` sites across seven handlers moved to `finalMessage()`, including the three confirm
+prompts (pass, pause, leave), which pass their button row as `finalMessage(text, [row])` so the
+row sits as a top-level sibling of the text container.
+
+Three early returns in `handleMyStoryManage` deliberately stay plain content: they answer before
+the panel is ever built, so that message is still a bare deferred reply. The `catch` in the same
+function does *not* stay plain — if the panel send itself threw, the message may already carry
+the flag, and `finalMessage` is correct either way (a deferred reply accepts a V2 first send,
+which is how `/story manage` and `/storyadmin setup` both open).
+
+Worst-case component count is 18 of 40, counted per nested node, verified by
+`test/myStoryManagePanel.test.js` across every combination of writer status, active turn, pen
+name, privacy and notification preference.

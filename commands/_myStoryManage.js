@@ -1,5 +1,6 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
+import { finalMessage } from '../story/_metadataModals.js';
 import { PickNextWriter, NextTurn, endTurnGuarded, endTurnThread, departWriter } from '../story/_turn.js';
 import { updateStoryStatusMessage } from '../story/_storyStatus.js';
 import { WRITER_STATUS, TURN_STATUS } from '../constants.js';
@@ -14,32 +15,44 @@ export function buildMyStoryManagePanel(state, cfg) {
     ? cfg.txtMyStoryManageActiveStatus
     : cfg.txtMyStoryManagePausedStatus;
 
-  const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(cfg.txtMyStoryManageTitle, { story_title: state.storyTitle }))
-    .setColor(0x5865f2)
-    .addFields(
-      { name: cfg.lblMyStoryManageStatus,  value: statusLabel,                                                      inline: true },
-      { name: cfg.lblMyStoryManagePenName,  value: state.penName || cfg.txtNotSet,                                   inline: true },
-      { name: cfg.lblMyStoryManageNotif,   value: state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention, inline: true },
-      { name: cfg.lblMyStoryManagePrivacy, value: state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic,               inline: true }
-    )
-    .setDescription(cfg.txtMyStoryManagePanelDesc);
-
   const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
   const privacyToggleLabel = state.writerTurnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
+  const pauseResumeLabel   = state.writerStatus === WRITER_STATUS.ACTIVE ? cfg.btnMyStoryManagePause : cfg.btnMyStoryManageResume;
 
-  const row1 = new ActionRowBuilder().addComponents(
+  const container = new ContainerBuilder().setAccentColor(0x5865F2);
+
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+    `# ${replaceTemplateVariables(cfg.txtMyStoryManageTitle, { story_title: state.storyTitle })}`
+  ));
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtMyStoryManagePanelDesc));
+  container.addSeparatorComponents(new SeparatorBuilder());
+
+  // One text display, one "**Label:** value" per line — the shape buildStoryPanel uses. These
+  // were four embed fields marked `inline: true`, which Discord's client is free to ignore: on
+  // LeeAnn's phone it did, and four fields became eight stacked lines of label over value.
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
+    `**${cfg.lblMyStoryManageStatus}:** ${statusLabel}`,
+    `**${cfg.lblMyStoryManagePenName}:** ${state.penName || cfg.txtNotSet}`,
+    `**${cfg.lblMyStoryManageNotif}:** ${state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention}`,
+    `**${cfg.lblMyStoryManagePrivacy}:** ${state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`,
+  ].join('\n')));
+
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('mystory_manage_penname').setLabel(cfg.btnAdminMUPenName).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('mystory_manage_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
     new ButtonBuilder().setCustomId('mystory_manage_privacy').setLabel(privacyToggleLabel).setStyle(ButtonStyle.Secondary)
-  );
-  const row2 = new ActionRowBuilder().addComponents(
+  ));
+
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success),
     new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
-  );
+  ));
 
-  const pauseResumeLabel = state.writerStatus === WRITER_STATUS.ACTIVE ? cfg.btnMyStoryManagePause : cfg.btnMyStoryManageResume;
-  const row3 = new ActionRowBuilder().addComponents(
+  // Participation actions are separated from the staged-settings cluster above: Save/Cancel
+  // commit the three fields, these three act on the story itself and take effect immediately.
+  container.addSeparatorComponents(new SeparatorBuilder());
+  container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('mystory_manage_pass')
       .setLabel(cfg.btnMyStoryManagePass)
@@ -53,9 +66,12 @@ export function buildMyStoryManagePanel(state, cfg) {
       .setCustomId('mystory_manage_leave')
       .setLabel(cfg.btnMyStoryManageLeave)
       .setStyle(ButtonStyle.Danger)
-  );
+  ));
 
-  return { embeds: [embed], components: [row1, row2, row3] };
+  // 18 nodes counting every nested child (container, 3 text displays, 3 separators, 3 action
+  // rows, 8 buttons) against Discord's documented 40 ceiling. See the component-budget note in
+  // docs/reference/discordjs_reference.md for why this is counted the conservative way.
+  return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }
 
 // ─── /mystory manage ─────────────────────────────────────────────────────────
@@ -66,6 +82,9 @@ export async function handleMyStoryManage(connection, interaction) {
   const guildId = interaction.guild.id;
   const storyId = await resolveStoryId(connection, guildId, interaction.options.getString('story_id'));
 
+  // The three early returns below answer before the panel is ever built, so this message is
+  // still a bare deferred reply and plain content is correct. Everything after the panel sends
+  // must go through finalMessage -- IsComponentsV2 cannot be removed from a message once set.
   if (storyId === null) {
     return await interaction.editReply({ content: await getConfigValue(connection, 'txtStoryNotFound', guildId) });
   }
@@ -129,7 +148,10 @@ export async function handleMyStoryManage(connection, interaction) {
 
   } catch (error) {
     log(`handleMyStoryManage failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId) });
+    // finalMessage, not plain content: if the panel already sent, this message carries
+    // IsComponentsV2 and a content edit throws. A deferred reply that never got the panel
+    // accepts a V2 payload just as /story manage and /storyadmin setup do on their first send.
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
@@ -141,7 +163,7 @@ export async function handleMyStoryManageButton(connection, interaction) {
 
   if (!state) {
     await interaction.deferUpdate();
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), embeds: [], components: [] });
+    return await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id)));
   }
 
   if (customId === 'mystory_manage_notif') {
@@ -180,16 +202,16 @@ export async function handleMyStoryManageButton(connection, interaction) {
       );
       log(`mystory manage saved for writer ${state.storyWriterId} in story ${state.storyId}`, { show: true, guildName: interaction?.guild?.name });
       pendingMyStoryManageData.delete(userId);
-      await interaction.editReply({ content: await getConfigValue(connection, 'txtMyStoryManageSaved', state.guildId), embeds: [], components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtMyStoryManageSaved', state.guildId)));
     } catch (error) {
       log(`mystory manage save failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-      await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', state.guildId), embeds: [], components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', state.guildId)));
     }
 
   } else if (customId === 'mystory_manage_cancel') {
     await interaction.deferUpdate();
     pendingMyStoryManageData.delete(userId);
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id)));
 
   } else if (customId === 'mystory_manage_pass') {
     await interaction.deferUpdate();
@@ -199,7 +221,7 @@ export async function handleMyStoryManageButton(connection, interaction) {
       new ButtonBuilder().setCustomId(`mystory_manage_pass_confirm_${state.storyId}`).setLabel(cfg.btnMyPassConfirm).setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`mystory_manage_pass_cancel_${state.storyId}`).setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
-    await interaction.editReply({ content: confirmMsg, embeds: [], components: [row] });
+    await interaction.editReply(finalMessage(confirmMsg, [row]));
 
   } else if (customId === 'mystory_manage_pause') {
     await interaction.deferUpdate();
@@ -209,7 +231,7 @@ export async function handleMyStoryManageButton(connection, interaction) {
       new ButtonBuilder().setCustomId(`mystory_manage_pause_confirm_${state.storyId}`).setLabel(cfg.btnMyPauseConfirm).setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`mystory_manage_pause_cancel_${state.storyId}`).setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
-    await interaction.editReply({ content: confirmMsg, embeds: [], components: [row] });
+    await interaction.editReply(finalMessage(confirmMsg, [row]));
 
   } else if (customId === 'mystory_manage_resume') {
     await interaction.deferUpdate();
@@ -225,10 +247,10 @@ export async function handleMyStoryManageButton(connection, interaction) {
       state.writerStatus = WRITER_STATUS.ACTIVE;
       pendingMyStoryManageData.delete(userId);
       const successMsg = replaceTemplateVariables(state.cfg.txtMyResumeSuccess, { story_title: state.storyTitle });
-      await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+      await interaction.editReply(finalMessage(successMsg));
     } catch (error) {
       log(`mystory manage resume failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-      await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', state.guildId), embeds: [], components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', state.guildId)));
     }
 
   } else if (customId === 'mystory_manage_leave') {
@@ -261,7 +283,7 @@ export async function handleMyStoryManageButton(connection, interaction) {
       new ButtonBuilder().setCustomId(`mystory_manage_leave_confirm_${state.storyId}`).setLabel(btnLeaveStory).setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`mystory_manage_leave_cancel_${state.storyId}`).setLabel(btnCancel).setStyle(ButtonStyle.Secondary)
     );
-    await interaction.editReply({ content: replaceTemplateVariables(confirmMsg, { story_title: state.storyTitle }), embeds: [], components: [row] });
+    await interaction.editReply(finalMessage(replaceTemplateVariables(confirmMsg, { story_title: state.storyTitle }), [row]));
   }
 }
 
@@ -280,14 +302,14 @@ export async function handlePanelPassConfirm(connection, interaction) {
       [storyId, userId, TURN_STATUS.ACTIVE]
     );
     if (turnInfo.length === 0) {
-      await interaction.editReply({ content: await getConfigValue(connection, 'txtNoActiveTurn', guildId), components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtNoActiveTurn', guildId)));
       return;
     }
     const turn = turnInfo[0];
     const ended = await endTurnGuarded(connection, turn.turn_id);
     if (!ended) {
       log(`handlePanelPassConfirm: turn ${turn.turn_id} already ended (race), no-op`, { show: true, guildName: interaction?.guild?.name });
-      await interaction.editReply({ content: await getConfigValue(connection, 'txtWriteTurnEnded', guildId), components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtWriteTurnEnded', guildId)));
       return;
     }
     const nextWriterId = await PickNextWriter(connection, storyId);
@@ -304,10 +326,10 @@ export async function handlePanelPassConfirm(connection, interaction) {
     }
     pendingMyStoryManageData.delete(userId);
     log(`${interaction.user.username} passed turn in story ${storyId} via manage panel`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtMyPassSuccess', guildId), embeds: [], components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtMyPassSuccess', guildId)));
   } catch (error) {
     log(`handlePanelPassConfirm failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
@@ -326,7 +348,7 @@ export async function handlePanelPauseConfirm(connection, interaction) {
       [storyId, guildId, userId, WRITER_STATUS.ACTIVE]
     );
     if (writerRows.length === 0) {
-      await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId), components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtNotActiveWriter', guildId)));
       return;
     }
     const story = writerRows[0];
@@ -377,10 +399,10 @@ export async function handlePanelPauseConfirm(connection, interaction) {
     log(`${interaction.user.username} paused in story ${storyId} via manage panel`, { show: true, guildName: interaction?.guild?.name });
     const storyTitle = `${story.title} (#${story.guild_story_id})`;
     const successMsg = replaceTemplateVariables(await getConfigValue(connection, 'txtMyPauseSuccess', guildId), { story_title: storyTitle });
-    await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+    await interaction.editReply(finalMessage(successMsg));
   } catch (error) {
     log(`handlePanelPauseConfirm failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
@@ -399,7 +421,7 @@ export async function handlePanelLeaveConfirm(connection, interaction) {
       [storyId, guildId, userId, WRITER_STATUS.ACTIVE, WRITER_STATUS.PAUSED]
     );
     if (writerRows.length === 0) {
-      await interaction.editReply({ content: await getConfigValue(connection, 'txtNotActiveWriter', guildId), components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtNotActiveWriter', guildId)));
       return;
     }
 
@@ -410,10 +432,10 @@ export async function handlePanelLeaveConfirm(connection, interaction) {
 
     pendingMyStoryManageData.delete(userId);
     log(`${interaction.user.username} left story ${storyId} via manage panel`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtLeftStorySuccess', guildId), embeds: [], components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtLeftStorySuccess', guildId)));
   } catch (error) {
     log(`handlePanelLeaveConfirm failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
@@ -425,7 +447,7 @@ export async function handlePanelActionCancel(connection, interaction) {
   if (state) {
     await interaction.editReply(buildMyStoryManagePanel(state, state.cfg));
   } else {
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id)));
   }
 }
 
