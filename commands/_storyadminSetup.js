@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder, SectionBuilder } from 'discord.js';
-import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin } from '../utilities.js';
+import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin, hasManageServer } from '../utilities.js';
 import { finalMessage } from '../story/_metadataModals.js';
 import { parseGroundRulesText, effectiveGroundRulesText, formatGroundRuleLabelList } from '../story/_groundRules.js';
 import { handleSetupSave } from './_storyadminSetupSave.js';
@@ -198,7 +198,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
 // triggered it, not a cached flag on state, since a tier-1 customId can be replayed by anyone
 // who has seen the panel (docs/TODO.md, "Split /storyadmin setup into two permission tiers").
 export function hasTier1Access(interaction) {
-  return interaction.member.permissions.has('ManageGuild');
+  return hasManageServer(interaction);
 }
 
 export async function handleSetup(connection, interaction) {

@@ -17,7 +17,7 @@ For config string keys, see `config_roadmap.md`.
 | `sync-config.js` | Syncs SQL config files into the database; `setupOnlyKeys` excludes per-guild/system-singleton keys (e.g. `cfgPrivacyPolicyMessageId`) that are written programmatically, never by file sync | — |
 | `database-setup.js` | Schema creation + numbered `db/migrations/*.sql` runner (tracked in the `migrations` table, each applied once) | — |
 | `announcements.js` | Story feed announcement embeds | — |
-| `faq.js` | `/story help`, `/mystory help`, `/storyadmin help` page rendering; `syncFaqPosts()` — deletes and reposts all FAQ forum threads in the hub server (deploy-time, gated on `config_help.sql` changing) | — |
+| `faq.js` | `/story help`, `/mystory help`, `/storyadmin help` page rendering; `syncFaqPosts()` — deletes and reposts all FAQ forum threads in the hub server (deploy-time, gated on `config_help.sql` changing). Pages are addressed by stable `id` via `pageById()`, never by array position; `cfgFaqPostIds` stores `pageId:threadId` pairs (`parseFaqPostIds()` / `serializeFaqPostIds()`, with migration from the old positional form) | `pageById`, `parseFaqPostIds`, `serializeFaqPostIds` |
 | `privacy-policy.js` | Canonical `POLICY_TEXT` for the Bot's Privacy Policy & Terms of Service (mirrored in `PRIVACY_POLICY.md`); `syncPrivacyPolicy()` — edits the pinned message in the hub's `#rules` channel in place (via stored `cfgPrivacyPolicyMessageId`), or posts + pins a new one. Runs on every deploy via `deploy.js`'s hub post sync step | — |
 | `broadcast.js` | `sendBroadcast()` — sends the `ANNOUNCEMENT` text to the hub announcements channel and every configured guild's story feed channel (opt-out via `cfgChangelogEnabled`). Gated by hardcoded `BROADCAST_ARMED` (must be manually flipped to `true`, then back to `false` after sending) since it's a one-shot send, not an idempotent sync; checked by `deploy.js`'s hub post sync step on every deploy | — |
 | `commands/story.js` | `/story` command handler (delegates to `story/` subcommands) | — |
@@ -166,7 +166,8 @@ Unique constraint on `(job_type, guild_id, window_key)` — duplicate insert fai
 | `log(content, { show, guildName })` | Unified logger; `show: false` = test-mode only |
 | `validateStoryAccess(conn, storyId, guildId)` | Checks story exists, belongs to guild, is active |
 | `validateActiveWriter(conn, userId, storyId)` | Checks user holds the current turn |
-| `checkIsAdmin(conn, interaction, guildId)` | Administrator permission or configured admin role |
+| `hasManageServer(interaction)` | **Server Admin**, the higher level: holds Manage Server. Single definition — `hasTier1Access()` in `commands/_storyadminSetup.js` delegates here. Administrator satisfies it (discord.js `has()` defaults `checkAdmin=true`) |
+| `checkIsAdmin(conn, interaction, guildId)` | **Story Admin**, the lower level: `hasManageServer()`, or holds the role named by `cfgAdminRoleName`. Tested Administrator until 2026-10-01, which left it stricter than the setup panel's own tier-1 gate |
 | `isGuildConfigured(conn, guildId)` | True once `cfgStoryFeedChannelId` holds a non-empty value |
 | `getSetupRequiredMessage(conn, interaction)` | The "server isn't set up yet" copy, or null if it is. Splits on Manage Server (`txtSetupRequiredAdmin` / `txtSetupRequiredUser`), reads from guild 1, substitutes `[hubInviteUrl]`. Called by the `index.js` gate, all three `help` handlers and `handleSetup` |
 | `createThread(interaction, guildId, keyValueMap)` | Creates public or private Discord thread with permissions |

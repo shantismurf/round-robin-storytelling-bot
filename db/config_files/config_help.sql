@@ -122,7 +122,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- 4095 of the 4096-character embed cap. Section keys keep their original Help8 names.
 -- ---------------------------------------------------------------------------
 ('txtHelp8Title', '🔧 Server Admin Options', 'en', 1),
-('txtHelp8Footer', '*All admin commands require the Discord Administrator permission, or the Round Robin admin role configured in `/storyadmin setup`*', 'en', 1),
+('txtHelp8Footer', '*All admin commands require the Manage Server permission, or the Story Admin role configured in `/storyadmin setup`*', 'en', 1),
 ('lblHelp8Setup', '🛠️ Setup', 'en', 1),
 ('txtHelp8Setup', '`/storyadmin setup` configures the Storybot system. Users with server administrator rights will see both Server Admin and Story Admin options, but users with the story admin role defined in setup will only see Story Admin options.\n\nThe setup panel has two tabs, depending on permission level:\n- **Server Admin** — Story and media channels and the Story Admin Role. Only members with Manage Server will see this tab.\n- **Story Admin** — For members of the Server Admin defined role. Sets the weekly roundup location and time, enables bot system announcements, sets server Ground Rules, and can hide mature or explicit ratings. Also displayed to Server Admins.', 'en', 1),
 ('lblHelp8SetupChannels', '📡 Configure Story Channels', 'en', 1),

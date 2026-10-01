@@ -29,6 +29,19 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
+_Nothing pending._
+
+
+## 3.7.0 — 2026-10-01
+
+Provenance: written alongside the work.
+
+MINOR. Readers get two new help pages and a new Section Break section, corrected copy on every
+page, and admin access widened to Manage Server holders. Not MAJOR: nothing changes about what
+the bot does or how it is operated, and the modal-panel paradigm 3.0.0 introduced is untouched.
+Proposed and signed off by LeeAnn 2026-10-01. Absorbs the setup-panel tweaks that were sitting
+in Unreleased.
+
 ### Changed
 - LeeAnn 2026-09-29, setup panel minor tweaks: one more line break added after
   `txtSetupChannelsPermissionNote` at the top of the Server Admin tab; "Storybot Hub
@@ -75,6 +88,17 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   `add` and `tag` and is now alphabetised; `/story manage` is available to the story admin role,
   not just the creator and server admins; the Ground Rules limits are stated as the real ones
   (40-character label, 100-character description, 10 rules) read from `story/_groundRules.js`.
+- **The two permission levels are now one definition each.** `checkIsAdmin` tested
+  `Administrator` while the setup panel's tier-1 gate (`hasTier1Access`) tested `ManageGuild`, so
+  a member with Manage Server but not Administrator could configure the server's channels and yet
+  could not run `/storyadmin user`, `delete` or `sweep`. Both now resolve through a new
+  `hasManageServer()` in `utilities.js`, and `hasTier1Access` delegates to it so the two cannot
+  drift apart again. **This widens access on live servers:** anyone holding Manage Server without
+  Administrator, and not in the Story Admin role, gains those three commands. Nobody loses
+  anything — discord.js's `PermissionsBitField.has()` defaults `checkAdmin=true`, so an
+  Administrator satisfies a Manage Server check. Raised and approved by LeeAnn 2026-10-01.
+- `txtHelp8Footer` and `txtSetupNoRoleNote` updated to match: both said Administrator, which
+  stopped being true with the change above. **Wording not yet approved by LeeAnn.**
 - Both entry pickers now say which one the reader is looking at
   (`txtEditMyEntriesSelect`, `txtManageEntriesSelectEntry`). `/story edit` shows only your own
   entries and `/story manage` → Manage Entries shows an admin all of them; the pickers looked

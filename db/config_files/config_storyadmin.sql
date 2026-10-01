@@ -223,7 +223,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- Added Silo 3: storyadmin.js setup
 ('txtSetupAgeRestrictNote', '*(Age-restrict this channel if the server is not already 18+)*', 'en', 1),
 ('txtSetupNoMediaNote', 'ℹ️ No media channel set — images will not be processed.', 'en', 1),
-('txtSetupNoRoleNote', 'ℹ️ No admin role set — only Discord Administrators can use admin commands.', 'en', 1),
+('txtSetupNoRoleNote', 'ℹ️ No Story Admin role set — only members with Manage Server can use admin commands.', 'en', 1),
 ('txtSetupRoundupDisabledNote', 'ℹ️ Weekly roundup disabled.', 'en', 1),
 ('txtSetupSupportInvite', 'Need help? Join our support server: [hubInviteUrl]', 'en', 1),
 ('lblSetupChangelog', 'Storybot Hub Announcements', 'en', 1),
