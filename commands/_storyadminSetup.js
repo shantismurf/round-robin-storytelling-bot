@@ -83,7 +83,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
   // all of them together via one modal.
   const fieldGroups = {
     channels: {
-      text: desc('txtSetupChannelsPermissionNote') + '\n' + [
+      text: desc('txtSetupChannelsPermissionNote') + '\n\n' + [
         `**${cfg.txtSetupModalTitleFeed}**\n` + desc('txtSetupEmbedDescFeed') + `-> ${fieldVal(state.feedChannelId)}`,
         `**${cfg.txtSetupModalTitleMedia}**\n` + desc('txtSetupEmbedDescMedia') + `-> ${fieldVal(state.mediaChannelId)}`,
         `**${cfg.txtSetupModalTitleRestrictedFeed}**\n` + desc('txtSetupEmbedDescRestrictedFeed') + `-> ${fieldVal(state.restrictedFeedChannelId)}`,
@@ -105,7 +105,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
     },
     changelog: {
       text: `**${cfg.lblSetupChangelog}**\n` + desc('txtSetupEmbedDescChangelog') + `-> ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`,
-      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_changelog').setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Secondary),
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_changelog').setLabel(`${cfg.lblSetupChangelog}: ${state.changelogEnabled ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Primary),
     },
     groundRules: {
       text: `**${cfg.txtSetupModalTitleGroundRules}**\n` + desc('txtSetupEmbedDescGroundRules') + `-> ${groundRulesDisplay}`,
@@ -113,7 +113,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
     },
     teenOrLowerOnly: {
       text: `**${cfg.lblSetupTeenOrLowerOnly}**\n` + desc('txtSetupEmbedDescTeenOrLowerOnly') + `-> ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`,
-      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_teenorlower').setLabel(`${cfg.lblSetupTeenOrLowerOnly}: ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Secondary),
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_teenorlower').setLabel(`${cfg.lblSetupTeenOrLowerOnly}: ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Primary),
     },
   };
 

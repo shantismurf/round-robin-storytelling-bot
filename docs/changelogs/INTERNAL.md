@@ -24,6 +24,22 @@ the thing you will search for later is the old name.
 
 ---
 
+## Unreleased
+
+Work that did not bump the version, because it changed nothing about what users experience.
+The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+
+### Changed
+- LeeAnn 2026-09-29, setup panel minor tweaks: one more line break added after
+  `txtSetupChannelsPermissionNote` at the top of the Server Admin tab; "Storybot Hub
+  Announcements" and "Teen or Lower Only" toggle buttons changed from gray (`Secondary`) to blue
+  (`Primary`); `txtSetupEmbedDescAdminRole` reworded ("only Discord server admins" → "only users
+  with Manage Server permissions", matching what `hasTier1Access()` actually checks — Administrator
+  also passes it, since discord.js's `PermissionsBitField.has()` defaults `checkAdmin=true`);
+  `txtSetupEmbedDescRestrictedMedia`'s second sentence trimmed ("If the channel is not set" →
+  "If not set").
+
+
 ## 3.6.0 — 2026-09-25
 
 Provenance: written alongside the work.
