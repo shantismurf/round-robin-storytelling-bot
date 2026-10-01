@@ -39,6 +39,47 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   `txtSetupEmbedDescRestrictedMedia`'s second sentence trimmed ("If the channel is not set" →
   "If not set").
 
+### Added
+- **Help pages are addressed by a stable `id`, not by their position.** Every entry in
+  `PAGE_DEFS` gained an `id` (`find-join`, `writer-commands`, `admin-server-setup` …) and a new
+  `pageById()` resolves it, throwing on an unknown id rather than returning `undefined`. Three
+  things indexed the array positionally: `/mystory help` and `/storyadmin help` jumped to
+  `PAGE_DEFS[6]` and `[7]`, the contents menu used the array index as each option's value, and
+  `cfgFaqPostIds` stored Hub forum thread ids as a bare pipe-delimited list read back by index.
+  That last one is why this had to come first: splitting or reordering any page shifted every
+  later slot, so the next FAQ sync would have overwritten the wrong forum thread, silently and
+  with no error — the same failure shape as the duplicate-post bug fixed on 2026-09-25.
+- `cfgFaqPostIds` now stores `pageId:threadId` pairs. `parseFaqPostIds()` still accepts the old
+  positional form and migrates it through a frozen `LEGACY_FAQ_PAGE_ORDER`, so an already-deployed
+  forum keeps its threads instead of being abandoned and duplicated. The sync also deletes the
+  thread of a page that no longer exists, which the positional format could not express.
+- Help page 2 gained a **Section Break** section documenting `[[break]]` (`lblHelp2SectionBreak` /
+  `txtHelp2SectionBreak`), which had no writer-facing coverage.
+- `txtHelpPageGone`, shown when a reader opens a page from a contents menu built by an older
+  deploy. **Wording not yet approved by LeeAnn.**
+- `txtHelp9Title`, `txtHelp10Title` for the two pages split out of the admin page.
+
+### Changed
+- **The admin help page was split three ways**, following the setup panel's own permission
+  tiers rather than cutting where the characters ran out: `admin-server-setup` (Server Admin
+  Options), `admin-story-setup` (Story Admin Options) and `admin-commands` (Other Admin
+  Commands). The single page had reached 4095 of Discord's 4096-character embed cap — one
+  character of headroom. LeeAnn's rewritten copy would have come to ~4029, still fitting but
+  with no room to edit. The three pages now render 1675 / 1620 / 861. Section keys keep their
+  original `Help8` names: the prefix identifies the key, and renaming would orphan any guild's
+  overriding row for no gain.
+- Help copy across all ten pages updated from LeeAnn's review of the full rendered text, carried
+  out over the week of 2026-09-25. Her wording throughout. Notable corrections of fact rather
+  than style: Turn Thread Privacy is no longer labelled "(Normal Mode only)" — `story/_turn.js`
+  creates turn threads for Normal *and* Slow mode; `/story help`'s command list was missing
+  `add` and `tag` and is now alphabetised; `/story manage` is available to the story admin role,
+  not just the creator and server admins; the Ground Rules limits are stated as the real ones
+  (40-character label, 100-character description, 10 rules) read from `story/_groundRules.js`.
+- Both entry pickers now say which one the reader is looking at
+  (`txtEditMyEntriesSelect`, `txtManageEntriesSelectEntry`). `/story edit` shows only your own
+  entries and `/story manage` → Manage Entries shows an admin all of them; the pickers looked
+  identical, which read as a bug.
+
 
 ## 3.6.0 — 2026-09-25
 

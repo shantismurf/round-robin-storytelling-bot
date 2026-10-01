@@ -153,7 +153,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageTurnsPanelTitle', 'Turn Actions — [story_title]', 'en', 1),
 ('txtManageTurnsNoTurn', 'No active turn.', 'en', 1),
 ('txtManageTurnsActiveTurn', 'Active writer: **[writer_name]** · Turn ends <t:[turn_ends_unix]:R>', 'en', 1),
-('txtManageEntriesSelectEntry', 'Select an entry to manage:', 'en', 1),
+('txtManageEntriesSelectEntry', 'Manage Any Entry — select an entry to edit:', 'en', 1),
 ('txtManageEntriesNoEntries', '❌ No entries found for this story.', 'en', 1),
 ('lblManageEntriesEntryOption', 'Turn [turn_number] — [writer_name] — [word_count] words — [preview]', 'en', 1),
 ('btnManageEntriesDelete', 'Delete Entry', 'en', 1),

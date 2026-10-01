@@ -5,6 +5,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- /story help — Table of Contents
 -- ---------------------------------------------------------------------------
 ('txtHelpTocTitle', '📖 Round Robin StoryBot Help', 'en', 1),
+('txtHelpPageGone', 'That help topic has moved. Use `/story help` to open the menu again.', 'en', 1),
 ('txtHelpTocFooter', 'Select a topic from the menu below.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
@@ -14,12 +15,12 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblHelp1FindJoin', '📚 Find & Join a Story', 'en', 1),
 ('txtHelp1FindJoin', 'Use `/story list` to browse all stories, past or present. Dedicated story threads can be found by clicking the 🧵 icon in the Round Robin feed channel. To check who has the current turn and how much time is left, use `/story timeleft [id]`.\n\nWhen you''re ready, you can join a story in several ways:\n- Use the quick join menu on `/story list`\n- Type `/story join [id]`\n- Pinned in each story thread is an info post with a "✍️ Join This Story" button.', 'en', 1),
 ('lblHelp1JoiningOptions', '⚙️ Joining Options', 'en', 1),
-('lblHelp1TurnThreadPrivacy', '🔒 Turn Thread Privacy *(Normal Mode only)*', 'en', 1),
-('txtHelp1TurnThreadPrivacy', '- **Public** — Threads for your turns will be visible to all.\n- **Private** — Turn threads will only be visible to you and admins.', 'en', 1),
+('lblHelp1TurnThreadPrivacy', '🔒 Turn Thread Privacy', 'en', 1),
+('txtHelp1TurnThreadPrivacy', '- **Public** — Threads for your turns will be visible to all.\n- **Private** — Turn threads will only be visible to you and admins.\n- Threads are only created for turns in Normal or Slow Mode stories.', 'en', 1),
 ('lblHelp1Notifications', '💬 Notifications', 'en', 1),
-('txtHelp1Notifications', '- **DM** — StoryBot sends DMs for turn start, reminders, and turn timeout or skip.\n- **Mention in channel** — The bot will tag you about your turn in messages on the story thread.', 'en', 1),
+('txtHelp1Notifications', '- **DM** — StoryBot sends DMs for turn start, reminders, and turn timeout or skip.\n- **Mention in channel** — The bot will tag you in a message on the story thread with information about your turn.\n- Underage users may need to add the bot as a friend so reminders aren''t deferred to Message Requests.', 'en', 1),
 ('lblHelp1PenName', '✒️ Pen Name *(optional)*', 'en', 1),
-('txtHelp1PenName', '- Your name as it appears on the story. If the story is configured to display names, it will show on entries and in the exported story. Defaults to your Discord display name.', 'en', 1),
+('txtHelp1PenName', 'If the story is configured to display names, your pen name will show on entries and in the exported story. Defaults to your Discord display name.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
 -- Page 2: Your Stories & Turns
@@ -29,7 +30,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp2Dashboard', '- `/mystory list` — See all your stories — active, paused, delayed, and closed.\n- `/mystory catchup [id]` — Read your last entry and any written since your last turn.', 'en', 1),
 ('lblHelp2ManageParticipation', '🤝 Managing Your Participation', 'en', 1),
 ('txtHelp2ManageParticipation', 'Use `/mystory manage` to take action on a specific story:\n- Pass your current turn\n- Pause or resume your participation\n- Leave the story', 'en', 1),
-('lblHelp2WritingYourTurn', '✍️ Writing Your Turn', 'en', 1),
+('lblHelp2WritingYourTurn', '✍️ Writing Your Entry', 'en', 1),
 ('lblHelp2WriteNormal', '📜 Normal Mode', 'en', 1),
 ('txtHelp2WriteNormal', 'When it''s your turn, you''ll be notified with a link to your turn thread. Make as many posts as you like, add images in their own posts with display (alt) text (if images are enabled), and format your posts using Discord markdown for bold, italics, etc.\n\nYour entry won''t be saved until you click Finalize. If your turn times out, all posts will be lost. Anything you post in the turn thread will be compiled for your entry. Posts from the bot or other users will not be included. If you need more time, click the button at the top of the thread to request an extension from the story creator.', 'en', 1),
 ('lblHelp2WriteQuick', '⚡ Quick Mode', 'en', 1),
@@ -37,6 +38,8 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblHelp2WriteSlow', '🐢 Slow Mode', 'en', 1),
 ('txtHelp2WriteSlow', 'Slow Mode is just like Normal mode, with individual turn threads and the ability to upload images, if enabled. The difference is, there is no timer. Turns only end when skipped or finalized, so you can take your time and write as you are able without feeling pressured. Reminders can be configured to send every X hours, so you don''t forget about the story entirely!', 'en', 1),
 ('lblHelp2WriteTranslations', '🌐 Inline Translations', 'en', 1),
+('lblHelp2SectionBreak', '⁘ Section Break', 'en', 1),
+('txtHelp2SectionBreak', 'Each story can define a custom scene break divider, a group of characters displayed on its own line and centered in the html export.  Use `[[break]]` in your entry to insert it automatically,  so you''ll never have to worry about it being consistent throughout your story!', 'en', 1),
 ('txtHelp2WriteTranslations', '**Inline Translations**: Type `[[original text|translation]]` to add a hover tooltip. In Discord, it shows as `original text *(translation)*`. When exported, it becomes a hover-over tooltip.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
@@ -68,24 +71,24 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp4Title', '📝 Create a New Story — Join Options & Metadata', 'en', 1),
 ('lblHelp4CreatorOptions', 'Story Creator''s Join Options', 'en', 1),
 ('lblHelp4PenName', '✒️ Your Pen Name', 'en', 1),
-('txtHelp4PenName', '- Your name as it will appear on the story. Used in story exports. Defaults to your Discord display name if left blank.', 'en', 1),
+('txtHelp4PenName', 'The story creator''s name as it will appear on the story. Defaults to your Discord display name if left blank.', 'en', 1),
 ('lblHelp4HideMyThreads', '🔒 Hide My Threads', 'en', 1),
-('txtHelp4HideMyThreads', '- **On** — Your turn threads will be private to you and admins, regardless of the story''s thread setting.\n- **Off** — Your thread visibility follows the story''s Hide Threads setting.', 'en', 1),
+('txtHelp4HideMyThreads', '- **On** — Creator''s turn threads will be private to them and server admins, regardless of the story''s thread setting.\n- **Off** — Thread visibility follows the story''s Hide Threads setting.', 'en', 1),
 ('lblHelp4Notifications', '💬 Notifications', 'en', 1),
-('txtHelp4Notifications', '- **DM** — StoryBot will send you a DM when your turn starts.\n- **Mention** — You''ll be mentioned in the story thread instead.', 'en', 1),
+('txtHelp4Notifications', '- **DM** — StoryBot will send a DM with reminders and notifications for this story.\n- **Mention** — Posts with the user mentioned will show in the story thread instead.', 'en', 1),
 ('lblHelp4GroundRules', '📜 Ground Rules', 'en', 1),
-('txtHelp4GroundRules', 'Tone and conduct rules for your story, chosen from the list your server set up. Pick as many as fit, or none at all. They appear on your story''s status post and on the join panel, so people can see what they''re agreeing to before they join rather than after. Change them later from `/story manage` and everyone in the thread gets a note.', 'en', 1),
+('txtHelp4GroundRules', 'Choose tone and conduct rules for your story from the list your server admin set up. They appear on the pinned story status post and on the join panel, so people can see what they''re agreeing to before they join. You can choose or remove rules later from `/story manage` and it will post an update for everyone in the thread. Speak to the server admin about changing or adding rules, max 10 per server.', 'en', 1),
 ('lblHelp4Metadata', '📋 Story Metadata', 'en', 1),
-('txtHelp4Metadata', 'Optional story info set via the **Metadata** sub-panel.\n- 🛡️ **Rating** — Global, Teen, Mature, Explicit, or Not Rated. M and E works may be posted to an age-restricted feed channel, and a server can turn those two options off entirely.\n- ⚠️ **Warnings** — Select all that apply: All Clear: No Content Warnings, Extreme or Visceral Violence, Main Character Fatality, Other: See Tags, Rape/Lack of Sexual Consent, Sex Involving a Minor, Unspecified: Warnings May Apply\n- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other\n- 💞 **Main Relationship** — Primary pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags, or tags submitted by story authors (e.g. slow burn, hurt/comfort, modern AU).\n- 📝 **Summary** — A brief teaser for your story.\n- ⁘ **Scene Break Divider**: A custom line of text (like `⁘ ⁘ ⁘` or `* * *`) used for scene breaks. Type `[[break]]` on its own line anywhere in your entry, and it''ll be replaced with this divider wherever your story is shown. If you haven''t set one yet, `[[break]]` stays as a reminder to set it up.', 'en', 1),
+('txtHelp4Metadata', 'Optional story info set via the **Metadata** sub-panel.\n- 🛡️ **Rating** — Global, Teen, Mature, Explicit, or Not Rated. M and E works may be posted to an age-restricted feed channel, or those ratings may be disabled for your server.\n- ⚠️ **Warnings** — Select all that apply: All Clear: No Content Warnings, Extreme or Visceral Violence, Main Character Fatality, Other: See Tags, Rape/Lack of Sexual Consent, Sex Involving a Minor, Unspecified: Warnings May Apply\n- 📊 **Dynamic** — General, F/F, F/M, M/M, Polyamory, or Other\n- 💞 **Main Relationship** — Primary pairing (e.g. Bilbo Baggins/Thorin Oakenshield).\n- 🫂 **Other Relationships** — Additional pairings or relationships\n- 🧑 **Characters** — Characters featured in the story.\n- 🏷️ **Tags** — Freeform tags, or tags submitted by story authors (e.g. slow burn, hurt/comfort, modern AU).\n- 📝 **Summary** — A brief teaser for your story.\n- ⁘ **Scene Break Divider**: A custom line of text (like `⁘ ⁘ ⁘` or `* * *`) used for scene breaks. Type `[[break]]` on its own line anywhere in your entry, and it''ll be replaced with this divider wherever your story is shown. If it''s not set yet, `[[break]]` will display as a reminder to set it up. It will be replaced or updated automatically when the change is saved.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
 -- Page 5: Managing a Story 
 -- ---------------------------------------------------------------------------
 ('txtHelp5Title', '⚙️ Managing a Story', 'en', 1),
 ('lblHelp5WhoCanUse', '👤 Who can use `/story manage`?', 'en', 1),
-('txtHelp5WhoCanUse', 'The story creator (the first writer to join) and server admins.', 'en', 1),
+('txtHelp5WhoCanUse', 'The story creator (the first writer to join), server admins, and members of the story admin role.', 'en', 1),
 ('lblHelp5WhatEdit', '❓ What settings can be edited?', 'en', 1),
-('txtHelp5WhatEdit', '- **Story Title** — Cannot be blank.\n- **Story Mode**\n- **Writer Order** — Choose between Random, Round Robin, and Fixed (Join) Order.\n- **Join Status** — You can close or open a story to new writers joining.\n- **Max Writers** — Cap on total writers. Leave blank for no limit.\n- **Turn Length** — hours per turn\n- **Reminder Timing** — a percentage of the total turn time when reminders will be sent, or 0% to disable. (Example: 50% of a 24hr turn means the reminder is sent after 12hrs.)\n- **Show Author Names** — Writer names appear on entries and in the story export if enabled.\n- **Turn Privacy** — Turn threads are only visible to the current writer (and server admins). Public turns are visible to all.\n- **Story Status** — Toggles the story status from Paused to Resumed, or Reopens a closed story. When paused, the current turn is frozen until the story status is resumed, then the turn restarts with a refreshed deadline.', 'en', 1),
+('txtHelp5WhatEdit', '- **Story Title** — Cannot be blank.\n- **Story Mode** — Normal, Quick, or Slow.\n- **Writer Order** — Choose between Random, Round Robin, and Fixed (Join) Order.\n- **Join Status** — Close or open a story to new writers joining.\n- **Max Writers** — Cap on total writers. Leave blank for no limit.\n- **Turn Length** — Hours per turn.\n- **Reminder Timing** — Reminder interval as a percentage of total turn length. Default: 50%. Set to 0% to disable.\n- **Show Author Names** — Writer names appear on entries and in the story export if enabled.\n- **Turn Privacy** — Turn threads are only visible to the current writer (and server admins). Public turns are visible to all.\n- **Story Status** — Toggles the story status from Paused to Resumed, or Reopens a closed story. When paused, the current turn is frozen until the story status is resumed, then the turn restarts with a refreshed deadline.', 'en', 1),
 ('lblHelp5Closing', '🏁 Closing a Story', 'en', 1),
 ('txtHelp5Closing', '- Use `/story close [id]` to close a story. This posts a completion message with the full story export, ends the current turn, and closes the story to new joins, but leaves the story thread open for discussion. You can always reopen a story from the management panel.', 'en', 1),
 ('lblHelp5AdminControls', '🛡️ Admin Controls', 'en', 1),
@@ -96,7 +99,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- ---------------------------------------------------------------------------
 ('txtHelp6Title', '📖 Reading & Editing', 'en', 1),
 ('lblHelp6Read', '📖 Reading a Story', 'en', 1),
-('txtHelp6Read', '`/story read [id]` — Displays the story in Discord, paginated by entry. Longer entries are broken into additional pages. Each entry shows the writer''s name (if enabled) and the text they submitted. Images are shown as placeholders with their alternate text.', 'en', 1),
+('txtHelp6Read', '`/story read [id]` — Displays the story in Discord, with longer entries broken into pages 4,000 characters or less. Each entry shows the writer''s name (if enabled on the story) and the text they submitted. Images are shown as placeholders with their alternate text. The story read interface will remember the last entry you read, and reopen to that page if the session times out.', 'en', 1),
 ('lblHelp6Edit', '✏️ Editing an Entry', 'en', 1),
 ('txtHelp6Edit', 'You can edit a finalized entry two ways:\n- `/story edit [id] (turn)` — If you know the turn number, it opens that entry directly. Leave it off to see a list of your entries in that story and pick one.\n- Click the **Edit** button in `/story read` — appears on the first page of each entry.\n\nWriters can edit their own entries. Admins can edit or delete any entry and restore previous versions.', 'en', 1),
 ('lblHelp6EditPages', '📄 Entries Split Across Pages', 'en', 1),
@@ -108,39 +111,42 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp7Title', '📋 Writer Command Reference', 'en', 1),
 ('txtHelp7Footer', 'Use /story help for detailed explanations of story modes, writer order, metadata, and more.', 'en', 1),
 ('lblHelp7StoryCommands', '📖 Story Commands', 'en', 1),
-('txtHelp7StoryCommands', '- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story join [id]` — Join a story\n- `/story write [id]` — Submit your entry *(Quick Mode only)*\n- `/story read [id]` — Read the story in Discord\n- `/story edit [id] (turn)` — Edit a finalized entry; give the turn number to open that entry, or leave it off to see all your entries\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story ping [id]` — Ping all writers in a story\n- `/story help` — Detailed guide with all writer options', 'en', 1),
+('txtHelp7StoryCommands', '- `/story add` — Create a new story\n- `/story edit [id] (turn)` — Edit a finalized entry; give the turn number to open that entry, or leave it off to see all your entries\n- `/story help` — Detailed guide with all writer options\n- `/story join [id]` — Join a story\n- `/story list` — Browse all stories on the server; filter by status or rating\n- `/story ping [id]` — Ping all writers in a story\n- `/story read [id]` — Read the story in Discord\n- `/story tag [id]` — Submit a suggested freeform tag to add to a story, for the story creator or admins to review\n- `/story timeleft [id]` — See how much time is left in the current turn\n- `/story write [id]` — Submit your entry *(Quick Mode only)*', 'en', 1),
 ('lblHelp7Dashboard', '🗂️ Your Dashboard', 'en', 1),
-('txtHelp7Dashboard', '- `/mystory list` — See all your stories — active, paused, delayed, and closed\n- `/mystory catchup [id]` — Read entries written since your last turn\n- `/mystory manage [id]` — Update your settings, pass your turn, pause, or leave a story', 'en', 1),
+('txtHelp7Dashboard', '- `/mystory list` — See all your stories — active, paused, delayed, and closed\n- `/mystory catchup [id]` — Read entries written since your last turn\n- `/mystory manage [id]` — Update your settings, pass your turn, pause, or leave a story\n- `/mystory help` — This quick reference for all writer commands', 'en', 1),
 ('lblHelp7CreatorCommands', '⚙️ Story Creator Commands', 'en', 1),
-('txtHelp7CreatorCommands', '- `/story manage [id]` — Edit story settings, manage turns and entries, pause or close', 'en', 1),
+('txtHelp7CreatorCommands', '- `/story manage [id]` — Edit story settings and metadata, manage turns and entries, pause or close', 'en', 1),
 
 -- ---------------------------------------------------------------------------
--- Page 8: StoryAdmin Commands
+-- Pages 8-10: admin setup and commands. Split out of a single page that had reached
+-- 4095 of the 4096-character embed cap. Section keys keep their original Help8 names.
 -- ---------------------------------------------------------------------------
-('txtHelp8Title', '⚙️ Admin Command Reference', 'en', 1),
+('txtHelp8Title', '🔧 Server Admin Options', 'en', 1),
 ('txtHelp8Footer', '*All admin commands require the Discord Administrator permission, or the Round Robin admin role configured in `/storyadmin setup`*', 'en', 1),
 ('lblHelp8Setup', '🛠️ Setup', 'en', 1),
-('txtHelp8Setup', '- `/storyadmin setup` — Run this once before the bot can do anything, and any time you want to change a setting afterward. It opens a panel rather than a single form: choose a field, fill it in, and come back for as many as you need. **Nothing is saved until you press Save Settings**, so don''t close the panel partway through and expect it to stick.', 'en', 1),
+('txtHelp8Setup', '`/storyadmin setup` configures the Storybot system. Users with server administrator rights will see both Server Admin and Story Admin options, but users with the story admin role defined in setup will only see Story Admin options.\n\nThe setup panel has two tabs, depending on permission level:\n- **Server Admin** — Story and media channels and the Story Admin Role. Only members with Manage Server will see this tab.\n- **Story Admin** — For members of the Server Admin defined role. Sets the weekly roundup location and time, enables bot system announcements, sets server Ground Rules, and can hide mature or explicit ratings. Also displayed to Server Admins.', 'en', 1),
 ('lblHelp8SetupChannels', '📡 Configure Story Channels', 'en', 1),
-('txtHelp8SetupChannels', '- **Story Feed Channel** — Central hub where all story threads and activity are posted.\n- **Story Media Channel** — Images posted to Normal or Slow Mode stories are forwarded here for long-term storage. Leave blank to disable images for your server. *Recommended admin-only.*\n- **Restricted Story Feed Channel** — Age-restricted channel for stories rated Mature or Explicit in non-18+ servers.\n- **Restricted Story Media Channel** — Private, age-restricted storage for mature story images. Leave it blank and mature images go to your Story Media Channel instead. *Recommended admin-only.*', 'en', 1),
-('lblHelp8SetupPermissions', '🔑 Permissions', 'en', 1),
-('txtHelp8SetupPermissions', 'The setup panel has two tabs, and they are not the same permission level.\n- **Server Admin** — The four channels above, plus the Story Admin Role field itself. Only members with Manage Server can open this tab. The role is set here, so anyone who could edit it could hand it to themselves.\n- **Story Admin** — The weekly roundup, Hub announcements, Ground Rules, and Teen or Lower Only. Anyone holding your Story Admin Role can reach these.\n- **Story Admin Role** — The role that can manage stories and writers, and change everything on the Story Admin tab. Leave it blank and only members with Manage Server can use `/storyadmin` commands.', 'en', 1),
+('txtHelp8SetupChannels', '- Story Feed Channel —  Where all story threads and activity are posted.\n- Story Media Channel — Images posted to turn threads are forwarded here for storage. Recommended to be a private channel with the Round Robin Storybot role added to Advanced Permissions. If no media channel is defined, images will not be handled in story entries.\n- Restricted Story Feed and Media Channels — Discord requires that channels containing NSFW content be age-restricted. If your server is not 18+, any story with an M or E rating will be created in or moved to these restricted channels automatically. The media channel should be private as well as restricted, with the bot''s role added in permissions. If it isn''t defined, all images will be stored in the Story Media Channel.', 'en', 1),
+('lblHelp8SetupPermissions', '🔑 Story Admin Role', 'en', 1),
+('txtHelp8SetupPermissions', 'Users with this role can manage stories and writers, and access the Story Admin tab of the system setup. Leave this blank, and only members with Manage Server can use admin commands.', 'en', 1),
+('txtHelp9Title', '🎛️ Story Admin Options', 'en', 1),
 ('lblHelp8GroundRules', '📜 Ground Rules', 'en', 1),
-('txtHelp8GroundRules', 'A menu of tone and conduct rules that story creators pick from for their own stories. You write the list, they choose what applies. Six are filled in to start with and all of them are yours to reword, remove, or replace — up to ten, each with a short label and a one-line description.\n\nEditing the list is safe. Rename a rule and stories already using it keep their selection. Remove one and you''ll be told how many stories use it before anything is saved.', 'en', 1),
+('txtHelp8GroundRules', 'A list of options for tone and conduct rules that story creators can add to a story. Admins define the list that applies to their server, and story creators choose what rules apply to their stories. Six examples are supplied, they can be edited or removed, and up to ten can be defined. Write a short label (max 40 characters) on one line and a one-line description (max 100 characters) under it, then put a space before the next rule. Your changes will be confirmed before they are committed.', 'en', 1),
 ('lblHelp8TeenOrLower', '🚦 Teen or Lower Only', 'en', 1),
-('txtHelp8TeenOrLower', 'Removes Mature and Explicit from the rating options everywhere stories are created or edited. Use it if your server doesn''t allow mature content at all.\n\nStories already rated M or E keep that rating until someone next edits their metadata, at which point it drops to Not Rated. You''ll see a confirmation first, because that change also moves the story''s thread out of your restricted feed and back into the main one.', 'en', 1),
+('txtHelp8TeenOrLower', 'Removes "Mature" and "Explicit" from the rating options everywhere stories are created or edited. Stories already rated M or E keep that rating until the metadata is edited, then it defaults to "Not Rated". A confirmation will inform you that the change will move the story''s thread out of your restricted feed and back into the main one, if applicable.', 'en', 1),
 ('lblHelp8SetupRoundup', '📆 Weekly Roundup', 'en', 1),
-('txtHelp8SetupRoundup', 'The weekly roundup is a summary of the story activity on your server. It lists active stories and writers, and gives a count of stories created or completed, turns submitted or missed, and words written.\n- **Roundup Channel** — Set the channel where the roundup will be posted, or leave this field blank to disable the weekly post.\n- **Roundup Timing** — Choose the day and hour you''d like the summary to post: day (0 = Sunday, 6 = Saturday), hour UTC (0–23).', 'en', 1),
+('txtHelp8SetupRoundup', 'A summary of story activity on your server can be posted each week, listing active stories and writers with a count of stories created or completed, turns submitted or missed, and words written.\n- **Roundup Channel** — Where the roundup will be posted. Leave this blank to disable.\n- **Roundup Timing** — Choose the day and hour for the summary to post: day (0 = Sunday, 6 = Saturday), hour UTC (0–23).', 'en', 1),
 ('lblHelp8HubAnnouncements', '📣 Storybot Hub Announcements', 'en', 1),
-('txtHelp8HubAnnouncements', 'Posts StoryBot update notes and changelogs into your Story Feed Channel, so you hear about new features without watching the Hub server. On by default — turn it off if you''d rather keep the feed to stories only.', 'en', 1),
+('txtHelp8HubAnnouncements', 'Updates and announcements from the Round Robin StoryBot Hub Server can be posted to your Story Feed Channel, so your users will hear about new features without joining the Hub server. On by default — posts are never more than monthly and more often quarterly, at most.', 'en', 1),
+('txtHelp10Title', '⚙️ Other Admin Commands', 'en', 1),
 ('lblHelp8ManageStory', '⚙️ Story Management Panel', 'en', 1),
-('txtHelp8ManageStory', '*(admin or story creator)*\n- `/story manage [id]` — See "Managing a Story" (`/story help`) for more information on the Story Management Panel.', 'en', 1),
+('txtHelp8ManageStory', '(All Admins and Story Creator)\n/story manage [id] — See "Managing a Story" (/story help) for more information on the Story Management Panel.', 'en', 1),
 ('lblHelp8ManageUser', '👤 User Management Panel', 'en', 1),
-('txtHelp8ManageUser', '*(admin only)*\n- `/storyadmin user [story_id] [writer]` — Manage a writer''s participation in a story: pause, remove, change their notification or privacy settings, or update their pen name.', 'en', 1),
+('txtHelp8ManageUser', '(Story Admins and Server Admins)\n`/storyadmin user [story_id] [writer]` — Manage a writer''s participation in a story: pause, remove, change their notification or privacy settings, or update their pen name.', 'en', 1),
 ('lblHelp8Delete', '🗑️ Delete a Story', 'en', 1),
-('txtHelp8Delete', '*(requires confirmation)*\n- `/storyadmin delete [id]` — Permanently delete a story and all its data', 'en', 1),
+('txtHelp8Delete', '(Story Admins and Server Admins)\n/storyadmin delete [id] — Permanently delete a story and all its data (requires confirmation)', 'en', 1),
 ('lblHelp8Sweep', '🧹 Sweep a Departed Writer', 'en', 1),
-('txtHelp8Sweep', '*(admin only)*\n- `/storyadmin sweep [user]` — Remove a user who left the server from every active or paused story they''re in. The bot also checks daily and posts a reminder in the story feed if it finds an active writer who''s no longer in the server.', 'en', 1),
+('txtHelp8Sweep', '(Story Admins and Server Admins)\n/storyadmin sweep [user] — Remove a user who has left the server from every active or paused story they''re in. The bot will check daily and post a reminder in the story feed channel if it finds an active writer who is no longer in the server.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
 -- FAQ sync status messages

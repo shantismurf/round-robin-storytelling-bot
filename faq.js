@@ -13,6 +13,7 @@ const EMBED_COLOR = 0x5865f2;
 
 export const PAGE_DEFS = [
   {
+    id: 'find-join',
     titleKey: 'txtHelp1Title',
     entries: [
       { lbl: 'lblHelp1FindJoin', txt: 'txtHelp1FindJoin' },
@@ -24,6 +25,7 @@ export const PAGE_DEFS = [
     ],
   },
   {
+    id: 'your-stories',
     titleKey: 'txtHelp2Title',
     entries: [
       { lbl: 'lblHelp2Dashboard',           txt: 'txtHelp2Dashboard' },
@@ -33,10 +35,12 @@ export const PAGE_DEFS = [
         { lbl: 'lblHelp2WriteQuick',  txt: 'txtHelp2WriteQuick' },
         { lbl: 'lblHelp2WriteSlow',   txt: 'txtHelp2WriteSlow' },
         { lbl: 'lblHelp2WriteTranslations', txt: 'txtHelp2WriteTranslations' },
+        { lbl: 'lblHelp2SectionBreak',      txt: 'txtHelp2SectionBreak' },
       ]},
     ],
   },
   {
+    id: 'create-general',
     titleKey: 'txtHelp3Title',
     entries: [
       { lbl: 'lblHelp3StoryTitle',      txt: 'txtHelp3StoryTitle' },
@@ -51,6 +55,7 @@ export const PAGE_DEFS = [
     ],
   },
   {
+    id: 'create-join-metadata',
     titleKey: 'txtHelp4Title',
     entries: [
       { lbl: 'lblHelp4CreatorOptions', children: [
@@ -63,6 +68,7 @@ export const PAGE_DEFS = [
     ],
   },
   {
+    id: 'managing-a-story',
     titleKey: 'txtHelp5Title',
     entries: [
       { lbl: 'lblHelp5WhoCanUse', txt: 'txtHelp5WhoCanUse' },
@@ -72,6 +78,7 @@ export const PAGE_DEFS = [
     ],
   },
   {
+    id: 'reading-editing',
     titleKey: 'txtHelp6Title',
     entries: [
       { lbl: 'lblHelp6Read',      txt: 'txtHelp6Read' },
@@ -80,6 +87,7 @@ export const PAGE_DEFS = [
     ],
   },
   {
+    id: 'writer-commands',
     titleKey: 'txtHelp7Title',
     footerKey: 'txtHelp7Footer',
     entries: [
@@ -89,17 +97,32 @@ export const PAGE_DEFS = [
     ],
   },
   {
+    id: 'admin-server-setup',
     titleKey: 'txtHelp8Title',
     footerKey: 'txtHelp8Footer',
     entries: [
       { lbl: 'lblHelp8Setup', txt: 'txtHelp8Setup', children: [
         { lbl: 'lblHelp8SetupChannels',    txt: 'txtHelp8SetupChannels' },
         { lbl: 'lblHelp8SetupPermissions', txt: 'txtHelp8SetupPermissions' },
-        { lbl: 'lblHelp8GroundRules',      txt: 'txtHelp8GroundRules' },
-        { lbl: 'lblHelp8TeenOrLower',      txt: 'txtHelp8TeenOrLower' },
-        { lbl: 'lblHelp8SetupRoundup',     txt: 'txtHelp8SetupRoundup' },
-        { lbl: 'lblHelp8HubAnnouncements', txt: 'txtHelp8HubAnnouncements' },
       ]},
+    ],
+  },
+  {
+    id: 'admin-story-setup',
+    titleKey: 'txtHelp9Title',
+    footerKey: 'txtHelp8Footer',
+    entries: [
+      { lbl: 'lblHelp8GroundRules',      txt: 'txtHelp8GroundRules' },
+      { lbl: 'lblHelp8TeenOrLower',      txt: 'txtHelp8TeenOrLower' },
+      { lbl: 'lblHelp8SetupRoundup',     txt: 'txtHelp8SetupRoundup' },
+      { lbl: 'lblHelp8HubAnnouncements', txt: 'txtHelp8HubAnnouncements' },
+    ],
+  },
+  {
+    id: 'admin-commands',
+    titleKey: 'txtHelp10Title',
+    footerKey: 'txtHelp8Footer',
+    entries: [
       { lbl: 'lblHelp8ManageStory', txt: 'txtHelp8ManageStory' },
       { lbl: 'lblHelp8ManageUser',  txt: 'txtHelp8ManageUser' },
       { lbl: 'lblHelp8Delete',      txt: 'txtHelp8Delete' },
@@ -107,6 +130,21 @@ export const PAGE_DEFS = [
     ],
   },
 ];
+
+// The config keys above keep the Help8 prefix they were created with even though four of them
+// now render on other pages. The prefix is part of the key's identity, not a statement about
+// where it appears -- renaming them would orphan any guild's overriding row for no gain.
+
+// Pages are addressed by id, never by position. /mystory help and /storyadmin help jump straight
+// to one, the contents menu carries one as each option's value, and the Hub FAQ sync keys each
+// forum thread on one. All three used to use the array index, so reordering or splitting a page
+// silently repointed every one of them at different content -- and in the sync's case that meant
+// overwriting the wrong forum thread with no error.
+export function pageById(id) {
+  const page = PAGE_DEFS.find(p => p.id === id);
+  if (!page) throw new Error(`pageById: no help page with id "${id}"`);
+  return page;
+}
 
 // ---------------------------------------------------------------------------
 // Renderer
@@ -165,10 +203,10 @@ async function buildTocEmbed(connection, guildId) {
   const select = new StringSelectMenuBuilder()
     .setCustomId('story_help_toc')
     .setPlaceholder(cfg.txtHelpTocFooter)
-    .addOptions(PAGE_DEFS.map((p, i) =>
+    .addOptions(PAGE_DEFS.map(p =>
       new StringSelectMenuOptionBuilder()
         .setLabel(cfg[p.titleKey].replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}️\s]+/gu, '').trim())
-        .setValue(String(i))
+        .setValue(p.id)
     ));
 
   const embed = new EmbedBuilder()
@@ -203,9 +241,14 @@ export async function handleHelpSelect(connection, interaction) {
   log(`handleHelpSelect entry user=${interaction.user.username} value=${interaction.values[0]}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const idx = parseInt(interaction.values[0]);
-    const pageDef = PAGE_DEFS[idx];
+    // The value is a page id. An unknown one means the menu was built by an older deploy and
+    // the reader is clicking a page that no longer exists -- say so rather than throwing.
+    const pageDef = PAGE_DEFS.find(p => p.id === interaction.values[0]);
     const guildId = interaction.guild.id;
+    if (!pageDef) {
+      log(`handleHelpSelect: no page with id "${interaction.values[0]}" -- stale menu`, { show: true, guildName: interaction?.guild?.name });
+      return await interaction.editReply({ content: await getConfigValue(connection, 'txtHelpPageGone', guildId) });
+    }
     const { content, cfg } = await buildPage(connection, guildId, pageDef);
 
     await interaction.editReply({ embeds: [buildPageEmbed(pageDef, cfg, content)] });
@@ -215,14 +258,14 @@ export async function handleHelpSelect(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /mystory help — page 6
+// /mystory help — jumps to the writer command reference
 // ---------------------------------------------------------------------------
 
 export async function handleWriterHelp(connection, interaction) {
   log(`handleWriterHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   await interaction.deferReply({ flags: MessageFlags.Ephemeral });
   try {
-    const pageDef = PAGE_DEFS[6]; // page 7: MyStory Commands
+    const pageDef = pageById('writer-commands');
     const { content, cfg } = await buildPage(connection, interaction.guild.id, pageDef);
     const setupMessage = await getSetupRequiredMessage(connection, interaction);
     await interaction.editReply({
@@ -235,13 +278,13 @@ export async function handleWriterHelp(connection, interaction) {
 }
 
 // ---------------------------------------------------------------------------
-// /storyadmin help — page 7
+// /storyadmin help — jumps to the first admin page
 // ---------------------------------------------------------------------------
 
 export async function handleAdminHelp(connection, interaction, guildId) {
   log(`handleAdminHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   try {
-    const pageDef = PAGE_DEFS[7]; // page 8: StoryAdmin Commands
+    const pageDef = pageById('admin-server-setup');
     const { content, cfg } = await buildPage(connection, guildId, pageDef);
     const setupMessage = await getSetupRequiredMessage(connection, interaction);
     await interaction.reply({
@@ -257,6 +300,63 @@ export async function handleAdminHelp(connection, interaction, guildId) {
 // ---------------------------------------------------------------------------
 // FAQ sync — deletes and reposts all pages to hub FAQ forum
 // ---------------------------------------------------------------------------
+
+// The ids the old positional cfgFaqPostIds format referred to, in the order it stored them.
+// A value written before pages carried ids is a bare pipe-delimited list of thread ids, and the
+// only way to know which page each slot meant is the page order at the time it was written.
+// Keep this frozen: it describes history, not the current page list.
+const LEGACY_FAQ_PAGE_ORDER = Object.freeze([
+  'find-join', 'your-stories', 'create-general', 'create-join-metadata',
+  'managing-a-story', 'reading-editing', 'writer-commands', 'admin-server-setup',
+]);
+
+/**
+ * Read cfgFaqPostIds into a Map of pageId -> threadId, accepting both the current
+ * `pageId:threadId|...` form and the legacy bare `threadId|...` form, which is migrated through
+ * LEGACY_FAQ_PAGE_ORDER so an existing forum's threads are still recognised and replaced rather
+ * than abandoned. Entries that are not usable thread ids are dropped.
+ */
+export function parseFaqPostIds(stored, isSnowflake) {
+  const map = new Map();
+  if (!stored) return map;
+  const parts = String(stored).split('|').filter(Boolean);
+  const legacy = parts.length > 0 && !parts[0].includes(':');
+  parts.forEach((part, i) => {
+    const [pageId, threadId] = legacy ? [LEGACY_FAQ_PAGE_ORDER[i], part] : splitFirst(part);
+    if (pageId && threadId && isSnowflake(threadId)) map.set(pageId, threadId);
+  });
+  return map;
+}
+
+function splitFirst(part) {
+  const at = part.indexOf(':');
+  return at === -1 ? [null, null] : [part.slice(0, at), part.slice(at + 1)];
+}
+
+export function serializeFaqPostIds(map) {
+  return [...map].map(([pageId, threadId]) => `${pageId}:${threadId}`).join('|');
+}
+
+/**
+ * Delete one tracked forum thread. Returns 1 if it could not be removed and is now an orphan
+ * sitting in the forum, 0 if it is gone. Every branch logs: both the fetch and the delete used
+ * to end in `.catch(() => null)`, so a thread that had vanished, or one the bot lacked
+ * permission to delete, produced a duplicate post and no trace of why.
+ */
+async function deleteTrackedThread(faqChannel, threadId, pageRef) {
+  const thread = await faqChannel.threads.fetch(threadId).catch(() => null);
+  if (!thread) {
+    log(`syncFaqPosts: ${pageRef} tracked thread ${threadId} not found in the FAQ channel — it was either already removed by hand, or the old post is still in the forum untracked and needs deleting`, { show: true });
+    return 1;
+  }
+  try {
+    await thread.delete();
+    return 0;
+  } catch (err) {
+    log(`syncFaqPosts: ${pageRef} failed to delete old thread ${threadId}: ${err?.stack ?? err}`, { show: true });
+    return 1;
+  }
+}
 
 export async function syncFaqPosts(client, connection, guildId) {
   log(`syncFaqPosts: starting sync for guild=${guildId}`, { show: true });
@@ -281,43 +381,33 @@ export async function syncFaqPosts(client, connection, guildId) {
     return { errors: PAGE_DEFS.length, orphaned: 0, total: PAGE_DEFS.length };
   }
 
-  // Load existing post (thread) IDs — stored as pipe-delimited string, one per page
+  // Tracked forum threads, stored as pipe-delimited `pageId:threadId` pairs. This used to be a
+  // bare positional list, one slot per page, which meant that splitting or reordering a page
+  // repointed every later slot at a different page and the sync then overwrote the wrong thread.
   const storedIds = await getConfigValue(connection, 'cfgFaqPostIds', guildId).catch(() => null);
   const isSnowflake = id => /^\d{17,20}$/.test(id);
-  const existingIds = (storedIds && isSnowflake(storedIds.split('|')[0]))
-    ? storedIds.split('|')
-    : [];
+  const existingIds = parseFaqPostIds(storedIds, isSnowflake);
 
-  const newIds = new Array(PAGE_DEFS.length).fill('');
+  const newIds = new Map();
   let errors = 0;
   // Counted separately from `errors`, which means "this page failed to post". An orphan is the
   // opposite problem: the new page posted fine but the old one is still sitting in the forum.
   let orphaned = 0;
 
-  // Post in reverse order so page 1 (Overview) sorts to top of forum
+  // Post in reverse order so page 1 sorts to the top of the forum
   for (let i = PAGE_DEFS.length - 1; i >= 0; i--) {
     const pageDef = PAGE_DEFS[i];
+    const pageRef = `${pageDef.id} (position ${i + 1})`;
     try {
       // Delete the existing forum post if we have a valid ID for it. Every branch here logs:
       // both the fetch and the delete used to end in `.catch(() => null)`, so a thread that had
       // vanished, or a delete the bot lacked permission for, produced a duplicate post and no
       // trace of why.
-      const existingId = existingIds[i];
-      if (!existingId || !isSnowflake(existingId)) {
-        log(`syncFaqPosts: page ${i + 1} has no tracked thread id — posting a new thread without replacing anything`, { show: false });
+      const existingId = existingIds.get(pageDef.id);
+      if (!existingId) {
+        log(`syncFaqPosts: ${pageRef} has no tracked thread id — posting a new thread without replacing anything`, { show: false });
       } else {
-        const existingThread = await faqChannel.threads.fetch(existingId).catch(() => null);
-        if (!existingThread) {
-          log(`syncFaqPosts: page ${i + 1} tracked thread ${existingId} not found in the FAQ channel — it was either already removed by hand, or the old post is still in the forum untracked and needs deleting`, { show: true });
-          orphaned++;
-        } else {
-          try {
-            await existingThread.delete();
-          } catch (err) {
-            log(`syncFaqPosts: page ${i + 1} failed to delete old thread ${existingId}: ${err?.stack ?? err}`, { show: true });
-            orphaned++;
-          }
-        }
+        orphaned += await deleteTrackedThread(faqChannel, existingId, pageRef);
       }
 
       const { content, cfg } = await buildPage(connection, guildId, pageDef);
@@ -326,19 +416,27 @@ export async function syncFaqPosts(client, connection, guildId) {
         name: title,
         message: { embeds: [buildPageEmbed(pageDef, cfg, content)] },
       });
-      newIds[i] = thread.id;
-      log(`syncFaqPosts: posted page ${i + 1} "${title}" (thread ${thread.id})`, { show: true });
+      newIds.set(pageDef.id, thread.id);
+      log(`syncFaqPosts: posted ${pageRef} "${title}" (thread ${thread.id})`, { show: true });
     } catch (err) {
-      log(`syncFaqPosts: failed for page ${i + 1}: ${err?.stack ?? err}`, { show: true });
+      log(`syncFaqPosts: failed for ${pageRef}: ${err?.stack ?? err}`, { show: true });
       errors++;
     }
+  }
+
+  // A page that no longer exists leaves its thread behind. Keying on id is what makes this
+  // findable at all — under the old positional format a removed page just shifted everything.
+  for (const [staleId, threadId] of existingIds) {
+    if (newIds.has(staleId)) continue;
+    log(`syncFaqPosts: "${staleId}" is no longer a help page — removing its leftover thread ${threadId}`, { show: true });
+    orphaned += await deleteTrackedThread(faqChannel, threadId, `retired page "${staleId}"`);
   }
 
   // Save new thread IDs back — use INSERT ... ON DUPLICATE KEY to handle missing key gracefully
   await connection.execute(
     `INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES ('cfgFaqPostIds', ?, 'en', ?)
      ON DUPLICATE KEY UPDATE config_value = VALUES(config_value)`,
-    [newIds.join('|'), guildId]
+    [serializeFaqPostIds(newIds), guildId]
   );
 
   if (orphaned > 0) {
