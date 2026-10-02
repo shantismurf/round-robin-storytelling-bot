@@ -49,20 +49,28 @@ export function buildMyStoryManagePanel(state, cfg) {
     );
   }
 
+  // No Cancel here (LeeAnn, 2026-10-02): this panel is ephemeral, so Discord's own "Dismiss
+  // message" already does exactly what Cancel did, with less to read and fewer ways to misread
+  // it. The staged edits live in pendingMyStoryManageData and are simply never committed --
+  // the next /mystory manage overwrites that entry anyway. Cancel still earns its place on the
+  // three confirm prompts below, where it means "go back to the panel" rather than "close".
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('mystory_manage_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary)
+    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success)
   ));
 
   // Participation actions are separated from the staged-settings cluster above: Save/Cancel
   // commit the three fields, these three act on the story itself and take effect immediately.
+  //
+  // Danger on the two you cannot take back -- passing spends the turn without submitting, and
+  // leaving is final -- and Secondary on Pause/Resume, which is reversible in both directions
+  // and shares one button slot, so colouring it would make Resume read as destructive too.
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
     new ButtonBuilder()
       .setCustomId('mystory_manage_pass')
       .setLabel(cfg.btnMyStoryManagePass)
-      .setStyle(ButtonStyle.Secondary)
+      .setStyle(ButtonStyle.Danger)
       .setDisabled(!state.hasActiveTurn),
     new ButtonBuilder()
       .setCustomId(state.writerStatus === WRITER_STATUS.ACTIVE ? 'mystory_manage_pause' : 'mystory_manage_resume')
@@ -74,8 +82,8 @@ export function buildMyStoryManagePanel(state, cfg) {
       .setStyle(ButtonStyle.Danger)
   ));
 
-  // 23 nodes counting every nested child (container, 3 top-level text displays, 3 separators,
-  // 3 sections each holding a text display and a button accessory, 2 action rows, 5 buttons)
+  // 22 nodes counting every nested child (container, 3 top-level text displays, 3 separators,
+  // 3 sections each holding a text display and a button accessory, 2 action rows, 4 buttons)
   // against Discord's documented 40 ceiling. See the component-budget note in
   // docs/reference/discordjs_reference.md for why this is counted the conservative way.
   return { components: [container], flags: MessageFlags.IsComponentsV2 };
@@ -214,11 +222,6 @@ export async function handleMyStoryManageButton(connection, interaction) {
       log(`mystory manage save failed: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
       await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', state.guildId)));
     }
-
-  } else if (customId === 'mystory_manage_cancel') {
-    await interaction.deferUpdate();
-    pendingMyStoryManageData.delete(userId);
-    await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id)));
 
   } else if (customId === 'mystory_manage_pass') {
     await interaction.deferUpdate();

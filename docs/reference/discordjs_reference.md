@@ -282,6 +282,6 @@ Status is deliberately *not* a section. Pause/Resume is the button that would pa
 it acts immediately, where the three staged settings wait for Save — putting it in the same
 visual group would have implied it behaves the same way.
 
-Worst-case component count is 23 of 40, counted per nested node, verified by
+Worst-case component count is 22 of 40, counted per nested node, verified by
 `test/myStoryManagePanel.test.js` across every combination of writer status, active turn, pen
 name, privacy and notification preference.

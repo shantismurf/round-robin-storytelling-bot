@@ -174,10 +174,19 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   `finalMessage(text, [row])`. Three early returns in `handleMyStoryManage` stay plain content
   deliberately: they answer before the panel is built, so that message is still a bare deferred
   reply. The `catch` in the same function does not, because if the panel send itself threw the
-  message may already carry the flag. Worst case is 23 components of Discord's 40, counted per
+  message may already carry the flag. Worst case is 22 components of Discord's 40, counted per
   nested node. New `test/myStoryManagePanel.test.js` covers the flag, the ceiling, the absence of
   `undefined`, the one-line-per-setting shape and the two state-dependent buttons, across every
   combination of writer status, active turn, pen name, privacy and notification preference.
+  Button styling settled in the same pass: Pass My Turn and Leave Story are `Danger`, the two
+  you cannot take back, while Pause/Resume stays `Secondary` because it is reversible in both
+  directions and shares one button slot — colouring it would make Resume read as destructive.
+  The panel's **Cancel button is gone** (LeeAnn, 2026-10-02: "I've never understood the value of
+  a cancel button when dismissing the post is right there and easier"). The panel is ephemeral,
+  so Discord's own Dismiss message already did exactly what Cancel did, and the staged edits it
+  discarded are overwritten by the next `/mystory manage` regardless. Cancel stays on the three
+  confirm prompts, where it means "go back to the panel" rather than "close". `/storyadmin
+  setup` still carries the same redundant panel-level Cancel — left alone here, not yet raised.
   **No version bump for this** (LeeAnn, 2026-10-01): it is an oversight being corrected rather
   than new work, and 3.7.0 has not been deployed, so it is part of what users first experience
   as 3.7.0.
