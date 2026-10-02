@@ -162,7 +162,11 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   `inline: true`, rendered as eight stacked lines of label over value on her phone, with a fold
   screen opened — so not a width fallback, since `inline` is a hint a client may ignore outright.
   That is the general argument for the conversion: a `TextDisplayBuilder`'s layout is what you
-  wrote, on every client. The four settings are now four lines of one text display.
+  wrote, on every client. Each editable setting is now a `SectionBuilder` — its line of text on
+  the left, the button that changes it on the right — which the old embed could not express at
+  all: its three edit buttons sat in a row under all four fields with nothing tying one to the
+  other. Status stays a plain line, because the button that would pair with it is Pause/Resume,
+  and that acts immediately where the other three stage until Save.
   Converting the builder forced every later edit of that message to become V2 too, since the flag
   is per-message and one-way — the same chain that `handleSetupSave`/`handleSetupCancel` had to
   follow. Twenty-one `editReply` sites across seven handlers now go through `finalMessage()`,
@@ -170,7 +174,7 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   `finalMessage(text, [row])`. Three early returns in `handleMyStoryManage` stay plain content
   deliberately: they answer before the panel is built, so that message is still a bare deferred
   reply. The `catch` in the same function does not, because if the panel send itself threw the
-  message may already carry the flag. Worst case is 18 components of Discord's 40, counted per
+  message may already carry the flag. Worst case is 23 components of Discord's 40, counted per
   nested node. New `test/myStoryManagePanel.test.js` covers the flag, the ceiling, the absence of
   `undefined`, the one-line-per-setting shape and the two state-dependent buttons, across every
   combination of writer status, active turn, pen name, privacy and notification preference.

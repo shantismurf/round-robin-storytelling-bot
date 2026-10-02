@@ -16,6 +16,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildMyStoryManagePanel } from '../commands/_myStoryManage.js';
+import { ComponentType } from 'discord.js';
 import { WRITER_STATUS } from '../constants.js';
 
 const COMPONENT_CEILING = 40;
@@ -35,6 +36,16 @@ const cfg = loadConfig();
 // Every node, not just top-level container children: it is unconfirmed which way Discord counts,
 // and this codebase takes the conservative reading throughout.
 const countNodes = node => 1 + (node.components ?? []).reduce((a, c) => a + countNodes(c), 0) + (node.accessory ? 1 : 0);
+
+// ComponentType.Section in the installed discord.js -- asserted below so a version bump that
+// renumbered it fails here rather than silently matching nothing.
+const SECTION = ComponentType.Section;
+
+// Every rendered line, including the ones nested inside a section.
+const allText = payload => toJson(payload).flatMap(function lines(node) {
+  return [...(node.content !== undefined ? node.content.split('\n') : []),
+          ...(node.components ?? []).flatMap(lines)];
+});
 
 function everyState() {
   const out = [];
@@ -85,13 +96,26 @@ describe('/mystory manage panel', () => {
     }
   });
 
-  test('the four settings render as one block, one line each', () => {
+  test('every setting renders as a bold label line, none as an embed field', () => {
     // The point of the conversion: these were four embed fields the client stacked over eight
-    // lines. They are now four lines of one text display, which no client is free to reflow.
-    const text = toJson(render(everyState()[0]))[0].components.filter(c => c.content).map(c => c.content).join('\n');
+    // lines. Status is a plain line and the other three are sections, so this walks both.
+    const lines = allText(render(everyState()[0]));
     for (const label of [cfg.lblMyStoryManageStatus, cfg.lblMyStoryManagePenName, cfg.lblMyStoryManageNotif, cfg.lblMyStoryManagePrivacy]) {
-      assert.ok(text.includes(`**${label}:**`), `"${label}" is not rendered as a bold label line`);
+      assert.ok(lines.some(l => l.startsWith(`**${label}:**`)), `"${label}" is not rendered as a bold label line`);
     }
+  });
+
+  test('each editable setting sits in a section beside its own button', () => {
+    // LeeAnn, 2026-10-01: text on one side, the button that changes it on the other. Status is
+    // deliberately not one of these -- Pause/Resume acts immediately, these three stage.
+    const sections = toJson(render(everyState()[0]))[0].components.filter(c => c.type === SECTION);
+    assert.equal(sections.length, 3, 'expected one section per editable setting');
+    for (const section of sections) {
+      assert.equal(section.components.length, 1, 'a section carries more than its one line');
+      assert.ok(section.accessory?.custom_id, 'a section has no button accessory');
+    }
+    assert.deepEqual(sections.map(s => s.accessory.custom_id),
+      ['mystory_manage_penname', 'mystory_manage_notif', 'mystory_manage_privacy']);
   });
 
   test('Pass My Turn is disabled unless the writer holds the turn', () => {

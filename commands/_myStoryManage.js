@@ -1,4 +1,4 @@
-import { ContainerBuilder, TextDisplayBuilder, SeparatorBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { ContainerBuilder, TextDisplayBuilder, SectionBuilder, SeparatorBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { finalMessage } from '../story/_metadataModals.js';
 import { PickNextWriter, NextTurn, endTurnGuarded, endTurnThread, departWriter } from '../story/_turn.js';
@@ -27,21 +27,27 @@ export function buildMyStoryManagePanel(state, cfg) {
   container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtMyStoryManagePanelDesc));
   container.addSeparatorComponents(new SeparatorBuilder());
 
-  // One text display, one "**Label:** value" per line — the shape buildStoryPanel uses. These
-  // were four embed fields marked `inline: true`, which Discord's client is free to ignore: on
-  // LeeAnn's phone it did, and four fields became eight stacked lines of label over value.
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent([
-    `**${cfg.lblMyStoryManageStatus}:** ${statusLabel}`,
-    `**${cfg.lblMyStoryManagePenName}:** ${state.penName || cfg.txtNotSet}`,
-    `**${cfg.lblMyStoryManageNotif}:** ${state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention}`,
-    `**${cfg.lblMyStoryManagePrivacy}:** ${state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic}`,
-  ].join('\n')));
-
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mystory_manage_penname').setLabel(cfg.btnAdminMUPenName).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('mystory_manage_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('mystory_manage_privacy').setLabel(privacyToggleLabel).setStyle(ButtonStyle.Secondary)
+  // Status is a plain line, not a section: the three below each sit beside the button that
+  // edits them, and Pause/Resume does not belong in that group -- it acts immediately, while
+  // these three are staged until Save.
+  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
+    `**${cfg.lblMyStoryManageStatus}:** ${statusLabel}`
   ));
+
+  // Section = text on the left, its own button on the right. These were four embed fields
+  // marked `inline: true` followed by a row of three buttons, which left the reader to map
+  // button back to field; `inline` is a hint the client may ignore, and on LeeAnn's phone it
+  // did, so the fields stacked into eight lines of label over value.
+  for (const [label, value, customId, buttonLabel] of [
+    [cfg.lblMyStoryManagePenName,  state.penName || cfg.txtNotSet,                                                      'mystory_manage_penname', cfg.btnAdminMUPenName],
+    [cfg.lblMyStoryManageNotif,    state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention,              'mystory_manage_notif',   notifToggleLabel],
+    [cfg.lblMyStoryManagePrivacy,  state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic,                            'mystory_manage_privacy', privacyToggleLabel],
+  ]) {
+    container.addSectionComponents(new SectionBuilder()
+      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${label}:** ${value}`))
+      .setButtonAccessory(new ButtonBuilder().setCustomId(customId).setLabel(buttonLabel).setStyle(ButtonStyle.Secondary))
+    );
+  }
 
   container.addSeparatorComponents(new SeparatorBuilder());
   container.addActionRowComponents(new ActionRowBuilder().addComponents(
@@ -68,8 +74,9 @@ export function buildMyStoryManagePanel(state, cfg) {
       .setStyle(ButtonStyle.Danger)
   ));
 
-  // 18 nodes counting every nested child (container, 3 text displays, 3 separators, 3 action
-  // rows, 8 buttons) against Discord's documented 40 ceiling. See the component-budget note in
+  // 23 nodes counting every nested child (container, 3 top-level text displays, 3 separators,
+  // 3 sections each holding a text display and a button accessory, 2 action rows, 5 buttons)
+  // against Discord's documented 40 ceiling. See the component-budget note in
   // docs/reference/discordjs_reference.md for why this is counted the conservative way.
   return { components: [container], flags: MessageFlags.IsComponentsV2 };
 }

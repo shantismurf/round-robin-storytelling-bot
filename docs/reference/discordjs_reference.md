@@ -269,6 +269,19 @@ function does *not* stay plain — if the panel send itself threw, the message m
 the flag, and `finalMessage` is correct either way (a deferred reply accepts a V2 first send,
 which is how `/story manage` and `/storyadmin setup` both open).
 
-Worst-case component count is 18 of 40, counted per nested node, verified by
+Each editable setting is a `SectionBuilder` — its line of text on the left, the button that
+changes it as a `setButtonAccessory` on the right — which is the layout the old embed could not
+express at all, since its three edit buttons sat in a row below all four fields with nothing
+tying one to the other. Verified against the installed builders rather than assumed:
+`SectionBuilder` exposes `addTextDisplayComponents`, `setButtonAccessory` and
+`setThumbnailAccessory`, and `ContainerBuilder.addSectionComponents` accepts it
+(`node_modules/@discordjs/builders/dist/index.d.ts`). As with the component ceiling, nothing
+validates a section's text-display count client-side, so this uses one per section.
+
+Status is deliberately *not* a section. Pause/Resume is the button that would pair with it, and
+it acts immediately, where the three staged settings wait for Save — putting it in the same
+visual group would have implied it behaves the same way.
+
+Worst-case component count is 23 of 40, counted per nested node, verified by
 `test/myStoryManagePanel.test.js` across every combination of writer status, active turn, pen
 name, privacy and notification preference.
