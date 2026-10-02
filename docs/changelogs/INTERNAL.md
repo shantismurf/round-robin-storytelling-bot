@@ -29,7 +29,24 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
-_Nothing pending._
+### Added
+- **A Hub-only welcome at the top of the Overview post in the FAQ forum.** `txtHelpOverviewFaqIntro`,
+  LeeAnn's text, 2026-10-02. The contents menu of `/story help` opens with `txtHelpTocIntro`, which
+  points at the Hub by invite link, but the forum sync posts the twelve pages and never the contents
+  menu, so a reader arriving in the Hub's FAQ forum met no welcome at all. This one names the Hub's
+  own `#storybot-support` channel, which is why it cannot simply be added to the Overview page: a
+  channel mention resolves only in the guild that owns the channel, so in any other server it would
+  render as a dead `#unknown`.
+  The mechanism is a `faqIntroKey` on the page definition, prepended by
+  `buildPage(conn, guildId, pageDef, { forFaq: true })`, which only `syncFaqPosts` passes. Overview
+  is the only page that has one. Note for whoever touches this next: `test/faqPages.test.js` covers
+  the rendering both ways, but nothing fails if that one call in `syncFaqPosts` loses its flag.
+- `cfgHubSupportChannelId` (`1498673028203286684`), joining the other `cfgHub*ChannelId` values in
+  `config_system.sql`, and substituted into help text as `[hubSupportChannelId]`.
+
+This lands after 3.7.0 merged but before the bot has been restarted, so readers will first meet it
+as part of 3.7.0 rather than as a change to it. No bump: it adds a paragraph to the Hub's own forum
+posts and changes nothing a writer does.
 
 
 ## 3.7.0 — 2026-10-01

@@ -15,6 +15,12 @@ export const PAGE_DEFS = [
   {
     id: 'overview',
     titleKey: 'txtHelp1Title',
+    // Prepended to this page in the Hub FAQ forum only. It points a reader at the Hub's own
+    // #storybot-support channel, which is meaningless inside any other server -- a channel
+    // mention only resolves in the guild that owns the channel, so in /story help it would
+    // render as a dead #unknown. The contents menu carries the other welcome, with the invite
+    // link, which is the one that does work anywhere (LeeAnn, 2026-10-02).
+    faqIntroKey: 'txtHelpOverviewFaqIntro',
     entries: [
       // No headings here on purpose: the overview is a conversational introduction, not the
       // topical reference the other pages are. Three label-less paragraphs, in order.
@@ -216,9 +222,11 @@ export function buildPageEmbed(pageDef, cfg, content) {
 // Hub FAQ forum sync -- which is why the [hubInviteUrl] substitution lives at this level rather
 // than at each caller. It used to run on the contents page's intro only, so a page body that
 // wanted to point a reader at the Hub had nowhere to put the link.
-export async function buildPage(connection, guildId, pageDef) {
+export async function buildPage(connection, guildId, pageDef, { forFaq = false } = {}) {
   const bodyKeys = collectKeys(pageDef.entries);
-  const keys = [pageDef.titleKey, ...bodyKeys, 'cfgHubInviteUrl'];
+  // faqIntroKey is fetched only when it will be rendered, so /story help never pays for it.
+  if (forFaq && pageDef.faqIntroKey) bodyKeys.unshift(pageDef.faqIntroKey);
+  const keys = [pageDef.titleKey, ...bodyKeys, 'cfgHubInviteUrl', 'cfgHubSupportChannelId'];
   if (pageDef.footerKey) keys.push(pageDef.footerKey);
   const cfg = await getConfigValue(connection, keys, guildId);
 
@@ -226,12 +234,17 @@ export async function buildPage(connection, guildId, pageDef) {
   // cfg-in/markdown-out function and the tests can call it with a plain object. Only body keys
   // are touched: a title is a label, and replaceTemplateVariables also strips {?...?} blocks,
   // which has no business running over text that was never written with a token in it.
-  const tokens = { hubInviteUrl: cfg.cfgHubInviteUrl };
+  const tokens = {
+    hubInviteUrl: cfg.cfgHubInviteUrl,
+    hubSupportChannelId: cfg.cfgHubSupportChannelId,
+  };
   for (const key of bodyKeys) {
     if (typeof cfg[key] === 'string') cfg[key] = replaceTemplateVariables(cfg[key], tokens);
   }
 
-  return { content: renderEntries(pageDef.entries, cfg), cfg };
+  const body = renderEntries(pageDef.entries, cfg);
+  const intro = forFaq && pageDef.faqIntroKey ? cfg[pageDef.faqIntroKey] : null;
+  return { content: intro ? `${intro}\n\n${body}` : body, cfg };
 }
 
 // ---------------------------------------------------------------------------
@@ -457,7 +470,7 @@ export async function syncFaqPosts(client, connection, guildId) {
         orphaned += await deleteTrackedThread(faqChannel, existingId, pageRef);
       }
 
-      const { content, cfg } = await buildPage(connection, guildId, pageDef);
+      const { content, cfg } = await buildPage(connection, guildId, pageDef, { forFaq: true });
       const title = cfg[pageDef.titleKey].replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}️\s]+/gu, '').trim();
       const thread = await faqChannel.threads.create({
         name: title,
