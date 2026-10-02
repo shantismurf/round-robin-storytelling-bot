@@ -135,8 +135,10 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   identical, which read as a bug.
 - **The help pages are reordered**, which is what the stable ids above were a prerequisite for.
   The order is now overview, creating a story, story options and metadata, find and join, writing
-  your entry, your stories, managing a story, reading and editing, the command reference, then the
-  three admin pages. LeeAnn's reasoning, from the review: the old order opened with finding and
+  your entry, reading and editing, your stories, managing a story, the command reference, then the
+  three admin pages. Reading and editing moved up to sit directly after writing your entry
+  (LeeAnn, 2026-10-02), since reading back what the group has written is the other half of taking
+  a turn, where your stories and managing a story are both about administering your participation. LeeAnn's reasoning, from the review: the old order opened with finding and
   joining, which assumes a reader who has walked into an already-active server, when the only
   person guaranteed to be reading on day one is whoever installed the bot. The order is asserted
   in full in `test/faqPages.test.js` — it is a decision, not an implementation detail.

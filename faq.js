@@ -82,6 +82,15 @@ export const PAGE_DEFS = [
     ],
   },
   {
+    id: 'reading-editing',
+    titleKey: 'txtHelp6Title',
+    entries: [
+      { lbl: 'lblHelp6Read',      txt: 'txtHelp6Read' },
+      { lbl: 'lblHelp6Edit',      txt: 'txtHelp6Edit' },
+      { lbl: 'lblHelp6EditPages', txt: 'txtHelp6EditPages' },
+    ],
+  },
+  {
     id: 'your-stories',
     titleKey: 'txtHelp2Title',
     entries: [
@@ -97,15 +106,6 @@ export const PAGE_DEFS = [
       { lbl: 'lblHelp5WhatEdit',  txt: 'txtHelp5WhatEdit' },
       { lbl: 'lblHelp5Closing',   txt: 'txtHelp5Closing' },
       { lbl: 'lblHelp5AdminControls', txt: 'txtHelp5AdminControls' },
-    ],
-  },
-  {
-    id: 'reading-editing',
-    titleKey: 'txtHelp6Title',
-    entries: [
-      { lbl: 'lblHelp6Read',      txt: 'txtHelp6Read' },
-      { lbl: 'lblHelp6Edit',      txt: 'txtHelp6Edit' },
-      { lbl: 'lblHelp6EditPages', txt: 'txtHelp6EditPages' },
     ],
   },
   {
