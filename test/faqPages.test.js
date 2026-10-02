@@ -17,7 +17,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PAGE_DEFS, collectKeys, renderEntries, buildPageEmbed, pageById } from '../faq.js';
+import { PAGE_DEFS, collectKeys, renderEntries, buildPageEmbed, pageById, buildPage } from '../faq.js';
+import { makeFakeConnection } from './_fakeConnection.js';
 
 const EMBED_DESCRIPTION_LIMIT = 4096;
 
@@ -245,4 +246,65 @@ describe('the 3.7.0 help restructure', () => {
     assert.deepEqual(collectKeys([{ txt: 'k' }]), ['k']);
     assert.ok(!collectKeys(PAGE_DEFS.flatMap(p => p.entries)).includes(undefined));
   });
+});
+
+// ---------------------------------------------------------------------------
+// Thread Features, and the hub link token in a page body
+// ---------------------------------------------------------------------------
+
+// buildPage is the one path every reader of a help page goes through -- /story help,
+// /mystory help, /storyadmin help and the Hub FAQ forum sync -- so this is where the
+// [hubInviteUrl] substitution lives and where it has to be proved.
+//
+// getConfigValue issues exactly one query for an array of keys and reads config_key,
+// config_value and guild_id off each row (utilities.js:390). The fake answers it from the real
+// seed file, so a page is rendered here from the same text a deployed guild would get.
+function fakeConfigRows(keys, extra = {}) {
+  return keys.map(config_key => ({
+    config_key,
+    config_value: extra[config_key] ?? cfg[config_key] ?? config_key,
+    guild_id: 1,
+  }));
+}
+
+describe('the Thread Features section and the hub link token', () => {
+  const HUB_URL = 'https://discord.gg/example';
+  const page = pageById('writing-your-entry');
+
+  test('Thread Features leads the page, ahead of the three modes', () => {
+    // LeeAnn condensed Inline Translations and Section Break into it on 2026-10-02 and moved it.
+    // It is true in every mode, so it is met before the sections that explain the differences.
+    assert.deepEqual(collectKeys(page.entries).filter(k => k.startsWith('lbl')), [
+      'lblHelpWritingThreadFeatures',
+      'lblHelp2WriteNormal',
+      'lblHelp2WriteQuick',
+      'lblHelp2WriteSlow',
+    ]);
+  });
+
+  test('the two condensed sections are gone from the seed, not merely unreferenced', () => {
+    // sync-config never deletes, so these four keys survive as inert rows in deployed guilds.
+    // What matters is that nothing can reintroduce them as live content here.
+    for (const key of ['lblHelp2WriteTranslations', 'txtHelp2WriteTranslations',
+                       'lblHelp2SectionBreak', 'txtHelp2SectionBreak']) {
+      assert.ok(!(key in cfg), `${key} is still in config_help.sql`);
+    }
+  });
+
+  test('a page body resolves [hubInviteUrl] into the real invite', async () => {
+    const keys = [page.titleKey, ...collectKeys(page.entries), 'cfgHubInviteUrl'];
+    const connection = makeFakeConnection([fakeConfigRows(keys, { cfgHubInviteUrl: HUB_URL })]);
+    const { content } = await buildPage(connection, 1, page);
+    assert.ok(content.includes(`](${HUB_URL})`), 'the hub link did not resolve');
+    assert.ok(!content.includes('[hubInviteUrl]'), 'the token survived into the rendered page');
+  });
+
+  test('buildPage asks for cfgHubInviteUrl, or the token could never resolve', async () => {
+    const keys = [page.titleKey, ...collectKeys(page.entries), 'cfgHubInviteUrl'];
+    const connection = makeFakeConnection([fakeConfigRows(keys, { cfgHubInviteUrl: HUB_URL })]);
+    await buildPage(connection, 1, page);
+    assert.ok(connection.calls[0].params.includes('cfgHubInviteUrl'),
+      'cfgHubInviteUrl is not in the key list buildPage fetches');
+  });
+
 });

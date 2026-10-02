@@ -69,11 +69,16 @@ export const PAGE_DEFS = [
     id: 'writing-your-entry',
     titleKey: 'txtHelpWritingTitle',
     entries: [
-      { lbl: 'lblHelp2WriteNormal',       txt: 'txtHelp2WriteNormal' },
-      { lbl: 'lblHelp2WriteQuick',        txt: 'txtHelp2WriteQuick' },
-      { lbl: 'lblHelp2WriteSlow',         txt: 'txtHelp2WriteSlow' },
-      { lbl: 'lblHelp2WriteTranslations', txt: 'txtHelp2WriteTranslations' },
-      { lbl: 'lblHelp2SectionBreak',      txt: 'txtHelp2SectionBreak' },
+      // Thread Features leads the page: it is the part that is true whatever mode you are
+      // writing in, so a reader meets it before the three sections that explain the differences.
+      // It replaced lblHelp2WriteTranslations and lblHelp2SectionBreak, which LeeAnn condensed
+      // into one section on 2026-10-02 and which also picked up double-spaced paragraphs and
+      // markdown preservation -- the latter moved out of Normal Mode, where it only ever
+      // described a behaviour common to all three modes.
+      { lbl: 'lblHelpWritingThreadFeatures', txt: 'txtHelpWritingThreadFeatures' },
+      { lbl: 'lblHelp2WriteNormal',          txt: 'txtHelp2WriteNormal' },
+      { lbl: 'lblHelp2WriteQuick',           txt: 'txtHelp2WriteQuick' },
+      { lbl: 'lblHelp2WriteSlow',            txt: 'txtHelp2WriteSlow' },
     ],
   },
   {
@@ -207,10 +212,25 @@ export function buildPageEmbed(pageDef, cfg, content) {
   return embed;
 }
 
-async function buildPage(connection, guildId, pageDef) {
-  const keys = [pageDef.titleKey, ...collectKeys(pageDef.entries)];
+// Every path that shows a help page goes through here -- the three interactive commands and the
+// Hub FAQ forum sync -- which is why the [hubInviteUrl] substitution lives at this level rather
+// than at each caller. It used to run on the contents page's intro only, so a page body that
+// wanted to point a reader at the Hub had nowhere to put the link.
+export async function buildPage(connection, guildId, pageDef) {
+  const bodyKeys = collectKeys(pageDef.entries);
+  const keys = [pageDef.titleKey, ...bodyKeys, 'cfgHubInviteUrl'];
   if (pageDef.footerKey) keys.push(pageDef.footerKey);
   const cfg = await getConfigValue(connection, keys, guildId);
+
+  // Substituted into the fetched copy, not at render time, so renderEntries stays a pure
+  // cfg-in/markdown-out function and the tests can call it with a plain object. Only body keys
+  // are touched: a title is a label, and replaceTemplateVariables also strips {?...?} blocks,
+  // which has no business running over text that was never written with a token in it.
+  const tokens = { hubInviteUrl: cfg.cfgHubInviteUrl };
+  for (const key of bodyKeys) {
+    if (typeof cfg[key] === 'string') cfg[key] = replaceTemplateVariables(cfg[key], tokens);
+  }
+
   return { content: renderEntries(pageDef.entries, cfg), cfg };
 }
 

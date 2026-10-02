@@ -54,6 +54,16 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   "If not set").
 
 ### Added
+- **`[hubInviteUrl]` now resolves in help page bodies, not just the contents page.** It was
+  substituted only into `txtHelpTocIntro`, so a page that wanted to point a reader at the Hub had
+  nowhere to put the link — which is what `txtHelpWritingThreadFeatures` needed for its
+  one-divider-per-story suggestion. The substitution lives in `buildPage`, the single path all
+  four readers of a help page go through (`/story help`, `/mystory help`, `/storyadmin help` and
+  the Hub FAQ forum sync), and runs over body keys only: a title is a label, and
+  `replaceTemplateVariables` also strips `{?...?}` blocks, which has no business running over text
+  never written with a token in it. `renderEntries` stays a pure cfg-in/markdown-out function, so
+  the substitution happens on the fetched copy rather than at render time. `buildPage` is exported
+  now purely so a test can render a page end to end against a scripted connection.
 - **Help pages are addressed by a stable `id`, not by their position.** Every entry in
   `PAGE_DEFS` gained an `id` (`find-join`, `writer-commands`, `admin-server-setup` …) and a new
   `pageById()` resolves it, throwing on an unknown id rather than returning `undefined`. Three
@@ -155,6 +165,24 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   with the extension sentence, both being about running out of time.
 - `txtHelp2Title` trimmed from "Your Stories & Turns" to "Your Stories", since taking a turn is
   now its own page.
+- **Inline Translations and Section Break condensed into one Thread Features section**, written by
+  LeeAnn 2026-10-02. Both described markup that behaves identically in every writing mode and
+  neither was long enough to earn its own heading. The new section leads the Writing Your Entry
+  page, ahead of Normal, Quick and Slow, because it is the part that is true whichever mode you
+  are in. It also absorbs two things that were not documented anywhere: that a paragraph break
+  needs a blank line, not a single newline (the export runs `marked` with `breaks: true`, so one
+  newline is a `<br>` inside the same paragraph), and that markdown survives into the export,
+  spoilers, quotes and `-#` subtext included (`story/export.js` pre-processes each before the
+  markdown pass). The markdown sentence moved here out of Normal Mode, where it had always
+  described behaviour common to all three modes.
+- **Normal Mode expanded**, LeeAnn's text, 2026-10-02. It now says what happens to a timed-out
+  turn in full — posts kept 24 hours so the writer can copy their work out and ask the creator
+  to reassign the turn, which is a real one-click action ("↩️ Reassign to Previous" on the turn
+  actions panel, `story/_manageTurnActions.js:118`, limited to the writer whose turn ended most
+  recently) — and gives image handling its own paragraph, including how to get images onto a site
+  like AO3, which the bot cannot do for you. The Delete Now button is deliberately left
+  undocumented (LeeAnn: "the button is self explanatory and I think it's better to keep this at
+  least somewhat concise").
 - **`/mystory manage` rebuilt on Components V2**, matching the `/story add` and `/story manage`
   panels. It was the last panel still built as a classic `EmbedBuilder` and was simply missed when
   the others were converted — LeeAnn's words, 2026-10-01: "it got lost in the component upgrade
