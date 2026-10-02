@@ -98,6 +98,12 @@ embeds: [], components: [] })` on save, and the same shape on cancel. Converting
 `buildSetupPanel()` to a `ContainerBuilder` meant both had to change — see the "What's
 forbidden" section above for the fix each one landed on.
 
+`handleSetupCancel` no longer exists: the panel's Cancel button was removed on 2026-10-02
+(LeeAnn, same instruction that removed `/mystory manage`'s), so only `handleSetupSave` remains
+on that path. Kept in this note because the trap it illustrates is still live for every other
+handler that edits a V2 message, and because the function name is what a future reader greps
+for after reading an old commit.
+
 ---
 
 ## Component budget
@@ -272,7 +278,10 @@ which is how `/story manage` and `/storyadmin setup` both open).
 Each editable setting is a `SectionBuilder` — its line of text on the left, the button that
 changes it as a `setButtonAccessory` on the right — which is the layout the old embed could not
 express at all, since its three edit buttons sat in a row below all four fields with nothing
-tying one to the other. Verified against the installed builders rather than assumed:
+tying one to the other. Those three accessories are `Primary`, settled 2026-10-02: a button that
+changes a setting is blue, Save alone is green, and red is reserved for the two actions you
+cannot take back. `test/myStoryManagePanel.test.js` asserts each role, so the scheme cannot
+drift silently. Verified against the installed builders rather than assumed:
 `SectionBuilder` exposes `addTextDisplayComponents`, `setButtonAccessory` and
 `setThumbnailAccessory`, and `ContainerBuilder.addSectionComponents` accepts it
 (`node_modules/@discordjs/builders/dist/index.d.ts`). As with the component ceiling, nothing

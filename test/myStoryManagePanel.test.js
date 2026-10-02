@@ -16,7 +16,7 @@ import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { buildMyStoryManagePanel } from '../commands/_myStoryManage.js';
-import { ComponentType } from 'discord.js';
+import { ComponentType, ButtonStyle } from 'discord.js';
 import { WRITER_STATUS } from '../constants.js';
 
 const COMPONENT_CEILING = 40;
@@ -116,6 +116,21 @@ describe('/mystory manage panel', () => {
     }
     assert.deepEqual(sections.map(s => s.accessory.custom_id),
       ['mystory_manage_penname', 'mystory_manage_notif', 'mystory_manage_privacy']);
+  });
+
+  test('the button colours match the roles LeeAnn signed off on', () => {
+    // LeeAnn, 2026-10-02: blue is the colour of "change this setting", so the three section
+    // accessories are Primary. Save alone is green, and only the two turn actions you cannot
+    // take back are red -- Pause/Resume shares a slot with its own reverse, so it stays grey.
+    const json = toJson(render({ ...everyState()[0], hasActiveTurn: true }))[0];
+    for (const section of json.components.filter(c => c.type === SECTION)) {
+      assert.equal(section.accessory.style, ButtonStyle.Primary, 'a setting button is not blue');
+    }
+    const byId = Object.fromEntries(json.components.flatMap(c => c.components ?? []).map(b => [b.custom_id, b.style]));
+    assert.equal(byId.mystory_manage_save, ButtonStyle.Success);
+    assert.equal(byId.mystory_manage_pass, ButtonStyle.Danger);
+    assert.equal(byId.mystory_manage_leave, ButtonStyle.Danger);
+    assert.equal(byId.mystory_manage_pause, ButtonStyle.Secondary);
   });
 
   test('Pass My Turn is disabled unless the writer holds the turn', () => {

@@ -45,7 +45,11 @@ export function buildMyStoryManagePanel(state, cfg) {
   ]) {
     container.addSectionComponents(new SectionBuilder()
       .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${label}:** ${value}`))
-      .setButtonAccessory(new ButtonBuilder().setCustomId(customId).setLabel(buttonLabel).setStyle(ButtonStyle.Secondary))
+      // Primary (LeeAnn, 2026-10-02): these three DO something -- open the pen-name modal, flip
+      // the notification mode, flip turn privacy -- so they read as actions, not as chrome.
+      // Save stays Success and the two irreversible turn actions stay Danger, so blue here is
+      // unambiguous: it is the colour of "change this setting".
+      .setButtonAccessory(new ButtonBuilder().setCustomId(customId).setLabel(buttonLabel).setStyle(ButtonStyle.Primary))
     );
   }
 
@@ -59,8 +63,8 @@ export function buildMyStoryManagePanel(state, cfg) {
     new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success)
   ));
 
-  // Participation actions are separated from the staged-settings cluster above: Save/Cancel
-  // commit the three fields, these three act on the story itself and take effect immediately.
+  // Participation actions are separated from the staged-settings cluster above: Save commits
+  // the three fields, these three act on the story itself and take effect immediately.
   //
   // Danger on the two you cannot take back -- passing spends the turn without submitting, and
   // leaving is final -- and Secondary on Pause/Resume, which is reversible in both directions

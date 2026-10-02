@@ -178,15 +178,26 @@ the modal-panel paradigm 3.0.0 introduced is untouched. Proposed and signed off 
   nested node. New `test/myStoryManagePanel.test.js` covers the flag, the ceiling, the absence of
   `undefined`, the one-line-per-setting shape and the two state-dependent buttons, across every
   combination of writer status, active turn, pen name, privacy and notification preference.
-  Button styling settled in the same pass: Pass My Turn and Leave Story are `Danger`, the two
-  you cannot take back, while Pause/Resume stays `Secondary` because it is reversible in both
-  directions and shares one button slot — colouring it would make Resume read as destructive.
+  Button styling settled in the same pass (LeeAnn, 2026-10-02: "those button colours look good,
+  blue is right for actions"). The three section accessories are `Primary`: each one does
+  something — opens the pen-name modal, flips the notification mode, flips turn privacy — so blue
+  is the colour of "change this setting". Save alone is `Success`. Pass My Turn and Leave Story
+  are `Danger`, the two you cannot take back, while Pause/Resume stays `Secondary` because it is
+  reversible in both directions and shares one button slot — colouring it would make Resume read
+  as destructive. `test/myStoryManagePanel.test.js` asserts all four roles, so a later change to
+  any of them fails the suite rather than landing unnoticed.
   The panel's **Cancel button is gone** (LeeAnn, 2026-10-02: "I've never understood the value of
   a cancel button when dismissing the post is right there and easier"). The panel is ephemeral,
   so Discord's own Dismiss message already did exactly what Cancel did, and the staged edits it
   discarded are overwritten by the next `/mystory manage` regardless. Cancel stays on the three
-  confirm prompts, where it means "go back to the panel" rather than "close". `/storyadmin
-  setup` still carries the same redundant panel-level Cancel — left alone here, not yet raised.
+  confirm prompts, where it means "go back to the panel" rather than "close". **`/storyadmin setup` lost its
+  panel-level Cancel in the same pass**, for the same reason and on the same instruction
+  (LeeAnn, 2026-10-02: "yes pull the cancel from both"). Those two were the only panels that had
+  one — `/story add` and `/story manage` never did. Removing it took `handleSetupCancel` and the
+  `storyadmin_setup_cancel` route with it, and the `btnCancel` fetch it was the only caller of.
+  Safe because `handleSetup` rebuilds that admin's `pendingSetupData` entry from the database on
+  every open, so a panel dismissed with staged edits cannot leak a stale value into the next one.
+  Cancel stays on the Ground Rules authoring flow, where it means "go back" rather than "close".
   **No version bump for this** (LeeAnn, 2026-10-01): it is an oversight being corrected rather
   than new work, and 3.7.0 has not been deployed, so it is part of what users first experience
   as 3.7.0.
