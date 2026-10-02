@@ -221,7 +221,7 @@ turnSlowReminder job (slow mode only)
 ### Unimplemented / Deferred
 - **Request More Time** (`story_request_more_time_*`): button exists but scheduling extension is not implemented. Requires job scheduler update.
 - **DM Support**: Full DM-based story participation planned but not implemented. Implementation order documented in `../plans/PLAN-dm-support.md`.
-- **Help pages**: /story help still needs AO3/tagging coverage. The /mystory help and /storyadmin help overhaul landed in 3.7.0 (LeeAnn's full content review, plus the admin page split three ways along the setup panel's permission tiers). Still open from that review: reordering so creating a story comes first, and a short true overview on the contents menu — see `../TODO.md`.
+- **Help pages**: the full overhaul landed in 3.7.0 — LeeAnn's content review of every rendered page, the admin page split three ways along the setup panel's permission tiers, and the restructure to twelve pages in reading order (overview, creating, options and metadata, find and join, writing your entry, reading and editing, your stories, managing, the command reference, then the three admin pages). The Overview page is prose with no headings by design, and the contents menu now carries a short welcome. `/story help` opens the menu, `/mystory help` jumps to the command reference, `/storyadmin help` to Server Admin Options. Still open: AO3/tagging coverage — see `../TODO.md`.
 
 ### Hardcoded Text (to be resolved in per-silo audits)
 - `ratingBadgeKey`, `modeText`, `orderText` — referenced in `../TODO.md` as hardcoded; not yet migrated to config keys.

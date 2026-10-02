@@ -67,7 +67,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtAdminMUPauseConfirmDesc', '**[user_name]** will be temporarily removed from the turn rotation in **[story_title]**. They can rejoin at any time with /mystory resume.', 'en', 1),
 ('txtAdminMUUnpauseConfirmDesc', '**[user_name]** will be returned to active rotation in **[story_title]** and will be selected the next time the cycle reaches them.', 'en', 1),
 ('txtAdminMURemoveConfirmDesc', '**[user_name]** will be permanently removed from **[story_title]**. This cannot be undone.', 'en', 1),
-('txtAdminMUActiveTurnWarning', '⚠️ It is currently **[user_name]**''s turn. Confirming will auto-pass to the next writer.', 'en', 1),
+('txtAdminMUActiveTurnWarning', '⚠️ It is currently **[user_name]**''s turn. Confirming will auto-skip to the next writer.', 'en', 1),
 ('txtAdminMULastWriterWarning', '🔴 **[user_name]** is the last active writer. Removing them will automatically close the story.', 'en', 1),
 ('txtManageUserPanelTitle', 'Managing **[writer_name]** in **[story_title]**', 'en', 1),
 ('lblManageUserStatus', 'Status', 'en', 1),

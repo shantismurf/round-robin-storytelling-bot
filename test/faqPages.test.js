@@ -17,7 +17,8 @@
 import { test, describe } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { PAGE_DEFS, collectKeys, renderEntries, buildPageEmbed, pageById } from '../faq.js';
+import { PAGE_DEFS, collectKeys, renderEntries, buildPageEmbed, pageById, buildPage } from '../faq.js';
+import { makeFakeConnection } from './_fakeConnection.js';
 
 const EMBED_DESCRIPTION_LIMIT = 4096;
 
@@ -183,4 +184,127 @@ describe('buildPageEmbed', () => {
       else assert.equal(json.footer, undefined, `${page.titleKey} got a footer it does not declare`);
     }
   });
+});
+
+describe('the 3.7.0 help restructure', () => {
+  // The order below is LeeAnn's, agreed 2026-10-01: what the bot is, how to start a story, how
+  // to join one, how to write a turn, then your own stories, running one, reading, reference and
+  // admin. It is asserted in full because the order is a decision, not an implementation detail
+  // -- an accidental reorder should fail here rather than quietly reshuffle the contents menu.
+  test('the pages are in the agreed reading order', () => {
+    assert.deepEqual(PAGE_DEFS.map(p => p.id), [
+      'overview',
+      'create-general',
+      'create-join-metadata',
+      'find-join',
+      'writing-your-entry',
+      'reading-editing',
+      'your-stories',
+      'managing-a-story',
+      'writer-commands',
+      'admin-server-setup',
+      'admin-story-setup',
+      'admin-commands',
+    ]);
+  });
+
+  test('the overview page carries no headings', () => {
+    // Deliberate: it is a conversational introduction, not the topical reference every other
+    // page is. Adding a lbl to any of its entries would turn it back into a sectioned page.
+    const headed = pageById('overview').entries.filter(e => e.lbl);
+    assert.deepEqual(headed, [], 'the overview page gained a section heading');
+  });
+
+  test('find-join and writing-your-entry have title keys of their own', () => {
+    // Both were section headings inside other pages before the split. Pointing either titleKey
+    // back at a lblHelp2* key would make the page title and its first heading identical.
+    assert.equal(pageById('find-join').titleKey, 'txtHelpFindJoinTitle');
+    assert.equal(pageById('writing-your-entry').titleKey, 'txtHelpWritingTitle');
+  });
+
+  test('no two pages share a title', () => {
+    // The contents menu labels every option from its page title, so a duplicate is unpickable.
+    const titles = PAGE_DEFS.map(p => cfg[p.titleKey]);
+    assert.equal(new Set(titles).size, titles.length, `duplicate page title: ${titles.join(' | ')}`);
+  });
+
+  test('the contents menu intro exists and links the Hub', () => {
+    assert.ok((cfg.txtHelpTocIntro ?? '').trim(), 'txtHelpTocIntro has no value');
+    assert.match(cfg.txtHelpTocIntro, /\[hubInviteUrl\]/,
+      'the intro must carry the token, since buildTocEmbed substitutes it');
+  });
+
+  test('a label-less entry renders its body with no heading', () => {
+    const out = renderEntries([{ txt: 'k' }], { k: 'lead paragraph' });
+    assert.equal(out, 'lead paragraph');
+    assert.ok(!out.includes('#'), 'a label-less entry rendered a heading');
+  });
+
+  test('collectKeys skips a label-less entry rather than emitting undefined', () => {
+    // It used to push entry.lbl unconditionally, so a label-less entry put `undefined` into the
+    // key list handed to getConfigValue.
+    assert.deepEqual(collectKeys([{ txt: 'k' }]), ['k']);
+    assert.ok(!collectKeys(PAGE_DEFS.flatMap(p => p.entries)).includes(undefined));
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Thread Features, and the hub link token in a page body
+// ---------------------------------------------------------------------------
+
+// buildPage is the one path every reader of a help page goes through -- /story help,
+// /mystory help, /storyadmin help and the Hub FAQ forum sync -- so this is where the
+// [hubInviteUrl] substitution lives and where it has to be proved.
+//
+// getConfigValue issues exactly one query for an array of keys and reads config_key,
+// config_value and guild_id off each row (utilities.js:390). The fake answers it from the real
+// seed file, so a page is rendered here from the same text a deployed guild would get.
+function fakeConfigRows(keys, extra = {}) {
+  return keys.map(config_key => ({
+    config_key,
+    config_value: extra[config_key] ?? cfg[config_key] ?? config_key,
+    guild_id: 1,
+  }));
+}
+
+describe('the Thread Features section and the hub link token', () => {
+  const HUB_URL = 'https://discord.gg/example';
+  const page = pageById('writing-your-entry');
+
+  test('Thread Features leads the page, ahead of the three modes', () => {
+    // LeeAnn condensed Inline Translations and Section Break into it on 2026-10-02 and moved it.
+    // It is true in every mode, so it is met before the sections that explain the differences.
+    assert.deepEqual(collectKeys(page.entries).filter(k => k.startsWith('lbl')), [
+      'lblHelpWritingThreadFeatures',
+      'lblHelp2WriteNormal',
+      'lblHelp2WriteQuick',
+      'lblHelp2WriteSlow',
+    ]);
+  });
+
+  test('the two condensed sections are gone from the seed, not merely unreferenced', () => {
+    // sync-config never deletes, so these four keys survive as inert rows in deployed guilds.
+    // What matters is that nothing can reintroduce them as live content here.
+    for (const key of ['lblHelp2WriteTranslations', 'txtHelp2WriteTranslations',
+                       'lblHelp2SectionBreak', 'txtHelp2SectionBreak']) {
+      assert.ok(!(key in cfg), `${key} is still in config_help.sql`);
+    }
+  });
+
+  test('a page body resolves [hubInviteUrl] into the real invite', async () => {
+    const keys = [page.titleKey, ...collectKeys(page.entries), 'cfgHubInviteUrl'];
+    const connection = makeFakeConnection([fakeConfigRows(keys, { cfgHubInviteUrl: HUB_URL })]);
+    const { content } = await buildPage(connection, 1, page);
+    assert.ok(content.includes(`](${HUB_URL})`), 'the hub link did not resolve');
+    assert.ok(!content.includes('[hubInviteUrl]'), 'the token survived into the rendered page');
+  });
+
+  test('buildPage asks for cfgHubInviteUrl, or the token could never resolve', async () => {
+    const keys = [page.titleKey, ...collectKeys(page.entries), 'cfgHubInviteUrl'];
+    const connection = makeFakeConnection([fakeConfigRows(keys, { cfgHubInviteUrl: HUB_URL })]);
+    await buildPage(connection, 1, page);
+    assert.ok(connection.calls[0].params.includes('cfgHubInviteUrl'),
+      'cfgHubInviteUrl is not in the key list buildPage fetches');
+  });
+
 });

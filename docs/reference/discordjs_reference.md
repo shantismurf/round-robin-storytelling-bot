@@ -98,6 +98,12 @@ embeds: [], components: [] })` on save, and the same shape on cancel. Converting
 `buildSetupPanel()` to a `ContainerBuilder` meant both had to change — see the "What's
 forbidden" section above for the fix each one landed on.
 
+`handleSetupCancel` no longer exists: the panel's Cancel button was removed on 2026-10-02
+(LeeAnn, same instruction that removed `/mystory manage`'s), so only `handleSetupSave` remains
+on that path. Kept in this note because the trap it illustrates is still live for every other
+handler that edits a V2 message, and because the function name is what a future reader greps
+for after reading an old commit.
+
 ---
 
 ## Component budget
@@ -248,3 +254,43 @@ Working reference implementation: [story/_metadataModals.js](../story/_metadataM
   (not V2) — intentional, since the standalone `/story close` command's own message never
   carries the flag. `story/_manageClose.js` is a deliberate temporary fork, not a bug; see
   "`/story close` — the worked example of getting it wrong" above.
+
+### `/mystory manage` — converted 2026-10-01
+
+It was the last panel still built as a classic `EmbedBuilder`, missed when the add/manage and
+setup panels were converted. The visible symptom was that its four `addFields` entries, all
+marked `inline: true`, rendered as eight stacked lines of label-over-value on LeeAnn's phone —
+`inline` is a hint a client is free to ignore, which is the general argument for V2 here: a
+`TextDisplayBuilder`'s layout is what you wrote, on every client.
+
+Converting `buildMyStoryManagePanel()` meant every later edit of that message had to become V2
+too, the same chain of consequences `handleSetupSave`/`handleSetupCancel` had. Twenty-one
+`editReply` sites across seven handlers moved to `finalMessage()`, including the three confirm
+prompts (pass, pause, leave), which pass their button row as `finalMessage(text, [row])` so the
+row sits as a top-level sibling of the text container.
+
+Three early returns in `handleMyStoryManage` deliberately stay plain content: they answer before
+the panel is ever built, so that message is still a bare deferred reply. The `catch` in the same
+function does *not* stay plain — if the panel send itself threw, the message may already carry
+the flag, and `finalMessage` is correct either way (a deferred reply accepts a V2 first send,
+which is how `/story manage` and `/storyadmin setup` both open).
+
+Each editable setting is a `SectionBuilder` — its line of text on the left, the button that
+changes it as a `setButtonAccessory` on the right — which is the layout the old embed could not
+express at all, since its three edit buttons sat in a row below all four fields with nothing
+tying one to the other. Those three accessories are `Primary`, settled 2026-10-02: a button that
+changes a setting is blue, Save alone is green, and red is reserved for the two actions you
+cannot take back. `test/myStoryManagePanel.test.js` asserts each role, so the scheme cannot
+drift silently. Verified against the installed builders rather than assumed:
+`SectionBuilder` exposes `addTextDisplayComponents`, `setButtonAccessory` and
+`setThumbnailAccessory`, and `ContainerBuilder.addSectionComponents` accepts it
+(`node_modules/@discordjs/builders/dist/index.d.ts`). As with the component ceiling, nothing
+validates a section's text-display count client-side, so this uses one per section.
+
+Status is deliberately *not* a section. Pause/Resume is the button that would pair with it, and
+it acts immediately, where the three staged settings wait for Save — putting it in the same
+visual group would have implied it behaves the same way.
+
+Worst-case component count is 22 of 40, counted per nested node, verified by
+`test/myStoryManagePanel.test.js` across every combination of writer status, active turn, pen
+name, privacy and notification preference.

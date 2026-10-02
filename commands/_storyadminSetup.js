@@ -1,6 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, MessageFlags, TextDisplayBuilder, SeparatorBuilder, ContainerBuilder, SectionBuilder } from 'discord.js';
 import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables, logGuildEvent, checkIsAdmin, hasManageServer } from '../utilities.js';
-import { finalMessage } from '../story/_metadataModals.js';
 import { parseGroundRulesText, effectiveGroundRulesText, formatGroundRuleLabelList } from '../story/_groundRules.js';
 import { handleSetupSave } from './_storyadminSetupSave.js';
 import { buildChannelsModal, buildRoundupModal, buildSetupFieldModal, handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';
@@ -178,10 +177,13 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
       container.addSeparatorComponents(new SeparatorBuilder());
       container.addActionRowComponents(buildTabRow('bottom'));
     }
+    // No Cancel (LeeAnn, 2026-10-02): the panel is ephemeral, so Discord's own "Dismiss message"
+    // already does what Cancel did. The staged edits live in pendingSetupData and are simply
+    // never committed -- handleSetup rebuilds that entry from the database on every open, so a
+    // dismissed panel cannot leak a stale value into the next one. Matches /mystory manage.
     container.addSeparatorComponents(new SeparatorBuilder());
     container.addActionRowComponents(new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId('storyadmin_setup_save').setLabel(cfg.btnSetupSave).setStyle(ButtonStyle.Success),
-      new ButtonBuilder().setCustomId('storyadmin_setup_cancel').setLabel(cfg.btnCancel).setStyle(ButtonStyle.Secondary),
     ));
   }
 
@@ -231,7 +233,7 @@ export async function handleSetup(connection, interaction) {
     'txtSetupEmbedDescRoundupChannel', 'txtSetupEmbedDescRoundupDay', 'txtSetupEmbedDescRoundupHour',
     'txtSetupEmbedDescChangelog',
     'btnSetupChannels', 'btnSetupRoundup', 'btnSetupRole',
-    'btnSetupSave', 'btnCancel',
+    'btnSetupSave',
     'txtSetupModalTitleChannels', 'txtSetupModalTitleRoundup',
     'txtSetupChannelsModalDesc', 'txtSetupRoundupModalDesc',
     'txtRoundupDay0', 'txtRoundupDay1', 'txtRoundupDay2', 'txtRoundupDay3',
@@ -373,14 +375,5 @@ export async function handleSetupButton(connection, interaction) {
   if (id === 'storyadmin_setup_groundrules_cancel') return await handleSetupGroundRulesCancel(connection, interaction);
   if (id === 'storyadmin_setup_groundrules_retry') return await handleSetupGroundRulesRetry(connection, interaction);
   if (id === 'storyadmin_setup_save') return await handleSetupSave(connection, interaction);
-  if (id === 'storyadmin_setup_cancel') return await handleSetupCancel(connection, interaction);
 }
 
-export async function handleSetupCancel(connection, interaction) {
-  pendingSetupData.delete(interaction.user.id);
-  await interaction.deferUpdate();
-  // finalMessage() (story/_metadataModals.js) wraps plain text as a one-block V2 Container —
-  // {content, embeds: [], components: []} is the pre-V2 shape and is no longer valid once this
-  // message carries IsComponentsV2 (see buildSetupPanel's doc comment).
-  await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id)));
-}
