@@ -299,6 +299,27 @@ describe('the Thread Features section and the hub link token', () => {
     assert.ok(!content.includes('[hubInviteUrl]'), 'the token survived into the rendered page');
   });
 
+  test('the Hub forum copy of Overview opens with its own welcome', async () => {
+    // LeeAnn, 2026-10-02. The welcome names the Hub's #storybot-support channel, so it can only
+    // go where that channel exists. A channel mention resolves in the guild that owns it and
+    // nowhere else, which is why this is forum-only rather than part of the page.
+    const page = pageById('overview');
+    const keys = [page.titleKey, page.faqIntroKey, ...collectKeys(page.entries),
+                  'cfgHubInviteUrl', 'cfgHubSupportChannelId'];
+    const extra = { cfgHubInviteUrl: HUB_URL, cfgHubSupportChannelId: '1498673028203286684' };
+
+    const forum = makeFakeConnection([fakeConfigRows(keys, extra)]);
+    const faq = (await buildPage(forum, 1, page, { forFaq: true })).content;
+    assert.match(faq, /^Welcome to Round Robin Storybot/, 'the forum copy does not open with it');
+    assert.ok(faq.includes('<#1498673028203286684>'), 'the support channel did not resolve');
+
+    const inDiscord = makeFakeConnection([fakeConfigRows(keys, extra)]);
+    const help = (await buildPage(inDiscord, 1, page)).content;
+    assert.ok(!help.includes('Welcome to Round Robin Storybot'),
+      '/story help is showing the Hub-only welcome, where the channel mention is dead');
+    assert.ok(faq.endsWith(help), 'the forum copy is not the page with the welcome in front');
+  });
+
   test('buildPage asks for cfgHubInviteUrl, or the token could never resolve', async () => {
     const keys = [page.titleKey, ...collectKeys(page.entries), 'cfgHubInviteUrl'];
     const connection = makeFakeConnection([fakeConfigRows(keys, { cfgHubInviteUrl: HUB_URL })]);

@@ -85,6 +85,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('cfgHubLogChannelId', '1505941432370724864', 'en', 1),
 ('cfgHubAnnouncementsChannelId', '1498673028203286681', 'en', 1),
 ('cfgHubRulesChannelId', '1499435586740682772', 'en', 1),
+('cfgHubSupportChannelId', '1498673028203286684', 'en', 1),
 ('cfgPrivacyPolicyMessageId', '1528880125498626179', 'en', 1),
 -- cfgFaqPostIds is deliberately NOT declared here. It is runtime state that syncFaqPosts
 -- writes after creating the Hub FAQ threads, so a literal value in this file gets resynced
