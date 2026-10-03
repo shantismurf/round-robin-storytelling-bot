@@ -95,7 +95,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblTags', 'Tags', 'en', 1),
 ('btnSetTags', 'Set Tags', 'en', 1),
 ('txtManageNotAuthorized', '❌ Only the story creator or an admin can manage this story.', 'en', 1),
-('txtManageValidationTurnLength', 'Turn length must be at least 1 hour.', 'en', 1),
+('txtManageValidationTurnLength', 'Turn length not recognized. Enter hours or days using numerals, like `24`, `36 hours`, `2 days`, or `1d12h`. It must be at least 1 hour.', 'en', 1),
 ('txtManageValidationTimeout', 'Timeout reminder must be a number between 0 and 100.', 'en', 1),
 ('txtManageValidationMaxWriters', 'Max writers must be at least 1, or leave blank for no limit.', 'en', 1),
 ('txtAdminNextSuccess', '✅ **[user_name]** will receive the next turn.', 'en', 1),
