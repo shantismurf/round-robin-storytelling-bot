@@ -10,7 +10,7 @@ For config string keys, see `config_roadmap.md`.
 | File | Purpose | Lines |
 |------|---------|-------|
 | `index.js` | Entry point, Discord client, interaction router. Waits for DB reachability (`waitForDatabase()`) before running `deploy.js`, so a DB outage at boot retries with throttled logging instead of crash-looping | ~280 |
-| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration, formatDuration, `createFailureThrottle()` (burst-then-summary logging for a repeating failure/recovery cycle, e.g. DB connectivity), `getSetupRequiredMessage()`, `logGuildEvent()` (non-fatal insert into the `guild_event` funnel table) | ~770 |
+| `utilities.js` | Shared helpers: DB, logging, config, validators, parseDuration (accepts bare hours, d/h/m, spelled-out units, and formatDuration's own "96 hours (4 days)" output), formatDuration, `replyValidationError()` (ephemeral validation reply that deletes itself after `cfgValidationErrorDismissSeconds`), `createFailureThrottle()` (burst-then-summary logging for a repeating failure/recovery cycle, e.g. DB connectivity), `getSetupRequiredMessage()`, `logGuildEvent()` (non-fatal insert into the `guild_event` funnel table) | ~770 |
 | `storybot.js` | Core story engine: CreateStory, NextTurn, PickNextWriter | — |
 | `job-runner.js` | Background job polling and execution | ~250 |
 | `deploy.js` | CLI deploy, run on every bot start: migrations, config sync, command registration, hub post sync (FAQ + privacy policy + gated broadcast) | ~125 |

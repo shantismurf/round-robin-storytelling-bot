@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, LabelBuilder, SeparatorBuilder, ContainerBuilder, TextDisplayBuilder, MessageFlags, EmbedBuilder } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration } from '../utilities.js';
+import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, checkIsAdmin, checkIsCreator, parseDuration, formatDuration, replyValidationError } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { ratingCodes, ratingLabelKey, warningOptions, dynamicOptions, crossesBarrier, isRestricted } from './_metadata.js';
 import { parseGroundRulesText, effectiveGroundRulesText } from './_groundRules.js';
@@ -637,7 +637,7 @@ async function handleManageModalSubmit(connection, interaction) {
       if (!isSlowMode && rawTurnLength) {
         const parsedTurnLength = parseDuration(rawTurnLength);
         if (isNaN(parsedTurnLength) || parsedTurnLength < 1) {
-          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id));
         }
         state.turnLength = parsedTurnLength;
       }
@@ -647,11 +647,11 @@ async function handleManageModalSubmit(connection, interaction) {
         const val = parseInt(rawReminder);
         if (isSlowMode) {
           if (isNaN(val) || val < 0) {
-            return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id), flags: MessageFlags.Ephemeral });
+            return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id));
           }
         } else {
           if (isNaN(val) || val < 0 || val > 100) {
-            return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id), flags: MessageFlags.Ephemeral });
+            return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id));
           }
         }
         state.timeoutReminder = val;
@@ -661,7 +661,7 @@ async function handleManageModalSubmit(connection, interaction) {
       if (rawMaxWriters) {
         const val = parseInt(rawMaxWriters);
         if (isNaN(val) || val < 0) {
-          return await interaction.reply({ content: await getConfigValue(connection, 'txtManageValidationMaxWriters', interaction.guild.id), flags: MessageFlags.Ephemeral });
+          return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationMaxWriters', interaction.guild.id));
         }
         state.maxWriters = val > 0 ? val : null;
       } else {
