@@ -592,7 +592,7 @@ async function handleManageButton(connection, interaction) {
 }
 
 async function handleManageModalSubmit(connection, interaction) {
-  log(`handleManageModalSubmit entry customId=${interaction.customId}`, { show: false, guildName: interaction?.guild?.name });
+  log(`handleManageModalSubmit entry customId=${interaction.customId} user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
   const userId = interaction.user.id;
   if (interaction.customId.startsWith('story_manage_ta_')) {
     return await handleTurnActionModal(connection, interaction, pendingManageData.get(userId));
@@ -600,6 +600,7 @@ async function handleManageModalSubmit(connection, interaction) {
   const state = pendingManageData.get(userId);
 
   if (!state) {
+    log(`handleManageModalSubmit: no pending manage state, session expired: customId=${interaction.customId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     return await interaction.reply({
       content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id),
       flags: MessageFlags.Ephemeral
@@ -637,7 +638,7 @@ async function handleManageModalSubmit(connection, interaction) {
       if (!isSlowMode && rawTurnLength) {
         const parsedTurnLength = parseDuration(rawTurnLength);
         if (isNaN(parsedTurnLength) || parsedTurnLength < 1) {
-          return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id));
+          return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id), `field=turn_length storyId=${state.storyId} input="${rawTurnLength}"`);
         }
         state.turnLength = parsedTurnLength;
       }
@@ -647,11 +648,11 @@ async function handleManageModalSubmit(connection, interaction) {
         const val = parseInt(rawReminder);
         if (isSlowMode) {
           if (isNaN(val) || val < 0) {
-            return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id));
+            return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id), `field=timeout_reminder(slow) storyId=${state.storyId} input="${rawReminder}"`);
           }
         } else {
           if (isNaN(val) || val < 0 || val > 100) {
-            return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id));
+            return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationTimeout', interaction.guild.id), `field=timeout_reminder storyId=${state.storyId} input="${rawReminder}"`);
           }
         }
         state.timeoutReminder = val;
@@ -661,12 +662,14 @@ async function handleManageModalSubmit(connection, interaction) {
       if (rawMaxWriters) {
         const val = parseInt(rawMaxWriters);
         if (isNaN(val) || val < 0) {
-          return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationMaxWriters', interaction.guild.id));
+          return await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationMaxWriters', interaction.guild.id), `field=max_writers storyId=${state.storyId} input="${rawMaxWriters}"`);
         }
         state.maxWriters = val > 0 ? val : null;
       } else {
         state.maxWriters = null;
       }
+
+      log(`handleManageModalSubmit: settings staged storyId=${state.storyId} user=${interaction.user.username} turnLength=${state.turnLength} timeoutReminder=${state.timeoutReminder} maxWriters=${state.maxWriters}`, { show: false, guildName: interaction?.guild?.name });
 
     } else if (customId === 'story_manage_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_manage_metadata_dynamic')?.[0];

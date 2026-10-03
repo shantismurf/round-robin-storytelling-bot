@@ -130,8 +130,10 @@ export function buildStoryAddMessage(cfg, state) {
 export async function handleAddStoryModalSubmit(connection, interaction) {
   const userId = interaction.user.id;
   const state = pendingStoryData.get(userId);
+  log(`handleAddStoryModalSubmit: entry customId=${interaction.customId} user=${interaction.user.username} hasState=${!!state}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!state) {
+    log(`handleAddStoryModalSubmit: no pending story state, session expired: customId=${interaction.customId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({
       content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
       flags: MessageFlags.Ephemeral
@@ -159,7 +161,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       const parsedTurnLength = parseDuration(rawTurnLength);
       if (!isSlowMode) {
         if (isNaN(parsedTurnLength) || parsedTurnLength < 1) {
-          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblTurnLength }));
+          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblTurnLength }), `field=turn_length input="${rawTurnLength}"`);
           return;
         }
         state.turnLength = parsedTurnLength;
@@ -170,12 +172,12 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
         const val = parseInt(rawReminder);
         if (isSlowMode) {
           if (isNaN(val) || val < 0) {
-            await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id));
+            await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationSlowReminder', interaction.guild.id), `field=timeout_reminder(slow) input="${rawReminder}"`);
             return;
           }
         } else {
           if (isNaN(val) || val < 0 || val > 100) {
-            await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtTimeoutReminderValidation', interaction.guild.id));
+            await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtTimeoutReminderValidation', interaction.guild.id), `field=timeout_reminder input="${rawReminder}"`);
             return;
           }
         }
@@ -186,7 +188,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       if (rawDelayHours) {
         const parsedDelay = parseDuration(rawDelayHours);
         if (isNaN(parsedDelay) || parsedDelay < 0) {
-          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblNoHours }));
+          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblNoHours }), `field=delay_hours input="${rawDelayHours}"`);
           return;
         }
         state.delayHours = parsedDelay || null;
@@ -198,7 +200,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       if (rawDelayWriters) {
         const val = parseInt(rawDelayWriters);
         if (isNaN(val) || val < 0) {
-          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblNoWriters }));
+          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblNoWriters }), `field=delay_writers input="${rawDelayWriters}"`);
           return;
         }
         state.delayWriters = val || null;
@@ -210,13 +212,15 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       if (rawMaxWriters) {
         const val = parseInt(rawMaxWriters);
         if (isNaN(val) || val < 1) {
-          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblMaxWriters }));
+          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblMaxWriters }), `field=max_writers input="${rawMaxWriters}"`);
           return;
         }
         state.maxWriters = val;
       } else {
         state.maxWriters = null;
       }
+
+      log(`handleAddStoryModalSubmit: settings staged user=${interaction.user.username} mode=${isSlowMode ? 'slow' : 'quick'} turnLength=${state.turnLength} timeoutReminder=${state.timeoutReminder} delayHours=${state.delayHours} delayWriters=${state.delayWriters} maxWriters=${state.maxWriters}`, { show: false, guildName: interaction?.guild?.name });
 
     } else if (customId === 'story_add_metadata_modal') {
       const dynamic = interaction.fields.getStringSelectValues('story_add_metadata_dynamic')?.[0];
@@ -280,6 +284,7 @@ export async function handleAddStoryButton(connection, interaction) {
   const state = pendingStoryData.get(userId);
 
   if (!state) {
+    log(`handleAddStoryButton: no pending story state, session expired: customId=${interaction.customId} user=${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
     await interaction.reply({
       content: await getConfigValue(connection, 'txtStoryAddSessionExpired', interaction.guild.id),
       flags: MessageFlags.Ephemeral

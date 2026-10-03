@@ -737,8 +737,11 @@ export function storyLastActivitySQL(storyAlias = 's') {
  * Replies to a modal submit with a validation error that removes itself.
  * An ephemeral reply has no dismiss control of its own, so without this the user has to
  * click "Dismiss message" after every typo. The delay is cfgValidationErrorDismissSeconds.
+ * `detail` names the field and raw input for the log, e.g. `field=turn_length input="abc"`.
  */
-export async function replyValidationError(connection, interaction, content) {
+export async function replyValidationError(connection, interaction, content, detail = '') {
+  // Worded "rejected", not "failed"/"error": show:true lines with those words are copied to the hub #logs channel, and a user typo should not page the admin.
+  log(`${interaction.customId} input rejected: user=${interaction.user?.username} ${detail}`.trim(), { show: true, guildName: interaction.guild?.name });
   await interaction.reply({ content, flags: MessageFlags.Ephemeral });
   const seconds = parseInt(await getConfigValue(connection, 'cfgValidationErrorDismissSeconds', interaction.guild?.id), 10);
   if (!(seconds > 0)) {

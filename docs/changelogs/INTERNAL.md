@@ -46,6 +46,12 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   reply and deletes it after `cfgValidationErrorDismissSeconds` (default 10), and the
   settings-modal validations in `story/add.js` and `story/manage.js` use it. Other ephemeral
   validation replies elsewhere in the bot are unchanged.
+- **Logging gaps on the add-story and manage-story modals.** `handleAddStoryModalSubmit` had no
+  entry log, and neither file logged validation rejections or expired sessions. Now: entry
+  (show:false), session expired (show:true), each rejected input with field and raw value
+  (show:true, via `replyValidationError`'s `detail`), and the staged settings values (show:false).
+  Rejection lines say "rejected", not "failed", because show:true lines containing "failed" or
+  "error" are mirrored to the hub #logs channel and a user typo should not page the admin.
 
 ### Added
 - **A Hub-only welcome at the top of the Overview post in the FAQ forum.** `txtHelpOverviewFaqIntro`,
