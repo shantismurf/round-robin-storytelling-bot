@@ -29,6 +29,30 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
+### Fixed
+- **"Edit Story Settings" on the /story add panel failed to open.** `lblNoWriters` was 47
+  characters and Discord caps a modal text-input label at 45, so `TextInputBuilder.setLabel`
+  threw "Invalid string length" before the modal could show. Now `👥 Delay Start until # Writers
+  (optional) 👥` (44), wording approved by LeeAnn 2026-10-03. `test/modalLabelLength.test.js`
+  checks all six settings-modal labels against the limit.
+- **Turn length rejected the text the modal itself pre-filled.** `formatDuration` writes
+  "96 hours (4 days)" into the field but `parseDuration` only understood bare numbers and
+  `d`/`h`/`m` suffixes, so any edit that kept the words failed with "Turn length must be at
+  least 1 hour." (the manage-story settings modal) or "must be a number" (/story add). `parseDuration`
+  now drops a trailing parenthetical, accepts commas and spelled-out units (days, hours, hrs,
+  minutes, mins), and round-trips everything `formatDuration` produces.
+- **Validation errors on the settings modals had to be dismissed by hand.** Ephemeral replies
+  have no dismiss control of their own. New `replyValidationError()` in `utilities.js` sends the
+  reply and deletes it after `cfgValidationErrorDismissSeconds` (default 30), and the
+  settings-modal validations in `story/add.js` and `story/manage.js` use it. Other ephemeral
+  validation replies elsewhere in the bot are unchanged.
+- **Logging gaps on the add-story and manage-story modals.** `handleAddStoryModalSubmit` had no
+  entry log, and neither file logged validation rejections or expired sessions. Now: entry
+  (show:false), session expired (show:true), each rejected input with field and raw value
+  (show:true, via `replyValidationError`'s `detail`), and the staged settings values (show:false).
+  Rejection lines say "rejected", not "failed", because show:true lines containing "failed" or
+  "error" are mirrored to the hub #logs channel and a user typo should not page the admin.
+
 ### Added
 - **A Hub-only welcome at the top of the Overview post in the FAQ forum.** `txtHelpOverviewFaqIntro`,
   LeeAnn's text, 2026-10-02. The contents menu of `/story help` opens with `txtHelpTocIntro`, which

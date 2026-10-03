@@ -2,6 +2,7 @@ import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
 import mysql from 'mysql2/promise';
+import { MessageFlags } from 'discord.js';
 import { STORY_STATUS, TURN_STATUS, JOB_STATUS, WRITER_STATUS, ENTRY_STATUS } from './constants.js';
 
 export function loadConfig() {
@@ -683,14 +684,17 @@ export function splitAtParagraphs(text, maxLen = 4000) {
 
 /**
  * Parses a duration string into integer hours (rounded to nearest).
- * Supports d/h/m suffixes, combinations (2d6h), decimals (1.5d), bare numbers (treated as hours).
+ * Supports d/h/m suffixes or spelled-out units (days, hours, hrs, minutes, mins), combinations
+ * (2d6h, "2 days, 6 hours"), decimals (1.5d), bare numbers (treated as hours), and the
+ * "96 hours (4 days)" text formatDuration writes into the settings modals - the parenthetical
+ * is a restatement of the leading figure, so it is dropped before parsing.
  */
 export function parseDuration(input) {
   if (!input || typeof input !== 'string') return NaN;
-  const trimmed = input.trim();
+  const trimmed = input.replace(/\([^)]*\)/g, ' ').replace(/,/g, ' ').trim();
   if (!trimmed) return NaN;
 
-  const combinedPattern = /^\s*(?:(\d+(?:\.\d+)?)\s*d)?\s*(?:(\d+(?:\.\d+)?)\s*h)?\s*(?:(\d+(?:\.\d+)?)\s*m)?\s*$/i;
+  const combinedPattern = /^\s*(?:(\d+(?:\.\d+)?)\s*d(?:ays?)?)?\s*(?:(\d+(?:\.\d+)?)\s*h(?:ours?|rs?)?)?\s*(?:(\d+(?:\.\d+)?)\s*m(?:in(?:ute)?s?)?)?\s*$/i;
   const match = trimmed.match(combinedPattern);
   if (match && (match[1] || match[2] || match[3])) {
     const days = parseFloat(match[1] || 0);
@@ -727,4 +731,24 @@ export function storyLastActivitySQL(storyAlias = 's') {
      WHERE sw.story_id = ${storyAlias}.story_id),
     ${storyAlias}.created_at
   )`;
+}
+
+/**
+ * Replies to a modal submit with a validation error that removes itself.
+ * An ephemeral reply has no dismiss control of its own, so without this the user has to
+ * click "Dismiss message" after every typo. The delay is cfgValidationErrorDismissSeconds.
+ * `detail` names the field and raw input for the log, e.g. `field=turn_length input="abc"`.
+ */
+export async function replyValidationError(connection, interaction, content, detail = '') {
+  // Worded "rejected", not "failed"/"error": show:true lines with those words are copied to the hub #logs channel, and a user typo should not page the admin.
+  log(`${interaction.customId} input rejected: user=${interaction.user?.username} ${detail}`.trim(), { show: true, guildName: interaction.guild?.name });
+  await interaction.reply({ content, flags: MessageFlags.Ephemeral });
+  const seconds = parseInt(await getConfigValue(connection, 'cfgValidationErrorDismissSeconds', interaction.guild?.id), 10);
+  if (!(seconds > 0)) {
+    log(`replyValidationError: cfgValidationErrorDismissSeconds is missing or invalid, reply left in place: user=${interaction.user?.username}`, { show: true, guildName: interaction.guild?.name });
+    return;
+  }
+  setTimeout(() => {
+    interaction.deleteReply().catch(err => log(`replyValidationError: could not delete reply (likely already dismissed): user=${interaction.user?.username}: ${err?.message ?? err}`, { show: false, guildName: interaction.guild?.name }));
+  }, seconds * 1000).unref?.();
 }

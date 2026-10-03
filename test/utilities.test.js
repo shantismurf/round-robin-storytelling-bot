@@ -49,8 +49,21 @@ describe('parseDuration', () => {
   test('parses decimals', () => {
     assert.equal(parseDuration('1.5d'), 36);
   });
+  test('parses spelled-out units', () => {
+    assert.equal(parseDuration('2 days'), 48);
+    assert.equal(parseDuration('6 hours'), 6);
+    assert.equal(parseDuration('1 hr'), 1);
+    assert.equal(parseDuration('90 minutes'), 2);
+    assert.equal(parseDuration('2 days, 6 hours'), 54);
+  });
+  test('round-trips whatever formatDuration writes into the modal', () => {
+    for (const h of [1, 6, 23, 24, 50, 96, 168]) {
+      assert.equal(parseDuration(formatDuration(h)), h);
+    }
+  });
   test('returns NaN for garbage input', () => {
     assert.ok(Number.isNaN(parseDuration('not a duration')));
+    assert.ok(Number.isNaN(parseDuration('(4 days)')));
     assert.ok(Number.isNaN(parseDuration('')));
     assert.ok(Number.isNaN(parseDuration(null)));
   });
