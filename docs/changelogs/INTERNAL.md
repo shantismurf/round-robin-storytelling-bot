@@ -43,7 +43,7 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   minutes, mins), and round-trips everything `formatDuration` produces.
 - **Validation errors on the settings modals had to be dismissed by hand.** Ephemeral replies
   have no dismiss control of their own. New `replyValidationError()` in `utilities.js` sends the
-  reply and deletes it after `cfgValidationErrorDismissSeconds` (default 10), and the
+  reply and deletes it after `cfgValidationErrorDismissSeconds` (default 30), and the
   settings-modal validations in `story/add.js` and `story/manage.js` use it. Other ephemeral
   validation replies elsewhere in the bot are unchanged.
 - **Logging gaps on the add-story and manage-story modals.** `handleAddStoryModalSubmit` had no
