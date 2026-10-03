@@ -39,7 +39,7 @@ export async function handleAddStory(connection, interaction) {
 
     const extraCfg = await getConfigValue(connection, [
       'txtAddValidationTitleEmpty', 'txtAddValidationTitleRequired',
-      'txtMustBeNo', 'txtTimeoutReminderValidation', 'txtManageValidationSlowReminder',
+      'txtMustBeNo', 'txtManageValidationTurnLength', 'txtAddValidationDelayHours', 'txtTimeoutReminderValidation', 'txtManageValidationSlowReminder',
       'txtTimeoutReminderSlowPlaceholder', 'txtTurnLengthPlaceholder',
       'txtDelayHoursPlaceholder', 'txtDelayWritersPlaceholder', 'txtManageMaxWritersPlaceholder',
       'lblNoHours', 'lblNoWriters',
@@ -161,7 +161,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       const parsedTurnLength = parseDuration(rawTurnLength);
       if (!isSlowMode) {
         if (isNaN(parsedTurnLength) || parsedTurnLength < 1) {
-          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblTurnLength }), `field=turn_length input="${rawTurnLength}"`);
+          await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtManageValidationTurnLength', interaction.guild.id), `field=turn_length input="${rawTurnLength}"`);
           return;
         }
         state.turnLength = parsedTurnLength;
@@ -188,7 +188,7 @@ export async function handleAddStoryModalSubmit(connection, interaction) {
       if (rawDelayHours) {
         const parsedDelay = parseDuration(rawDelayHours);
         if (isNaN(parsedDelay) || parsedDelay < 0) {
-          await replyValidationError(connection, interaction, replaceTemplateVariables(await getConfigValue(connection, 'txtMustBeNo', interaction.guild.id), { 'Field label text': cfg.lblNoHours }), `field=delay_hours input="${rawDelayHours}"`);
+          await replyValidationError(connection, interaction, await getConfigValue(connection, 'txtAddValidationDelayHours', interaction.guild.id), `field=delay_hours input="${rawDelayHours}"`);
           return;
         }
         state.delayHours = parsedDelay || null;

@@ -7,6 +7,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtTimeoutReminderDesc', 'Percentage of turn length (0 = off)', 'en', 1),
 ('lblTurnPrivacy', '🔏 Turn Thread Privacy 🔏', 'en', 1),
 ('lblNoHours', '⏱️ Delay Start by # of Hours (optional) ⏱️', 'en', 1),
+('txtAddValidationDelayHours', 'Delay start not recognized. Enter hours or days using numerals, like `12`, `36 hours`, `2 days`, or `1d12h`. Leave blank for no delay.', 'en', 1),
 ('lblNoWriters', '👥 Delay Start until # Writers (optional) 👥', 'en', 1),
 ('lblMaxWriters', '♾️ Max Writers (optional) ♾️', 'en', 1),
 ('txtMaxWritersDesc', 'Set writer join cap', 'en', 1),

@@ -29,6 +29,47 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
+Nothing pending.
+
+
+## 3.7.1 — 2026-10-03
+
+Provenance: written alongside the work.
+
+PATCH. Fixes the /story add "Edit Story Settings" modal that would not open, makes turn length
+accept the text the modal pre-fills, makes settings-modal validation errors dismiss themselves
+and say what the field accepts, and fills logging gaps on those modals. Small, contained fixes
+with no new feature. Proposed and signed off by LeeAnn 2026-10-03. Absorbs the Hub FAQ welcome
+that was sitting in Unreleased.
+
+### Changed
+- **Turn-length and delay-start validation messages now say what the field accepts.** Typing
+  "five days" got "Turn length must be at least 1 hour." in the manage modal and "must be a
+  number" in /story add, neither of which told the writer what to type. LeeAnn approved the copy
+  2026-10-03. `txtManageValidationTurnLength` is reworded to list the accepted formats and the
+  1-hour floor, and `/story add` now uses it instead of `txtMustBeNo` for turn length. A new key,
+  `txtAddValidationDelayHours`, covers delay start, which is optional and may be 0 so the 1-hour
+  floor does not apply. `txtMustBeNo` still serves the writer-count fields, which really are
+  plain numbers.
+
+### Added
+- **A Hub-only welcome at the top of the Overview post in the FAQ forum.** `txtHelpOverviewFaqIntro`,
+  LeeAnn's text, 2026-10-02. The contents menu of `/story help` opens with `txtHelpTocIntro`, which
+  points at the Hub by invite link, but the forum sync posts the twelve pages and never the contents
+  menu, so a reader arriving in the Hub's FAQ forum met no welcome at all. This one names the Hub's
+  own `#storybot-support` channel, which is why it cannot simply be added to the Overview page: a
+  channel mention resolves only in the guild that owns the channel, so in any other server it would
+  render as a dead `#unknown`.
+  The mechanism is a `faqIntroKey` on the page definition, prepended by
+  `buildPage(conn, guildId, pageDef, { forFaq: true })`, which only `syncFaqPosts` passes. Overview
+  is the only page that has one. Note for whoever touches this next: `test/faqPages.test.js` covers
+  the rendering both ways, but nothing fails if that one call in `syncFaqPosts` loses its flag.
+- `cfgHubSupportChannelId` (`1498673028203286684`), joining the other `cfgHub*ChannelId` values in
+  `config_system.sql`, and substituted into help text as `[hubSupportChannelId]`.
+
+The Hub welcome landed after 3.7.0 merged but before the bot was restarted, so it ships with
+this release rather than as a change to 3.7.0.
+
 ### Fixed
 - **"Edit Story Settings" on the /story add panel failed to open.** `lblNoWriters` was 47
   characters and Discord caps a modal text-input label at 45, so `TextInputBuilder.setLabel`
@@ -52,25 +93,6 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   (show:true, via `replyValidationError`'s `detail`), and the staged settings values (show:false).
   Rejection lines say "rejected", not "failed", because show:true lines containing "failed" or
   "error" are mirrored to the hub #logs channel and a user typo should not page the admin.
-
-### Added
-- **A Hub-only welcome at the top of the Overview post in the FAQ forum.** `txtHelpOverviewFaqIntro`,
-  LeeAnn's text, 2026-10-02. The contents menu of `/story help` opens with `txtHelpTocIntro`, which
-  points at the Hub by invite link, but the forum sync posts the twelve pages and never the contents
-  menu, so a reader arriving in the Hub's FAQ forum met no welcome at all. This one names the Hub's
-  own `#storybot-support` channel, which is why it cannot simply be added to the Overview page: a
-  channel mention resolves only in the guild that owns the channel, so in any other server it would
-  render as a dead `#unknown`.
-  The mechanism is a `faqIntroKey` on the page definition, prepended by
-  `buildPage(conn, guildId, pageDef, { forFaq: true })`, which only `syncFaqPosts` passes. Overview
-  is the only page that has one. Note for whoever touches this next: `test/faqPages.test.js` covers
-  the rendering both ways, but nothing fails if that one call in `syncFaqPosts` loses its flag.
-- `cfgHubSupportChannelId` (`1498673028203286684`), joining the other `cfgHub*ChannelId` values in
-  `config_system.sql`, and substituted into help text as `[hubSupportChannelId]`.
-
-This lands after 3.7.0 merged but before the bot has been restarted, so readers will first meet it
-as part of 3.7.0 rather than as a change to it. No bump: it adds a paragraph to the Hub's own forum
-posts and changes nothing a writer does.
 
 
 ## 3.7.0 — 2026-10-01
