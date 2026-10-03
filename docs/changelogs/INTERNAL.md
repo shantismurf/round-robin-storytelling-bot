@@ -29,7 +29,33 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
-Nothing pending.
+### Changed
+- **A second pass over the help copy**, LeeAnn reviewing the pages as they render in Discord
+  rather than as a document, 2026-10-02 and 2026-10-03.
+  - Ground Rules addressed a reader and a story creator with the same "you" in one paragraph. It
+    now breaks after "before they join." and the second paragraph starts "Story creators can
+    choose...".
+  - Reading a Story: "The story read interface will remember" lost its product name.
+  - Editing an Entry: "and pick one" trimmed, and an em dash that was doing a relative clause's
+    job became "that appears on the first page of each entry."
+  - Entries Split Across Pages: the old sentence implied the reload was automatic. It now says to
+    save and close the edit tool, then reopen.
+  - Managing Your Participation listed the three buttons but none of the three staged settings,
+    so a reader had no idea `/mystory manage` was where a pen name gets changed. It now names
+    both, with the settings first.
+  - Configure Story Channels: each bullet's subject is bolded, and the three text-heavy
+    descriptions are separated by blank lines. The Story Admin Role description became a bullet
+    so both children of Setup indent alike.
+  - Other Admin Commands: the parenthetical role line on each command is now `-#` subtext rather
+    than body text.
+  - Every command is in backticks. Five were bare, including one in the admin pages' footer.
+- **The two manage panels describe their own buttons.** `txtManageUserPanelSaveNote` and
+  `txtMyStoryManagePanelDesc` both now open with what Save applies, then name what does not wait
+  for it — Pause/Restore/Remove on the admin panel, Pass/Pause/Resume/Leave on the writer's own.
+  The previous writer-panel text mentioned only notifications and privacy, omitting the pen name,
+  and the admin text led with the immediate actions rather than with Save.
+
+No version bump: this is wording, and nothing a writer does changes.
 
 
 ## 3.7.1 — 2026-10-03
