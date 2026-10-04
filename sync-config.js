@@ -58,7 +58,7 @@ export async function syncConfig(connection) {
     // saved row, because that row never appears in any file at all, so the comparison loop below
     // never sees it regardless of this list. cfgWeeklyRoundup*/cfgChangelogEnabled being in this
     // list and still having a working guild_id=1 default only works because that default row was
-    // synced once, before they were added here — added 2026-09-24: cfgTeenOrLowerOnly and
+    // synced once, before they were added here — added 2026-09-24: cfgRatingsFilter and
     // cfgGroundRules were mistakenly added to this list in the same commit that first declared
     // their guild_id=1 default rows in config_storyadmin.sql, which meant those defaults were
     // never actually inserted — every getConfigValue() call for a guild with no row of its own

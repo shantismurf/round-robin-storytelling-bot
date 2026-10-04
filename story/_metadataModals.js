@@ -283,7 +283,7 @@ export function buildStoryPanel(cfg, state, title, { isManage = false, activeGro
 /**
  * Builds the Story Metadata modal (Dynamic, Rating, Warnings, Ground Rules).
  * namespace: 'story_add' or 'story_manage'
- * state.teenOrLowerOnly: when true, the rating select offers only the ratings below the
+ * state.ratingsFilter: when true, the rating select offers only the ratings below the
  *   restricted-content barrier (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2's Teen or
  *   Lower Only toggle) — ratingCodes itself is never filtered (story/list.js, _myStoryList.js,
  *   export.js, _storyStatus.js all iterate the full list for already-existing stories), only the
@@ -309,7 +309,7 @@ export function buildMetadataModal(cfg, state, namespace) {
       default: state.dynamic === k,
     })));
 
-  const availableRatingCodes = state.teenOrLowerOnly ? ratingCodes.filter(code => !isRestricted(code)) : ratingCodes;
+  const availableRatingCodes = state.ratingsFilter ? ratingCodes.filter(code => !isRestricted(code)) : ratingCodes;
   const ratingSelect = new StringSelectMenuBuilder()
     .setCustomId(`${ns}_metadata_rating`)
     .setPlaceholder(cfg.lblMetaRating)

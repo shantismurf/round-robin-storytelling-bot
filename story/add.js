@@ -48,16 +48,16 @@ export async function handleAddStory(connection, interaction) {
 
     Object.assign(cfg, extraCfg);
 
-    const [groundRulesText, teenOrLowerOnly] = await Promise.all([
+    const [groundRulesText, ratingsFilter] = await Promise.all([
       getConfigValue(connection, 'cfgGroundRules', interaction.guild.id),
-      getConfigValue(connection, 'cfgTeenOrLowerOnly', interaction.guild.id),
+      getConfigValue(connection, 'cfgRatingsFilter', interaction.guild.id),
     ]);
 
     const state = {
       cfg,
       groundRulesVocabulary: parseGroundRulesText(effectiveGroundRulesText(groundRulesText, cfg.txtGroundRulesDefaultVocabulary)),
       groundRules: [],
-      teenOrLowerOnly: teenOrLowerOnly === '1',
+      ratingsFilter: ratingsFilter === '1',
       storyTitle: null,
       storyMode: 0,
       storyTurnPrivacy: 0,

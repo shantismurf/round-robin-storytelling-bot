@@ -24,12 +24,99 @@ the thing you will search for later is the old name.
 
 ---
 
-## Unreleased
+## 3.8.3 — 2026-10-04
 
-Work that did not bump the version, because it changed nothing about what users experience.
-The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+Provenance: written alongside the work.
 
-_Nothing pending._
+PATCH. "Teen or Lower" renamed to Ratings Filter throughout, and the Hub broadcast gained a length
+guard plus a permanent opt-out notice. Two contained fixes and one rename. LeeAnn approved PATCH on
+2026-10-04; announcements gain a visible line, which is what moves the number at all. The rename was
+recorded as no-bump when it landed earlier the same day and is absorbed here, per the Versioning
+Policy's rule that the next version's entry takes up the Unreleased section.
+
+### Changed
+- **"Teen or Lower Only" is now "Ratings Filter".** LeeAnn, 2026-10-04, while editing the Hub
+  changelog post: she had written the feature up as a Ratings Filter, which read better than the
+  name it actually shipped under, so the bot follows the post rather than the other way round.
+### Removed
+- **`lblSetupTeenOrLowerOnly`, `txtSetupEmbedDescTeenOrLowerOnly`, `cfgTeenOrLowerOnly`,
+  `lblHelp8TeenOrLower`, `txtHelp8TeenOrLower`.** **Why:** renamed, not deleted — see the Added
+  entry below for where each went. Recorded as a Removed plus an Added rather than a Changed,
+  because the name you will search for later is the old one.
+
+### Added
+- **`lblSetupRatingsFilter`, `txtSetupEmbedDescRatingsFilter`, `cfgRatingsFilter`,
+  `lblHelp8RatingsFilter`, `txtHelp8RatingsFilter`** — the same five keys under the feature's new
+  name, one-for-one with the Removed list above and in the same order.
+
+### Changed
+- **Two label values follow the rename.** `lblSetupRatingsFilter` is "Ratings Filter" (was "Teen
+  or Lower Only") and `lblHelp8RatingsFilter` is "🚦 Ratings Filter" (was "🚦 Teen or Lower Only").
+  The two descriptions needed no edit, since neither contained the old name — and
+  `txtSetupEmbedDescRatingsFilter` ("Enable to remove Mature and Explicit as Rating options")
+  earns its keep more now that the label no longer says what the switch does.
+- **The setup panel's save confirmation reads its label from config instead of a literal.**
+  `_storyadminSetupSave.js` had "Teen or Lower Only" hardcoded in the saved-settings summary, so
+  the rename would have left the old name visible there. It now uses `lblSetupRatingsFilter`,
+  which that function already has in `state.cfg`. **Its neighbours in that same summary are still
+  hardcoded** ("Media channel:", "Admin role:", "Hub announcements:", "Weekly roundup:") — that is
+  a pre-existing gap against the Zero Hardcoding standard, left alone here rather than widened
+  into an unrelated sweep. Filed in `docs/TODO.md` instead, at LeeAnn's request, along with a
+  second hardcoding site found the same day: the creation announcement's turn-length label
+  (`'No Timer'` and a hardcoded `h` unit where `txtHrs` exists), which folds into the
+  formatDuration sweep already listed there rather than becoming its own item.
+- **Internal identifiers renamed to match**, none of them user-visible: the panel state field
+  `teenOrLowerOnly` → `ratingsFilter` (21 sites) and the toggle's customId
+  `storyadmin_setup_toggle_teenorlower` → `storyadmin_setup_toggle_ratingsfilter`. A setup panel
+  left open across the deploy has a stale customId on that one button, which will no longer route;
+  the panels are ephemeral and reopening fixes it.
+- **Migration `025_rename_teen_or_lower_to_ratings_filter.sql`** renames the five keys in place
+  rather than letting the config sync insert fresh rows. Without it the old rows would be
+  unreachable but still present (`sync-config.js` inserts and updates, never deletes), and more
+  importantly a guild's *own* saved `cfgTeenOrLowerOnly` row never appears in any config file, so
+  a server with the filter switched on would have silently reverted to off: `getConfigValue` on a
+  missing key returns the key name, and `'cfgRatingsFilter' === '1'` is false. Renaming in place
+  carries the saved value across. Safe because migrations run before `sync_config` on boot, so no
+  row under the new name exists yet to collide with the unique key on (config_key, guild_id).
+  - LeeAnn, 2026-10-04, when the orphan-row risk was put to her as a reason to keep the old key
+    names: "No one but me uses this bot, no there's nothing affected. Let's make the config values
+    consistent for future clarity."
+- **Recorded as no-bump when it landed**, as a wording adjustment under the Versioning Policy, then
+  absorbed into this PATCH when 3.8.3 was cut the same day. Current-state docs follow the new name;
+  the shipped 3.6.0 and 3.7.0 entries below, `docs/plans/`, and the struck `TODO.md` item keep the
+  old one, because they record what the feature was called at the time.
+
+### Added
+- **`txtHubAnnouncementOptOut`** — the opt-out notice that rides along on every Hub broadcast as a
+  second embed, so it no longer has to be pasted into the announcement body and counted against the
+  body's own 4,096-character budget. Value is July's wording verbatim ("Changelog announcements from
+  the Round Robin Hub Server are rare, but you can disable them via `/storyadmin setup`."), which
+  shipped once already in `public/2026-07-15-v2.6.0-v3.1.2.md`. It is a second embed rather than the
+  embed's footer slot because footer text does not render markdown, so the `-#` subtext and the
+  inline code span would have shown up literally. **Untested in Discord** — that caveat applies to
+  the second embed's rendering as much as to the 3.8.0 markdown work.
+  - LeeAnn, 2026-10-04: "I didn't feel great about removing the footer either. I'm considering
+    having that tack on as a second embed... We can make it a constant thats always tacked on."
+- **`EMBED_DESCRIPTION_LIMIT` (4096) and `EMBED_MESSAGE_TOTAL_LIMIT` (6000) in `broadcast.js`** —
+  module-local, matching the convention in `story/_groundRules.js` rather than introducing a shared
+  limits module for two values.
+
+### Fixed
+- **An over-long Hub announcement was silently truncated, with nothing logged.** `sendBroadcast`
+  built its embed with `.setDescription(ANNOUNCEMENT.slice(0, 4096))`, so anything past the limit
+  was dropped on the floor and the send reported success. That slice is also what suppressed the
+  one error that would have been loud: `@discordjs/builders` validates a description at 1–4,096
+  (`node_modules/@discordjs/builders/dist/index.js:185`) and would have thrown. It now logs the
+  character count on every run and aborts before sending anything if the body or the whole message
+  is over, returning `{ sent: 0, skipped: 0 }`. The abort is flagged `hub: true` so it reaches the
+  hub log channel — "refusing"/"aborted" matches none of the `HUB_LOG_PATTERNS` in `utilities.js`.
+  **Why this matters more here than elsewhere:** the host offers no console, so
+  `helper/broadcast.js --dry-run` cannot be run at all, and a broadcast is a one-shot send to every
+  configured server that cannot be taken back. Arming and restarting is now effectively the dry
+  run: the startup log either states the count or states how far over it is and that nothing went.
+- **Not fixed, same bug:** `privacy-policy.js:65` has the identical silent
+  `POLICY_TEXT.slice(0, 4096)`. Left alone deliberately — out of scope for this change, and the
+  policy text is nowhere near the limit. Worth doing when something else touches that file.
 
 
 ## 3.8.2 — 2026-10-04
