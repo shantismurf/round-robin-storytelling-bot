@@ -29,9 +29,18 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
-**A bump is proposed for this batch and awaiting sign-off.** The help page navigation below is a
-new affordance on every help page, so this will not stay a no-bump section — it is only sitting
-here until the number is agreed, at which point the version's entry absorbs it.
+_Nothing pending._
+
+
+## 3.8.2 — 2026-10-04
+
+Provenance: written alongside the work.
+
+PATCH. Inline navigation on the help pages, the Ground Rules embed polished after testing on the
+host, and the help reader split into its own file. Two contained additions plus a refactor with no
+behaviour of its own. LeeAnn chose PATCH over MINOR on 2026-10-04: a recommendation of 3.9.0 was
+put to her on the grounds that navigation changes how a reader moves through twelve pages, and she
+judged the batch closer in size to 3.8.1, which carried the comparable shared writer panel.
 
 ### Added
 - **Inline navigation on the help pages.** LeeAnn, testing the 3.7.0 help revamp on the host:
@@ -84,6 +93,33 @@ here until the number is agreed, at which point the version's entry absorbs it.
     up its own green for it — it is a Ground Rules embed like the other two, and its lead line
     already says the rules changed. Stored as `#RRGGBB`, matching `cfgWeeklyRoundupColor`, the one
     colour that was already in config.
+- **The three admin help pages take an "Admin —" prefix and the third one finally says what it
+  holds.** LeeAnn, 2026-10-04, on the old `txtHelp10Title`: "Other Admin Commands ... its not
+  descriptive" — and it wasn't, since the page holds the Story and User Management Panels, Delete
+  a Story, and Sweep a Departed Writer. The prefix is hers, and it groups the trio in the contents
+  menu, which nothing previously did.
+  - `txtHelp8Title`: "🔧 Server Admin Options" → "🔧 Admin — Server Setup"
+  - `txtHelp9Title`: "🎛️ Story Admin Options" → "🎛️ Admin — Story Settings"
+  - `txtHelp10Title`: "⚙️ Other Admin Commands" → "🛠️ Admin — Managing Stories & Writers"
+  - Em dash and ampersand to match the rest of the set ("📝 Create a New Story — General Options",
+    "📚 Find & Join a Story"); LeeAnn's instruction was "just be consistent, whatever's already
+    used".
+  - **Known tradeoff, her call 2026-10-04.** She first proposed "Admin - Server Admin Setup" and
+    "Admin - Story Admin Setup", keeping the permission-level names in full, and those match the
+    setup panel's own tab labels exactly (`btnSetupTabServer` is "Server Admin",
+    `btnSetupTabStory` is "Story Admin"). That argument was put to her; she chose the shorter
+    titles anyway. So the help titles no longer echo the tab names an admin sees on the panel — if
+    that ever reads as a mismatch, restoring the longer pair is a two-value change and nothing in
+    code depends on the wording.
+  - The emoji on the third page changed from ⚙️, which was already on `txtHelp5Title`
+    ("⚙️ Managing a Story") and on that page's own "⚙️ Story Management Panel" heading.
+  - These titles are also the Hub FAQ forum thread names, so those three threads are renamed by
+    the next deploy sync. The sync deletes and reposts every thread, so nothing is orphaned.
+- **`txtHelpPageGone` no longer tells the reader to reopen a menu that is still on screen.** It
+  read "Use `/story help` to open the menu again", which was true when a stale selection left the
+  reader with nothing. The navigation above keeps the controls on that error path deliberately, so
+  the menu is right there: it now reads "That help topic has moved. Pick another from the menu
+  below." Found and fixed in the same change that made the old wording wrong.
 
 
 ## 3.8.1 — 2026-10-04
