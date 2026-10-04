@@ -137,7 +137,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusInactiveHeading', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
-      'lblMetaDynamic', 'lblMetaGroundRules', 'txtGroundRulesDesc', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
+      'lblMetaDynamic', 'lblMetaGroundRules', 'cfgGroundRulesColor', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
       'txtStatusWriterListMore',
       ratingBadgeCfgKey,
       ...warningOptions,

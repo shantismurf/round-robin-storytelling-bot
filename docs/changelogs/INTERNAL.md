@@ -24,6 +24,30 @@ the thing you will search for later is the old name.
 
 ---
 
+## Unreleased
+
+Work that did not bump the version, because it changed nothing about what users experience.
+The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+
+### Changed
+- **The reader-facing Ground Rules embed lost its subtext line and a blank line.** Both found by
+  LeeAnn testing 3.8.0 on the host, 2026-10-04.
+  - The line under the title was `txtGroundRulesDesc` — "Select rules for story tone and writer
+    conduct." That is instruction text for the picker in the story metadata modal, where the key
+    still earns its place; a reader looking at a story's rules on the status post, the join panel
+    or the change notice is not selecting anything. Removed from the embed, and dropped from the
+    two cfg fetch lists that had been extended only to supply it.
+  - The change notice joined its lead line to the rules with a blank line. A heading brings its
+    own space above it, so that read as a doubled gap. One newline now.
+  - Each rule's label dropped from h2 to h3. At h2 the labels rendered larger than the embed's
+    own title sitting above them.
+  - The border is `cfgGroundRulesColor` (new, `#ED4245`) instead of the hardcoded blurple, so all
+    three sites share one colour and LeeAnn can change it without a deploy. The change notice gave
+    up its own green for it — it is a Ground Rules embed like the other two, and its lead line
+    already says the rules changed. Stored as `#RRGGBB`, matching `cfgWeeklyRoundupColor`, the one
+    colour that was already in config.
+
+
 ## 3.8.1 — 2026-10-04
 
 Provenance: written alongside the work.

@@ -111,6 +111,11 @@ KEYS: txtManageTurnLengthLiveTurnNote, txtSetupChannelsPermissionNote, btnSetupG
 
 **FILE: config_metadata.sql**
 REMOVED IN v3.0.0: btnSetMetadata (metadata panel button replaced by modal openers in story add/manage)
+ADDED 2026-10-04: cfgGroundRulesColor — the reader-facing Ground Rules embed's border, as
+'#RRGGBB' (same form as cfgWeeklyRoundupColor). Read by buildGroundRulesEmbed() in
+story/_groundRules.js for all three of its sites. Missing or unparseable logs a high-priority
+error and leaves the border unset, rather than throwing — setColor(NaN) would take the whole
+status post down.
 ADDED 2026-09-24 (panel-rework plan Part 2): Ground Rules — lblMetaGroundRules,
 txtGroundRulesDefaultVocabulary (the six approved default rules, verbatim, do not reword —
 see docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2), txtGroundRulesErrCount,
