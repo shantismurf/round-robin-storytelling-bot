@@ -78,6 +78,10 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   Close button, which is gone per above. `sync_config` only INSERTs missing and UPDATEs changed
   keys, so already-deployed guilds keep an inert row for it.
 
+- **The turn-announcement creator tip points at turn management.** `txtStoryThreadCreatorTip`
+  ended "to add a summary, tags, and adjust settings at any time"; it now ends "to manage turns
+  and adjust settings at any time". LeeAnn, 2026-10-04.
+
 Proposed bump: 3.8.1 (PATCH) — awaiting sign-off, since the Extend fix is a visible bug fix.
 
 
