@@ -24,10 +24,13 @@ the thing you will search for later is the old name.
 
 ---
 
-## Unreleased
+## 3.8.1 — 2026-10-04
 
-Work that did not bump the version, because it changed nothing about what users experience.
-The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+Provenance: written alongside the work.
+
+PATCH. Extend Deadline now refreshes the pinned status post, `/storyadmin user` shows the same
+panel `/mystory manage` does, and two copy lines were reworded. Small, contained fixes plus one
+panel brought in line with the rest of the app. Proposed and signed off by LeeAnn 2026-10-04.
 
 ### Fixed
 - **Extend Deadline left the pinned status post showing the old deadline.** It is the only turn
@@ -81,8 +84,6 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
 - **The turn-announcement creator tip points at turn management.** `txtStoryThreadCreatorTip`
   ended "to add a summary, tags, and adjust settings at any time"; it now ends "to manage turns
   and adjust settings at any time". LeeAnn, 2026-10-04.
-
-Proposed bump: 3.8.1 (PATCH) — awaiting sign-off, since the Extend fix is a visible bug fix.
 
 
 ## 3.8.0 — 2026-10-04
