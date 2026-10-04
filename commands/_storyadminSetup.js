@@ -22,7 +22,7 @@ export const pendingSetupData = new Map();
 export const STAGED_FIELDS = [
   'feedChannelId', 'mediaChannelId', 'adminRoleName',
   'restrictedFeedChannelId', 'restrictedMediaChannelId',
-  'roundupChannelId', 'roundupDay', 'roundupHour', 'changelogEnabled', 'teenOrLowerOnly',
+  'roundupChannelId', 'roundupDay', 'roundupHour', 'changelogEnabled', 'ratingsFilter',
 ];
 
 export function isSetupDirty(state) {
@@ -110,9 +110,9 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
       text: `**${cfg.txtSetupModalTitleGroundRules}**\n` + desc('txtSetupEmbedDescGroundRules') + `-> ${groundRulesDisplay}`,
       button: () => new ButtonBuilder().setCustomId('storyadmin_setup_groundrules').setLabel(cfg.btnSetupGroundRules).setStyle(ButtonStyle.Primary),
     },
-    teenOrLowerOnly: {
-      text: `**${cfg.lblSetupTeenOrLowerOnly}**\n` + desc('txtSetupEmbedDescTeenOrLowerOnly') + `-> ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`,
-      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_teenorlower').setLabel(`${cfg.lblSetupTeenOrLowerOnly}: ${state.teenOrLowerOnly ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Primary),
+    ratingsFilter: {
+      text: `**${cfg.lblSetupRatingsFilter}**\n` + desc('txtSetupEmbedDescRatingsFilter') + `-> ${state.ratingsFilter ? cfg.txtOn : cfg.txtOff}`,
+      button: () => new ButtonBuilder().setCustomId('storyadmin_setup_toggle_ratingsfilter').setLabel(`${cfg.lblSetupRatingsFilter}: ${state.ratingsFilter ? cfg.txtOn : cfg.txtOff}`).setStyle(ButtonStyle.Primary),
     },
   };
 
@@ -155,7 +155,7 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
 
   const groupsForTab = effectiveTab === 'tier1'
     ? [fieldGroups.channels, fieldGroups.role]
-    : [fieldGroups.roundup, fieldGroups.changelog, fieldGroups.groundRules, fieldGroups.teenOrLowerOnly];
+    : [fieldGroups.roundup, fieldGroups.changelog, fieldGroups.groundRules, fieldGroups.ratingsFilter];
 
   groupsForTab.forEach((group, i) => {
     if (interactive) {
@@ -193,8 +193,8 @@ export function buildSetupPanel(state, cfg, { interactive = true, prependMessage
 // Tier-1 fields (escalation-capable: feed/media/restricted channels, admin role name — editing
 // cfgAdminRoleName lets whoever holds it repoint the admin role at one they control, so it stays
 // Manage Server only) are gated to Manage Server. Tier-2 (roundup, changelog, and — per
-// docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2 — Ground Rules and the Teen or Lower
-// Only toggle) is reachable by Manage Server OR the story admin role (checkIsAdmin). Hiding a
+// docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2 — Ground Rules and the Ratings Filter
+// toggle) is reachable by Manage Server OR the story admin role (checkIsAdmin). Hiding a
 // tier from the rendered panel is presentation, not enforcement — every handler that actually
 // writes a tier-1 field or opens a tier-1 modal re-checks this live against the interaction that
 // triggered it, not a cached flag on state, since a tier-1 customId can be replayed by anyone
@@ -251,7 +251,7 @@ export async function handleSetup(connection, interaction) {
     'lblGroundRulesAdded', 'lblGroundRulesRemoved', 'lblGroundRulesRenamed',
     'txtGroundRulesRemovedUsageNote', 'txtGroundRulesRenamedNote',
     'btnGroundRulesConfirm', 'btnGroundRulesCancel', 'btnGroundRulesTryAgain',
-    'lblSetupTeenOrLowerOnly', 'txtSetupEmbedDescTeenOrLowerOnly',
+    'lblSetupRatingsFilter', 'txtSetupEmbedDescRatingsFilter',
     'btnSetupTabServer', 'btnSetupTabStory',
   ], guildId);
 
@@ -262,7 +262,7 @@ export async function handleSetup(connection, interaction) {
        'cfgStoryFeedChannelId', 'cfgMediaChannelId', 'cfgAdminRoleName',
        'cfgRestrictedFeedChannelId', 'cfgRestrictedMediaChannelId',
        'cfgWeeklyRoundupChannelId', 'cfgWeeklyRoundupDay', 'cfgWeeklyRoundupHour',
-       'cfgChangelogEnabled', 'cfgGroundRules', 'cfgTeenOrLowerOnly'
+       'cfgChangelogEnabled', 'cfgGroundRules', 'cfgRatingsFilter'
      )`,
     [guildId]
   );
@@ -279,7 +279,7 @@ export async function handleSetup(connection, interaction) {
     roundupDay:               guildCfg.cfgWeeklyRoundupDay       || '1',
     roundupHour:              guildCfg.cfgWeeklyRoundupHour      || '9',
     changelogEnabled:         guildCfg.cfgChangelogEnabled !== '0',
-    teenOrLowerOnly:          guildCfg.cfgTeenOrLowerOnly === '1',
+    ratingsFilter:          guildCfg.cfgRatingsFilter === '1',
     groundRulesText:          guildCfg.cfgGroundRules || '',
     hasManageGuild,
     // Manage Server holders default to the tier-1 tab (LeeAnn, 2026-09-24: "I'm a server admin
@@ -360,8 +360,8 @@ export async function handleSetupButton(connection, interaction) {
     state.changelogEnabled = !state.changelogEnabled;
     return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
-  if (id === 'storyadmin_setup_toggle_teenorlower') {
-    state.teenOrLowerOnly = !state.teenOrLowerOnly;
+  if (id === 'storyadmin_setup_toggle_ratingsfilter') {
+    state.ratingsFilter = !state.ratingsFilter;
     return await interaction.update(buildSetupPanel(state, cfg, { tier1Visible: hasTier1Access(interaction), activeTab: state.activeSetupTab }));
   }
   if (id.startsWith('storyadmin_setup_tab_tier1') || id.startsWith('storyadmin_setup_tab_tier2')) {

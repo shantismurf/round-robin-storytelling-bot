@@ -29,7 +29,56 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
-_Nothing pending._
+### Changed
+- **"Teen or Lower Only" is now "Ratings Filter".** LeeAnn, 2026-10-04, while editing the Hub
+  changelog post: she had written the feature up as a Ratings Filter, which read better than the
+  name it actually shipped under, so the bot follows the post rather than the other way round.
+### Removed
+- **`lblSetupTeenOrLowerOnly`, `txtSetupEmbedDescTeenOrLowerOnly`, `cfgTeenOrLowerOnly`,
+  `lblHelp8TeenOrLower`, `txtHelp8TeenOrLower`.** **Why:** renamed, not deleted — see the Added
+  entry below for where each went. Recorded as a Removed plus an Added rather than a Changed,
+  because the name you will search for later is the old one.
+
+### Added
+- **`lblSetupRatingsFilter`, `txtSetupEmbedDescRatingsFilter`, `cfgRatingsFilter`,
+  `lblHelp8RatingsFilter`, `txtHelp8RatingsFilter`** — the same five keys under the feature's new
+  name, one-for-one with the Removed list above and in the same order.
+
+### Changed
+- **Two label values follow the rename.** `lblSetupRatingsFilter` is "Ratings Filter" (was "Teen
+  or Lower Only") and `lblHelp8RatingsFilter` is "🚦 Ratings Filter" (was "🚦 Teen or Lower Only").
+  The two descriptions needed no edit, since neither contained the old name — and
+  `txtSetupEmbedDescRatingsFilter` ("Enable to remove Mature and Explicit as Rating options")
+  earns its keep more now that the label no longer says what the switch does.
+- **The setup panel's save confirmation reads its label from config instead of a literal.**
+  `_storyadminSetupSave.js` had "Teen or Lower Only" hardcoded in the saved-settings summary, so
+  the rename would have left the old name visible there. It now uses `lblSetupRatingsFilter`,
+  which that function already has in `state.cfg`. **Its neighbours in that same summary are still
+  hardcoded** ("Media channel:", "Admin role:", "Hub announcements:", "Weekly roundup:") — that is
+  a pre-existing gap against the Zero Hardcoding standard, left alone here rather than widened
+  into an unrelated sweep. Filed in `docs/TODO.md` instead, at LeeAnn's request, along with a
+  second hardcoding site found the same day: the creation announcement's turn-length label
+  (`'No Timer'` and a hardcoded `h` unit where `txtHrs` exists), which folds into the
+  formatDuration sweep already listed there rather than becoming its own item.
+- **Internal identifiers renamed to match**, none of them user-visible: the panel state field
+  `teenOrLowerOnly` → `ratingsFilter` (21 sites) and the toggle's customId
+  `storyadmin_setup_toggle_teenorlower` → `storyadmin_setup_toggle_ratingsfilter`. A setup panel
+  left open across the deploy has a stale customId on that one button, which will no longer route;
+  the panels are ephemeral and reopening fixes it.
+- **Migration `025_rename_teen_or_lower_to_ratings_filter.sql`** renames the five keys in place
+  rather than letting the config sync insert fresh rows. Without it the old rows would be
+  unreachable but still present (`sync-config.js` inserts and updates, never deletes), and more
+  importantly a guild's *own* saved `cfgTeenOrLowerOnly` row never appears in any config file, so
+  a server with the filter switched on would have silently reverted to off: `getConfigValue` on a
+  missing key returns the key name, and `'cfgRatingsFilter' === '1'` is false. Renaming in place
+  carries the saved value across. Safe because migrations run before `sync_config` on boot, so no
+  row under the new name exists yet to collide with the unique key on (config_key, guild_id).
+  - LeeAnn, 2026-10-04, when the orphan-row risk was put to her as a reason to keep the old key
+    names: "No one but me uses this bot, no there's nothing affected. Let's make the config values
+    consistent for future clarity."
+- **No bump:** a wording adjustment under the Versioning Policy. Current-state docs follow the new
+  name; the shipped 3.6.0 and 3.7.0 entries below, `docs/plans/`, and the struck `TODO.md` item
+  keep the old one, because they record what the feature was called at the time.
 
 
 ## 3.8.2 — 2026-10-04

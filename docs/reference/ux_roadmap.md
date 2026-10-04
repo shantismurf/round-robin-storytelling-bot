@@ -148,7 +148,7 @@ guild guard. See `docs/plans/PLAN-dm-support.md`.
       Tier 1 (Manage Server only): feed/media/restricted channels, admin role name
       Tier 2 (any story admin): roundup channel/day/hour, changelog toggle,
         Ground Rules (own authoring flow, writes immediately — see below),
-        Teen or Lower Only toggle (staged behind Save Settings like changelog)
+        Ratings Filter toggle (staged behind Save Settings like changelog)
   → storyadmin_setup_* modal → guild config saved
   → storyadmin_setup_groundrules → paragraph-text modal, pre-filled with the approved defaults
     on an unconfigured guild → validate → pure addition saves immediately, anything else shows

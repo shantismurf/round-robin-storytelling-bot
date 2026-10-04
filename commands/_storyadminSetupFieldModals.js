@@ -1,6 +1,6 @@
 // storyadmin setup — the channels/role/roundup field-editing modals, extracted from
 // commands/_storyadminSetup.js to keep that file under the 500-line CLAUDE.md standard once
-// Ground Rules and the Teen or Lower Only toggle pushed it over. Pure field-editing modules: each
+// Ground Rules and the Ratings Filter toggle pushed it over. Pure field-editing modules: each
 // modal builder plus its submit handler, staging values into the same shared `state` the panel
 // itself reads. Tier-1 handlers (channels, role) re-check hasTier1Access() themselves rather than
 // trusting handleSetupButton's own gate — see commands/_storyadminSetup.js's hasTier1Access doc

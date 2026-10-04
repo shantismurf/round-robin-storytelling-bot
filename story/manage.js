@@ -257,9 +257,9 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
     const activeTurn = activeTurnRows.length > 0 ? activeTurnRows[0] : null;
     log(`handleManage: activeTurn=${activeTurn ? activeTurn.turn_id : 'none'} isCreator=${isCreator} isAdmin=${isAdmin}`, { show: false, guildName: interaction?.guild?.name });
 
-    const [groundRulesText, teenOrLowerOnly] = await Promise.all([
+    const [groundRulesText, ratingsFilter] = await Promise.all([
       getConfigValue(connection, 'cfgGroundRules', guildId),
-      getConfigValue(connection, 'cfgTeenOrLowerOnly', guildId),
+      getConfigValue(connection, 'cfgRatingsFilter', guildId),
     ]);
 
     const state = {
@@ -291,7 +291,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       dynamic: story.dynamic ?? '',
       groundRules: story.ground_rules ? story.ground_rules.split(',').map(s => s.trim()).filter(Boolean) : [],
       groundRulesVocabulary: parseGroundRulesText(effectiveGroundRulesText(groundRulesText, cfg.txtGroundRulesDefaultVocabulary)),
-      teenOrLowerOnly: teenOrLowerOnly === '1',
+      ratingsFilter: ratingsFilter === '1',
       pendingTagCount: Number(pendingTagCount),
       storyThreadId: story.story_thread_id ?? null,
       isAdminOrCreator: isCreator || isAdmin,
@@ -683,11 +683,12 @@ async function handleManageModalSubmit(connection, interaction) {
         state.groundRules = interaction.fields.getCheckboxGroup('story_manage_metadata_groundrules') ?? [];
       } catch { /* group wasn't in this submission — vocabulary is empty */ }
 
-      // Teen or Lower Only reset (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2): once
+      // Ratings Filter reset (docs/plans/PLAN-panel-rework-and-ground-rules.md Part 2, where it
+      // is still called Teen or Lower Only): once
       // the toggle is on, M/E is no longer offered in the rating select at all (buildMetadataModal),
       // so a story that's currently M/E resets to NR the moment its metadata is next submitted —
       // there's no way for the admin to reaffirm M/E through this modal to avoid it.
-      const forcedRating = (state.teenOrLowerOnly && isRestricted(state.rating)) ? 'NR' : null;
+      const forcedRating = (state.ratingsFilter && isRestricted(state.rating)) ? 'NR' : null;
       const newRating = forcedRating ?? selectedRating ?? state.rating;
 
       // Restored rating-change confirmation flow — deleted in eefc881 (2026-07-01, "UX v3"),

@@ -136,7 +136,7 @@ describe('pages are addressed by id, never by position', () => {
 });
 
 describe('3.6.0 features are documented', () => {
-  // Ground Rules, Teen or Lower Only and Hub announcements all shipped without help coverage.
+  // Ground Rules, the Ratings Filter and Hub announcements all shipped without help coverage.
   // These assert the coverage exists rather than asserting its wording, which is LeeAnn's.
   const rendered = PAGE_DEFS.map(p => renderEntries(p.entries, cfg)).join('\n');
 
@@ -145,8 +145,8 @@ describe('3.6.0 features are documented', () => {
     assert.ok(cfg.txtHelp8GroundRules, 'no server-side Ground Rules help');
   });
 
-  test('Teen or Lower Only is documented', () => {
-    assert.ok(cfg.txtHelp8TeenOrLower, 'no Teen or Lower Only help');
+  test('the Ratings Filter is documented', () => {
+    assert.ok(cfg.txtHelp8RatingsFilter, 'no Ratings Filter help');
   });
 
   test('help uses the current channel names, not the pre-3.6.0 ones', () => {

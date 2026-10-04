@@ -141,7 +141,7 @@ export const PAGE_DEFS = [
     footerKey: 'txtHelp8Footer',
     entries: [
       { lbl: 'lblHelp8GroundRules',      txt: 'txtHelp8GroundRules' },
-      { lbl: 'lblHelp8TeenOrLower',      txt: 'txtHelp8TeenOrLower' },
+      { lbl: 'lblHelp8RatingsFilter',      txt: 'txtHelp8RatingsFilter' },
       { lbl: 'lblHelp8SetupRoundup',     txt: 'txtHelp8SetupRoundup' },
       { lbl: 'lblHelp8HubAnnouncements', txt: 'txtHelp8HubAnnouncements' },
     ],
