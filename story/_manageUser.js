@@ -1,7 +1,9 @@
-import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { PickNextWriter, NextTurn, postStoryThreadActivity, endTurnGuarded, endTurnThread, departWriter } from './_turn.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
+import { buildWriterPanel } from './_writerPanel.js';
+import { finalMessage } from './_metadataModals.js';
 import { TURN_STATUS, WRITER_STATUS } from '../constants.js';
 
 // Keyed by admin user ID
@@ -19,52 +21,10 @@ async function logAdminAction(connection, adminUserId, actionType, storyId, targ
   }
 }
 
-function buildManageUserPanel(state) {
-  log(`buildManageUserPanel: storyId=${state.storyId} targetUser=${state.targetUserId} writerStatus=${state.writerStatus}`, { show: false, guildName: state.guildName });
-  const cfg = state.cfg;
-
-  const statusLabel    = state.writerStatus === WRITER_STATUS.ACTIVE ? cfg.txtMyStoryManageActiveStatus : cfg.txtMyStoryManagePausedStatus;
-  const notifLabel     = state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention;
-  const privacyLabel   = state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic;
-
-  const embed = new EmbedBuilder()
-    .setTitle(replaceTemplateVariables(cfg.txtManageUserPanelTitle, {
-      writer_name: state.writerName,
-      story_title: state.storyTitle
-    }))
-    .setColor(0x5865f2)
-    .addFields(
-      { name: cfg.lblManageUserStatus, value: statusLabel,                   inline: true },
-      { name: cfg.lblManageUserPenName, value: state.penName || cfg.txtNotSet, inline: true },
-      { name: cfg.lblAdminMUNotif,     value: notifLabel,                    inline: true },
-      { name: cfg.lblAdminMUPrivacy,   value: privacyLabel,                  inline: true },
-      // Trailing note field (zero-width name, same convention already used below for
-      // txtAdminMUActiveTurnWarning/txtAdminMULastWriterWarning) rather than .setDescription() —
-      // this reads as a footnote at the bottom of the embed, not an intro at the top.
-      { name: '​', value: cfg.txtManageUserPanelSaveNote }
-    );
-
-  const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
-  const privacyToggleLabel = state.writerTurnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
-
-  const row1 = new ActionRowBuilder().addComponents(
-    state.writerStatus === WRITER_STATUS.ACTIVE
-      ? new ButtonBuilder().setCustomId('storyadmin_mu_pause').setLabel(cfg.btnAdminMUPause).setStyle(ButtonStyle.Danger)
-      : new ButtonBuilder().setCustomId('storyadmin_mu_unpause').setLabel(cfg.btnAdminMUUnpause).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('storyadmin_mu_remove').setLabel(cfg.btnAdminMURemove).setStyle(ButtonStyle.Danger),
-    new ButtonBuilder().setCustomId('storyadmin_mu_penname').setLabel(cfg.btnAdminMUPenName).setStyle(ButtonStyle.Secondary)
-  );
-  const row2 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_mu_toggle_notif').setLabel(notifToggleLabel).setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder().setCustomId('storyadmin_mu_toggle_privacy').setLabel(privacyToggleLabel).setStyle(ButtonStyle.Secondary)
-  );
-  const row3 = new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('storyadmin_mu_save').setLabel(cfg.btnAdminMUSave).setStyle(ButtonStyle.Success),
-    new ButtonBuilder().setCustomId('storyadmin_mu_close').setLabel(cfg.btnManageUserClose).setStyle(ButtonStyle.Secondary)
-  );
-
-  return { embeds: [embed], components: [row1, row2, row3] };
-}
+// The panel itself is shared with /mystory manage — see story/_writerPanel.js. Admin mode swaps
+// the labels, the customId prefix and the bottom row; everything else is identical, which is the
+// point: both panels stage the same three settings behind the same Save.
+const buildManageUserPanel = (state) => buildWriterPanel(state, state.cfg, 'admin');
 
 /**
  * Shared core: fetches writer data and shows the manage-user panel for a given story/writer
@@ -122,7 +82,7 @@ export async function openManageUserPanel(connection, interaction, storyId, targ
     const cfg = await getConfigValue(connection, [
       'txtManageUserPanelTitle', 'txtManageUserPanelSaveNote',
       'lblManageUserStatus', 'lblManageUserPenName',
-      'lblAdminMUNotif', 'lblAdminMUPrivacy', 'btnManageUserClose',
+      'lblAdminMUNotif', 'lblAdminMUPrivacy',
       'btnAdminMUPause', 'btnAdminMUUnpause', 'btnAdminMURemove', 'btnAdminMUPenName',
       'btnAdminMUSave', 'txtAdminMUSaved',
       'txtAdminMUPauseConfirmDesc', 'txtAdminMUActiveTurnWarning',
@@ -194,17 +154,10 @@ export async function handleManageUserButton(connection, interaction) {
   const pending = pendingManageUserData.get(adminId);
   const customId = interaction.customId;
 
-  if (customId === 'storyadmin_mu_close') {
-    await interaction.deferUpdate();
-    pendingManageUserData.delete(adminId);
-    await interaction.editReply({ content: await getConfigValue(connection, 'txtActionCancelled', interaction.guild.id), embeds: [], components: [] });
-    return;
-  }
-
   if (!pending) {
     log(`handleManageUserButton: no pending session for user ${adminId}`, { show: false, guildName: interaction?.guild?.name });
     await interaction.deferUpdate();
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), embeds: [], components: [] });
+    return await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id)));
   }
 
   if (customId === 'storyadmin_mu_toggle_notif') {
@@ -234,50 +187,56 @@ export async function handleManageUserButton(connection, interaction) {
         story_title: pending.storyTitle
       });
       pendingManageUserData.delete(adminId);
-      await interaction.editReply({ content: msg, embeds: [], components: [] });
+      await interaction.editReply(finalMessage(msg));
     } catch (err) {
       log(`handleManageUserButton save failed: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
-      await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id), embeds: [], components: [] });
+      await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', interaction.guild.id)));
     }
 
   } else if (customId === 'storyadmin_mu_pause') {
     pending.action = 'pause';
     await interaction.deferUpdate();
     log(`handleManageUserButton: showing pause confirm for ${pending.writerName}`, { show: false, guildName: interaction?.guild?.name });
-    const description = replaceTemplateVariables(pending.cfg.txtAdminMUPauseConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle });
-    const embed = new EmbedBuilder().setTitle(pending.cfg.txtAdminMUPauseConfirmTitle).setDescription(description).setColor(0xfee75c);
-    if (pending.isActiveTurn) embed.addFields({ name: '​', value: replaceTemplateVariables(pending.cfg.txtAdminMUActiveTurnWarning, { user_name: pending.writerName }) });
+    const parts = [
+      `## ${pending.cfg.txtAdminMUPauseConfirmTitle}`,
+      replaceTemplateVariables(pending.cfg.txtAdminMUPauseConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle }),
+    ];
+    if (pending.isActiveTurn) parts.push(replaceTemplateVariables(pending.cfg.txtAdminMUActiveTurnWarning, { user_name: pending.writerName }));
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMUPause).setStyle(ButtonStyle.Primary),
       new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
-    await interaction.editReply({ embeds: [embed], components: [row] });
+    await interaction.editReply(finalMessage(parts.join('\n\n'), [row]));
 
   } else if (customId === 'storyadmin_mu_unpause') {
     pending.action = 'unpause';
     await interaction.deferUpdate();
     log(`handleManageUserButton: showing unpause confirm for ${pending.writerName}`, { show: false, guildName: interaction?.guild?.name });
-    const description = replaceTemplateVariables(pending.cfg.txtAdminMUUnpauseConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle });
-    const embed = new EmbedBuilder().setTitle(pending.cfg.txtAdminMUUnpauseConfirmTitle).setDescription(description).setColor(0x57f287);
+    const parts = [
+      `## ${pending.cfg.txtAdminMUUnpauseConfirmTitle}`,
+      replaceTemplateVariables(pending.cfg.txtAdminMUUnpauseConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle }),
+    ];
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMUUnpause).setStyle(ButtonStyle.Success),
       new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
-    await interaction.editReply({ embeds: [embed], components: [row] });
+    await interaction.editReply(finalMessage(parts.join('\n\n'), [row]));
 
   } else if (customId === 'storyadmin_mu_remove') {
     pending.action = 'remove';
     await interaction.deferUpdate();
     log(`handleManageUserButton: showing remove confirm for ${pending.writerName}`, { show: false, guildName: interaction?.guild?.name });
-    const description = replaceTemplateVariables(pending.cfg.txtAdminMURemoveConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle });
-    const embed = new EmbedBuilder().setTitle(pending.cfg.txtAdminMURemoveConfirmTitle).setDescription(description).setColor(0xed4245);
-    if (pending.isActiveTurn) embed.addFields({ name: '​', value: replaceTemplateVariables(pending.cfg.txtAdminMUActiveTurnWarning, { user_name: pending.writerName }) });
-    if (pending.isLastWriter) embed.addFields({ name: '​', value: replaceTemplateVariables(pending.cfg.txtAdminMULastWriterWarning, { user_name: pending.writerName }) });
+    const parts = [
+      `## ${pending.cfg.txtAdminMURemoveConfirmTitle}`,
+      replaceTemplateVariables(pending.cfg.txtAdminMURemoveConfirmDesc, { user_name: pending.writerName, story_title: pending.storyTitle }),
+    ];
+    if (pending.isActiveTurn) parts.push(replaceTemplateVariables(pending.cfg.txtAdminMUActiveTurnWarning, { user_name: pending.writerName }));
+    if (pending.isLastWriter) parts.push(replaceTemplateVariables(pending.cfg.txtAdminMULastWriterWarning, { user_name: pending.writerName }));
     const row = new ActionRowBuilder().addComponents(
       new ButtonBuilder().setCustomId(`storyadmin_mu_confirm_${adminId}`).setLabel(pending.cfg.btnAdminMURemove).setStyle(ButtonStyle.Danger),
       new ButtonBuilder().setCustomId(`storyadmin_mu_cancel_${adminId}`).setLabel(pending.cfg.btnCancel).setStyle(ButtonStyle.Secondary)
     );
-    await interaction.editReply({ embeds: [embed], components: [row] });
+    await interaction.editReply(finalMessage(parts.join('\n\n'), [row]));
 
   } else if (customId === 'storyadmin_mu_penname') {
     log(`handleManageUserButton: showing pen name modal`, { show: false, guildName: interaction?.guild?.name });
@@ -312,7 +271,7 @@ async function handleManageUserConfirm(connection, interaction) {
   log(`handleManageUserConfirm: action=${pending?.action} for story ${pending?.storyId}`, { show: false, guildName: interaction?.guild?.name });
 
   if (!pending) {
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), embeds: [], components: [] });
+    return await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id)));
   }
 
   pendingManageUserData.delete(adminId);
@@ -359,7 +318,7 @@ async function handleManageUserConfirm(connection, interaction) {
         await getConfigValue(connection, 'txtAdminPauseUserSuccess', guildId),
         { user_name: writerName, story_title: storyTitle }
       );
-      await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+      await interaction.editReply(finalMessage(successMsg));
 
     } else if (action === 'unpause') {
       log(`handleManageUserConfirm: unpausing writer ${writerId}`, { show: false, guildName: interaction?.guild?.name });
@@ -372,7 +331,7 @@ async function handleManageUserConfirm(connection, interaction) {
         await getConfigValue(connection, 'txtAdminUnpauseUserSuccess', guildId),
         { user_name: writerName, story_title: storyTitle }
       );
-      await interaction.editReply({ content: successMsg, embeds: [], components: [] });
+      await interaction.editReply(finalMessage(successMsg));
 
     } else if (action === 'remove') {
       log(`handleManageUserConfirm: removing writer ${writerId} isActiveTurn=${isActiveTurn} isLastWriter=${isLastWriter}`, { show: false, guildName: interaction?.guild?.name });
@@ -386,7 +345,7 @@ async function handleManageUserConfirm(connection, interaction) {
         { user_name: writerName, story_title: storyTitle }
       );
       const closeNote = closedStory ? '\n' + await getConfigValue(connection, 'txtAdminRemoveAutoClose', guildId) : '';
-      await interaction.editReply({ content: successMsg + closeNote, embeds: [], components: [] });
+      await interaction.editReply(finalMessage(successMsg + closeNote));
 
       getConfigValue(connection, 'txtStoryThreadWriterRemove', guildId).then(template =>
         postStoryThreadActivity(connection, interaction.guild, storyId, replaceTemplateVariables(template, { writer_name: writerName }))
@@ -395,7 +354,7 @@ async function handleManageUserConfirm(connection, interaction) {
 
   } catch (error) {
     log(`handleManageUserConfirm (${action}) failed for story ${storyId} guild ${guildId}: ${error?.stack ?? error}`, { show: true, guildName: interaction?.guild?.name });
-    await interaction.editReply({ content: await getConfigValue(connection, 'errProcessingRequest', guildId), embeds: [], components: [] });
+    await interaction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
   }
 }
 
@@ -404,7 +363,7 @@ async function handleManageUserCancel(connection, interaction) {
   const pending = pendingManageUserData.get(interaction.user.id);
   log(`handleManageUserCancel: user=${interaction.user.username} hasPending=${!!pending}`, { show: false, guildName: interaction?.guild?.name });
   if (!pending) {
-    return await interaction.editReply({ content: await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id), embeds: [], components: [] });
+    return await interaction.editReply(finalMessage(await getConfigValue(connection, 'txtActionSessionExpired', interaction.guild.id)));
   }
   pending.action = null;
   await interaction.editReply(buildManageUserPanel(pending));
