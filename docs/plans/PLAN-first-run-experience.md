@@ -131,6 +131,10 @@ the `index.js` gate, `handleHelp`, `handleWriterHelp`, `handleAdminHelp` and `ha
 Deliberately **not** wired into `handleHelpSelect`, which would put the message above every help
 page the reader opens.
 
+**Updated 2026-10-04:** the intent holds but the mechanism changed. Selecting a page now edits the
+same message in place rather than posting a new one, so the notice would persist on its own; the
+page view clears it explicitly instead. Nothing calls `getSetupRequiredMessage()` per page.
+
 Removed alongside: `commands/story.js` had its own unconfigured check replying with
 `txtNotConfigured`. It was unreachable (the gate catches every `/story` subcommand except
 `help`, and the check exempted `help` too) and the key it read was deleted by migration 010.

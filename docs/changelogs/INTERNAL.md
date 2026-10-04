@@ -29,7 +29,45 @@ the thing you will search for later is the old name.
 Work that did not bump the version, because it changed nothing about what users experience.
 The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
 
+**A bump is proposed for this batch and awaiting sign-off.** The help page navigation below is a
+new affordance on every help page, so this will not stay a no-bump section — it is only sitting
+here until the number is agreed, at which point the version's entry absorbs it.
+
+### Added
+- **Inline navigation on the help pages.** LeeAnn, testing the 3.7.0 help revamp on the host:
+  "they are missing inline navigation, forward and back." Every page now carries the contents
+  select menu with a Prev/Next row under it, and a page change edits the message in place so the
+  content appears to reload in the same embed.
+  - The real defect was the old flow, not the missing buttons. `handleHelpSelect` called
+    `deferReply`, so a selected page arrived as a *separate* ephemeral message — which is why a
+    page could never carry controls: it was never the message the menu lived on, and a reader
+    browsing five pages collected five messages. It is `deferUpdate` + `editReply` now, the
+    pattern `story_join_privacy_` already used.
+  - No new config keys. The buttons reuse `btnPrev`/`btnNext` in Secondary style, disabled at the
+    first and last page, which is exactly how `/story list` paginates — so help navigation looks
+    and behaves like the pagination a reader has already met.
+  - `/mystory help` and `/storyadmin help` render through the same builder, so they carry the
+    controls too. Both used to land the reader on a single page with no way on at all.
+  - The contents page keeps the menu alone. "Next" from a table of contents has no obvious
+    destination, and the first page is one click away. The current page is marked selected in the
+    menu, which with Prev/Next driving the embed is the only thing on screen saying where you are.
+  - The "set me up first" notice still appears on the first view, but is cleared once a page
+    opens: in-place editing would otherwise pin it above every page the reader browsed.
+
 ### Changed
+- **The help reader moved out of `faq.js` into a new `help.js`.** Adding the navigation pushed
+  `faq.js` to 580 lines against the repo's 500-line standard, and it was already at 507. The
+  division is by consumer rather than by size: `faq.js` keeps the help *content* — page
+  definitions, renderer, and the Hub FAQ forum sync — and `help.js` owns the one consumer that is
+  interactive. The forum sync posts a static thread per page and must never acquire the controls,
+  which is the clearest sign the two belong apart. 407 and 183 lines respectively.
+  - `buildPage()`'s `withNav` flag became a general `extraKeys` option, so the renderer no longer
+    knows what a nav control is while the page's config still loads in one query —
+    `getConfigValue` is one query per call with no cache, so a second round trip per page view
+    would have bought nothing.
+  - The emoji-strip regex that the select labels and the forum thread names both need was
+    duplicated in two places; it is now one exported `stripLeadingEmoji()`.
+  - `EMBED_COLOR` is exported rather than copied, since `help.js` builds the contents embed.
 - **The reader-facing Ground Rules embed lost its subtext line and a blank line.** Both found by
   LeeAnn testing 3.8.0 on the host, 2026-10-04.
   - The line under the title was `txtGroundRulesDesc` — "Select rules for story tone and writer
