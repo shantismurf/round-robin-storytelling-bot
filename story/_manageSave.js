@@ -9,7 +9,7 @@ import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
 import { crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
-import { resolveGroundRuleLabels, formatGroundRuleLabelList } from './_groundRules.js';
+import { resolveGroundRules, buildGroundRulesEmbed } from './_groundRules.js';
 import { postStoryThreadActivity } from './_turn.js';
 import { finalMessage } from './_metadataModals.js';
 import { pendingManageData } from './manage.js';
@@ -51,11 +51,14 @@ export async function handleManageSave(connection, interaction, state) {
     const originalGroundRules = state.originalFields?.groundRules ?? [];
     const groundRulesChanged = JSON.stringify([...(state.groundRules ?? [])].sort()) !== JSON.stringify([...originalGroundRules].sort());
     if (groundRulesChanged) {
-      const currentLabels = resolveGroundRuleLabels(groundRulesStr, state.groundRulesVocabulary ?? []);
-      const notice = currentLabels.length
-        ? replaceTemplateVariables(state.cfg.txtGroundRulesChangedNotice, { ground_rules: formatGroundRuleLabelList(currentLabels) })
-        : state.cfg.txtGroundRulesChangedNoticeNone;
-      postStoryThreadActivity(connection, interaction.guild, state.storyId, { embeds: [new EmbedBuilder().setDescription(notice).setColor(0x57F287)] }).catch(() => {});
+      // Same builder as the status post and the join panel, so a reader sees the rules in the
+      // one shape everywhere. The notice's own lead line goes in as the intro; when nothing is
+      // selected there is no rules block to show, so that string stands alone.
+      const currentRules = resolveGroundRules(groundRulesStr, state.groundRulesVocabulary ?? []);
+      const noticeEmbed = currentRules.length
+        ? buildGroundRulesEmbed(state.cfg, currentRules, { intro: state.cfg.txtGroundRulesChangedNotice, color: 0x57F287 })
+        : new EmbedBuilder().setTitle(state.cfg.lblMetaGroundRules).setDescription(state.cfg.txtGroundRulesChangedNoticeNone).setColor(0x57F287);
+      postStoryThreadActivity(connection, interaction.guild, state.storyId, { embeds: [noticeEmbed] }).catch(() => {});
     }
 
     // story_status is deliberately not written here — Pause/Resume applies immediately from the

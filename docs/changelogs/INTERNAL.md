@@ -55,7 +55,55 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   The previous writer-panel text mentioned only notifications and privacy, omitting the pen name,
   and the admin text led with the immediate actions rather than with Save.
 
-No version bump: this is wording, and nothing a writer does changes.
+### Fixed
+- **Ground Rules never showed the description an admin wrote.** A rule is authored as a label
+  plus a description, and until now the only place the description was ever visible was the
+  checkbox picker inside the story metadata modal — which no reader opens. The status post, the
+  join panel and the change notice all called `resolveGroundRuleLabels()`, which throws the
+  descriptions away, and rendered a quoted comma-joined list of bare labels. So the rules a
+  writer agrees to on joining were labels with no content behind them.
+  - `resolveGroundRules()` (new) returns the whole `{ label, description }` rules in stored
+    order; `resolveGroundRuleLabels()` is now a thin map over it, kept for the compact displays
+    (the add/manage panel summary, the Ground Rules confirmation screen) that have no room for
+    descriptions.
+  - `formatGroundRulesBlock()` and `buildGroundRulesEmbed()` (both new) are the single renderer
+    behind all three reader-facing sites, so they cannot drift apart again. Each rule is an h2
+    heading carrying the bullet, with the description as `-#` subtext on the next line, under the
+    `🤝 Ground Rules 🤝` title and the same `txtGroundRulesDesc` line the add/manage panel shows.
+  - On the status post the rules are their own embed and the old metadata field is gone. On the
+    join panel they are their own embed rather than a field, because ten labels plus descriptions
+    will not fit an embed field's 1024. The change notice uses the same builder with its own lead
+    line as an intro.
+- **Three status-post fields could exceed what an embed accepts and take the whole post down.**
+  Each has a modal input cap larger than the render cap it is written into, and `EmbedBuilder`
+  throws rather than truncating — which aborts `updateStoryStatusMessage` entirely, so the pinned
+  post silently stops updating for that story.
+  - The writer list had no cap at all. Around thirty writers pushed the field past 1024. It now
+    caps at 512, with `…and N more` appended to the last name it kept (not on a line of its own,
+    which would read as another writer, and `-#` subtext does not render in a field value). The
+    inactive roster and the legend are reserved out of the budget first, so they always survive.
+  - Other Relationships accepts 1000 in the modal against a field limit of 1024. Capped at 512 on
+    render.
+  - The story title accepts 500 against an embed title limit of 256. The title itself is now
+    clamped to whatever the story id and rating badge around it leave free, so those survive
+    instead of being cut off the end.
+  - Maxed out, a status post now comes to roughly 5,500 of the 6,000 characters Discord allows
+    across one message's embeds.
+
+### Changed
+- **The Ground Rules change notice lost its emoji and its token.** `txtGroundRulesChangedNotice`
+  was `🤝 **Ground Rules updated for this story:** [ground_rules]`, where the token was the old
+  quoted label list. The list now renders as a block beneath, and the embed title already carries
+  the emoji, so the string is just the lead line. `txtGroundRulesChangedNoticeNone` likewise drops
+  the emoji.
+
+### Added
+- **`txtStatusWriterListMore`** (`config_turn.sql`) — `…and [count] more`, the overflow marker on
+  a capped writer list.
+
+The help copy above is wording and does not bump. The Ground Rules fix and the status-post guards
+do change what a user sees; a bump for them is proposed and awaiting sign-off, so they sit here
+until that lands.
 
 
 ## 3.7.1 — 2026-10-03

@@ -9,6 +9,7 @@
  * see diffGroundRules()'s doc comment for how a label rename is told apart from a
  * delete-and-recreate.
  */
+import { EmbedBuilder } from 'discord.js';
 import { replaceTemplateVariables } from '../utilities.js';
 
 export const GROUND_RULES_MAX_RULES = 10;
@@ -177,16 +178,30 @@ export async function renameGroundRuleSlug(connection, guildId, oldSlug, newSlug
 }
 
 /**
- * Resolves a story's stored slugs against the guild's current vocabulary for display — a slug
- * with no matching current rule (an actually-deleted rule, not a rename) is dropped silently
- * rather than shown as an error, per the plan's storage section.
+ * Resolves a story's stored slugs against the guild's current vocabulary for display, returning
+ * the full { label, description } rules in stored order — a slug with no matching current rule
+ * (an actually-deleted rule, not a rename) is dropped silently rather than shown as an error,
+ * per the plan's storage section.
+ *
+ * LeeAnn, 2026-10-03: this returns whole rules, not just labels, because every reader-facing
+ * display of Ground Rules (status post, join panel, change notice) had been dropping the
+ * description an admin wrote — the only place a description was ever visible was the checkbox
+ * picker in the story modal, which readers never see.
  */
-export function resolveGroundRuleLabels(storedSlugsCsv, currentRules) {
+export function resolveGroundRules(storedSlugsCsv, currentRules) {
   if (!storedSlugsCsv) return [];
   const storedSlugs = storedSlugsCsv.split(',').map((s) => s.trim()).filter(Boolean);
   if (storedSlugs.length === 0) return [];
-  const labelBySlug = new Map(currentRules.map((r) => [slugifyGroundRuleLabel(r.label), r.label]));
-  return storedSlugs.map((slug) => labelBySlug.get(slug)).filter(Boolean);
+  const ruleBySlug = new Map(currentRules.map((r) => [slugifyGroundRuleLabel(r.label), r]));
+  return storedSlugs.map((slug) => ruleBySlug.get(slug)).filter(Boolean);
+}
+
+/**
+ * Label-only view of resolveGroundRules(), kept for the compact displays (the add/manage panel's
+ * summary line, the Ground Rules confirmation screen) that have no room for descriptions.
+ */
+export function resolveGroundRuleLabels(storedSlugsCsv, currentRules) {
+  return resolveGroundRules(storedSlugsCsv, currentRules).map((r) => r.label);
 }
 
 /**
@@ -200,4 +215,42 @@ export function resolveGroundRuleLabels(storedSlugsCsv, currentRules) {
  */
 export function formatGroundRuleLabelList(labels) {
   return labels.map((label) => `"${label}"`).join(', ');
+}
+
+/**
+ * Renders resolved rules as the reader-facing block shared by the status post, the join panel and
+ * the change notice: an h2 heading carrying the bullet, with the description as subtext on the
+ * next line. LeeAnn, 2026-10-03, on the markdown order: "you have to put the header markdown
+ * before the bullet point, but a line break and subtext under that, then another line break and a
+ * header with bullet point should all render fine."
+ */
+export function formatGroundRulesBlock(rules) {
+  return rules
+    .map((rule) => (rule.description ? `## - ${rule.label}\n-# ${rule.description}` : `## - ${rule.label}`))
+    .join('\n');
+}
+
+/**
+ * The one builder behind every reader-facing Ground Rules display, so the status post, the join
+ * panel and the change notice cannot drift. Lives here rather than in each caller because the
+ * three sites are in three modules and had already drifted once (all three showed a quoted,
+ * comma-joined label list with no descriptions at all).
+ *
+ * cfg must carry lblMetaGroundRules (the emoji title) and txtGroundRulesDesc (the same subtext
+ * line the add/manage panel shows under its Ground Rules field).
+ *
+ * @param {object} cfg
+ * @param {Array<{label: string, description: string}>} rules
+ * @param {{ intro?: string|null, color?: number }} [options] intro is prepended above the subtext
+ *   line — used by the change notice to say the selection changed.
+ */
+export function buildGroundRulesEmbed(cfg, rules, { intro = null, color = 0x5865f2 } = {}) {
+  const parts = [];
+  if (intro) parts.push(intro);
+  parts.push(`-# ${cfg.txtGroundRulesDesc}`);
+  if (rules.length) parts.push(formatGroundRulesBlock(rules));
+  return new EmbedBuilder()
+    .setTitle(cfg.lblMetaGroundRules)
+    .setDescription(parts.join('\n\n'))
+    .setColor(color);
 }
