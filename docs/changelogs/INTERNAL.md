@@ -24,6 +24,31 @@ the thing you will search for later is the old name.
 
 ---
 
+## Unreleased
+
+Work that did not bump the version, because it changed nothing about what users experience.
+The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+
+### Fixed
+- **Extend Deadline left the pinned status post showing the old deadline.** It is the only turn
+  action that edits a turn in place — Skip, Designate Next and Reassign all go through `NextTurn`,
+  which refreshes the status post itself, and Pause/Resume refreshes it from
+  `_managePauseResume.js` — so `_manageTurnActions.js` never called `updateStoryStatusMessage` at
+  all. After an extension the post kept the pre-extension deadline until the next turn started,
+  while the admin's own panel and the rescheduled timeout job both had the new one. Now refreshed
+  after the job reschedule.
+
+### Changed
+- **The last three copies of the turn deadline and reminder arithmetic moved onto the helpers.**
+  3.8.0 introduced `turnEndTimeFunction()`/`turnReminderOffsetMs()` as the single definition of
+  each, but only converted `story/_turn.js` and `announcements.js`. `story/_managePauseResume.js`
+  still spelled out all three — the resumed turn's deadline, the percentage reminder and slow
+  mode's flat-hours reminder — so "one definition each" was not yet true. It is now. No behaviour
+  change.
+
+Proposed bump: 3.8.1 (PATCH) — awaiting sign-off, since the Extend fix is a visible bug fix.
+
+
 ## 3.8.0 — 2026-10-04
 
 Provenance: written alongside the work.

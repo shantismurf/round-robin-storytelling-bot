@@ -1,5 +1,5 @@
 import { getConfigValue, log, replaceTemplateVariables, getTurnNumber } from '../utilities.js';
-import { PickNextWriter, NextTurn } from './_turn.js';
+import { PickNextWriter, NextTurn, turnEndTimeFunction, turnReminderOffsetMs } from './_turn.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { isRestricted, resolveFeedChannelId } from './_metadata.js';
 import { getActiveThreadId } from '../storybot.js';
@@ -131,7 +131,7 @@ export async function applyResumeActions(connection, interaction, state) {
   let newEndTimestamp = null;
 
   if (!isSlowMode) {
-    newTurnEndsAt = new Date(Date.now() + (state.turnLength * 60 * 60 * 1000));
+    newTurnEndsAt = turnEndTimeFunction(state.turnLength);
     await connection.execute(
       `UPDATE turn SET turn_ends_at = ? WHERE turn_id = ?`,
       [newTurnEndsAt, activeTurn.turn_id]
@@ -141,8 +141,7 @@ export async function applyResumeActions(connection, interaction, state) {
       ['turnTimeout', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId }), newTurnEndsAt, JOB_STATUS.PENDING, activeTurn.turn_id]
     );
     if (state.timeoutReminder > 0) {
-      const reminderMs = state.turnLength * (state.timeoutReminder / 100) * 60 * 60 * 1000;
-      const reminderTime = new Date(Date.now() + reminderMs);
+      const reminderTime = new Date(Date.now() + turnReminderOffsetMs(state.turnLength, state.timeoutReminder, false));
       await connection.execute(
         `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
         ['turnReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id }), reminderTime, JOB_STATUS.PENDING, activeTurn.turn_id]
@@ -150,7 +149,7 @@ export async function applyResumeActions(connection, interaction, state) {
     }
     newEndTimestamp = `<t:${Math.floor(newTurnEndsAt.getTime() / 1000)}:F>`;
   } else if (state.timeoutReminder > 0) {
-    const reminderTime = new Date(Date.now() + (state.timeoutReminder * 60 * 60 * 1000));
+    const reminderTime = new Date(Date.now() + turnReminderOffsetMs(state.turnLength, state.timeoutReminder, true));
     await connection.execute(
       `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
       ['turnSlowReminder', JSON.stringify({ turnId: activeTurn.turn_id, storyId: state.storyId, guildId: state.guildId, writerUserId: activeTurn.discord_user_id, reminderHours: state.timeoutReminder }), reminderTime, JOB_STATUS.PENDING, activeTurn.turn_id]
