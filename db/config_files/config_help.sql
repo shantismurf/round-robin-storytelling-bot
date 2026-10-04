@@ -6,7 +6,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- ---------------------------------------------------------------------------
 ('txtHelpTocTitle', '📖 Round Robin StoryBot Help', 'en', 1),
 ('txtHelpTocIntro', 'Welcome to Round Robin Storybot, a collaborative storywriting system. If you ever have any questions these help files don''t cover, you can ask them in the [Storybot Hub Server]([hubInviteUrl]).', 'en', 1),
-('txtHelpPageGone', 'That help topic has moved. Use `/story help` to open the menu again.', 'en', 1),
+('txtHelpPageGone', 'That help topic has moved. Pick another from the menu below.', 'en', 1),
 ('txtHelpTocFooter', 'Select a topic from the menu below.', 'en', 1),
 
 -- ---------------------------------------------------------------------------
@@ -132,7 +132,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 -- Help8 keys: the three admin pages. Split out of a single page that had reached
 -- 4095 of the 4096-character embed cap. Section keys keep their original Help8 names.
 -- ---------------------------------------------------------------------------
-('txtHelp8Title', '🔧 Server Admin Options', 'en', 1),
+('txtHelp8Title', '🔧 Admin — Server Setup', 'en', 1),
 ('txtHelp8Footer', '*All admin commands require the Manage Server permission, or the Story Admin role configured in `/storyadmin setup`*', 'en', 1),
 ('lblHelp8Setup', '🛠️ Setup', 'en', 1),
 ('txtHelp8Setup', '`/storyadmin setup` configures the Storybot system. Users with server administrator rights will see both Server Admin and Story Admin options, but users with the story admin role defined in setup will only see Story Admin options.\n\nThe setup panel has two tabs, depending on permission level:\n- **Server Admin** — Story and media channels and the Story Admin Role. Only members with Manage Server will see this tab.\n- **Story Admin** — For members of the Server Admin defined role. Sets the weekly roundup location and time, enables bot system announcements, sets server Ground Rules, and can hide mature or explicit ratings. Also displayed to Server Admins.', 'en', 1),
@@ -140,7 +140,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp8SetupChannels', '- **Story Feed Channel** — Where all story threads and activity are posted.\n\n- **Story Media Channel** — Images posted to turn threads are forwarded here for storage. Recommended to be a private channel with the Round Robin Storybot role added to Advanced Permissions. If no media channel is defined, images will not be handled in story entries.\n\n- **Restricted Story Feed and Media Channels** — Discord requires that channels containing NSFW content be age-restricted. If your server is not 18+, any story with an M or E rating will be created in or moved to these restricted channels automatically. The media channel should be private as well as restricted, with the bot''s role added in permissions. If it isn''t defined, all images will be stored in the Story Media Channel.', 'en', 1),
 ('lblHelp8SetupPermissions', '🔑 Story Admin Role', 'en', 1),
 ('txtHelp8SetupPermissions', '- Users with this role can manage stories and writers, and access the Story Admin tab of the system setup. Leave this blank, and only members with Manage Server can use admin commands.', 'en', 1),
-('txtHelp9Title', '🎛️ Story Admin Options', 'en', 1),
+('txtHelp9Title', '🎛️ Admin — Story Settings', 'en', 1),
 ('lblHelp8GroundRules', '📜 Ground Rules', 'en', 1),
 ('txtHelp8GroundRules', 'A list of options for tone and conduct rules that story creators can add to a story. Admins define the list that applies to their server, and story creators choose what rules apply to their stories. Six examples are supplied, they can be edited or removed, and up to ten can be defined. Write a short label (max 40 characters) on one line and a one-line description (max 100 characters) under it, then put a space before the next rule. Your changes will be confirmed before they are committed.', 'en', 1),
 ('lblHelp8TeenOrLower', '🚦 Teen or Lower Only', 'en', 1),
@@ -149,7 +149,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtHelp8SetupRoundup', 'A summary of story activity on your server can be posted each week, listing active stories and writers with a count of stories created or completed, turns submitted or missed, and words written.\n- **Roundup Channel** — Where the roundup will be posted. Leave this blank to disable.\n- **Roundup Timing** — Choose the day and hour for the summary to post: day (0 = Sunday, 6 = Saturday), hour UTC (0–23).', 'en', 1),
 ('lblHelp8HubAnnouncements', '📣 Storybot Hub Announcements', 'en', 1),
 ('txtHelp8HubAnnouncements', 'Updates and announcements from the Round Robin StoryBot Hub Server can be posted to your Story Feed Channel, so your users will hear about new features without joining the Hub server. On by default — posts are never more than monthly and more often quarterly, at most.', 'en', 1),
-('txtHelp10Title', '⚙️ Other Admin Commands', 'en', 1),
+('txtHelp10Title', '🛠️ Admin — Managing Stories & Writers', 'en', 1),
 ('lblHelp8ManageStory', '⚙️ Story Management Panel', 'en', 1),
 ('txtHelp8ManageStory', '-# (All Admins and Story Creator)\n`/story manage [id]` — See "Managing a Story" (`/story help`) for more information on the Story Management Panel.', 'en', 1),
 ('lblHelp8ManageUser', '👤 User Management Panel', 'en', 1),

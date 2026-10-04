@@ -1,6 +1,6 @@
 import { SlashCommandBuilder, MessageFlags, InteractionContextType } from 'discord.js';
 import { log, storyLastActivitySQL } from '../utilities.js';
-import { handleWriterHelp } from '../faq.js';
+import { handleWriterHelp } from '../help.js';
 import { handleList, handleListNavigation, handleViewToggle, handleCatchUp, handleCatchUpNavigation } from './_myStoryList.js';
 import { handleMyStoryManage, handleMyStoryManageButton, handlePanelPassConfirm, handlePanelPauseConfirm, handlePanelLeaveConfirm, handlePanelActionCancel, handleMyStoryManageModal } from './_myStoryManage.js';
 import { STORY_STATUS, WRITER_STATUS, ENTRY_STATUS } from '../constants.js';

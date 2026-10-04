@@ -2,7 +2,8 @@ import { SlashCommandBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, Mess
 import { getConfigValue, log, replaceTemplateVariables, resolveStoryId, checkIsAdmin, storyLastActivitySQL } from '../utilities.js';
 import { STORY_STATUS, JOB_STATUS, WRITER_STATUS } from '../constants.js';
 import { handleManageUser, handleManageUserButton, handleManageUserModalSubmit } from '../story/_manageUser.js';
-import { syncFaqPosts, handleAdminHelp } from '../faq.js';
+import { syncFaqPosts } from '../faq.js';
+import { handleAdminHelp } from '../help.js';
 import { deleteThreadAndAnnouncement, departWriter } from '../story/_turn.js';
 import { handleSetup, handleSetupButton } from './_storyadminSetup.js';
 import { handleSetupChannelsModal, handleSetupRoundupModal, handleSetupRoleModal } from './_storyadminSetupFieldModals.js';

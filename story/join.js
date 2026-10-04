@@ -77,7 +77,7 @@ export async function buildJoinEmbed(connection, state) {
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacy', 'lblJoinNotifications',
     'lblJoinPenName', 'txtJoinPenNameNotSet', 'btnJoinSetPenName', 'btnJoinConfirm', 'btnCancel',
-    'lblMetaGroundRules', 'txtGroundRulesDesc', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
+    'lblMetaGroundRules', 'cfgGroundRulesColor', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
   ], guildId);
 
   const embed = new EmbedBuilder()

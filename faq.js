@@ -1,7 +1,7 @@
-import { EmbedBuilder, ActionRowBuilder, StringSelectMenuBuilder, StringSelectMenuOptionBuilder, MessageFlags } from 'discord.js';
-import { getConfigValue, getSetupRequiredMessage, log, replaceTemplateVariables } from './utilities.js';
+import { EmbedBuilder } from 'discord.js';
+import { getConfigValue, log, replaceTemplateVariables } from './utilities.js';
 
-const EMBED_COLOR = 0x5865f2;
+export const EMBED_COLOR = 0x5865f2;
 
 // ---------------------------------------------------------------------------
 // Page definitions
@@ -176,6 +176,12 @@ export function pageById(id) {
   return page;
 }
 
+// A select option label and a forum thread name both want the title without its leading emoji:
+// the option already renders its own bullet, and a forum thread name sorts by its first character.
+export function stripLeadingEmoji(title) {
+  return title.replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}\u{FE0F}\s]+/gu, '').trim();
+}
+
 // ---------------------------------------------------------------------------
 // Renderer
 // ---------------------------------------------------------------------------
@@ -222,12 +228,16 @@ export function buildPageEmbed(pageDef, cfg, content) {
 // Hub FAQ forum sync -- which is why the [hubInviteUrl] substitution lives at this level rather
 // than at each caller. It used to run on the contents page's intro only, so a page body that
 // wanted to point a reader at the Hub had nowhere to put the link.
-export async function buildPage(connection, guildId, pageDef, { forFaq = false } = {}) {
+export async function buildPage(connection, guildId, pageDef, { forFaq = false, extraKeys = [] } = {}) {
   const bodyKeys = collectKeys(pageDef.entries);
   // faqIntroKey is fetched only when it will be rendered, so /story help never pays for it.
   if (forFaq && pageDef.faqIntroKey) bodyKeys.unshift(pageDef.faqIntroKey);
   const keys = [pageDef.titleKey, ...bodyKeys, 'cfgHubInviteUrl', 'cfgHubSupportChannelId'];
   if (pageDef.footerKey) keys.push(pageDef.footerKey);
+  // Appended rather than merged into bodyKeys, deliberately: only body copy gets token
+  // substitution, and a caller's extra keys are labels. Duplicates in the IN(...) list are
+  // harmless, so neither side has to de-dupe against the other.
+  keys.push(...extraKeys);
   const cfg = await getConfigValue(connection, keys, guildId);
 
   // Substituted into the fetched copy, not at render time, so renderEntries stays a pure
@@ -245,116 +255,6 @@ export async function buildPage(connection, guildId, pageDef, { forFaq = false }
   const body = renderEntries(pageDef.entries, cfg);
   const intro = forFaq && pageDef.faqIntroKey ? cfg[pageDef.faqIntroKey] : null;
   return { content: intro ? `${intro}\n\n${body}` : body, cfg };
-}
-
-// ---------------------------------------------------------------------------
-// /story help — ToC embed with select menu
-// ---------------------------------------------------------------------------
-
-async function buildTocEmbed(connection, guildId) {
-  const titleKeys = PAGE_DEFS.map(p => p.titleKey);
-  const cfg = await getConfigValue(
-    connection,
-    ['txtHelpTocTitle', 'txtHelpTocIntro', 'txtHelpTocFooter', 'cfgHubInviteUrl', ...titleKeys],
-    guildId
-  );
-
-  const select = new StringSelectMenuBuilder()
-    .setCustomId('story_help_toc')
-    .setPlaceholder(cfg.txtHelpTocFooter)
-    .addOptions(PAGE_DEFS.map(p =>
-      new StringSelectMenuOptionBuilder()
-        .setLabel(cfg[p.titleKey].replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}️\s]+/gu, '').trim())
-        .setValue(p.id)
-    ));
-
-  const embed = new EmbedBuilder()
-    .setTitle(cfg.txtHelpTocTitle)
-    .setDescription(replaceTemplateVariables(cfg.txtHelpTocIntro, { hubInviteUrl: cfg.cfgHubInviteUrl }))
-    .setColor(EMBED_COLOR);
-
-  return {
-    embeds: [embed],
-    components: [new ActionRowBuilder().addComponents(select)],
-  };
-}
-
-export async function handleHelp(connection, interaction) {
-  log(`handleHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-  try {
-    // `help` is exempt from the setup gate in index.js, so an unconfigured server needs the
-    // "set me up first" message carried here instead — otherwise the reader gets documentation
-    // for commands that will not run, with nothing saying why. Not repeated on page selection,
-    // which would put it above every page the reader opens.
-    const setupMessage = await getSetupRequiredMessage(connection, interaction);
-    await interaction.reply({
-      ...(setupMessage ? { content: setupMessage } : {}),
-      ...await buildTocEmbed(connection, interaction.guild.id),
-      flags: MessageFlags.Ephemeral,
-    });
-  } catch (err) {
-    log(`handleHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-}
-
-export async function handleHelpSelect(connection, interaction) {
-  log(`handleHelpSelect entry user=${interaction.user.username} value=${interaction.values[0]}`, { show: false, guildName: interaction?.guild?.name });
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  try {
-    // The value is a page id. An unknown one means the menu was built by an older deploy and
-    // the reader is clicking a page that no longer exists -- say so rather than throwing.
-    const pageDef = PAGE_DEFS.find(p => p.id === interaction.values[0]);
-    const guildId = interaction.guild.id;
-    if (!pageDef) {
-      log(`handleHelpSelect: no page with id "${interaction.values[0]}" -- stale menu`, { show: true, guildName: interaction?.guild?.name });
-      return await interaction.editReply({ content: await getConfigValue(connection, 'txtHelpPageGone', guildId) });
-    }
-    const { content, cfg } = await buildPage(connection, guildId, pageDef);
-
-    await interaction.editReply({ embeds: [buildPageEmbed(pageDef, cfg, content)] });
-  } catch (err) {
-    log(`handleHelpSelect failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// /mystory help — jumps to the writer command reference
-// ---------------------------------------------------------------------------
-
-export async function handleWriterHelp(connection, interaction) {
-  log(`handleWriterHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-  await interaction.deferReply({ flags: MessageFlags.Ephemeral });
-  try {
-    const pageDef = pageById('writer-commands');
-    const { content, cfg } = await buildPage(connection, interaction.guild.id, pageDef);
-    const setupMessage = await getSetupRequiredMessage(connection, interaction);
-    await interaction.editReply({
-      ...(setupMessage ? { content: setupMessage } : {}),
-      embeds: [buildPageEmbed(pageDef, cfg, content)],
-    });
-  } catch (err) {
-    log(`handleWriterHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
-  }
-}
-
-// ---------------------------------------------------------------------------
-// /storyadmin help — jumps to the first admin page
-// ---------------------------------------------------------------------------
-
-export async function handleAdminHelp(connection, interaction, guildId) {
-  log(`handleAdminHelp entry user=${interaction.user.username}`, { show: false, guildName: interaction?.guild?.name });
-  try {
-    const pageDef = pageById('admin-server-setup');
-    const { content, cfg } = await buildPage(connection, guildId, pageDef);
-    const setupMessage = await getSetupRequiredMessage(connection, interaction);
-    await interaction.reply({
-      ...(setupMessage ? { content: setupMessage } : {}),
-      embeds: [buildPageEmbed(pageDef, cfg, content)],
-      flags: MessageFlags.Ephemeral,
-    });
-  } catch (err) {
-    log(`handleAdminHelp failed for user=${interaction.user.username}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name });
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -471,7 +371,7 @@ export async function syncFaqPosts(client, connection, guildId) {
       }
 
       const { content, cfg } = await buildPage(connection, guildId, pageDef, { forFaq: true });
-      const title = cfg[pageDef.titleKey].replace(/^[\p{Emoji_Presentation}\p{Extended_Pictographic}\p{So}️\s]+/gu, '').trim();
+      const title = stripLeadingEmoji(cfg[pageDef.titleKey]);
       const thread = await faqChannel.threads.create({
         name: title,
         message: { embeds: [buildPageEmbed(pageDef, cfg, content)] },

@@ -51,7 +51,7 @@ export async function getMetaCfg(connection, guildId) {
     'btnAddTitleAndSummary', 'btnAddStoryInfo', 'btnAddSettings', 'btnAddMetadata', 'btnAddTags', 'btnAddMySettings',
     'btnSaveSettings', 'btnCreateStory', 'btnPanelTabStoryInfo', 'btnPanelTabSettings', 'btnPanelTabMetadata', 'txtStoryManagementLabel',
     'lblUnsavedChangesTitle', 'txtUnsavedChangesBody',
-    'optWarnAllClear', 'lblMetaGroundRules', 'txtGroundRulesNoneConfigured', 'txtGroundRulesDefaultVocabulary', 'txtGroundRulesDesc',
+    'optWarnAllClear', 'lblMetaGroundRules', 'cfgGroundRulesColor', 'txtGroundRulesNoneConfigured', 'txtGroundRulesDefaultVocabulary', 'txtGroundRulesDesc',
     'txtRatingChangeConfirmTitle', 'txtRatingChangeConfirmBody',
     'btnRatingChangeConfirm', 'btnRatingChangeRevert', 'txtMetaApplied',
     ...ratingCodes.map(ratingLabelKey),

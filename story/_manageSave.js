@@ -4,7 +4,6 @@
 // STAGED_FIELDS value to the DB in one UPDATE, handles the rating-barrier thread migration, and
 // posts the Ground Rules change notification (docs/plans/PLAN-panel-rework-and-ground-rules.md
 // Part 2) when a save actually changed the story's selection.
-import { EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, discordTimestamp } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
@@ -56,8 +55,8 @@ export async function handleManageSave(connection, interaction, state) {
       // selected there is no rules block to show, so that string stands alone.
       const currentRules = resolveGroundRules(groundRulesStr, state.groundRulesVocabulary ?? []);
       const noticeEmbed = currentRules.length
-        ? buildGroundRulesEmbed(state.cfg, currentRules, { intro: state.cfg.txtGroundRulesChangedNotice, color: 0x57F287 })
-        : new EmbedBuilder().setTitle(state.cfg.lblMetaGroundRules).setDescription(state.cfg.txtGroundRulesChangedNoticeNone).setColor(0x57F287);
+        ? buildGroundRulesEmbed(state.cfg, currentRules, { intro: state.cfg.txtGroundRulesChangedNotice })
+        : buildGroundRulesEmbed(state.cfg, [], { intro: state.cfg.txtGroundRulesChangedNoticeNone });
       postStoryThreadActivity(connection, interaction.guild, state.storyId, { embeds: [noticeEmbed] }).catch(() => {});
     }
 

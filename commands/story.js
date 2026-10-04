@@ -16,7 +16,7 @@ import { handleTagCommand, handleTagSubmit, handleTagSubmitModalSubmit, handleVi
 import { handleClose, handleCloseConfirm, handleCloseCancel, handleCloseExportButton } from '../story/close.js';
 import { handleTimeleft, handleRequestMoreTime } from '../story/timeleft.js';
 import { handleExportPostPublic } from '../story/export.js';
-import { handleHelp, handleHelpSelect } from '../faq.js';
+import { handleHelp, handleHelpSelect, handleHelpNav } from '../help.js';
 import { handlePing } from '../story/ping.js';
 
 const data = new SlashCommandBuilder()
@@ -211,7 +211,12 @@ async function handleModalSubmit(connection, interaction) {
 }
 
 async function handleButtonInteraction(connection, interaction) {
-  if (interaction.customId.startsWith('story_add_')) {
+  // index.js routes every button that is not storyadmin_/mystory_ here, so the help nav lands in
+  // this chain whichever command opened the page -- /story help, /mystory help or /storyadmin help.
+  if (interaction.customId.startsWith('story_help_page_')) {
+    await handleHelpNav(connection, interaction);
+
+  } else if (interaction.customId.startsWith('story_add_')) {
     await handleAddStoryButton(connection, interaction);
   } else if (interaction.customId.startsWith('story_list_')) {
     await handleListNavigation(connection, interaction);

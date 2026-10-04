@@ -10,7 +10,7 @@
  * delete-and-recreate.
  */
 import { EmbedBuilder } from 'discord.js';
-import { replaceTemplateVariables } from '../utilities.js';
+import { log, replaceTemplateVariables } from '../utilities.js';
 
 export const GROUND_RULES_MAX_RULES = 10;
 export const GROUND_RULES_LABEL_MAX = 40;
@@ -219,14 +219,15 @@ export function formatGroundRuleLabelList(labels) {
 
 /**
  * Renders resolved rules as the reader-facing block shared by the status post, the join panel and
- * the change notice: an h2 heading carrying the bullet, with the description as subtext on the
- * next line. LeeAnn, 2026-10-03, on the markdown order: "you have to put the header markdown
+ * the change notice: an h3 heading carrying the bullet, with the description as subtext on the
+ * next line. h3 rather than h2 (LeeAnn, 2026-10-04) because an h2 label renders larger than the
+ * embed's own title above it. LeeAnn, 2026-10-03, on the markdown order: "you have to put the header markdown
  * before the bullet point, but a line break and subtext under that, then another line break and a
  * header with bullet point should all render fine."
  */
 export function formatGroundRulesBlock(rules) {
   return rules
-    .map((rule) => (rule.description ? `## - ${rule.label}\n-# ${rule.description}` : `## - ${rule.label}`))
+    .map((rule) => (rule.description ? `### - ${rule.label}\n-# ${rule.description}` : `### - ${rule.label}`))
     .join('\n');
 }
 
@@ -236,21 +237,41 @@ export function formatGroundRulesBlock(rules) {
  * three sites are in three modules and had already drifted once (all three showed a quoted,
  * comma-joined label list with no descriptions at all).
  *
- * cfg must carry lblMetaGroundRules (the emoji title) and txtGroundRulesDesc (the same subtext
- * line the add/manage panel shows under its Ground Rules field).
+ * cfg must carry lblMetaGroundRules (the emoji title) and cfgGroundRulesColor (the border, as
+ * '#RRGGBB' — same form as cfgWeeklyRoundupColor, the colour already in config). Deliberately no
+ * subtext line under it:
+ * txtGroundRulesDesc ("Select rules for story tone and writer conduct.") was tried there and
+ * removed the same day — it is instruction text for the picker, and a reader of a story's rules
+ * is not selecting anything (LeeAnn, 2026-10-04).
  *
  * @param {object} cfg
  * @param {Array<{label: string, description: string}>} rules
- * @param {{ intro?: string|null, color?: number }} [options] intro is prepended above the subtext
- *   line — used by the change notice to say the selection changed.
+ * @param {{ intro?: string|null }} [options] intro is prepended above the rules — used by the
+ *   change notice to say the selection changed.
  */
-export function buildGroundRulesEmbed(cfg, rules, { intro = null, color = 0x5865f2 } = {}) {
+export function buildGroundRulesEmbed(cfg, rules, { intro = null } = {}) {
   const parts = [];
   if (intro) parts.push(intro);
-  parts.push(`-# ${cfg.txtGroundRulesDesc}`);
   if (rules.length) parts.push(formatGroundRulesBlock(rules));
-  return new EmbedBuilder()
+  const embed = new EmbedBuilder()
     .setTitle(cfg.lblMetaGroundRules)
-    .setDescription(parts.join('\n\n'))
-    .setColor(color);
+    .setDescription(parts.join('\n'));
+
+  // No fallback colour: per CLAUDE.md a missing config value is an error to log, not something to
+  // paper over. Left unset rather than thrown, because setColor(NaN) throws and would take the
+  // whole status post down with it — the same failure mode the render caps exist to prevent.
+  const color = groundRulesColor(cfg);
+  if (color !== null) embed.setColor(color);
+  return embed;
+}
+
+/** Parses cfgGroundRulesColor's '#RRGGBB' into the integer EmbedBuilder wants. */
+function groundRulesColor(cfg) {
+  const raw = cfg.cfgGroundRulesColor;
+  const parsed = typeof raw === 'string' ? parseInt(raw.replace('#', ''), 16) : NaN;
+  if (Number.isNaN(parsed)) {
+    log(`buildGroundRulesEmbed: cfgGroundRulesColor missing or unparseable (got ${JSON.stringify(raw)}) — embed rendered with no border colour`, { show: true });
+    return null;
+  }
+  return parsed;
 }

@@ -123,7 +123,9 @@ Any command on a server with no cfgStoryFeedChannelId
   Two exemptions, so a stuck admin always has a way forward:
     /storyadmin setup    → handleSetup prepends the same message above the panel
     any `help` subcommand → handleHelp / handleWriterHelp / handleAdminHelp prepend it
-                            above the embed (not repeated on help page selection)
+                            above the embed, and it clears as soon as the reader opens
+                            a page (page changes edit that same message in place, so
+                            leaving it would pin the notice above every page)
 
   The message splits on Manage Server: txtSetupRequiredAdmin lists the prerequisites an
   admin has to create before opening the panel, txtSetupRequiredUser just explains what
@@ -225,7 +227,7 @@ turnSlowReminder job (slow mode only)
 ### Unimplemented / Deferred
 - **Request More Time** (`story_request_more_time_*`): button exists but scheduling extension is not implemented. Requires job scheduler update.
 - **DM Support**: Full DM-based story participation planned but not implemented. Implementation order documented in `../plans/PLAN-dm-support.md`.
-- **Help pages**: the full overhaul landed in 3.7.0 — LeeAnn's content review of every rendered page, the admin page split three ways along the setup panel's permission tiers, and the restructure to twelve pages in reading order (overview, creating, options and metadata, find and join, writing your entry, reading and editing, your stories, managing, the command reference, then the three admin pages). The Overview page is prose with no headings by design, and the contents menu now carries a short welcome. `/story help` opens the menu, `/mystory help` jumps to the command reference, `/storyadmin help` to Server Admin Options. Still open: AO3/tagging coverage — see `../TODO.md`.
+- **Help pages**: the full overhaul landed in 3.7.0 — LeeAnn's content review of every rendered page, the admin page split three ways along the setup panel's permission tiers, and the restructure to twelve pages in reading order (overview, creating, options and metadata, find and join, writing your entry, reading and editing, your stories, managing, the command reference, then the three admin pages). The Overview page is prose with no headings by design, and the contents menu now carries a short welcome. `/story help` opens the menu, `/mystory help` jumps to the command reference, `/storyadmin help` to Server Admin Options. Inline navigation landed 2026-10-04: every page carries the contents menu with the current page selected, and a Prev/Next row under it, and a page change edits the one message rather than posting another — so the three commands all open onto a page you can read straight through instead of a dead end. Still open: AO3/tagging coverage — see `../TODO.md`.
 
 ### Hardcoded Text (to be resolved in per-silo audits)
 - `ratingBadgeKey`, `modeText`, `orderText` — referenced in `../TODO.md` as hardcoded; not yet migrated to config keys.

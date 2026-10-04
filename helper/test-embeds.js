@@ -13,7 +13,7 @@
 
 import { Client, GatewayIntentBits } from 'discord.js';
 import { DB, loadConfig } from './utilities.js';
-import { handleHelp, handleHelpSelect, handleWriterHelp, handleAdminHelp } from './faq.js';
+import { handleHelp, handleHelpSelect, handleWriterHelp, handleAdminHelp } from '../help.js';
 import { generateRoundupStats, buildRoundupEmbed } from './story/roundup.js';
 
 const TEST_GUILD_ID   = '1503426199064412362';
