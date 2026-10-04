@@ -1,6 +1,7 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, StringSelectMenuBuilder, MessageFlags } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
 import { PickNextWriter, NextTurn, skipActiveTurn } from './_turn.js';
+import { updateStoryStatusMessage } from './_storyStatus.js';
 import { TURN_STATUS, WRITER_STATUS, JOB_STATUS, ENTRY_STATUS } from '../constants.js';
 
 // Keyed by admin user ID — holds context for the pending turn action
@@ -395,6 +396,12 @@ export async function handleTurnActionModal(connection, interaction, manageState
         `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
         ['turnTimeout', JSON.stringify({ turnId, storyId, guildId }), newTurnEndsAt, JOB_STATUS.PENDING, turnId]
       );
+
+      // Extend is the only turn action that edits a turn in place — Skip, Designate Next and
+      // Reassign all go through NextTurn, which refreshes the status post itself. Without this
+      // the pinned post kept showing the deadline from before the extension until the next turn
+      // started (LeeAnn, 2026-10-04).
+      updateStoryStatusMessage(connection, interaction.guild, storyId).catch(err => log(`handleTurnActionModal: status refresh failed after extend on story ${storyId}: ${err?.stack ?? err}`, { show: true, guildName: interaction?.guild?.name }));
 
       await logAdminAction(connection, adminId, 'extend', storyId, null, `+${hours}h`);
       pendingTurnActionData.delete(adminId);

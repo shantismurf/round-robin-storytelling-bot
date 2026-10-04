@@ -1,8 +1,9 @@
-import { ContainerBuilder, TextDisplayBuilder, SectionBuilder, SeparatorBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
+import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, sanitizeModalInput, log, replaceTemplateVariables, resolveStoryId } from '../utilities.js';
 import { finalMessage } from '../story/_metadataModals.js';
 import { PickNextWriter, NextTurn, endTurnGuarded, endTurnThread, departWriter } from '../story/_turn.js';
 import { updateStoryStatusMessage } from '../story/_storyStatus.js';
+import { buildWriterPanel } from '../story/_writerPanel.js';
 import { WRITER_STATUS, TURN_STATUS } from '../constants.js';
 
 // Pending /mystory manage sessions keyed by user ID
@@ -10,88 +11,10 @@ export const pendingMyStoryManageData = new Map();
 
 // ─── Panel builder ───────────────────────────────────────────────────────────
 
-export function buildMyStoryManagePanel(state, cfg) {
-  const statusLabel = state.writerStatus === WRITER_STATUS.ACTIVE
-    ? cfg.txtMyStoryManageActiveStatus
-    : cfg.txtMyStoryManagePausedStatus;
-
-  const notifToggleLabel   = state.notificationPrefs === 'dm' ? cfg.btnManageUserSwitchMention : cfg.btnManageUserSwitchDM;
-  const privacyToggleLabel = state.writerTurnPrivacy ? cfg.btnManageUserMakePublic : cfg.btnManageUserMakePrivate;
-  const pauseResumeLabel   = state.writerStatus === WRITER_STATUS.ACTIVE ? cfg.btnMyStoryManagePause : cfg.btnMyStoryManageResume;
-
-  const container = new ContainerBuilder().setAccentColor(0x5865F2);
-
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-    `# ${replaceTemplateVariables(cfg.txtMyStoryManageTitle, { story_title: state.storyTitle })}`
-  ));
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(cfg.txtMyStoryManagePanelDesc));
-  container.addSeparatorComponents(new SeparatorBuilder());
-
-  // Status is a plain line, not a section: the three below each sit beside the button that
-  // edits them, and Pause/Resume does not belong in that group -- it acts immediately, while
-  // these three are staged until Save.
-  container.addTextDisplayComponents(new TextDisplayBuilder().setContent(
-    `**${cfg.lblMyStoryManageStatus}:** ${statusLabel}`
-  ));
-
-  // Section = text on the left, its own button on the right. These were four embed fields
-  // marked `inline: true` followed by a row of three buttons, which left the reader to map
-  // button back to field; `inline` is a hint the client may ignore, and on LeeAnn's phone it
-  // did, so the fields stacked into eight lines of label over value.
-  for (const [label, value, customId, buttonLabel] of [
-    [cfg.lblMyStoryManagePenName,  state.penName || cfg.txtNotSet,                                                      'mystory_manage_penname', cfg.btnAdminMUPenName],
-    [cfg.lblMyStoryManageNotif,    state.notificationPrefs === 'dm' ? cfg.txtNotifDM : cfg.txtNotifMention,              'mystory_manage_notif',   notifToggleLabel],
-    [cfg.lblMyStoryManagePrivacy,  state.writerTurnPrivacy ? cfg.txtPrivate : cfg.txtPublic,                            'mystory_manage_privacy', privacyToggleLabel],
-  ]) {
-    container.addSectionComponents(new SectionBuilder()
-      .addTextDisplayComponents(new TextDisplayBuilder().setContent(`**${label}:** ${value}`))
-      // Primary (LeeAnn, 2026-10-02): these three DO something -- open the pen-name modal, flip
-      // the notification mode, flip turn privacy -- so they read as actions, not as chrome.
-      // Save stays Success and the two irreversible turn actions stay Danger, so blue here is
-      // unambiguous: it is the colour of "change this setting".
-      .setButtonAccessory(new ButtonBuilder().setCustomId(customId).setLabel(buttonLabel).setStyle(ButtonStyle.Primary))
-    );
-  }
-
-  // No Cancel here (LeeAnn, 2026-10-02): this panel is ephemeral, so Discord's own "Dismiss
-  // message" already does exactly what Cancel did, with less to read and fewer ways to misread
-  // it. The staged edits live in pendingMyStoryManageData and are simply never committed --
-  // the next /mystory manage overwrites that entry anyway. Cancel still earns its place on the
-  // three confirm prompts below, where it means "go back to the panel" rather than "close".
-  container.addSeparatorComponents(new SeparatorBuilder());
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder().setCustomId('mystory_manage_save').setLabel(cfg.btnMyStoryManageSave).setStyle(ButtonStyle.Success)
-  ));
-
-  // Participation actions are separated from the staged-settings cluster above: Save commits
-  // the three fields, these three act on the story itself and take effect immediately.
-  //
-  // Danger on the two you cannot take back -- passing spends the turn without submitting, and
-  // leaving is final -- and Secondary on Pause/Resume, which is reversible in both directions
-  // and shares one button slot, so colouring it would make Resume read as destructive too.
-  container.addSeparatorComponents(new SeparatorBuilder());
-  container.addActionRowComponents(new ActionRowBuilder().addComponents(
-    new ButtonBuilder()
-      .setCustomId('mystory_manage_pass')
-      .setLabel(cfg.btnMyStoryManagePass)
-      .setStyle(ButtonStyle.Danger)
-      .setDisabled(!state.hasActiveTurn),
-    new ButtonBuilder()
-      .setCustomId(state.writerStatus === WRITER_STATUS.ACTIVE ? 'mystory_manage_pause' : 'mystory_manage_resume')
-      .setLabel(pauseResumeLabel)
-      .setStyle(ButtonStyle.Secondary),
-    new ButtonBuilder()
-      .setCustomId('mystory_manage_leave')
-      .setLabel(cfg.btnMyStoryManageLeave)
-      .setStyle(ButtonStyle.Danger)
-  ));
-
-  // 22 nodes counting every nested child (container, 3 top-level text displays, 3 separators,
-  // 3 sections each holding a text display and a button accessory, 2 action rows, 4 buttons)
-  // against Discord's documented 40 ceiling. See the component-budget note in
-  // docs/reference/discordjs_reference.md for why this is counted the conservative way.
-  return { components: [container], flags: MessageFlags.IsComponentsV2 };
-}
+// The panel itself is shared with /storyadmin user — see story/_writerPanel.js for why, and for
+// everything that differs between the two modes. Kept as a named wrapper so the call sites below
+// and the panel test read the same as they did before the extraction.
+export const buildMyStoryManagePanel = (state, cfg) => buildWriterPanel(state, cfg, 'self');
 
 // ─── /mystory manage ─────────────────────────────────────────────────────────
 

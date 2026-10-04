@@ -74,7 +74,6 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('lblManageUserPenName', 'Pen Name', 'en', 1),
 ('lblManageUserNotif', 'Notifications', 'en', 1),
 ('lblManageUserPrivacy', 'Turn Privacy', 'en', 1),
-('btnManageUserClose', 'Close', 'en', 1),
 ('txtAdminPauseSuccess', '⏸️ **[story_title]** has been paused.', 'en', 1),
 ('txtAdminAlreadyPaused', 'This story is already paused.', 'en', 1),
 ('txtAdminAlreadyActive', 'This story is already active.', 'en', 1),

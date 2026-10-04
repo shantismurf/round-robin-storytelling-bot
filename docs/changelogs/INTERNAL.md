@@ -24,6 +24,68 @@ the thing you will search for later is the old name.
 
 ---
 
+## 3.8.1 — 2026-10-04
+
+Provenance: written alongside the work.
+
+PATCH. Extend Deadline now refreshes the pinned status post, `/storyadmin user` shows the same
+panel `/mystory manage` does, and two copy lines were reworded. Small, contained fixes plus one
+panel brought in line with the rest of the app. Proposed and signed off by LeeAnn 2026-10-04.
+
+### Fixed
+- **Extend Deadline left the pinned status post showing the old deadline.** It is the only turn
+  action that edits a turn in place — Skip, Designate Next and Reassign all go through `NextTurn`,
+  which refreshes the status post itself, and Pause/Resume refreshes it from
+  `_managePauseResume.js` — so `_manageTurnActions.js` never called `updateStoryStatusMessage` at
+  all. After an extension the post kept the pre-extension deadline until the next turn started,
+  while the admin's own panel and the rescheduled timeout job both had the new one. Now refreshed
+  after the job reschedule.
+
+### Changed
+- **The last three copies of the turn deadline and reminder arithmetic moved onto the helpers.**
+  3.8.0 introduced `turnEndTimeFunction()`/`turnReminderOffsetMs()` as the single definition of
+  each, but only converted `story/_turn.js` and `announcements.js`. `story/_managePauseResume.js`
+  still spelled out all three — the resumed turn's deadline, the percentage reminder and slow
+  mode's flat-hours reminder — so "one definition each" was not yet true. It is now. No behaviour
+  change.
+
+- **`/storyadmin user` is the same panel as `/mystory manage`.** LeeAnn, 2026-10-04: "storyadmin
+  user needs to be brought in line with the rest of the app." Both panels stage the same three
+  settings behind the same Save, but the admin one was still a four-field embed with its buttons
+  in three rows below — the exact layout the writer's panel moved away from in 3.7.0, because
+  `inline: true` is a hint the client may ignore and on a narrow screen the fields stack into
+  eight lines of label over value with nothing tying a button to the field it edits.
+  - `story/_writerPanel.js` (new) holds `buildWriterPanel(state, cfg, mode)`. Only the labels,
+    the customId prefix and the bottom action row differ between `'self'` and `'admin'`;
+    everything else is built once. Both panels keep their own customIds, so index.js's routing is
+    untouched. `buildMyStoryManagePanel` survives as a one-line wrapper so the existing call
+    sites and the panel test read as they did.
+  - Pause/Unpause is Secondary in admin mode, where it was Danger and Success. Same rule LeeAnn
+    set on the writer's panel: it is reversible in both directions and shares one button slot, so
+    colouring it makes Restore read as destructive too. Remove stays the only red.
+  - The panel-level Close button is gone, for the reason Cancel came off the other panels — the
+    panel is ephemeral, so Discord's own Dismiss already does it. Cancel stays on the three
+    confirm prompts, where it means "go back to the panel".
+  - Those three confirm prompts and every terminal message on that panel are now
+    `finalMessage()` containers rather than embeds. Not cosmetic: Components V2 is per-message and
+    one-way, so once the panel sets that flag, an `editReply` carrying `content` or `embeds` on
+    the same message is rejected outright.
+- **The `/story ping` reference moved to Story Creator Commands and names its options.** It was
+  listed under 📖 Story Commands as "Ping all writers in a story", among the commands any writer
+  can run — but ping is creator-or-admin only, so it was in the wrong section, and neither option
+  was documented. LeeAnn's copy, 2026-10-04. Written `(message)` and `(include_paused)` per that
+  page's own convention, where square brackets are required and parentheses optional.
+
+### Removed
+- **`btnManageUserClose`** (`config_storyadmin.sql`) — labelled the `/storyadmin user` panel's own
+  Close button, which is gone per above. `sync_config` only INSERTs missing and UPDATEs changed
+  keys, so already-deployed guilds keep an inert row for it.
+
+- **The turn-announcement creator tip points at turn management.** `txtStoryThreadCreatorTip`
+  ended "to add a summary, tags, and adjust settings at any time"; it now ends "to manage turns
+  and adjust settings at any time". LeeAnn, 2026-10-04.
+
+
 ## 3.8.0 — 2026-10-04
 
 Provenance: written alongside the work.

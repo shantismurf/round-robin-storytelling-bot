@@ -39,7 +39,8 @@ For config string keys, see `config_roadmap.md`.
 | `story/_migration.js` | `migrateStoryThread()` — moves a story's active thread between unrestricted/restricted channels on a rating change | — |
 | `story/_managePauseResume.js` | `applyPauseActions`, `applyResumeActions`, `handleTogglePauseResume`, `handleReopenStory` — pause/resume/reopen state transitions and thread retitling | — |
 | `story/_manageTurnActions.js` | Admin turn actions panel: skip/reassign/extend the active turn | ~500 |
-| `story/_manageUser.js` | Admin per-writer management panel: pause/unpause/remove a writer, pen-name edits | — |
+| `story/_manageUser.js` | Admin per-writer management panel: pause/unpause/remove a writer, pen-name, notification and turn-privacy edits. Components V2 as of 2026-10-04 — the panel itself comes from `story/_writerPanel.js` in `'admin'` mode, and its three confirm prompts are `finalMessage()` containers rather than embeds, because V2 is per-message and one-way | ~395 |
+| `story/_writerPanel.js` | `buildWriterPanel(state, cfg, mode)` — the one writer-settings panel behind `/mystory manage` (`'self'`) and `/storyadmin user` (`'admin'`). Only the labels, the customId prefix and the bottom action row differ between modes; the three staged settings, the Save button and the layout are built once | ~165 |
 | `story/_manageEntries.js` | Admin "Manage Entries" panel: thin picker (all entries, all writers, flat list) that hands off directly into the Story Edit session engine (`edit.js`) — no view/edit/delete logic of its own | — |
 | `story/_manageEntriesList.js` | Shared entry-picker engine used by both `_manageEntries.js` (admin, all writers + deleted) and `edit.js`'s no-turn `/story edit` picker (author, own entries only): `fetchStoryEntries`, `renderEntryListPage`, `buildEntryPickerMessage` | ~150 |
 | `story/_tagSubmit.js` | Writer-facing tag proposal flow: submit, delete own pending proposal | — |

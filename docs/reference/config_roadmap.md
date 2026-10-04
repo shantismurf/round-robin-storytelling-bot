@@ -99,6 +99,7 @@ for consistency with the "Story Admin" naming convention. txtSetupEmbedDescMedia
 txtSetupEmbedDescRestrictedMedia reworded to drop bot-permission wording in favor of a single
 shared note (see next). txtSetupEmbedDescRestrictedMedia also now states its fallback (unset →
 Story Media Channel), matching what resolveMediaChannelId() in story/_metadata.js already does.
+REMOVED 2026-10-04: btnManageUserClose (the /storyadmin user panel's own Close button, dropped when that panel moved to the shared Components V2 builder — the panel is ephemeral, so Discord's own Dismiss already does it, which is why Cancel came off the other panels. NOTE: sync_config only INSERTs missing and UPDATEs changed keys, never DELETEs, so already-deployed guilds keep an inert btnManageUserClose row.)
 ADDED 2026-09-24: txtSetupChannelsPermissionNote — one shared note above all four channel fields
 ("If any of these channels are set as private, the Round Robin Storybot role must be added under
 Advanced Permissions"), replacing per-field permission wording. LeeAnn: the bot's invite already

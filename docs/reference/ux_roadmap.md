@@ -153,8 +153,12 @@ guild guard. See `docs/plans/PLAN-dm-support.md`.
     an Added/Removed/Renamed confirmation screen before writing cfgGroundRules
 
 /storyadmin user [story_id] [user]
-  → ManageUser panel (pause, remove, pen name, notif prefs, turn privacy)
-  → storyadmin_mu_* buttons → confirm embed → storyadmin_mu_confirm_* / storyadmin_mu_cancel_*
+  → ManageUser panel — the same Components V2 panel /mystory manage shows, in admin mode
+    (story/_writerPanel.js). Pen name, notification mode and turn privacy are sections with
+    their own blue button, staged until Save; the bottom row is Pause/Restore and Remove.
+    No panel-level Close as of 2026-10-04 — the panel is ephemeral, so Dismiss does that.
+  → storyadmin_mu_* buttons → confirm prompt (a V2 container, not an embed)
+    → storyadmin_mu_confirm_* / storyadmin_mu_cancel_*, where Cancel returns to the panel
 
 /storyadmin faqsync
   → syncFaqPosts: fetches each cfgFaqThread* thread, edits bot's first post or posts new one
