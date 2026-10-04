@@ -24,10 +24,15 @@ the thing you will search for later is the old name.
 
 ---
 
-## Unreleased
+## 3.8.3 — 2026-10-04
 
-Work that did not bump the version, because it changed nothing about what users experience.
-The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+Provenance: written alongside the work.
+
+PATCH. "Teen or Lower" renamed to Ratings Filter throughout, and the Hub broadcast gained a length
+guard plus a permanent opt-out notice. Two contained fixes and one rename. LeeAnn approved PATCH on
+2026-10-04; announcements gain a visible line, which is what moves the number at all. The rename was
+recorded as no-bump when it landed earlier the same day and is absorbed here, per the Versioning
+Policy's rule that the next version's entry takes up the Unreleased section.
 
 ### Changed
 - **"Teen or Lower Only" is now "Ratings Filter".** LeeAnn, 2026-10-04, while editing the Hub
@@ -76,9 +81,42 @@ The next version's entry absorbs this section. See the Versioning Policy in `CLA
   - LeeAnn, 2026-10-04, when the orphan-row risk was put to her as a reason to keep the old key
     names: "No one but me uses this bot, no there's nothing affected. Let's make the config values
     consistent for future clarity."
-- **No bump:** a wording adjustment under the Versioning Policy. Current-state docs follow the new
-  name; the shipped 3.6.0 and 3.7.0 entries below, `docs/plans/`, and the struck `TODO.md` item
-  keep the old one, because they record what the feature was called at the time.
+- **Recorded as no-bump when it landed**, as a wording adjustment under the Versioning Policy, then
+  absorbed into this PATCH when 3.8.3 was cut the same day. Current-state docs follow the new name;
+  the shipped 3.6.0 and 3.7.0 entries below, `docs/plans/`, and the struck `TODO.md` item keep the
+  old one, because they record what the feature was called at the time.
+
+### Added
+- **`txtHubAnnouncementOptOut`** — the opt-out notice that rides along on every Hub broadcast as a
+  second embed, so it no longer has to be pasted into the announcement body and counted against the
+  body's own 4,096-character budget. Value is July's wording verbatim ("Changelog announcements from
+  the Round Robin Hub Server are rare, but you can disable them via `/storyadmin setup`."), which
+  shipped once already in `public/2026-07-15-v2.6.0-v3.1.2.md`. It is a second embed rather than the
+  embed's footer slot because footer text does not render markdown, so the `-#` subtext and the
+  inline code span would have shown up literally. **Untested in Discord** — that caveat applies to
+  the second embed's rendering as much as to the 3.8.0 markdown work.
+  - LeeAnn, 2026-10-04: "I didn't feel great about removing the footer either. I'm considering
+    having that tack on as a second embed... We can make it a constant thats always tacked on."
+- **`EMBED_DESCRIPTION_LIMIT` (4096) and `EMBED_MESSAGE_TOTAL_LIMIT` (6000) in `broadcast.js`** —
+  module-local, matching the convention in `story/_groundRules.js` rather than introducing a shared
+  limits module for two values.
+
+### Fixed
+- **An over-long Hub announcement was silently truncated, with nothing logged.** `sendBroadcast`
+  built its embed with `.setDescription(ANNOUNCEMENT.slice(0, 4096))`, so anything past the limit
+  was dropped on the floor and the send reported success. That slice is also what suppressed the
+  one error that would have been loud: `@discordjs/builders` validates a description at 1–4,096
+  (`node_modules/@discordjs/builders/dist/index.js:185`) and would have thrown. It now logs the
+  character count on every run and aborts before sending anything if the body or the whole message
+  is over, returning `{ sent: 0, skipped: 0 }`. The abort is flagged `hub: true` so it reaches the
+  hub log channel — "refusing"/"aborted" matches none of the `HUB_LOG_PATTERNS` in `utilities.js`.
+  **Why this matters more here than elsewhere:** the host offers no console, so
+  `helper/broadcast.js --dry-run` cannot be run at all, and a broadcast is a one-shot send to every
+  configured server that cannot be taken back. Arming and restarting is now effectively the dry
+  run: the startup log either states the count or states how far over it is and that nothing went.
+- **Not fixed, same bug:** `privacy-policy.js:65` has the identical silent
+  `POLICY_TEXT.slice(0, 4096)`. Left alone deliberately — out of scope for this change, and the
+  policy text is nowhere near the limit. Worth doing when something else touches that file.
 
 
 ## 3.8.2 — 2026-10-04
