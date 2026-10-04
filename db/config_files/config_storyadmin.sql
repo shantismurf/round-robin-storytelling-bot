@@ -147,6 +147,7 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtManageUsersNoWriters', 'This story has no active or paused writers to manage.', 'en', 1),
 ('txtManageEntriesDesc', '-# Edit, delete, or restore an entry', 'en', 1),
 ('txtManageTurnsDesc', '-# Skip Current Turn, Extend Deadline, Designate Next Writer, Reassign to Previous', 'en', 1),
+('txtManageTurnLengthLiveTurnNote', '⏳ The new turn length ([turn_length] [hrs]) will not apply to the current turn ending [turn_end]. To update it, click ''[manage_turns]'', then ''[extend_deadline]''.', 'en', 1),
 ('txtReviewTagsDesc', '-# Approve or reject submitted tags', 'en', 1),
 ('txtManageUsersDesc', '-# Pause or Remove a user, change Pen Name, Notifications, and Turn Privacy', 'en', 1),
 ('txtChangeStoryStatusLabel', '## 🚦 Change Story Status', 'en', 1),

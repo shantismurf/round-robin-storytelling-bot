@@ -5,7 +5,7 @@
 // posts the Ground Rules change notification (docs/plans/PLAN-panel-rework-and-ground-rules.md
 // Part 2) when a save actually changed the story's selection.
 import { EmbedBuilder } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, discordTimestamp } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
 import { crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
@@ -89,7 +89,30 @@ export async function handleManageSave(connection, interaction, state) {
 
     pendingManageData.delete(interaction.user.id);
 
-    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'txtAdminConfigSaved', guildId)));
+    // A turn's deadline is written once, when the turn starts, so a turn-length edit lands on
+    // the next turn rather than the one running. Deliberate: shortening the length would
+    // otherwise end the live turn the instant Save landed. So say so and leave the live turn to
+    // the creator, who can move it from Manage Turns (LeeAnn, 2026-10-04).
+    const savedText = await getConfigValue(connection, 'txtAdminConfigSaved', guildId);
+    const turnLengthChanged = state.originalFields?.turnLength !== state.turnLength;
+    const liveTurnEndsUnix = state.activeTurn?.turn_ends_unix ?? null;
+    let confirmation = savedText;
+    if (turnLengthChanged && liveTurnEndsUnix) {
+      log(`handleManageSave: turn length ${state.originalFields?.turnLength}h→${state.turnLength}h with turn ${state.activeTurn?.turn_id} still running — live deadline left alone`, { show: true, guildName: state.guildName });
+      confirmation += `\n\n${replaceTemplateVariables(state.cfg.txtManageTurnLengthLiveTurnNote, {
+        // Number only — the unit word comes from txtHrs, which already existed and was unused,
+        // so "hrs" can be reworded in config rather than in a template literal here.
+        turn_length: state.turnLength,
+        hrs: state.cfg.txtHrs,
+        turn_end: discordTimestamp(liveTurnEndsUnix * 1000, 'f'),
+        // Both button names come from their own config values, so renaming a button renames it
+        // here too. btnTurnExtend carries its own leading emoji, which is what the admin is
+        // looking for on the panel, so it goes in as-is.
+        manage_turns: state.cfg.btnManageTurns,
+        extend_deadline: state.cfg.btnTurnExtend,
+      })}`;
+    }
+    await state.originalInteraction.editReply(finalMessage(confirmation));
   } catch (error) {
     log(`handleManageSave failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
     await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));
