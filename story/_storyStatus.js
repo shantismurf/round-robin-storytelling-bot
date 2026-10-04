@@ -1,9 +1,51 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, EmbedBuilder } from 'discord.js';
 import { getConfigValue, log, replaceTemplateVariables, trimTrailingEmoji } from '../utilities.js';
 import { ratingCodes, ratingBadgeKey, warningOptions, dynamicOptions, formatWarnings, isStoryJoinable } from './_metadata.js';
-import { resolveGroundRuleLabels, parseGroundRulesText, effectiveGroundRulesText, formatGroundRuleLabelList } from './_groundRules.js';
+import { resolveGroundRules, parseGroundRulesText, effectiveGroundRulesText, buildGroundRulesEmbed } from './_groundRules.js';
 import { getActiveThreadId } from '../storybot.js';
 import { STORY_STATUS, TURN_STATUS, WRITER_STATUS, STORY_MODE, ENTRY_STATUS } from '../constants.js';
+
+/**
+ * Truncates free-text metadata to a render cap, with an ellipsis when it had to cut. Several of
+ * these fields accept more characters in their modal than the status post can afford to spend on
+ * them, and a value over an embed's own limit makes EmbedBuilder throw — which takes the whole
+ * status post down, not just the one field.
+ */
+function clampText(text, limit) {
+  return text.length > limit ? `${text.slice(0, limit - 1)}…` : text;
+}
+
+/**
+ * Joins `lines` under a character budget, always keeping `tail`, and marks whatever was cut by
+ * appending "…and N more" to the last line it kept. Written for the writer list, which had no cap
+ * at all: around thirty writers would push the field past an embed field's 1024 and EmbedBuilder
+ * would throw, so a busy story simply stopped updating its status post.
+ *
+ * The suffix rides the last name rather than taking a line of its own (LeeAnn, 2026-10-03) — a
+ * line of its own would read as another writer, and `-#` subtext doesn't render in a field value.
+ */
+function capLines(lines, tail, limit, moreTemplate) {
+  const tailText = tail.length ? `\n${tail.join('\n')}` : '';
+  const budget = limit - tailText.length;
+  const full = lines.join('\n');
+  if (full.length <= budget) return (full + tailText) || '—';
+
+  // Reserved against the widest count the suffix could carry, so the digits it ends up printing
+  // can never push the finished value back over budget.
+  const suffixReserve = 1 + replaceTemplateVariables(moreTemplate, { count: String(lines.length) }).length;
+  const kept = [];
+  let used = 0;
+  for (let i = 0; i < lines.length; i++) {
+    const cost = (kept.length ? 1 : 0) + lines[i].length;
+    if (used + cost + suffixReserve > budget) break;
+    kept.push(lines[i]);
+    used += cost;
+  }
+  const moreText = replaceTemplateVariables(moreTemplate, { count: String(lines.length - kept.length) });
+  if (!kept.length) return `${moreText}${tailText}`;
+  kept[kept.length - 1] = `${kept[kept.length - 1]} ${moreText}`;
+  return `${kept.join('\n')}${tailText}`;
+}
 
 /**
  * Build thread title string from config templates.
@@ -95,12 +137,13 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       'lblStatusTurnLength', 'lblStatusWriters', 'lblStatusShowAuthors',
       'lblStatusCurrentTurn', 'lblStatusNextWriter', 'lblStatusEntries', 'lblStatusWriterList', 'lblStatusInactiveHeading', 'lblStatusClosed',
       'lblMetaRating', 'lblMetaMainRelationship', 'lblMetaOtherRelationships', 'lblMetaWarnings', 'lblMetaCharacters', 'lblMetaTags',
-      'lblMetaDynamic', 'lblMetaGroundRules', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
+      'lblMetaDynamic', 'lblMetaGroundRules', 'txtGroundRulesDesc', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
+      'txtStatusWriterListMore',
       ratingBadgeCfgKey,
       ...warningOptions,
       ...dynamicOptions,
     ], story.guild_id);
-    const groundRulesDisplay = formatGroundRuleLabelList(resolveGroundRuleLabels(story.ground_rules, parseGroundRulesText(effectiveGroundRulesText(cfg.cfgGroundRules, cfg.txtGroundRulesDefaultVocabulary))));
+    const groundRules = resolveGroundRules(story.ground_rules, parseGroundRulesText(effectiveGroundRulesText(cfg.cfgGroundRules, cfg.txtGroundRulesDefaultVocabulary)));
     const txtActive = cfg.txtActive;
     const txtPaused = cfg.txtPaused;
     const txtClosed = cfg.txtClosed;
@@ -134,7 +177,7 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
       ...leftWriters.map(w => `*${w.discord_display_name}*`),
     ];
 
-    const writerLines = [
+    const activeWriterLines = [
       ...activeWriters.map(w => {
         const isCurrent = activeTurn?.story_writer_id === w.story_writer_id;
         const isCreator = w.story_writer_id === creatorId;
@@ -144,10 +187,16 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         const prefix = emojis ? `${emojis} ` : '';
         return `${prefix}**${w.discord_display_name}**${penName}`;
       }),
+    ];
+
+    // The inactive roster and the legend are the part of this field a reader needs whatever the
+    // writer count is, so the 512 cap is spent on names and these are reserved out of it first.
+    const writerListTail = [
       ...(inactiveLines.length > 0 ? ['', `**${cfg.lblStatusInactiveHeading}**`, ...inactiveLines] : []),
       '',
       `*${legendParts.join('  ·  ')}*`
     ];
+    const writerListValue = capLines(activeWriterLines, writerListTail, 512, cfg.txtStatusWriterListMore);
 
     let turnValue;
     if (activeTurn) {
@@ -202,16 +251,27 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     }
     if (story.dynamic)            metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaDynamic), value: cfg[story.dynamic] ?? story.dynamic, inline: true });
     if (story.main_pairing)       metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaMainRelationship), value: story.main_pairing, inline: true });
-    if (story.other_relationships) metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaOtherRelationships), value: story.other_relationships, inline: true });
+    // Capped at 512 on render (LeeAnn, 2026-10-03): the modal input accepts 1000, comfortably
+    // past half of an embed field's own 1024, and two maxed free-text fields plus a maxed
+    // writer list is what pushes a status post toward Discord's 6,000-per-message ceiling.
+    if (story.other_relationships) metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaOtherRelationships), value: clampText(story.other_relationships, 512), inline: true });
     if (warningsDisplay)          metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaWarnings), value: warningsDisplay, inline: false });
-    if (groundRulesDisplay)       metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaGroundRules), value: groundRulesDisplay, inline: false });
+    // Ground Rules deliberately absent from metadataFields — they render as their own embed
+    // below, where the description an admin wrote has room to show (see buildGroundRulesEmbed).
     if (story.characters)    metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaCharacters), value: story.characters.length > 200 ? story.characters.slice(0, 197) + '...' : story.characters, inline: false });
     if (story.tags) metadataFields.push({ name: trimTrailingEmoji(cfg.lblMetaTags), value: story.tags.length > 500 ? story.tags.slice(0, 497) + '...' : story.tags, inline: false });
 
     const joinStatus = story.allow_joins && !(story.max_writers && activeWriters.length >= story.max_writers) ? cfg.txtOpen : cfg.txtClosed;
 
+    // An embed title over 256 makes EmbedBuilder throw and the status post stops updating
+    // altogether. The story title input accepts 500, so clamp the title itself to whatever the
+    // id and rating badge around it leave free rather than clamping the finished string, which
+    // would cut the badge off instead.
+    const titleSuffix = ` (#${story.guild_story_id}) ${ratingBadgeDisplay}`;
+    const embedTitle = `📚 ${clampText(story.title, 256 - titleSuffix.length - 3)}${titleSuffix}`;
+
     const embed = new EmbedBuilder()
-      .setTitle(`📚 ${story.title} (#${story.guild_story_id}) ${ratingBadgeDisplay}`)
+      .setTitle(embedTitle)
       .setColor(colorMap[story.story_status] ?? 0x5865f2)
       .addFields(
         { name: cfg.lblStatusStatus,      value: statusMap[story.story_status] ?? '—',                                         inline: true },
@@ -224,11 +284,16 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
         { name: cfg.lblStatusNextWriter,  value: nextWriterValue,                                                              inline: true },
         { name: cfg.lblStatusEntries,     value: statsValue,                                                                   inline: true },
         ...metadataFields,
-        { name: cfg.lblStatusWriterList,  value: writerLines.join('\n') || '—',                                                inline: false }
+        { name: cfg.lblStatusWriterList,  value: writerListValue,                                                             inline: false }
       )
       .setTimestamp();
 
     if (story.summary) embed.setDescription(story.summary);
+
+    // Ground Rules get an embed of their own so each rule's description has room — in a metadata
+    // field they were a quoted comma list of labels and the descriptions were never shown at all.
+    const embeds = [embed];
+    if (groundRules.length) embeds.push(buildGroundRulesEmbed(cfg, groundRules));
     if (story.story_status === STORY_STATUS.CLOSED && story.closed_at) {
       const closedTimestamp = `<t:${Math.floor(new Date(story.closed_at).getTime() / 1000)}:D>`;
       embed.addFields({ name: cfg.lblStatusClosed, value: closedTimestamp, inline: true });
@@ -290,9 +355,9 @@ export async function updateStoryStatusMessage(connection, guild, storyId) {
     }
 
     if (message) {
-      await message.edit({ embeds: [embed], components });
+      await message.edit({ embeds, components });
     } else {
-      const newMsg = await storyThread.send({ embeds: [embed], components });
+      const newMsg = await storyThread.send({ embeds, components });
       await newMsg.pin().catch(err => log(`Failed to pin status message in story thread ${storyId}: ${err.message}`, { show: true, guildName: guild?.name }));
       await connection.execute(
         `UPDATE story SET status_message_id = ? WHERE story_id = ?`,

@@ -5,11 +5,11 @@
 // posts the Ground Rules change notification (docs/plans/PLAN-panel-rework-and-ground-rules.md
 // Part 2) when a save actually changed the story's selection.
 import { EmbedBuilder } from 'discord.js';
-import { getConfigValue, log, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, log, replaceTemplateVariables, discordTimestamp } from '../utilities.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { migrateStoryThread } from './_migration.js';
 import { crossesBarrier, isRestricted, isRestrictedChannelConfigured } from './_metadata.js';
-import { resolveGroundRuleLabels, formatGroundRuleLabelList } from './_groundRules.js';
+import { resolveGroundRules, buildGroundRulesEmbed } from './_groundRules.js';
 import { postStoryThreadActivity } from './_turn.js';
 import { finalMessage } from './_metadataModals.js';
 import { pendingManageData } from './manage.js';
@@ -51,11 +51,14 @@ export async function handleManageSave(connection, interaction, state) {
     const originalGroundRules = state.originalFields?.groundRules ?? [];
     const groundRulesChanged = JSON.stringify([...(state.groundRules ?? [])].sort()) !== JSON.stringify([...originalGroundRules].sort());
     if (groundRulesChanged) {
-      const currentLabels = resolveGroundRuleLabels(groundRulesStr, state.groundRulesVocabulary ?? []);
-      const notice = currentLabels.length
-        ? replaceTemplateVariables(state.cfg.txtGroundRulesChangedNotice, { ground_rules: formatGroundRuleLabelList(currentLabels) })
-        : state.cfg.txtGroundRulesChangedNoticeNone;
-      postStoryThreadActivity(connection, interaction.guild, state.storyId, { embeds: [new EmbedBuilder().setDescription(notice).setColor(0x57F287)] }).catch(() => {});
+      // Same builder as the status post and the join panel, so a reader sees the rules in the
+      // one shape everywhere. The notice's own lead line goes in as the intro; when nothing is
+      // selected there is no rules block to show, so that string stands alone.
+      const currentRules = resolveGroundRules(groundRulesStr, state.groundRulesVocabulary ?? []);
+      const noticeEmbed = currentRules.length
+        ? buildGroundRulesEmbed(state.cfg, currentRules, { intro: state.cfg.txtGroundRulesChangedNotice, color: 0x57F287 })
+        : new EmbedBuilder().setTitle(state.cfg.lblMetaGroundRules).setDescription(state.cfg.txtGroundRulesChangedNoticeNone).setColor(0x57F287);
+      postStoryThreadActivity(connection, interaction.guild, state.storyId, { embeds: [noticeEmbed] }).catch(() => {});
     }
 
     // story_status is deliberately not written here — Pause/Resume applies immediately from the
@@ -86,7 +89,30 @@ export async function handleManageSave(connection, interaction, state) {
 
     pendingManageData.delete(interaction.user.id);
 
-    await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'txtAdminConfigSaved', guildId)));
+    // A turn's deadline is written once, when the turn starts, so a turn-length edit lands on
+    // the next turn rather than the one running. Deliberate: shortening the length would
+    // otherwise end the live turn the instant Save landed. So say so and leave the live turn to
+    // the creator, who can move it from Manage Turns (LeeAnn, 2026-10-04).
+    const savedText = await getConfigValue(connection, 'txtAdminConfigSaved', guildId);
+    const turnLengthChanged = state.originalFields?.turnLength !== state.turnLength;
+    const liveTurnEndsUnix = state.activeTurn?.turn_ends_unix ?? null;
+    let confirmation = savedText;
+    if (turnLengthChanged && liveTurnEndsUnix) {
+      log(`handleManageSave: turn length ${state.originalFields?.turnLength}h→${state.turnLength}h with turn ${state.activeTurn?.turn_id} still running — live deadline left alone`, { show: true, guildName: state.guildName });
+      confirmation += `\n\n${replaceTemplateVariables(state.cfg.txtManageTurnLengthLiveTurnNote, {
+        // Number only — the unit word comes from txtHrs, which already existed and was unused,
+        // so "hrs" can be reworded in config rather than in a template literal here.
+        turn_length: state.turnLength,
+        hrs: state.cfg.txtHrs,
+        turn_end: discordTimestamp(liveTurnEndsUnix * 1000, 'f'),
+        // Both button names come from their own config values, so renaming a button renames it
+        // here too. btnTurnExtend carries its own leading emoji, which is what the admin is
+        // looking for on the panel, so it goes in as-is.
+        manage_turns: state.cfg.btnManageTurns,
+        extend_deadline: state.cfg.btnTurnExtend,
+      })}`;
+    }
+    await state.originalInteraction.editReply(finalMessage(confirmation));
   } catch (error) {
     log(`handleManageSave failed for storyId=${state.storyId}: ${error?.stack ?? error}`, { show: true, guildName: state.guildName });
     await state.originalInteraction.editReply(finalMessage(await getConfigValue(connection, 'errProcessingRequest', guildId)));

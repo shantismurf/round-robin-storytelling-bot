@@ -69,4 +69,4 @@ INSERT INTO config (config_key, config_value, language_code, guild_id) VALUES
 ('txtCatchupIntroNoTurns', '📖 **[story_title]** — [turn_count] turn(s) so far (you haven''t had a turn yet).', 'en', 1),
 ('txtCatchupNavHeader', '📖 **[story_title]** — (Page [page]/[total])', 'en', 1),
 -- Silo 4: manage panel description
-('txtMyStoryManagePanelDesc', '-# Notifications and Privacy are staged — click **Save Settings** to apply.', 'en', 1);
+('txtMyStoryManagePanelDesc', '-# You must click **Save Settings** to apply edits to pen name, notifications, or turn privacy. Turn and participation actions (Pass/Pause/Resume/Leave) apply immediately.', 'en', 1);

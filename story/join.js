@@ -1,6 +1,6 @@
 import { EmbedBuilder, ActionRowBuilder, ButtonBuilder, ButtonStyle, StringSelectMenuBuilder, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags } from 'discord.js';
 import { getConfigValue, log, sanitizeModalInput, replaceTemplateVariables, resolveStoryId, trimTrailingEmoji, logGuildEvent } from '../utilities.js';
-import { resolveGroundRuleLabels, parseGroundRulesText, effectiveGroundRulesText, formatGroundRuleLabelList } from './_groundRules.js';
+import { resolveGroundRules, parseGroundRulesText, effectiveGroundRulesText, buildGroundRulesEmbed } from './_groundRules.js';
 import { StoryJoin, getActiveThreadId } from '../storybot.js';
 import { updateStoryStatusMessage } from './_storyStatus.js';
 import { postStoryThreadActivity } from './_turn.js';
@@ -77,7 +77,7 @@ export async function buildJoinEmbed(connection, state) {
   const cfg = await getConfigValue(connection, [
     'txtJoinEmbedDesc', 'lblJoinPrivacy', 'lblJoinNotifications',
     'lblJoinPenName', 'txtJoinPenNameNotSet', 'btnJoinSetPenName', 'btnJoinConfirm', 'btnCancel',
-    'lblMetaGroundRules', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
+    'lblMetaGroundRules', 'txtGroundRulesDesc', 'cfgGroundRules', 'txtGroundRulesDefaultVocabulary',
   ], guildId);
 
   const embed = new EmbedBuilder()
@@ -89,11 +89,12 @@ export async function buildJoinEmbed(connection, state) {
       { name: trimTrailingEmoji(cfg.lblJoinPenName), value: penName || (displayName ? `${displayName} (Discord display name)` : cfg.txtJoinPenNameNotSet), inline: false }
     );
 
-  // Read-only — writers see this before committing to join, not a field they set here.
-  const groundRulesLabels = resolveGroundRuleLabels(groundRules, parseGroundRulesText(effectiveGroundRulesText(cfg.cfgGroundRules, cfg.txtGroundRulesDefaultVocabulary)));
-  if (groundRulesLabels.length) {
-    embed.addFields({ name: trimTrailingEmoji(cfg.lblMetaGroundRules), value: formatGroundRuleLabelList(groundRulesLabels), inline: false });
-  }
+  // Read-only — writers see this before committing to join, not a field they set here. In its own
+  // embed rather than a field so each rule's description shows: this is the one screen where a
+  // writer agrees to the rules, and a field capped at 1024 can't hold ten labels plus descriptions.
+  const resolvedGroundRules = resolveGroundRules(groundRules, parseGroundRulesText(effectiveGroundRulesText(cfg.cfgGroundRules, cfg.txtGroundRulesDefaultVocabulary)));
+  const embeds = [embed];
+  if (resolvedGroundRules.length) embeds.push(buildGroundRulesEmbed(cfg, resolvedGroundRules));
 
   const privacyRow = new ActionRowBuilder().addComponents(
     new StringSelectMenuBuilder()
@@ -128,7 +129,7 @@ export async function buildJoinEmbed(connection, state) {
       .setStyle(ButtonStyle.Danger)
   );
 
-  return { embeds: [embed], components: [privacyRow, notifRow, buttonRow] };
+  return { embeds, components: [privacyRow, notifRow, buttonRow] };
 }
 
 export async function handleJoin(connection, interaction, buttonStoryId = null) {

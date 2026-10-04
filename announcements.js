@@ -22,7 +22,7 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
       }
 
       const [turnInfo] = await connection.execute(`
-        SELECT sw.discord_display_name, t.started_at, s.turn_length_hours, s.mode
+        SELECT sw.discord_display_name, t.turn_ends_at, s.mode
         FROM turn t
         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
         JOIN story s ON sw.story_id = s.story_id
@@ -44,7 +44,7 @@ export async function postStoryFeedJoinAnnouncement(connection, storyId, interac
             current_writer: turn.discord_display_name,
           });
         } else {
-          const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
+          const endTime = new Date(turn.turn_ends_at);
           const txtStoryFeedJoinAnnouncement = await getConfigValue(connection, 'txtStoryFeedJoinAnnouncement', guildId);
           announcement = replaceTemplateVariables(txtStoryFeedJoinAnnouncement, {
             joiner_name: joinerName,
@@ -200,7 +200,7 @@ export async function postStoryFeedActivationAnnouncement(connection, storyId, i
       
       // Get active writer and turn end time
       const [turnInfo] = await connection.execute(`
-        SELECT sw.discord_display_name, t.started_at, s.turn_length_hours, s.mode
+        SELECT sw.discord_display_name, t.turn_ends_at, s.mode
         FROM turn t
         JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
         JOIN story s ON sw.story_id = s.story_id
@@ -219,7 +219,7 @@ export async function postStoryFeedActivationAnnouncement(connection, storyId, i
             first_writer: turn.discord_display_name,
           });
         } else {
-          const endTime = new Date(turn.started_at.getTime() + (turn.turn_length_hours * 60 * 60 * 1000));
+          const endTime = new Date(turn.turn_ends_at);
           const txtStoryFeedNowActive = await getConfigValue(connection, 'txtStoryFeedNowActive', guildId);
           announcement = replaceTemplateVariables(txtStoryFeedNowActive, {
             story_title: storyTitle,

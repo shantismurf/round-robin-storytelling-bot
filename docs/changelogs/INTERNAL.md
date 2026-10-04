@@ -24,12 +24,117 @@ the thing you will search for later is the old name.
 
 ---
 
-## Unreleased
+## 3.8.0 — 2026-10-04
 
-Work that did not bump the version, because it changed nothing about what users experience.
-The next version's entry absorbs this section. See the Versioning Policy in `CLAUDE.md`.
+Provenance: written alongside the work.
 
-Nothing pending.
+MINOR. Ground Rules finally show the description an admin wrote, wherever a reader sees them.
+Three status-post fields that could exceed what Discord accepts are capped. The two story-feed
+announcements stop misreporting a turn's deadline, and every turn deadline and reminder offset in
+the engine now comes from one place instead of five. Editing a story's turn length says plainly
+that the turn in progress keeps its own. Proposed and signed off by LeeAnn 2026-10-04. Absorbs the
+help copy second pass that was sitting in Unreleased, which does not bump on its own.
+
+### Changed
+- **A second pass over the help copy**, LeeAnn reviewing the pages as they render in Discord
+  rather than as a document, 2026-10-02 and 2026-10-03.
+  - Ground Rules addressed a reader and a story creator with the same "you" in one paragraph. It
+    now breaks after "before they join." and the second paragraph starts "Story creators can
+    choose...".
+  - Reading a Story: "The story read interface will remember" lost its product name.
+  - Editing an Entry: "and pick one" trimmed, and an em dash that was doing a relative clause's
+    job became "that appears on the first page of each entry."
+  - Entries Split Across Pages: the old sentence implied the reload was automatic. It now says to
+    save and close the edit tool, then reopen.
+  - Managing Your Participation listed the three buttons but none of the three staged settings,
+    so a reader had no idea `/mystory manage` was where a pen name gets changed. It now names
+    both, with the settings first.
+  - Configure Story Channels: each bullet's subject is bolded, and the three text-heavy
+    descriptions are separated by blank lines. The Story Admin Role description became a bullet
+    so both children of Setup indent alike.
+  - Other Admin Commands: the parenthetical role line on each command is now `-#` subtext rather
+    than body text.
+  - Every command is in backticks. Five were bare, including one in the admin pages' footer.
+- **The two manage panels describe their own buttons.** `txtManageUserPanelSaveNote` and
+  `txtMyStoryManagePanelDesc` both now open with what Save applies, then name what does not wait
+  for it — Pause/Restore/Remove on the admin panel, Pass/Pause/Resume/Leave on the writer's own.
+  The previous writer-panel text mentioned only notifications and privacy, omitting the pen name,
+  and the admin text led with the immediate actions rather than with Save.
+- **The Ground Rules change notice lost its emoji and its token.** `txtGroundRulesChangedNotice`
+  was `🤝 **Ground Rules updated for this story:** [ground_rules]`, where the token was the old
+  quoted label list. The list now renders as a block beneath, and the embed title already carries
+  the emoji, so the string is just the lead line. `txtGroundRulesChangedNoticeNone` likewise drops
+  the emoji.
+- **Editing a story's turn length now says that the turn in progress keeps its own.** A turn's
+  deadline is written once, when the turn starts, so a length edit has always landed on the next
+  turn rather than the running one — nothing told the creator that. Deliberately left as is rather
+  than made retroactive: shortening the length would otherwise end the live turn the instant Save
+  landed, which is messier than leaving it to the creator (LeeAnn's call, 2026-10-04). The save
+  confirmation now carries `txtManageTurnLengthLiveTurnNote`, naming the new length, the running
+  turn's actual deadline, and the two buttons that can move it. Nothing in it is typed in: the
+  length is the staged value, the unit word is `txtHrs` (which already existed and was used
+  nowhere), and the button names are `btnManageTurns` and `btnTurnExtend`. Shown only when the length
+  changed and a turn is genuinely running, so slow mode and `/story add` never see it.
+- **Turn deadline and reminder arithmetic has one definition each.** `turnEndTimeFunction()`
+  already existed but was bypassed in three of the five places that needed it, and the reminder
+  offset was spelled out in full three times — once for the job row and twice for a notification
+  token — so confirming they agreed meant comparing them character by character.
+  `turnReminderOffsetMs()` (new) is now the only place that calculation lives, and it is the one
+  place that knows slow mode's `reminder_timing` is flat hours rather than a percentage.
+
+### Fixed
+- **Ground Rules never showed the description an admin wrote.** A rule is authored as a label
+  plus a description, and until now the only place the description was ever visible was the
+  checkbox picker inside the story metadata modal — which no reader opens. The status post, the
+  join panel and the change notice all called `resolveGroundRuleLabels()`, which throws the
+  descriptions away, and rendered a quoted comma-joined list of bare labels. So the rules a
+  writer agrees to on joining were labels with no content behind them.
+  - `resolveGroundRules()` (new) returns the whole `{ label, description }` rules in stored
+    order; `resolveGroundRuleLabels()` is now a thin map over it, kept for the compact displays
+    (the add/manage panel summary, the Ground Rules confirmation screen) that have no room for
+    descriptions.
+  - `formatGroundRulesBlock()` and `buildGroundRulesEmbed()` (both new) are the single renderer
+    behind all three reader-facing sites, so they cannot drift apart again. Each rule is an h2
+    heading carrying the bullet, with the description as `-#` subtext on the next line, under the
+    `🤝 Ground Rules 🤝` title and the same `txtGroundRulesDesc` line the add/manage panel shows.
+  - On the status post the rules are their own embed and the old metadata field is gone. On the
+    join panel they are their own embed rather than a field, because ten labels plus descriptions
+    will not fit an embed field's 1024. The change notice uses the same builder with its own lead
+    line as an intro.
+- **Three status-post fields could exceed what an embed accepts and take the whole post down.**
+  Each has a modal input cap larger than the render cap it is written into, and `EmbedBuilder`
+  throws rather than truncating — which aborts `updateStoryStatusMessage` entirely, so the pinned
+  post silently stops updating for that story.
+  - The writer list had no cap at all. Around thirty writers pushed the field past 1024. It now
+    caps at 512, with `…and N more` appended to the last name it kept (not on a line of its own,
+    which would read as another writer, and `-#` subtext does not render in a field value). The
+    inactive roster and the legend are reserved out of the budget first, so they always survive.
+  - Other Relationships accepts 1000 in the modal against a field limit of 1024. Capped at 512 on
+    render.
+  - The story title accepts 500 against an embed title limit of 256. The title itself is now
+    clamped to whatever the story id and rating badge around it leave free, so those survive
+    instead of being cut off the end.
+  - Maxed out, a status post now comes to roughly 5,500 of the 6,000 characters Discord allows
+    across one message's embeds.
+- **The two story-feed announcements reported the wrong turn deadline.** The writer-joined and
+  story-now-active posts computed it as `started_at + story.turn_length_hours` instead of reading
+  `turn.turn_ends_at`, so after anything that moves a turn's real deadline — an admin Extend, a
+  Pause and Resume, or a turn-length edit — they disagreed with both the pinned status post and
+  the moment the turn actually times out. Both now read the stored deadline.
+- **A turn's deadline was computed twice, a few hundred milliseconds apart.** `NextTurn` worked
+  out `turn_ends_at` for the row it inserts, then worked it out again from a fresh `Date.now()`
+  for every timestamp it shows the writer — with thread creation and several queries in between.
+  The welcome message, the DM or mention, the quick-mode feed post and the thread activity line
+  were therefore all slightly ahead of the deadline the engine enforces. Computed once now and
+  passed down.
+
+### Added
+- **`txtStatusWriterListMore`** (`config_turn.sql`) — `…and [count] more`, the overflow marker on
+  a capped writer list.
+- **`txtManageTurnLengthLiveTurnNote`** (`config_storyadmin.sql`) — appended to the save
+  confirmation when a turn-length edit lands while a turn is running. LeeAnn's wording, and both
+  button names are substituted from `btnManageTurns` and `btnTurnExtend` rather than typed in, so
+  renaming either button renames it here.
 
 
 ## 3.7.1 — 2026-10-03

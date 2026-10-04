@@ -181,11 +181,11 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 
     const isSlowMode = writer.mode === STORY_MODE.SLOW;
 
-    // Insert turn record — slow mode has no deadline (turn_ends_at stays NULL)
-    let turnEndsAt = null;
-    if (!isSlowMode) {
-      turnEndsAt = new Date(Date.now() + (writer.turn_length_hours * 60 * 60 * 1000));
-    }
+    // Insert turn record — slow mode has no deadline (turn_ends_at stays NULL). Computed once
+    // here and threaded through every display below: this value IS the turn's deadline, and the
+    // second Date.now() further down produced a timestamp a few hundred milliseconds off the one
+    // written to the DB.
+    const turnEndsAt = isSlowMode ? null : turnEndTimeFunction(writer.turn_length_hours);
     const [turnResult] = await connection.execute(
       `INSERT INTO turn (story_writer_id, started_at, turn_ends_at, turn_status) VALUES (?, NOW(), ?, ?)`,
       [storyWriterId, turnEndsAt, TURN_STATUS.ACTIVE]
@@ -203,8 +203,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
 
       // Schedule turnReminder job if configured (percent-based, fires once)
       if (writer.reminder_timing > 0) {
-        const reminderMs = writer.turn_length_hours * (writer.reminder_timing / 100) * 60 * 60 * 1000;
-        const reminderTime = new Date(Date.now() + reminderMs);
+        const reminderTime = new Date(Date.now() + turnReminderOffsetMs(writer.turn_length_hours, writer.reminder_timing, false));
         await connection.execute(
           `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
           ['turnReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id }), reminderTime, JOB_STATUS.PENDING, turnId]
@@ -212,7 +211,7 @@ export async function NextTurn(connection, interaction, storyWriterId) {
       }
     } else if (writer.reminder_timing > 0) {
       // Slow mode: schedule repeating reminder (hours-based; re-schedules itself on each fire)
-      const reminderTime = new Date(Date.now() + (writer.reminder_timing * 60 * 60 * 1000));
+      const reminderTime = new Date(Date.now() + turnReminderOffsetMs(writer.turn_length_hours, writer.reminder_timing, true));
       await connection.execute(
         `INSERT INTO job (job_type, payload, run_at, job_status, turn_id) VALUES (?, ?, ?, ?, ?)`,
         ['turnSlowReminder', JSON.stringify({ turnId, storyId: writer.story_id, guildId: writer.guild_id, writerUserId: writer.discord_user_id, reminderHours: writer.reminder_timing }), reminderTime, JOB_STATUS.PENDING, turnId]
@@ -223,12 +222,10 @@ export async function NextTurn(connection, interaction, storyWriterId) {
     let dmMessage = '';
 
     const turnNumber = await getTurnNumber(connection, writer.story_id);
-    // turnEndTime is only meaningful for normal/quick mode
-    const turnEndTime = isSlowMode ? null : turnEndTimeFunction(writer.turn_length_hours);
 
     if (writer.mode === STORY_MODE.QUICK) {
       // Quick mode — feed announcement, no turn thread
-      await handleQuickModeNotification(connection, interaction, writer, guild_id);
+      await handleQuickModeNotification(connection, interaction, writer, guild_id, turnEndsAt);
       dmMessage = 'Quick mode notification sent';
     } else {
       // Normal and Slow mode — create turn thread on the feed channel
@@ -260,8 +257,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
         [threadId, turnId]
       );
 
-      await postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime);
-      await handleWriterNotification(connection, interaction, writer, threadId, guild_id);
+      await postWelcomeMessage(connection, thread, writer, guild_id, turnEndsAt);
+      await handleWriterNotification(connection, interaction, writer, threadId, guild_id, turnEndsAt);
       dmMessage = `${isSlowMode ? 'Slow' : 'Normal'} mode thread created and notification sent`;
     }
 
@@ -273,8 +270,8 @@ export async function NextTurn(connection, interaction, storyWriterId) {
         let msg = template
           .replace('[turn_number]', turnNumber)
           .replace('[writer_name]', writer.discord_display_name);
-        if (!isSlowMode && turnEndTime) {
-          const unixTs = Math.floor(turnEndTime.getTime() / 1000);
+        if (!isSlowMode && turnEndsAt) {
+          const unixTs = Math.floor(turnEndsAt.getTime() / 1000);
           msg = msg
             .replace('[turn_end_full]', `<t:${unixTs}:F>`)
             .replace('[turn_end_relative]', `<t:${unixTs}:R>`);
@@ -603,17 +600,31 @@ export function turnEndTimeFunction(turnLengthHours) {
   return new Date(Date.now() + (turnLengthHours * 60 * 60 * 1000));
 }
 
+/**
+ * Milliseconds from a turn's start until its reminder fires. Normal and quick mode schedule it as
+ * a percentage of the turn length; slow mode has no deadline to take a percentage of, so its
+ * reminder_timing is a flat number of hours that re-schedules itself on each fire.
+ *
+ * One definition because this arithmetic had been written out three times — once for the job row
+ * and twice for the "your reminder is at" token in a notification — and a reader had to compare
+ * them character by character to confirm they agreed.
+ */
+export function turnReminderOffsetMs(turnLengthHours, reminderTiming, isSlowMode) {
+  return isSlowMode
+    ? reminderTiming * 60 * 60 * 1000
+    : turnLengthHours * (reminderTiming / 100) * 60 * 60 * 1000;
+}
+
 // ---------------------------------------------------------------------------
 // Private helpers — not exported
 // ---------------------------------------------------------------------------
 
-async function handleQuickModeNotification(connection, interaction, writer, guild_id) {
+async function handleQuickModeNotification(connection, interaction, writer, guild_id, turnEndsAt) {
   log(`handleQuickModeNotification: entry storyId=${writer.story_id} (${writer.title}) writerId=${writer.discord_user_id} (${writer.discord_display_name})`, { show: false, guildName: interaction?.guild?.name });
-  const turnEndTime = turnEndTimeFunction(writer.turn_length_hours);
-  const discordTimestamp = `<t:${Math.floor(turnEndTime.getTime() / 1000)}:F>`;
+  const discordTimestamp = `<t:${Math.floor(turnEndsAt.getTime() / 1000)}:F>`;
 
   // Send notification to writer using the active story thread as the link
-  await handleWriterNotification(connection, interaction, writer, getActiveThreadId(writer), guild_id);
+  await handleWriterNotification(connection, interaction, writer, getActiveThreadId(writer), guild_id, turnEndsAt);
 
   // Post feed announcement to the appropriate channel (restricted if M/E rated)
   const txtQuickModeTurnStart = await getConfigValue(connection, 'txtQuickModeTurnStart', guild_id);
@@ -628,7 +639,7 @@ async function handleQuickModeNotification(connection, interaction, writer, guil
   await channel.send(feedMessage);
 }
 
-async function handleWriterNotification(connection, interaction, writer, linkToThreadId, guild_id) {
+async function handleWriterNotification(connection, interaction, writer, linkToThreadId, guild_id, turnEndsAt) {
   log(`handleWriterNotification: entry writerId=${writer.discord_user_id} (${writer.discord_display_name}) prefs=${writer.notification_prefs} mode=${writer.mode}`, { show: false, guildName: interaction?.guild?.name });
   const linkToUse = linkToThreadId || writer.story_thread_id;
   const threadUrl = `https://discord.com/channels/${guild_id}/${linkToUse}`;
@@ -640,15 +651,15 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
     story_title: writer.title,
   };
 
-  if (!isSlowMode) {
-    const turnEndMs = Date.now() + (writer.turn_length_hours * 60 * 60 * 1000);
-    tokenMap.relative_end_time = discordTimestamp(turnEndMs, 'R');
+  // The turn's actual deadline, passed in from where the turn row was written, rather than
+  // recomputed from the story's length — the two drifted by however long the inserts took, and
+  // after a mid-turn length edit a recomputation disagrees with the DB outright.
+  if (!isSlowMode && turnEndsAt) {
+    tokenMap.relative_end_time = discordTimestamp(turnEndsAt.getTime(), 'R');
   }
 
   if (writer.reminder_timing > 0) {
-    const reminderMs = isSlowMode
-      ? writer.reminder_timing * 60 * 60 * 1000
-      : writer.turn_length_hours * (writer.reminder_timing / 100) * 60 * 60 * 1000;
+    const reminderMs = turnReminderOffsetMs(writer.turn_length_hours, writer.reminder_timing, isSlowMode);
     tokenMap.relative_reminder_time = discordTimestamp(Date.now() + reminderMs, 'R');
   }
 
@@ -679,7 +690,7 @@ async function handleWriterNotification(connection, interaction, writer, linkToT
   }
 }
 
-async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndTime) {
+async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndsAt) {
   log(`postWelcomeMessage: entry storyId=${writer.story_id} (${writer.title}) writerId=${writer.discord_user_id} (${writer.discord_display_name}) mode=${writer.mode}`, { show: false });
   const isSlowMode = writer.mode === STORY_MODE.SLOW;
   const mediaChannelId = await getConfigValue(connection, 'cfgMediaChannelId', guild_id);
@@ -702,8 +713,8 @@ async function postWelcomeMessage(connection, thread, writer, guild_id, turnEndT
     story_id: writer.guild_story_id,
     story_thread_link: storyThreadLink,
   };
-  if (!isSlowMode && turnEndTime) {
-    const unixTs = Math.floor(turnEndTime.getTime() / 1000);
+  if (!isSlowMode && turnEndsAt) {
+    const unixTs = Math.floor(turnEndsAt.getTime() / 1000);
     welcomeTokens.turn_end_full = `<t:${unixTs}:F>`;
     welcomeTokens.turn_end_relative = `<t:${unixTs}:R>`;
   }

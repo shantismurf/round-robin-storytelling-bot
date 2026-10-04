@@ -235,6 +235,7 @@ async function handleManage(connection, interaction, alreadyDeferred = false) {
       'txtManageEntriesDesc', 'txtManageTurnsDesc', 'txtReviewTagsDesc', 'txtManageUsersDesc', 'txtChangeStoryStatusLabel',
       'txtManageEmbedTitleMetadata',
       'txtGroundRulesChangedNotice', 'txtGroundRulesChangedNoticeNone',
+      'txtManageTurnLengthLiveTurnNote',
     ], guildId);
 
     Object.assign(cfg, extraCfg);
