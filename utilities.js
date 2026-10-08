@@ -479,6 +479,21 @@ export function chunkEntryContent(content, maxChunkSize = 3800) {
 }
 
 /**
+ * Re-attach a page's original leading/trailing whitespace to its edited text.
+ * chunkEntryContent leaves the paragraph break at the end of each page, and both Discord and
+ * sanitizeModalInput trim modal input, so without this a saved page splices back in with its
+ * seam break gone and two paragraphs run together.
+ * @param {string} originalText - the page text as loaded into the modal
+ * @param {string} editedText - the trimmed text the modal returned
+ * @returns {string}
+ */
+export function restoreChunkEdges(originalText, editedText) {
+  const leading = originalText.match(/^\s*/)[0];
+  const trailing = originalText.slice(leading.length).match(/\s*$/)[0];
+  return leading + editedText.trim() + trailing;
+}
+
+/**
  * Returns the most recent edit info for an entry, or null if none or within grace period.
  * Grace period: author edits within 1 hour of entry creation suppress the read-view footnote.
  */

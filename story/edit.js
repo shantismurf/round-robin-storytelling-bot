@@ -1,5 +1,5 @@
 import { ActionRowBuilder, ButtonBuilder, ButtonStyle, ModalBuilder, TextInputBuilder, TextInputStyle, MessageFlags, EmbedBuilder, StringSelectMenuBuilder } from 'discord.js';
-import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, splitAtParagraphs, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
+import { getConfigValue, log, sanitizeModalInput, resolveStoryId, chunkEntryContent, restoreChunkEdges, splitAtParagraphs, checkIsAdmin, checkIsCreator, replaceTemplateVariables } from '../utilities.js';
 import { postThreadEntry } from './_entryRenderer.js';
 import { resolveMentionsToPlainText } from './_entryMarkup.js';
 import { pendingReadData, pendingEditData } from './_state.js';
@@ -482,7 +482,10 @@ async function handleEditModalSubmit(connection, interaction) {
       'txtExportPlaceholderUser', 'txtExportPlaceholderChannel', 'txtExportPlaceholderRole'
     ], state.guildId)
   );
-  const newContent = currentContent.slice(0, chunk.start) + resolvedChunk + currentContent.slice(chunk.end);
+  // Put back the seam whitespace the modal trimmed, or the page's closing paragraph break is lost.
+  const savedChunk = restoreChunkEdges(chunk.text, resolvedChunk);
+  log(`handleEditModalSubmit: entry ${state.entryId} page ${state.chunkPage} saved ${savedChunk.length} chars (modal returned ${editedChunk.length}, after mentions ${resolvedChunk.length})`, { show: false, guildName: interaction?.guild?.name });
+  const newContent = currentContent.slice(0, chunk.start) + savedChunk + currentContent.slice(chunk.end);
 
   const editorName = interaction.member?.displayName ?? interaction.user.username;
 
@@ -528,11 +531,13 @@ async function handleEditModalSubmit(connection, interaction) {
 
   // Command path: update state with stable chunk boundaries (do NOT re-chunk from scratch,
   // as that shifts boundaries and causes orphaned content on subsequent edits).
-  const delta = editedChunk.length - (chunk.end - chunk.start);
+  // Measure what was actually stored (seam whitespace restored, mentions resolved), not the raw
+  // modal value, or the later pages' boundaries drift.
+  const delta = savedChunk.length - (chunk.end - chunk.start);
   state.chunks[state.chunkPage] = {
-    text: editedChunk,
+    text: savedChunk,
     start: chunk.start,
-    end: chunk.start + editedChunk.length
+    end: chunk.start + savedChunk.length
   };
   for (let i = state.chunkPage + 1; i < state.chunks.length; i++) {
     state.chunks[i] = {
