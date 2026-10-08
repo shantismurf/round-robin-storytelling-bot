@@ -178,6 +178,7 @@ Unique constraint on `(job_type, guild_id, window_key)` — duplicate insert fai
 | `getTurnNumber(conn, storyId)` | Next confirmed turn number for display |
 | `getEntryEditInfo(conn, entryId, authorId, createdAt)` | Edit metadata with 1-hour grace suppression |
 | `chunkEntryContent(content, maxChunkSize)` | Splits long entries at paragraph boundaries |
+| `restoreChunkEdges(originalText, editedText)` | Re-attaches an edit page's original leading/trailing whitespace after the modal trims it, so seam paragraph breaks survive a save |
 | `replaceTemplateVariables(template, keyValueMap)` | `[key]` substitution in config string templates |
 | `sendUserMessage(conn, interaction, writerId, cfgKey)` | DM writer; falls back to channel mention |
 | `sanitize(input, maxLength)` | Escapes HTML entities and Discord markdown for embed fields |

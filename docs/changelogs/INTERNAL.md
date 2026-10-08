@@ -24,6 +24,30 @@ the thing you will search for later is the old name.
 
 ---
 
+## 3.8.4 — 2026-10-08
+
+Provenance: written alongside the work.
+
+PATCH. One user-visible bug fix in the edit flow, plus a boundary-drift fix in the same handler.
+LeeAnn approved PATCH on 2026-10-08.
+
+### Fixed
+- **Saving an edit page no longer deletes the paragraph break at its seam.** Long-standing:
+  `chunkEntryContent()` splits edit pages after a `\n\n` and keeps that break at the end of the
+  page, but the modal value comes back trimmed (by Discord and by `sanitizeModalInput`), so
+  `handleEditModalSubmit` spliced the page back in with the break gone and two paragraphs ran
+  together. Opening and saving a page with no changes was enough. Because reopening the editor
+  re-chunks from scratch, each save could land the seam on a different break, which is why
+  repeated edits to the same turn kept producing new joins. New `restoreChunkEdges()` in
+  `utilities.js` puts the page's original leading/trailing whitespace back before the splice.
+  The single-newline and word-boundary fallback splits had the same problem (glued lines and
+  words) and are covered by the same fix. Entries already damaged stay damaged and need fixing
+  by hand.
+- **Edit page boundaries no longer drift after saving a page with a mention in it.** The
+  command-path boundary update measured the raw modal value, but what gets stored is the text
+  after mentions are resolved to display names, so the later pages' start/end were off by the
+  difference. It now measures the stored text.
+
 ## 3.8.3 — 2026-10-04
 
 Provenance: written alongside the work.
