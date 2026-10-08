@@ -82,7 +82,7 @@ Words: ~[word_count]', 'en', 1),
 ('txtMentionTurnReminderSlow', '🔵 **Friendly reminder:** You have an active turn in **[story_title]**. No rush — take your time! [Click here to write your entry.]([turn_thread_link]).', 'en', 1),
 ('txtWriteTurnEnded', 'Your turn has already ended — the story has moved on.', 'en', 1),
 ('txtWriteAlreadySubmitted', 'Your entry has already been submitted.', 'en', 1),
-('txtMediaPostLabel', '📎 Story #[story_id] — Turn [turn_id]', 'en', 1),
+('txtMediaPostLabel', '📎 Story #[story_id] — Turn [turn_number]', 'en', 1),
 ('txtPingWriters', '📢 [mentions]\n[message]', 'en', 1),
 ('txtPingWritersSent', '✅ All active writers have been pinged in the story thread.', 'en', 1),
 -- Moved from config_other: turn/finalize/skip/validation keys
