@@ -216,11 +216,17 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
   log(`doFinalizeEntry: start — story ${storyId}, writer ${writerId}, triggered by ${interaction.user.username}`, { show: true, guildName: interaction?.guild?.name });
   try {
     const [turnInfo] = await connection.execute(
-      `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id
+      `SELECT t.turn_id, t.thread_id, sw.discord_user_id, sw.story_id, s.guild_story_id,
+              (SELECT COUNT(DISTINCT t2.turn_id)
+               FROM turn t2
+               JOIN story_writer sw2 ON t2.story_writer_id = sw2.story_writer_id
+               JOIN story_entry se2 ON se2.turn_id = t2.turn_id AND se2.entry_status = ?
+               WHERE sw2.story_id = sw.story_id AND t2.started_at < t.started_at) + 1 AS turn_number
        FROM turn t
        JOIN story_writer sw ON t.story_writer_id = sw.story_writer_id
+       JOIN story s ON sw.story_id = s.story_id
        WHERE sw.story_id = ? AND t.turn_status = ? AND sw.discord_user_id = ?`,
-      [storyId, TURN_STATUS.ACTIVE, writerId]
+      [ENTRY_STATUS.CONFIRMED, storyId, TURN_STATUS.ACTIVE, writerId]
     );
     if (turnInfo.length === 0) {
       log(`doFinalizeEntry: no active turn for writer ${writerId} story ${storyId}`, { show: true, guildName: interaction?.guild?.name });
@@ -228,7 +234,7 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
       return;
     }
     const turn = turnInfo[0];
-    log(`doFinalizeEntry: turn ${turn.turn_id}, thread ${turn.thread_id}`, { show: false, guildName: interaction?.guild?.name });
+    log(`doFinalizeEntry: turn ${turn.turn_id} (story #${turn.guild_story_id}, turn #${turn.turn_number}), thread ${turn.thread_id}`, { show: false, guildName: interaction?.guild?.name });
 
     const thread = await interaction.guild.channels.fetch(turn.thread_id);
     const messages = await thread.messages.fetch({ limit: 100 });
@@ -293,7 +299,7 @@ export async function doFinalizeEntry(connection, interaction, storyId, writerId
           log(`doFinalizeEntry: forwarding image "${att.name}" to media channel`, { show: true, guildName: interaction?.guild?.name });
           try {
             const forwarded = await mediaChannel.send({
-              content: replaceTemplateVariables(mediaPostLabelTemplate, { story_id: storyId, turn_id: turn.turn_id }),
+              content: replaceTemplateVariables(mediaPostLabelTemplate, { story_id: turn.guild_story_id, turn_number: turn.turn_number }),
               files: [att.url]
             });
             imgLinks.push(`[${msgText || att.name}](${forwarded.attachments.first().url})`);

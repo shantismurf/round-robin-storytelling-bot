@@ -24,6 +24,21 @@ the thing you will search for later is the old name.
 
 ---
 
+## Unreleased
+
+No bump (LeeAnn, 2026-10-08).
+
+### Fixed
+- **Media channel image posts now show the server's story and turn numbers.** The label on
+  each image `doFinalizeEntry` forwards to the media channel (`txtMediaPostLabel`) was filled
+  with the database `story_id` and `turn_id`, which mean nothing to admins. It now uses the
+  story's `guild_story_id` and the turn number shown everywhere else (the count of turns with
+  a confirmed entry, as in `/story edit`, plus one for the entry being finalized). The config
+  string's token changed from `[turn_id]` to `[turn_number]`. Posts already in media channels
+  keep their old numbers.
+
+---
+
 ## 3.8.4 — 2026-10-08
 
 Provenance: written alongside the work.
